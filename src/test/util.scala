@@ -41,7 +41,12 @@ def setup(
 				if (stacks.length != g.state.variant.suits.length)
 					throw new IllegalArgumentException("Invalid play stacks length")
 				g.copy(
-					state = g.state.copy(playStacks = stacks),
+					state = g.state.copy(
+						playStacks = stacks,
+						baseCount = stacks.zipWithIndex
+							.flatMap((stack, suitIndex) => (1 to stack).map(Identity(suitIndex, _)))
+							.foldLeft(g.state.baseCount)((acc, id) => acc.updated(id.toOrd, acc(id.toOrd) + 1))
+					),
 					players = g.players.map(_.copy(hypoStacks = stacks)),
 					common = g.common.copy(hypoStacks = stacks)
 				)
@@ -72,7 +77,7 @@ def setup(
 		}
 		.tap { g =>
 			for (id <- g.state.variant.allIds) {
-				val count =	g.state.baseCount(id) + visibleFind(g.state, g.me, id).length
+				val count =	g.state.baseCount(id.toOrd) + visibleFind(g.state, g.me, id).length
 
 				if (count > g.state.cardCount(id.toOrd))
 					throw new IllegalArgumentException(s"Found $count copies of ${g.state.logId(id)}!")
@@ -120,7 +125,7 @@ def takeTurn(rawAction: String, drawS: String = "")(game: Game) =
 
 						case Some(id) =>
 							val Identity(suitIndex, rank) = id
-							val count = state.baseCount(id) + visibleFind(state, game.me, id).length
+							val count = state.baseCount(id.toOrd) + visibleFind(state, game.me, id).length
 
 							if (count + 1 > state.cardCount(id.toOrd))
 								throw new IllegalArgumentException(s"Found ${count + 1} copies of ${state.logId(id)}")

@@ -261,22 +261,22 @@ enum PerformAction:
 	def json(tableID: Int) =
 		this match {
 			case PerformAction.Play(target) =>
-				ujson.write(ujson.Obj("tableID" -> tableID, "type" -> 0, "target" -> target))
+				ujson.Obj("tableID" -> tableID, "type" -> 0, "target" -> target)
 			case PerformAction.Discard(target) =>
-				ujson.write(ujson.Obj("tableID" -> tableID, "type" -> 1, "target" -> target))
+				ujson.Obj("tableID" -> tableID, "type" -> 1, "target" -> target)
 			case PerformAction.Colour(target, value) =>
-				ujson.write(ujson.Obj("tableID" -> tableID, "type" -> 2, "target" -> target, "value" -> value))
+				ujson.Obj("tableID" -> tableID, "type" -> 2, "target" -> target, "value" -> value)
 			case PerformAction.Rank(target, value) =>
-				ujson.write(ujson.Obj("tableID" -> tableID, "type" -> 3, "target" -> target, "value" -> value))
+				ujson.Obj("tableID" -> tableID, "type" -> 3, "target" -> target, "value" -> value)
 			case PerformAction.Terminate(target, value) =>
-				ujson.write(ujson.Obj("tableID" -> tableID, "type" -> 4, "target" -> target, "value" -> value))
+				ujson.Obj("tableID" -> tableID, "type" -> 4, "target" -> target, "value" -> value)
 		}
 
 object PerformAction:
 	def fromJSON(json: ujson.Value): PerformAction = {
 		val actionType = json("type").num.toInt
-		val target = json("target").num.toInt
-		val value = json("value").num.toInt
+		lazy val target = json("target").num.toInt
+		lazy val value = json("value").num.toInt
 
 		actionType match {
 			case 0 => PerformAction.Play(target)

@@ -207,7 +207,7 @@ case class Player(
 
 	def unknownIds(state: State, id: Identity) =
 		val visibleCount = state.hands.flatten.filter(thoughts(_).matches(id)).length
-		state.cardCount(id.toOrd) - state.baseCount(id) - visibleCount
+		state.cardCount(id.toOrd) - state.baseCount(id.toOrd) - visibleCount
 
 	def linkedOrders(state: State) =
 		links.flatMap {
@@ -224,18 +224,15 @@ case class Player(
 			hypo: Game,
 			unknownPlays: Set[Int],
 			played: Set[Int],
-			unplayable: Set[Int]
+			viable: Set[Int]
 		)
 
 		def processRound(struct: HypoStruct): HypoStruct =
-			game.state.hands.flatten.foldLeft(struct) { (acc, order) =>
-				val HypoStruct(hypo, unknownPlays, played, unplayable) = acc
+			struct._4.foldLeft(struct) { (acc, order) =>
+				val HypoStruct(hypo, unknownPlays, played, viable) = acc
 				val thought = thoughts(order)
 
-				val skip = played.contains(order) ||
-					unplayable.contains(order) ||
-					!hypo.state.hasConsistentInfs(thought) ||
-					!orderKp(hypo, order)
+				val skip = !hypo.state.hasConsistentInfs(thought) || !orderKp(hypo, order)
 
 				if (skip) acc else thought.id(infer = true, symmetric = true) match {
 					case None =>
@@ -257,27 +254,33 @@ case class Player(
 							acc.copy(
 								hypo = newHypo,
 								unknownPlays = unknownPlays + order,
-								played = played + order
+								played = played + order,
+								viable = viable - order
 							)
 						else
 							acc.copy(
 								unknownPlays = unknownPlays + order,
-								played = played + order
+								played = played + order,
+								viable = viable - order
 							)
 					case Some(id) =>
 						if (hypo.state.isPlayable(id))
 							acc.copy(
 								hypo = hypo.copy(state = hypo.state.withPlay(id)),
 								unknownPlays = unknownPlays + order,
-								played = played + order
+								played = played + order,
+								viable = viable - order
 							)
 						else
 							Log.warn(s"tried to add ${hypo.state.logId(id)} ($order) onto hypo stacks, but they were at ${hypo.state.playStacks} $played")
-							acc.copy(unplayable = unplayable + order)
+							acc.copy(viable = viable - order)
 				}
 			}
 
-		val initialS = HypoStruct(game, Set(), Set(), Set())
+		val viable = game.state.hands.flatten
+			.filter(game.state.deck(_).id().forall(!game.state.isBasicTrash(_)))
+			.toSet
+		val initialS = HypoStruct(game, Set(), Set(), viable)
 		val HypoStruct(hypo, unknownPlays, played, _) = Iterator.iterate(initialS)(processRound)
 			.sliding(2)
 			.find { case Seq(prev, curr) => prev == curr }

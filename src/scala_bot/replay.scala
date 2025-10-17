@@ -25,7 +25,7 @@ object GameData:
 		parse(ujson.read(requests.get(s"https://hanab.live/export/${id}").text()))
 
 	def fetchFile(file: String) =
-		parse(fromFile(file).mkString)
+		parse(ujson.read(fromFile(file).mkString))
 
 	def parse(data: ujson.Value) =
 		val players = data("players").arr.map(_.str).toVector

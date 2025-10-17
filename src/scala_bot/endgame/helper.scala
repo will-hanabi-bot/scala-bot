@@ -10,7 +10,7 @@ def findMustPlays(state: State, hand: Vector[Int]): Iterable[Identity] =
 
 	for {
 		(id, group) <- idGroups
-		i <- id if !state.isBasicTrash(i) && state.cardCount(i.toOrd) - state.baseCount(i) == group.length
+		i <- id if !state.isBasicTrash(i) && state.cardCount(i.toOrd) - state.baseCount(i.toOrd) == group.length
 	}
 	yield i
 

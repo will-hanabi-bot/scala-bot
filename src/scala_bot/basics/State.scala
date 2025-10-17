@@ -14,6 +14,7 @@ case class State(
 	playStacks: Vector[Int],
 	discardStacks: Vector[Vector[Vector[Int]]],
 	maxRanks: Vector[Int],
+	baseCount: Vector[Int],
 
 	variant: Variant,
 	allIds: IdentitySet,
@@ -36,6 +37,7 @@ case class State(
 
 		copy(
 			discardStacks = newStacks,
+			baseCount = baseCount.updated(id.toOrd, baseCount(id.toOrd) + 1),
 			maxRanks =
 				if (newStack.length == cardCount(Identity(suitIndex, rank).toOrd))
 					maxRanks.updated(suitIndex, math.min(maxRanks(suitIndex), rank - 1))
@@ -44,8 +46,10 @@ case class State(
 		)
 
 	def withPlay(id: Identity) =
-		copy(playStacks = playStacks.updated(id.suitIndex, id.rank))
-			.when(_ => id.rank == 5)(_.regainClue)
+		copy(
+			playStacks = playStacks.updated(id.suitIndex, id.rank),
+			baseCount = baseCount.updated(id.toOrd, baseCount(id.toOrd) + 1),
+		).when(_ => id.rank == 5)(_.regainClue)
 
 	def tryPlay(id: Identity) =
 		if (isPlayable(id)) withPlay(id) else this
@@ -82,9 +86,7 @@ case class State(
 
 	def ourHand = hands(ourPlayerIndex)
 
-	def baseCount(id: Identity) =
-		(if (playStacks(id.suitIndex) >= id.rank) 1 else 0) +
-			discardStacks(id.suitIndex)(id.rank - 1).length
+
 
 	def clueTouched(orders: Seq[Int], clue: BaseClue) =
 		orders.filter(order => variant.cardTouched(deck(order), clue))
@@ -105,8 +107,12 @@ case class State(
 	def includesVariant(regex: Regex) =
 		variant.suits.exists(regex.matches)
 
-	def remainingMultiplicity(ids: Iterable[Identity]) =
-		ids.map(id => cardCount(id.toOrd) - baseCount(id)).sum
+	def remainingMultiplicity(ids: IdentitySet) =
+		var count = 0
+		ids.foreachFast { id =>
+			count += cardCount(id.toOrd) - baseCount(id.toOrd)
+		}
+		count
 
 	def holderOf(order: Int) =
 		val holder = hands.indexWhere(_.contains(order))
@@ -157,6 +163,7 @@ object State:
 			playStacks = Vector.fill(variant.suits.length)(0),
 			discardStacks = Vector.fill(variant.suits.length)(Vector.fill(5)(Vector())),
 			maxRanks = Vector.fill(variant.suits.length)(5),
+			baseCount = Vector.fill(variant.suits.length * 5)(0),
 
 			variant = variant,
 			allIds = IdentitySet.from(variant.allIds),

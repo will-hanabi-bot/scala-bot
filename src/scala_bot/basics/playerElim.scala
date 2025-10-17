@@ -6,7 +6,7 @@ import scala_bot.logger.Log
 
 class MatchEntry(
 	var order: Int,
-	var unknownSelf: Boolean
+	var unknownTo: Int
 )
 
 class IdEntry(
@@ -16,27 +16,22 @@ class IdEntry(
 
 extension (p: Player) {
 	def cardElim(state: State) =
-		val certainMap = mutable.Map[Identity, mutable.Buffer[MatchEntry]]()
+		val certainMap = Array.fill[mutable.Buffer[MatchEntry]](state.variant.suits.length * 5)(mutable.Buffer.empty)
 		var crossElimCandidates = mutable.Buffer[IdEntry]()
 		val resets = mutable.Buffer[Int]()
-		val updates = mutable.Map[Int, Thought]()
+		val thoughts = p.thoughts.toArray
 
 		var allPossible = p.allPossible
 		var allInferred = p.allInferred
 
-		def thoughts(order: Int) =
-			updates.get(order).getOrElse(p.thoughts(order))
-
 		for (playerIndex <- 0 until state.numPlayers; order <- state.hands(playerIndex)) {
-			val thought = p.thoughts(order)
+			val thought = thoughts(order)
 			val id = thought.id(symmetric = p.isCommon)
-			val unknownSelf = thought.id(symmetric = true).isEmpty
+			val unknownTo = if (thought.id(symmetric = true).isEmpty) playerIndex else -1
 			val possible = thought.possible
 
 			id.foreach(i =>
-				if (!certainMap.contains(i))
-					certainMap(i) = mutable.Buffer.empty
-				certainMap(i) += MatchEntry(order, unknownSelf))
+				certainMap(i.toOrd) += MatchEntry(order, unknownTo))
 
 			if (possible.length > 1 &&
 				possible.exists(!state.isBasicTrash(_)) &&
@@ -45,48 +40,57 @@ extension (p: Player) {
 			}
 		}
 
-		def updateMap(id: Identity, exclude: Set[Int]): (Boolean, IdentitySet) =
+		def updateMap(id: Identity, exclude: mutable.BitSet): (Boolean, IdentitySet) =
 			var changed = false
 			var recursiveIds = IdentitySet.empty
-			val crossElimRemovals = mutable.Buffer[Int]()
+			val crossElimRemovals = mutable.BitSet.empty
 
-			for ((hand, playerIndex) <- state.hands.zipWithIndex if !exclude.contains(playerIndex)) {
-				for (order <- hand) {
-					val thought = thoughts(order)
-					val noElim =
-						!thought.possible.contains(id) ||
-						certainMap.get(id).exists(_.exists(e => e.order == order || (state.holderOf(e.order) == playerIndex && e.unknownSelf)))
+			var playerIndex = 0
 
-					if (!noElim)
-						changed = true
-						val newInferred = thought.inferred.retain(_ != id)
-						val newPossible = thought.possible.retain(_ != id)
-						val reset = newInferred.isEmpty && !thought.reset
+			while (playerIndex < state.hands.length) {
+				if (!exclude.contains(playerIndex))
+					val hand = state.hands(playerIndex)
+					var i = 0
 
-						updates(order) = if (reset)
-							thought.resetInferences()
-						else
-							thought.copy(inferred = newInferred, possible = newPossible)
+					while (i < hand.length) {
+						val order = hand(i)
+						val thought = thoughts(order)
+						val noElim =
+							!thought.possible.contains(id) ||
+							certainMap(id.toOrd).exists(e => e.order == order || e.unknownTo == playerIndex)
 
-						if (reset)
-							resets += order
+						if (!noElim)
+							changed = true
+							val newInferred = thought.inferred.difference(id)
+							val newPossible = thought.possible.difference(id)
+							val reset = newInferred.isEmpty && !thought.reset
 
-						// Card can be further eliminated
-						if (newPossible.length == 1)
-							val recursiveId = newPossible.head
-							certainMap.get(recursiveId) match {
-								case Some(certains) =>
+							thoughts(order) = if (reset)
+								thought.resetInferences()
+							else
+								thought.copy(inferred = newInferred, possible = newPossible)
+
+							if (reset)
+								resets += order
+
+							// Card can be further eliminated
+							if (newPossible.length == 1)
+								val recursiveId = newPossible.head
+								val certains = certainMap(recursiveId.toOrd)
+
+								if (certains.isEmpty)
+									certains += MatchEntry(order, -1)
+								else
 									certains.find(_.order == order) match {
-										case Some(entry) => entry.unknownSelf = false
-										case None => certains += MatchEntry(order, false)
+										case Some(entry) => entry.unknownTo = -1
+										case None => certains += MatchEntry(order, -1)
 									}
-								case None =>
-									certainMap += recursiveId -> mutable.Buffer(MatchEntry(order, false))
-							}
 
-							recursiveIds = recursiveIds.union(recursiveId)
-							crossElimRemovals += order
-				}
+								recursiveIds = recursiveIds.union(recursiveId)
+								crossElimRemovals += order
+						i += 1
+					}
+				playerIndex += 1
 			}
 
 			crossElimCandidates = crossElimCandidates.filterNot(c => crossElimRemovals.contains(c.order))
@@ -101,11 +105,11 @@ extension (p: Player) {
 			var recursiveIds = IdentitySet.empty
 			var eliminated = IdentitySet.empty
 
-			for (id <- ids) {
-				val knownCount = state.baseCount(id) + certainMap.get(id).map(_.size).getOrElse(0)
+			ids.foreachFast { id =>
+				val knownCount = state.baseCount(id.toOrd) + certainMap(id.toOrd).size
 
 				if (knownCount == state.cardCount(id.toOrd)) {
-					val (innerChanged, innerRecursiveIds) = updateMap(id, Set())
+					val (innerChanged, innerRecursiveIds) = updateMap(id, mutable.BitSet())
 
 					eliminated = eliminated.union(id)
 					changed ||= innerChanged
@@ -132,10 +136,10 @@ extension (p: Player) {
 
 			for ((id, group) <- groups) {
 				id.foreach { id =>
-					val certains = certainMap.get(id).map(_.filter(c => !group.exists(_.order == c.order)).length).getOrElse(0)
+					val certains = certainMap(id.toOrd).filter(c => !group.exists(_.order == c.order)).length
 
-					if (group.size == state.remainingMultiplicity(List(id)) - certains) {
-						val (innerChanged, _) = updateMap(id, group.map(_.playerIndex))
+					if (group.size == state.remainingMultiplicity(IdentitySet.single(id)) - certains) {
+						val (innerChanged, _) = updateMap(id, mutable.BitSet.fromSpecific(group.map(_.playerIndex)))
 						changed ||= innerChanged
 					}
 				}
@@ -143,7 +147,7 @@ extension (p: Player) {
 
 			// Now elim all the cards outside of this entry
 			for (id <- ids) {
-				val (innerChanged, _) = updateMap(id, entries.map(_.playerIndex))
+				val (innerChanged, _) = updateMap(id, mutable.BitSet.fromSpecific(entries.map(_.playerIndex)))
 				changed ||= innerChanged
 			}
 
@@ -170,9 +174,18 @@ extension (p: Player) {
 			val newAccIds = accIds.union(thoughts(order).possible)
 
 			val nextContained = contained + item
-			val nextCertains = certains ++ thoughts(order).possible.difference(accIds)
-				.flatMap(id => certainMap.get(id).map(_.map(_.order)).getOrElse(mutable.Buffer.empty))
-				.filter(o => !nextContained.exists(_.order == o))
+			val nextCertains = {
+				val delta = thoughts(order).possible.difference(accIds)
+
+				if (delta.isEmpty)
+					certains
+				else
+					val orders = mutable.Buffer.empty[Int]
+					delta.foreachFast { id =>
+						orders ++= certainMap(id.toOrd).map(_.order)
+					}
+					certains ++ orders.filter(o => !nextContained.exists(_.order == o))
+			}
 
 			val included = crossElim(nextContained, newAccIds, nextCertains, nextIndex + 1)
 			if (included)
@@ -186,9 +199,7 @@ extension (p: Player) {
 		while (crossElim(Set(), IdentitySet.empty, Set(), 0)) {}
 
 		val newPlayer = p.copy(
-			thoughts = updates.foldLeft(p.thoughts) {
-				case (acc, (id, update)) => acc.updated(id, update)
-			},
+			thoughts = thoughts.toVector,
 			allPossible = allPossible,
 			allInferred = allInferred
 		)
@@ -233,7 +244,7 @@ extension (p: Player) {
 			val newInferred = if (order == focus)
 				IdentitySet.single(id)
 			else
-				thought.inferred.retain(_ != id)
+				thought.inferred.difference(id)
 
 			val newThought =
 				if (newInferred.isEmpty && !thought.reset)
@@ -321,13 +332,14 @@ extension (p: Player) {
 							newLinks,
 							viableOrders.head +: sarcastics)
 					else
-						Log.info(s"updating sarcastic link for ${state.logId(id)} to $viableOrders (${p.name})")
+						if (viableOrders != orders)
+							Log.info(s"updating sarcastic link for ${state.logId(id)} to $viableOrders (${p.name})")
 						(player, Link.Sarcastic(viableOrders, id) +: newLinks, sarcastics)
 
 				case Link.Unpromised(orders, ids) =>
 					val revealed = orders.filter { o =>
 						val thought = player.thoughts(o)
-						thought.id().nonEmpty && ids.exists(!thought.possible.contains(_))
+						thought.id(symmetric = true).nonEmpty || ids.exists(!thought.possible.contains(_))
 					}
 					lazy val focused = orders.filter(game.meta(_).focused)
 

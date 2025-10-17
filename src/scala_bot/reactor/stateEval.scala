@@ -155,7 +155,7 @@ def advance(game: Game, offset: Int): Double =
 	else
 		urgentDc.orElse(trash.headOption) match {
 			case None =>
-				val chop = Reactor.chop(game, playerIndex).getOrElse(throw new Exception(s"Player ${state.names(playerIndex)} locked but no chop!"))
+				val chop = Reactor.chop(game, playerIndex).getOrElse(throw new Exception(s"Player ${state.names(playerIndex)} not locked but no chop! ${state.hands(playerIndex).map(state.deck(_))}"))
 				val id = state.deck(chop).id().get
 				val action = DiscardAction(playerIndex, chop, id.suitIndex, id.rank)
 				val dcGame = advanceGame(game, action)

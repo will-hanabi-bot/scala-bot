@@ -19,7 +19,7 @@ case class Identity(suitIndex: Int, rank: Int) extends Identifiable:
 	def id(infer: Boolean = false, symmetric: Boolean = false) =
 		Some(this)
 
-	def toOrd: Int =
+	inline def toOrd: Int =
 		suitIndex * 5 + (rank - 1)
 
 	def prev: Identity =
@@ -35,7 +35,7 @@ case class Identity(suitIndex: Int, rank: Int) extends Identifiable:
 		Identity(suitIndex, rank + 1)
 
 object Identity {
-	def fromOrd(ord: Int): Identity =
+	inline def fromOrd(ord: Int): Identity =
 		if (ord < 30)
 			val suitIndex = ord / 5
 			val rank = (ord % 5) + 1
@@ -90,7 +90,7 @@ case class Thought(
 			Option.when(infer && inferred.length == 1)(inferred.head)
 		}
 
-	def possibilities: IdentitySet =
+	inline def possibilities: IdentitySet =
 		if (inferred.isEmpty) { possible } else { inferred }
 
 	def resetInferences(): Thought =
@@ -123,7 +123,7 @@ case class ConvData(
 	reasoning: List[Int] = List(),
 	by: Option[Int] = None
 ):
-	def cm = status == CardStatus.ChopMoved
+	inline def cm = status == CardStatus.ChopMoved
 
 	def cleared = copy(
 		focused = false,

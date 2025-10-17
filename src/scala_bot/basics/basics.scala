@@ -91,8 +91,7 @@ extension (game: Game)
 				else
 					g
 			else
-				println(g.state.hands)
-				throw new IllegalArgumentException(s"Only have ${deckIds.length} deck ids, but drew card with order $order!")
+				throw new IllegalArgumentException(s"Only have ${deckIds.length} deck ids, but drew card with order $order! ${g.state.hands}")
 		}
 		.tap { g =>
 			assert(g.state.deck.length == order, "deck length doesn't match drawn order")

@@ -79,6 +79,7 @@ def interpretReactiveColour(prev: Game, game: Game, action: ClueAction, focusSlo
 					t.copy(oldInferred = Some(t.inferred))
 				}
 				val newGame = targetDiscard(game.copy(common = newCommon), action, reactOrder, urgent = true)
+				Log.info(s"reactive dc+play, reacter ${state.names(reacter)} (slot $reactSlot) receiver ${state.names(receiver)} (slot $targetSlot), focus slot $focusSlot")
 				Some((Some(ClueInterp.Reactive), newGame))
 		}
 	}.headOption
@@ -192,7 +193,7 @@ def interpretReactiveRank(prev: Game, game: Game, action: ClueAction, focusSlot:
 			case Some(reactOrder) =>
 				val (interp, newGame) = targetPlay(game, action, reactOrder, urgent = true, stable = false)
 				val nextGame = newGame.withThought(reactOrder) { t =>
-					t.copy(inferred = t.inferred.retain(_ != state.deck(receiveOrder).id().get))
+					t.copy(inferred = t.inferred.difference(state.deck(receiveOrder).id().get))
 				}
 				interp match {
 					case None => Some(None, nextGame)

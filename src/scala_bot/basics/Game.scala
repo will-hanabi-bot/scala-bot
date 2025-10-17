@@ -87,8 +87,7 @@ case class Game(
 
 	def handleAction(action: Action) =
 		if (state.actionList.length < state.turnCount)
-			println(state.actionList)
-			throw new IllegalStateException(s"Turn count ${state.turnCount}, actionList length ${state.actionList.length}")
+			throw new IllegalStateException(s"Turn count ${state.turnCount}, actionList ${state.actionList}")
 		val newGame = withState(_.copy(
 			actionList = addAction(state.actionList, action, state.turnCount)
 		))
@@ -307,7 +306,7 @@ case class Game(
 			else
 				val linkNote = common.links.foldLeft(List()) { (a, link) =>
 					if (link.getOrders.contains(order) && link.promise.isDefined)
-						a :+ link.promise.get
+						a :+ state.logId(link.promise.get)
 					else a
 				}.mkString("? ")
 

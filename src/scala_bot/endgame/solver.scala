@@ -66,7 +66,7 @@ def findRemainingIds(game: Game) =
 		infers.foldLeft((seen, own)) { case (acc, (id, orders)) =>
 			val (seenIds, ownIds) = acc
 			val seen = seenIds.lift(id).getOrElse(0)
-			val tooMany = seen + orders.length + state.baseCount(id) > state.cardCount(id.toOrd)
+			val tooMany = seen + orders.length + state.baseCount(id.toOrd) > state.cardCount(id.toOrd)
 
 			val newSeen = if (tooMany) seenIds else seenIds.updated(id, seen + orders.length)
 			val newOwn = orders.foldLeft(ownIds)((a, o) => (o, Option.when(!tooMany)(id)) +: a)
@@ -78,7 +78,7 @@ def findRemainingIds(game: Game) =
 		for
 			id <- state.variant.allIds
 			total = state.cardCount(id.toOrd)
-			missing = total - state.baseCount(id) - seenIds.getOrElse(id, 0)
+			missing = total - state.baseCount(id.toOrd) - seenIds.getOrElse(id, 0)
 				if missing > 0
 		yield
 			(id, RemainingEntry(missing, missing == total))
@@ -449,8 +449,7 @@ case class EndgameSolver(
 							case Right((performs, wr)) =>
 								val newWinrate = winrate + prob * wr
 								if (newWinrate > Frac.one)
-									println(arrs.map(_.prob).mkString(","))
-									throw new IllegalStateException(s"Winrate exceeds 100% $prob $newWinrate")
+									throw new IllegalStateException(s"Winrate exceeds 100% $prob $newWinrate | ${arrs.map(_.prob).mkString(",")}")
 
 								Log.highlight(colour, s"${indent(depth)}} ${performs.map(_.fmtObj(game, nextPlayerIndex)).mkString(", ")} prob $prob winrate $newWinrate")
 								calcWinrate(arrs.tail, newWinrate, remProb)

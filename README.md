@@ -19,7 +19,7 @@ It only plays with [Reactor 1.0 conventions](https://hanabi.wiki/en/conventions/
   - You'll need to create its account on hanab.live first.
 - Run `scala-cli . --main-class scala_bot.main -- index=<index>` to start the bot.
 - Debug logs will show up in the console, providing more information about what the bot thinks about every action.
-- `hand <playerName> [observerIndex]` will display the information on that player's hand from a particular perspective.
+	- `hand <playerName> [observerIndex]` will display the information on that player's hand from a particular perspective.
         - If no observer index is provided, the hand will be logged from the common knowledge perspective.
 
 ## Supported commands
@@ -44,3 +44,11 @@ In a replay, the following commands are also supported (in addition to `hand`):
 - `navigate <turn>` to travel to a specific turn.
     - If it is the bot's turn, it will provide a suggestion on what it would do.
     - Instead of a turn number, `+` (next turn), `++` (next turn of the same player), `-`, and `--` can also be used.
+
+## Self-play
+The bot can play games with copies of itself using `cargo run --release --bin self_play [-- <options>]`. Possible options:
+- `games=<numGames>` sets the number of games to play (defaults to 1)
+- `seed=<seed>` sets the seed of the first game to be played (defaults to 0)
+    - The seeding algorithm is different from the one used on hanab.live.
+
+The final score for each seed as well as how each game terminated are logged to the console. JSON replays of each game are saved to a `seeds` folder, which can be loaded into hanab.live for viewing.

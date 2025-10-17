@@ -219,7 +219,7 @@ def reactDiscard(prev: Game, game: Game, playerIndex: Int, order: Int, wc: Waiti
 				}
 
 				val action = if (clue.kind == ClueKind.Colour) "play" else "dc"
-				Log.info(s"reactive dc+$action, reacter ${state.names(reacter)} (slot $reactSlot) receiver ${state.names(receiver)} (slot $targetSlot), focus slot $focusSlot, (order ${state.hands(receiver)(targetSlot - 1)})")
+				Log.info(s"reactive dc+$action, reacter ${state.names(reacter)} (slot $reactSlot) receiver ${state.names(receiver)} (slot $targetSlot), focus slot $focusSlot (order ${state.hands(receiver)(targetSlot - 1)})")
 				game.copy(common = newCommon, meta = newMeta)
 			case None =>
 				game
@@ -256,6 +256,6 @@ def reactPlay(prev: Game, game: Game, playerIndex: Int, order: Int, wc: WaitingC
 						elimPlayDc(prev.state, newCommon, newMeta, reacter, receiverHand, focusSlot, targetSlot)
 				}
 				val action = if (clue.kind == ClueKind.Colour) "dc" else "play"
-				Log.info(s"reactive play+$action, reacter ${state.names(reacter)} (slot $reactSlot) receiver ${state.names(receiver)} (slot $targetSlot), focus slot $focusSlot, (order ${state.hands(receiver)(targetSlot - 1)})")
+				Log.info(s"reactive play+$action, reacter ${state.names(reacter)} (slot $reactSlot) receiver ${state.names(receiver)} (slot $targetSlot), focus slot $focusSlot (order ${state.hands(receiver)(targetSlot - 1)})")
 				game.copy(common = newCommon, meta = newMeta)
 		}

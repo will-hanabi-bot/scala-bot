@@ -3,12 +3,22 @@ package scala_bot.basics
 type IdentitySet = Long
 
 extension(ids: IdentitySet)
-	def value: Long = ids
-	def length: Int = java.lang.Long.bitCount(ids)
-	def isEmpty: Boolean = length == 0
+	inline def value: Long = ids
+	inline def length: Int = java.lang.Long.bitCount(ids)
+	inline def isEmpty: Boolean = length == 0
 
-	def contains(id: Identity): Boolean =
+	inline def contains(id: Identity): Boolean =
 		(ids & IdentitySet.single(id)) != 0
+
+	inline def foreachFast(f: Identity => Unit): Unit = {
+		var remaining = ids
+		while (remaining != 0L) {
+			val bit = java.lang.Long.numberOfTrailingZeros(remaining)
+			f(Identity.fromOrd(bit))
+
+			remaining &= (remaining - 1)
+		}
+	}
 
 	def iterator: Iterator[Identity] = new Iterator[Identity]:
 		private var remaining = ids
@@ -28,19 +38,19 @@ extension(ids: IdentitySet)
 	def toIterable: Iterable[Identity] = new Iterable[Identity]:
 		def iterator: Iterator[Identity] = ids.iterator
 
-	def intersect(other: IdentitySet): IdentitySet =
+	inline def intersect(other: IdentitySet): IdentitySet =
 		ids & other
 
-	def union(other: IdentitySet): IdentitySet =
+	inline def union(other: IdentitySet): IdentitySet =
 		ids | other
 
-	def union(id: Identity): IdentitySet =
+	inline def union(id: Identity): IdentitySet =
 		ids | IdentitySet.single(id)
 
-	def difference(other: IdentitySet): IdentitySet =
+	inline def difference(other: IdentitySet): IdentitySet =
 		ids & ~other
 
-	def difference(id: Identity): IdentitySet =
+	inline def difference(id: Identity): IdentitySet =
 		ids & ~IdentitySet.single(id)
 
 	def retain(cond: Identity => Boolean): IdentitySet =
@@ -60,12 +70,12 @@ extension(ids: IdentitySet)
 given Conversion[IdentitySet, Iterable[Identity]] = _.toIterable
 
 object IdentitySet:
-	def empty: IdentitySet = 0L
+	inline def empty: IdentitySet = 0L
 
-	def single(id: Identity): IdentitySet =
+	inline def single(id: Identity): IdentitySet =
 		1L << id.toOrd
 
-	def from(ids: Iterable[Identity]) =
+	inline def from(ids: Iterable[Identity]) =
 		ids.foldLeft(0L) { (acc, id) => acc | IdentitySet.single(id) }
 
 	def unapplySeq(ids: IdentitySet): Option[Seq[Identity]] =

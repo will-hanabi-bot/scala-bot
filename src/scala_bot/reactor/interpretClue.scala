@@ -396,7 +396,7 @@ def refDiscard(prev: Game, game: Game, action: ClueAction, stall: Boolean): (Opt
 					newCommon = newCommon.withThought(lockOrder)(t => t.copy(inferred = t.inferred.retain(_.rank == clue.value)))
 					newMeta = newMeta.updated(lockOrder, newMeta(lockOrder).copy(focused = true))
 
-				for (order <- hand if !state.deck(order).clued && game.meta(order).status == CardStatus.None) {
+				for (order <- hand if !state.deck(order).clued) { // && game.meta(order).status == CardStatus.None) {
 					newMeta = newMeta.updated(order, newMeta(order).copy(
 						status = CardStatus.ChopMoved,
 						by = Some(giver)

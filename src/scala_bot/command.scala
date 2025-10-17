@@ -18,7 +18,7 @@ val timer = new Timer
 def delay(f: () => Unit, n: Long) =
 	timer.schedule(new TimerTask() { def run = f() }, n)
 
-val BOT_VERSION = "v0.0.1 (scala-bot)"
+val BOT_VERSION = "v0.0.2 (scala-bot)"
 
 case class ChatMessage(
 	msg: String,
@@ -161,8 +161,7 @@ class BotClient(queue: Queue[IO, String], gameRef: Ref[IO, Option[Game]]):
 	def handleMsg(data: String): IO[Unit] =
 		val (command, args) = data.splitAt(data.indexOf(' '))
 
-		// (if (command == "gameAction" || command == "gameActionList" || command == "connected") IO.println(s"AAAAAAAAAAAA handling $data") else IO.println(s"$command .")) *>
-		(command match {
+		command match {
 			case "chat" =>
 				handleChat(upickle.read[ChatMessage](ujson.read(args)))
 
@@ -229,7 +228,7 @@ class BotClient(queue: Queue[IO, String], gameRef: Ref[IO, Option[Game]]):
 				IO { info = Some(upickle.read[SelfData](args)) }
 
 			case _ => IO.unit
-		})
+		}
 
 	def leaveRoom(): IO[Unit] =
 		val cmd = if (gameStarted) "tableUnattend" else "tableLeave"
@@ -335,7 +334,7 @@ class BotClient(queue: Queue[IO, String], gameRef: Ref[IO, Option[Game]]):
 						val arg = suggestedAction.json(tableID.get)
 
 						IO.whenA(newGame.inProgress) {
-							IO.sleep(2.seconds) *> sendCmd("action", arg)
+							IO.sleep(2.seconds) *> sendCmd("action", ujson.write(arg))
 						}
 					}
 
