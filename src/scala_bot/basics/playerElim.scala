@@ -154,11 +154,15 @@ extension (p: Player) {
 			basicElim(ids) || changed
 
 		def crossElim(contained: Set[IdEntry], accIds: IdentitySet, certains: Set[Int], nextIndex: Int): Boolean =
-			val multiplicity = state.remainingMultiplicity(accIds)
-			val impossibleMultiplicity = multiplicity - certains.size >
+			lazy val multiplicity = state.remainingMultiplicity(accIds)
+			lazy val impossibleMultiplicity = multiplicity - certains.size >
 				contained.size + (crossElimCandidates.length - nextIndex)
 
 			if (crossElimCandidates.length <= 1 || impossibleMultiplicity)
+				return false
+
+			// Impossible to reach multiplicity
+			if (multiplicity - certains.size > contained.size + (crossElimCandidates.length - nextIndex))
 				return false
 
 			if (contained.size >= 2 && multiplicity - certains.size == contained.size)
@@ -169,6 +173,7 @@ extension (p: Player) {
 			if (nextIndex >= crossElimCandidates.length)
 				return false
 
+			// Check all remaining subsets that contain the next item
 			val item = crossElimCandidates(nextIndex)
 			val order = item.order
 			val newAccIds = accIds.union(thoughts(order).possible)
@@ -177,14 +182,16 @@ extension (p: Player) {
 			val nextCertains = {
 				val delta = thoughts(order).possible.difference(accIds)
 
-				if (delta.isEmpty)
+				val allCertains = if (delta.isEmpty)
 					certains
 				else
 					val orders = mutable.Buffer.empty[Int]
 					delta.foreachFast { id =>
 						orders ++= certainMap(id.toOrd).map(_.order)
 					}
-					certains ++ orders.filter(o => !nextContained.exists(_.order == o))
+					certains ++ orders
+
+				allCertains.filter(o => !nextContained.exists(_.order == o))
 			}
 
 			val included = crossElim(nextContained, newAccIds, nextCertains, nextIndex + 1)
@@ -262,14 +269,16 @@ extension (p: Player) {
 	def findLinks(game: Game, goodTouch: Boolean) =
 		val linkedOrders = p.links.flatMap(_.getOrders).toSet
 
-		val linkableOrders = game.state.hands.flatten.filter { o =>
-			val thought = p.thoughts(o)
-			thought.id(symmetric = true).isEmpty &&
-				(0 to 3).contains(thought.inferred.length) &&
-				!thought.inferred.forall(game.state.isBasicTrash)
+		val linkableOrders = game.state.hands.zipWithIndex.flatMap { (hand, index) =>
+			hand.filter { o =>
+				val thought = p.thoughts(o)
+				thought.id(symmetric = true).isEmpty &&
+					(0 to 3).contains(thought.inferred.length) &&
+					!thought.inferred.forall(game.state.isBasicTrash)
+			}.map(_ -> index)
 		}
 
-		val (newPlayer, _) = linkableOrders.foldLeft((p, linkedOrders)) { case ((player, linked), order) =>
+		val (newPlayer, _) = linkableOrders.foldLeft((p, linkedOrders)) { case ((player, linked), (order, index)) =>
 			val thought = player.thoughts(order)
 			val inferred = thought.inferred
 
@@ -277,7 +286,7 @@ extension (p: Player) {
 				(player, linked)
 			else
 				// Find all cards with the same inferences
-				val matches = linkableOrders.filter(player.thoughts(_).inferred == inferred)
+				val matches = linkableOrders.filter((o, i) => i == index && player.thoughts(o).inferred == inferred).map(_._1)
 				val focusedMatches = matches.filter(game.meta(_).focused)
 
 				if (matches.length == 1)

@@ -14,7 +14,7 @@ def findMustPlays(state: State, hand: Vector[Int]): Iterable[Identity] =
 	}
 	yield i
 
-def unwinnableState(state: State, playerTurn: Int, depth: Int): Boolean =
+def unwinnableState(state: State, playerTurn: Int, depth: Int = 0): Boolean =
 	if (state.ended || state.pace < 0)
 		return true
 
@@ -100,7 +100,7 @@ def genArrs(game: Game, remaining: RemainingMap, clueOnly: Boolean, _depth: Int 
 	val state = game.state
 	val undrawn = GameArr(Frac.one, remaining, None)
 
-	assert(remaining.values.map(_.missing).sum == state.cardsLeft, "genArr failed")
+	assert(remaining.values.map(_.missing).sum == state.cardsLeft, s"genArr failed $remaining ${state.cardsLeft}")
 
 	val drawn =
 		if (clueOnly)

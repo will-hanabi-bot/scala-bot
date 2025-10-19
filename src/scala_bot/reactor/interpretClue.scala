@@ -116,7 +116,7 @@ private def tryStable(prev: Game, game: Game, action: ClueAction, stall: Boolean
 			val oldSafeActions = prevPlayables.concat(prev.common.thinksTrash(prev, target))
 
 			if (safeActions.exists(!oldSafeActions.contains(_)))
-				Log.info("revealed a safe action!")
+				Log.info(s"revealed a safe action! ${safeActions.find(!oldSafeActions.contains(_)).get}")
 				(Some(ClueInterp.Reveal), newGame)
 			else if (stall)
 				Log.info("stalling with fill-in/hard burn!")
@@ -125,8 +125,8 @@ private def tryStable(prev: Game, game: Game, action: ClueAction, stall: Boolean
 				Log.warn("looked like fill-in/hard burn outside of a stalling situation!")
 				(None, newGame)
 
-		else if (playables.nonEmpty && playables.exists(o => !prevPlayables.contains(o) && prev.state.deck(o).clued))
-			Log.info("revealed a safe action!")
+		else if (playables.nonEmpty && playables.exists(o => list.contains(o) && !prevPlayables.contains(o) && prev.state.deck(o).clued))
+			Log.info(s"revealed a safe action! ${playables.find(o => !prevPlayables.contains(o) && prev.state.deck(o).clued).get} $prevPlayables")
 			(Some(ClueInterp.Reveal), newGame)
 
 		else if (common.orderKt(game, newlyTouched.max))
@@ -213,7 +213,7 @@ def badStable(prev: Game, game: Game, action: ClueAction, interp: ClueInterp, st
 		false
 	else if (badPlayable.isDefined)
 		val bad = badPlayable.get
-		Log.warn(s"bad playable on $bad ${state.logId(bad)}")
+		Log.warn(s"bad playable on $bad ${state.logId(bad)}!")
 		true
 	else if (badDiscard.isDefined)
 		Log.warn(s"bad discard on ${badDiscard.get}!")

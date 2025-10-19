@@ -5,7 +5,7 @@ import cats.effect.IO
 import scala_bot.BotClient
 
 enum ConsoleCmd:
-	case Hand(name: String)
+	case Hand(name: String, from: Option[String])
 	case Navigate(arg: NavArg)
 
 enum NavArg:
@@ -19,7 +19,8 @@ def spawnConsoleInput(queue: Queue[IO, ConsoleCmd]) =
 	def loop: IO[Unit] = for {
 		input <- Console[IO].readLine
 		cmd <- input.split(" ") match {
-			case Array("hand", name) => IO.pure(Some(ConsoleCmd.Hand(name)))
+			case Array("hand", name) => IO.pure(Some(ConsoleCmd.Hand(name, None)))
+			case Array("hand", name, from) => IO.pure(Some(ConsoleCmd.Hand(name, Some(from))))
 			case Array(nav, arg) if nav == "navigate" || nav == "nav" =>
 				val navArg = arg match {
 					case "++" => NavArg.NextRound

@@ -2,15 +2,12 @@ package scala_bot.reactor
 
 import scala_bot.basics._
 import scala_bot.basics.given_Conversion_IdentitySet_Iterable
+import scala_bot.endgame.EndgameSolver
+import scala_bot.logger._
 import scala_bot.utils._
 
 import scala.concurrent.duration._
 import scala.util.chaining.scalaUtilChainingOps
-import scala_bot.logger._
-import scala_bot.endgame.EndgameSolver
-import cats.effect.IO
-import cats.effect.kernel.Outcome
-import cats.effect.unsafe.implicits.global
 
 object Reactor extends Convention:
 	private def checkMissed(game: Game, playerIndex: Int, actionOrder: Int) =
@@ -227,19 +224,6 @@ object Reactor extends Convention:
 			game.copy(common = newCommon, meta = newMeta)
 				.elim(goodTouch = true)
 
-	def solve(game: Game) =
-		val solver = new EndgameSolver(monteCarlo = true)
-		val solveIO = IO.blocking(solver.solve(game))
-
-		for {
-			fiber <- solveIO.start
-			res <- IO.sleep(5.seconds) *> fiber.cancel.as(Left("timeout")).race(fiber.join.flatMap {
-				case Outcome.Succeeded(s)   => s
-				case Outcome.Errored(e)     => IO.raiseError(e)
-				case Outcome.Canceled()     => IO.pure(Left("canceled"))
-			}).map(_.merge)
-		} yield res
-
 	def takeAction(game: Game): PerformAction =
 		val (common, state, me) = (game.common, game.state, game.me)
 
@@ -258,7 +242,7 @@ object Reactor extends Convention:
 		if (state.inEndgame && state.remScore <= state.variant.suits.length + 1)
 			Log.highlight(Console.MAGENTA, "trying to solve endgame...")
 
-			solve(game).unsafeRunSync() match {
+			EndgameSolver(monteCarlo = true).solve(game) match {
 				case Left(err) => Log.info(s"couldn't solve endgame: $err")
 				case Right((perform, _)) =>
 					Log.info(s"endgame solved!")

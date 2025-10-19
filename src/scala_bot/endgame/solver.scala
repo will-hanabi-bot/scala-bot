@@ -116,7 +116,7 @@ case class EndgameSolver(
 			if (winningPlay.isDefined)
 				return Right(PerformAction.Play(winningPlay.get), Frac.one)
 
-		val deadline = Instant.now().plusSeconds(5)
+		val deadline = Instant.now().plusSeconds(1)
 		val (remainingIds, ownIds) = findRemainingIds(game)
 
 		if (remainingIds.count((id, v) => !state.isBasicTrash(id) && v.all) > 2)
@@ -135,7 +135,7 @@ case class EndgameSolver(
 			case (order, id) if id.isEmpty => order
 		}
 		val totalUnknown = state.cardsLeft + unknownOwn.length
-		Log.info(s"unknown own $unknownOwn}, cards left ${state.cardsLeft}")
+		Log.info(s"unknown own $unknownOwn, cards left ${state.cardsLeft}")
 
 		if (totalUnknown == 0)
 			winnable(assumedGame, state.ourPlayerIndex, remainingIds, deadline) match {
@@ -162,13 +162,16 @@ case class EndgameSolver(
 				// We cannot assign a trash id if it is linked and all other orders are already trash
 				(!linkedOrders.contains(order) || game.me.links.forall{ l =>
 					val orders = l.getOrders
-					orders.contains(order) || orders.forall { o =>
+					!orders.contains(order) || orders.forall { o =>
 						o == order ||
 						(0 until ids.length).exists(i => o == unknownOwn(i) && state.isBasicTrash(ids(i)))
 					}
 				}))
 
-		def expandArr(arrangement: Arrangement) =
+		def expandArr(arrangement: Arrangement): Iterable[Arrangement] =
+			if (Instant.now.isAfter(deadline))
+				return Seq(arrangement)
+
 			val Arrangement(ids, prob, remaining) = arrangement
 			val totalCards = remaining.values.map(_.missing).sum
 
@@ -191,7 +194,7 @@ case class EndgameSolver(
 		// Normalize all probabilities: some of the potential generated ones may be impossible, so the total prob may be less than 1.
 		val sumProb = allArrs.map(_.prob).sum
 		val normalArrs = allArrs.map { arr =>
-			assert(arr.remaining.values.map(_.missing).sum == state.cardsLeft)
+			assert(arr.remaining.values.map(_.missing).sum == state.cardsLeft, s"arrangement not generated correctly: ${arr.remaining.values.map(_.missing)} ${state.cardsLeft}")
 			arr.copy(prob = arr.prob / sumProb)
 		}
 

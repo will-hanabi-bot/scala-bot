@@ -35,8 +35,9 @@ def connectableSimple(game: Game, player: Player, start: Int, target: Int, id: O
 		val connectables = playables.view.map { order =>
 			player.thoughts(order).id(infer = true).map { playId =>
 				val newGame = game
+					.simulateAction(TurnAction(state.turnCount, start))	// Go to starting player's turn
 					.simulateAction(PlayAction(start, order, playId.suitIndex, playId.rank))
-					.simulateAction(TurnAction(state.turnCount, nextPlayerIndex))
+					.simulateAction(TurnAction(state.turnCount + 1, nextPlayerIndex))
 
 				connectableSimple(newGame, player, nextPlayerIndex, target, id)
 			}

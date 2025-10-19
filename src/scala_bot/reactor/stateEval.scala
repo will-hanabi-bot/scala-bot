@@ -84,7 +84,7 @@ def getResult(game: Game, hypo: Game, action: ClueAction): Double =
 def advanceGame(game: Game, action: Action) =
 	action match {
 		case clue @ ClueAction(_, _, _, _) => game.simulateClue(clue, log = true)
-		case _ => game.simulateAction(action, log = true)
+		case _ => game.simulateAction(action)
 	}
 
 def advance(game: Game, offset: Int): Double =
@@ -318,5 +318,17 @@ def evalGame(game: Game): Double =
 			}
 	}.sum * 2.5
 
-	Log.info(s"state: $stateVal, future: $futureVal, bdr: $bdrVal")
-	stateVal + futureVal + bdrVal
+	val endgamePenalty = state.endgameTurns.fold(0) { turns =>
+		val finalScore = (0 until turns).foldLeft(state.playStacks) { (stacks, i) =>
+			val playerIndex = (state.currentPlayerIndex + i + 1) % state.numPlayers
+
+			state.hands(playerIndex).map(state.deck(_).id()).flatten.find(state.isPlayable).fold(stacks) { id =>
+				stacks.updated(id.suitIndex, id.rank)
+			}
+		}.sum
+
+		(finalScore - state.maxScore) * 5
+	}
+
+	Log.info(s"state: $stateVal, future: $futureVal, bdr: $bdrVal${if (endgamePenalty != 0) s" endgame penalty: ${endgamePenalty}" else ""}")
+	stateVal + futureVal + bdrVal + endgamePenalty

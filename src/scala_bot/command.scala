@@ -18,7 +18,7 @@ val timer = new Timer
 def delay(f: () => Unit, n: Long) =
 	timer.schedule(new TimerTask() { def run = f() }, n)
 
-val BOT_VERSION = "v0.0.2 (scala-bot)"
+val BOT_VERSION = "v0.0.3 (scala-bot)"
 
 case class ChatMessage(
 	msg: String,
@@ -105,39 +105,51 @@ class BotClient(queue: Queue[IO, String], gameRef: Ref[IO, Option[Game]]):
 		case Some(game) =>
 			val state = game.state
 			cmd match {
-				case ConsoleCmd.Hand(name) => state.names.indexWhere(_ == name) match {
+				case ConsoleCmd.Hand(name, from) => state.names.indexWhere(_ == name) match {
 					case -1 =>
 						Log.error(s"Player $name not found.")
 						IO.unit
 					case i =>
 						val hand = state.hands(i)
-						val player = game.common
-
-						val output = List(
-							s"viewing from common",
-							s"===================="
-						).concat {
-							hand.flatMap { order =>
-								val meta = game.meta(order)
-								val flags = List(
-									Option.when(meta.focused)("focused"),
-									Option.when(meta.trash)("trash"),
-									Option.when(meta.urgent)("urgent"),
-									Option.when(player.thoughts(order).reset)("reset")
-								).flatten
-
-								List(
-									Some(s"$order: ${state.logId(order)} ${meta.status}"),
-									Some(s"inferred: [${player.strInfs(state, order)}]"),
-									player.thoughts(order).infoLock.map(info => s"info lock: [${info.map(state.logId).mkString(",")}]"),
-									Some(s"possible: [${player.strPoss(state, order)}]"),
-									Some(s"reasoning: ${meta.reasoning}"),
-									Option.when(!flags.isEmpty)(s"flags: ${flags.toList}"),
-									Some("====================")
-								).flatten
-							}
+						val player = from match {
+								case None => game.common
+								case Some(name) => state.names.indexWhere(_ == name) match {
+									case -1 =>
+										println(s"Player $from not found.")
+										null
+									case index =>
+										game.players(index)
+								}
 						}
-						IO.println(output.mkString("\n"))
+
+						if (player != null)
+							val output = List(
+								s"viewing from common",
+								s"===================="
+							).concat {
+								hand.flatMap { order =>
+									val meta = game.meta(order)
+									val flags = List(
+										Option.when(meta.focused)("focused"),
+										Option.when(meta.trash)("trash"),
+										Option.when(meta.urgent)("urgent"),
+										Option.when(player.thoughts(order).reset)("reset")
+									).flatten
+
+									List(
+										Some(s"$order: ${state.logId(order)} ${meta.status}"),
+										Some(s"inferred: [${player.strInfs(state, order)}]"),
+										player.thoughts(order).infoLock.map(info => s"info lock: [${info.map(state.logId).mkString(",")}]"),
+										Some(s"possible: [${player.strPoss(state, order)}]"),
+										Some(s"reasoning: ${meta.reasoning}"),
+										Option.when(!flags.isEmpty)(s"flags: ${flags.toList}"),
+										Some("====================")
+									).flatten
+								}
+							}
+							IO.println(output.mkString("\n"))
+						else
+							IO.unit
 					}
 				case ConsoleCmd.Navigate(arg) =>
 					val turn = arg match {

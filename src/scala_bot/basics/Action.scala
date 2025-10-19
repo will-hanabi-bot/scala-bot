@@ -1,5 +1,7 @@
 package scala_bot.basics
 
+import scala_bot.logger.Log
+
 sealed trait Action:
 	def fmt(state: State): String
 
@@ -203,8 +205,10 @@ object Action {
 def addAction(actionList: Vector[List[Action]], action: Action, turn: Int) =
 	if (turn < actionList.size)
 		if (actionList(turn).contains(action))
-			throw new IllegalArgumentException(s"Action $action already exists in turn $turn")
-		actionList.updated(turn, actionList(turn) :+ action)
+			Log.error(s"Action $action already exists in turn $turn")
+			actionList
+		else
+			actionList.updated(turn, actionList(turn) :+ action)
 	else if (turn == actionList.size)
 		actionList :+ List(action)
 	else

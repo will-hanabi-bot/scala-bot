@@ -129,7 +129,7 @@ case class ConvData(
 		focused = false,
 		urgent = false,
 		trash = false,
-		status = CardStatus.None,
+		status = if (status == CardStatus.ZeroClueChop) status else CardStatus.None,
 		by = None
 	)
 
