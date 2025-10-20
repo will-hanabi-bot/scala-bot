@@ -18,7 +18,7 @@ val timer = new Timer
 def delay(f: () => Unit, n: Long) =
 	timer.schedule(new TimerTask() { def run = f() }, n)
 
-val BOT_VERSION = "v0.0.3 (scala-bot)"
+val BOT_VERSION = "v0.1.0 (scala-bot)"
 
 case class ChatMessage(
 	msg: String,

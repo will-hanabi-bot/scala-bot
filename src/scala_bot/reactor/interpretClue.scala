@@ -410,9 +410,11 @@ def refDiscard(prev: Game, game: Game, action: ClueAction, stall: Boolean): (Opt
 			Log.info(s"ref discard on ${state.names(receiver)}'s slot ${targetIndex + 1}")
 
 			val meta = newMeta(hand(targetIndex))
-			newMeta = newMeta.updated(hand(targetIndex), meta.copy(
-				status = CardStatus.CalledToDiscard,
-				by = Some(giver))
-			.reason(state.turnCount))
+			newMeta = newMeta
+				.updated(hand(targetIndex), meta.copy(
+					status = CardStatus.CalledToDiscard,
+					by = Some(giver))
+					.reason(state.turnCount))
+				.updated(focus, newMeta(focus).copy(focused = true))
 			(Some(ClueInterp.RefDiscard), game.copy(common = newCommon, meta = newMeta))
 	}

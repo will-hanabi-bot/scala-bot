@@ -86,7 +86,7 @@ case class Player(
 			case Link.Unpromised(orders, ids) =>
 				!orders.contains(order) && ids.contains(id)
 			case link =>
-				!link.getOrders.contains(order) && link.promise.exists(_ == id)
+				!link.getOrders.contains(order) && link.promise.contains(id)
 		}
 
 	def isDuped(game: Game, id: Identity, order: Int) =
@@ -98,7 +98,7 @@ case class Player(
 				case Link.Unpromised(orders, ids) =>
 					orders.contains(order) && orders.contains(o) && ids.contains(id)
 				case link =>
-					link.getOrders.contains(order) && link.getOrders.contains(o) && link.promise.exists(_ == id)
+					link.getOrders.contains(order) && link.getOrders.contains(o) && link.promise.contains(id)
 			}
 		}
 
@@ -146,7 +146,7 @@ case class Player(
 		val state = game.state
 
 		state.hands(playerIndex).filter { order =>
-			lazy val unsafeLink = state.strikes == 2 || links.exists(link =>
+			lazy val unsafeLink = links.exists(link =>
 				link.getOrders.contains(order) && link.getOrders.max != order)
 
 			if (orderKp(game, order))

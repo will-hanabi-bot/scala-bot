@@ -5,8 +5,6 @@ import scala_bot.basics.given_Conversion_IdentitySet_Iterable
 import scala_bot.endgame.EndgameSolver
 import scala_bot.logger._
 import scala_bot.utils._
-
-import scala.concurrent.duration._
 import scala.util.chaining.scalaUtilChainingOps
 
 object Reactor extends Convention:
@@ -283,9 +281,16 @@ object Reactor extends Convention:
 			(PerformAction.Play(order), action)
 		}
 
+		val potentialReacter = state.nextPlayerIndex(state.ourPlayerIndex)
+
+		// We have a play and the reacter might play on top of us
+		lazy val potentialForcedPlay = allPlays.nonEmpty &&
+			common.waiting.exists(_.reacter == potentialReacter) &&
+			playableOrders.exists(o => game.me.thoughts(o).inferred.exists(id => id.rank != 5 && state.hands(potentialReacter).exists(state.deck(_).id().get == id.next)))
+
 		val cantDiscard = state.clueTokens == 8 ||
 			(state.pace == 0 && (allClues.nonEmpty || allPlays.nonEmpty)) ||
-			(allPlays.nonEmpty && common.waiting.exists(_.reacter == state.nextPlayerIndex(state.ourPlayerIndex)))	// If we have a play and there's a potential inversion
+			potentialForcedPlay
 		Log.info(s"can discard: ${!cantDiscard} ${state.clueTokens}")
 
 		val allDiscards = if (cantDiscard) List() else

@@ -19,8 +19,8 @@ It only plays with [Reactor 1.0 conventions](https://hanabi.wiki/en/conventions/
   - You'll need to create its account on hanab.live first.
 - Run `scala-cli . --main-class scala_bot.main -- index=<index>` to start the bot.
 - Debug logs will show up in the console, providing more information about what the bot thinks about every action.
-	- `hand <playerName> [observerIndex]` will display the information on that player's hand from a particular perspective.
-        - If no observer index is provided, the hand will be logged from the common knowledge perspective.
+	- `hand <playerName> [observerName]` will display the information on that player's hand from a particular perspective.
+        - If no observer name is provided, the hand will be logged from the common knowledge perspective.
 
 ## Supported commands
 

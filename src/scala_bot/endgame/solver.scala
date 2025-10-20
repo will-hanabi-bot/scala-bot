@@ -223,27 +223,33 @@ case class EndgameSolver(
 			val GameArr(prob, remaining, _) = arr
 			val eState = eGame.state
 			Log.highlight(Console.MAGENTA, s"\narrangement ${eState.ourHand.map(eState.logId).mkString(",")} $prob")
-			val allActions = possibleActions(eGame, state.ourPlayerIndex, remaining, deadline)
+			val allActions = {
+				val as = possibleActions(eGame, state.ourPlayerIndex, remaining, deadline)
+
+				if (as.nonEmpty) as else
+					possibleActions(eGame, state.ourPlayerIndex, remaining, deadline, infer = true)
+			}
 
 			if (allActions.isEmpty)
 				Log.info("couldn't find any valid actions")
+				bestPerforms
 			else
 				Log.highlight(Console.GREEN, s"actions: ${allActions.map((action, _) => action.fmt(eGame)).mkString(", ")}")
 
-			val arrs = genArrs(eGame, remaining, allActions.forall(_._1.isClue))
+				val arrs = genArrs(eGame, remaining, allActions.forall(_._1.isClue))
 
-			optimize(eGame, arrs, allActions, state.ourPlayerIndex, deadline) match {
-				case Right((performs, winrate)) =>
-					Log.info(s"arrangement winnable! ${performs.map(_.fmt(eGame)).mkString(", ")} | winrate: $winrate")
-					performs.foldLeft(bestPerforms) { (acc, perform) =>
-						val entry = acc.lift(perform) match {
-							case Some((w, i)) => (w + winrate * prob, i)
-							case None => (winrate * prob, bestPerforms.size)
+				optimize(eGame, arrs, allActions, state.ourPlayerIndex, deadline) match {
+					case Right((performs, winrate)) =>
+						Log.info(s"arrangement winnable! ${performs.map(_.fmt(eGame)).mkString(", ")} | winrate: $winrate")
+						performs.foldLeft(bestPerforms) { (acc, perform) =>
+							val entry = acc.lift(perform) match {
+								case Some((w, i)) => (w + winrate * prob, i)
+								case None => (winrate * prob, bestPerforms.size)
+							}
+							acc.updated(perform, entry)
 						}
-						acc.updated(perform, entry)
-					}
-				case Left(_) => bestPerforms
-			}
+					case Left(_) => bestPerforms
+				}
 
 		val bestPerforms =
 			if (arrs.isEmpty)
@@ -326,7 +332,7 @@ case class EndgameSolver(
 		simpleCache = simpleCache.updated(hash, result)
 		result
 
-	def possibleActions(game: Game, playerTurn: Int, remaining: RemainingMap, deadline: Instant, depth: Int = 0): List[(PerformAction, List[Identity])] =
+	def possibleActions(game: Game, playerTurn: Int, remaining: RemainingMap, deadline: Instant, depth: Int = 0, infer: Boolean = false): List[(PerformAction, List[Identity])] =
 		boundary:
 			val state = game.state
 
@@ -348,7 +354,11 @@ case class EndgameSolver(
 			if (urgentAction.isDefined)
 				return urgentAction.get
 
-			val playables = game.players(playerTurn).obviousPlayables(game, playerTurn)
+			val playables = if (infer)
+				game.players(playerTurn).thinksPlayables(game, playerTurn)
+			else
+				game.players(playerTurn).obviousPlayables(game, playerTurn)
+
 			val playActions = playables.map { order =>
 				if (Instant.now.isAfter(deadline))
 					break(List())

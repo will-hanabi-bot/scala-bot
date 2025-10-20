@@ -58,7 +58,7 @@ case class State(
 		copy(clueTokens = 8.min(clueTokens + 1))
 
 	def ended =
-		strikes == 3 || score == maxScore || endgameTurns.exists(_ == 0)
+		strikes == 3 || score == maxScore || endgameTurns.contains(0)
 
 	def score = playStacks.sum
 	def maxScore = maxRanks.sum
@@ -85,8 +85,6 @@ case class State(
 		!isBasicTrash(id) && discardStacks(id.suitIndex)(id.rank - 1).length == cardCount(id.toOrd) - 1
 
 	def ourHand = hands(ourPlayerIndex)
-
-
 
 	def clueTouched(orders: Seq[Int], clue: BaseClue) =
 		orders.filter(order => variant.cardTouched(deck(order), clue))

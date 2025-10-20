@@ -118,7 +118,7 @@ extension (p: Player) {
 			}
 
 			if (!recursiveIds.isEmpty)
-				changed ||= basicElim(recursiveIds)
+				changed = basicElim(recursiveIds) || changed
 
 			allPossible = allPossible.difference(eliminated)
 			allInferred = allPossible.difference(eliminated)
@@ -308,9 +308,9 @@ extension (p: Player) {
 	def refreshLinks(game: Game, goodTouch: Boolean) =
 		val state = game.state
 
-		val initial = (p, List[Link](), List[Int]())
-		val (newPlayer, newLinks, sarcastics) = p.links.foldRight(initial) { (link, acc) =>
-			val (player, newLinks, sarcastics) = acc
+		val initial = (p.copy(links = List.empty), List[Int]())
+		val (newPlayer, sarcastics) = p.links.foldRight(initial) { (link, acc) =>
+			val (player, sarcastics) = acc
 			link match {
 				case Link.Promised(orders, id, target) =>
 					lazy val viableOrders = orders.filter(player.thoughts(_).possible.contains(id))
@@ -322,10 +322,10 @@ extension (p: Player) {
 					if (skip)
 						acc
 					else if (viableOrders.length == 1)
-						(player.withThought(viableOrders.head)(_.copy(inferred = IdentitySet.single(id))), newLinks, sarcastics)
+						(player.withThought(viableOrders.head)(_.copy(inferred = IdentitySet.single(id))), sarcastics)
 					else
 						Log.info(s"updating promised link for ${state.logId(id)} to $viableOrders (${p.name})")
-						(player, Link.Promised(viableOrders, id, target) +: newLinks, sarcastics)
+						(player.copy(links = Link.Promised(viableOrders, id, target) +: player.links), sarcastics)
 
 				case Link.Sarcastic(orders, id) =>
 					lazy val viableOrders = orders.filter(player.thoughts(_).possible.contains(id))
@@ -338,18 +338,21 @@ extension (p: Player) {
 						acc
 					else if (viableOrders.length == 1)
 						(player.withThought(viableOrders.head)(_.copy(inferred = IdentitySet.single(id))),
-							newLinks,
 							viableOrders.head +: sarcastics)
 					else
 						if (viableOrders != orders)
 							Log.info(s"updating sarcastic link for ${state.logId(id)} to $viableOrders (${p.name})")
-						(player, Link.Sarcastic(viableOrders, id) +: newLinks, sarcastics)
+						(player.copy(links = Link.Sarcastic(viableOrders, id) +: player.links), sarcastics)
 
 				case Link.Unpromised(orders, ids) =>
 					val revealed = orders.filter { o =>
 						val thought = player.thoughts(o)
-						thought.id(symmetric = true).nonEmpty || ids.exists(!thought.possible.contains(_))
+
+						thought.id(symmetric = true).nonEmpty ||
+						ids.exists(!thought.possible.contains(_)) ||
+						!state.hands.flatten.contains(o)		// An unknown card was played/discarded hypothetically; in hypo, we would know what it is
 					}
+
 					lazy val focused = orders.filter(game.meta(_).focused)
 
 					if (revealed.nonEmpty)
@@ -361,11 +364,11 @@ extension (p: Player) {
 						ids.find(i => orders.exists(!newPlayer.thoughts(_).inferred.contains(i))) match {
 							case Some(lostInf) =>
 								Log.info(s"linked orders $orders lost inference ${state.logId(lostInf)}")
-								(newPlayer, newLinks, sarcastics)
+								(newPlayer, sarcastics)
 							case None =>
-								(newPlayer, link +: newLinks, sarcastics)
+								(newPlayer.copy(links =  link +: newPlayer.links), sarcastics)
 						}
 			}
 		}
-		(sarcastics, newPlayer.copy(links = newLinks).findLinks(game, goodTouch))
+		(sarcastics, newPlayer.findLinks(game, goodTouch))
 }

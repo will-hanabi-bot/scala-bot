@@ -101,4 +101,4 @@ object Variant:
 			short +: acc
 		}.reverse
 
-		Variant(variant.id, variant.name, variant.suits.map(_.toLowerCase()), shortForms)
+		Variant(variant.id, variant.name, variant.suits, shortForms)

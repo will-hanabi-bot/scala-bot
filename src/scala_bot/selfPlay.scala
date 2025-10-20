@@ -46,40 +46,46 @@ def simulateGame(deck: Vector[Identity], variant: Variant): GameSummary =
 
 	def advance(result: (List[Game], Vector[PerformAction])) =
 		val (games, actions) = result
-		val currentPlayerIndex = games.head.state.currentPlayerIndex
-		val currentGame = games(currentPlayerIndex)
-		val perform = currentGame.takeAction
 
-		val newGames = games.map { game =>
-			val state = game.state
-			val action = performToAction(state, perform, currentPlayerIndex, Some(deck))
+		try
+			val currentPlayerIndex = games.head.state.currentPlayerIndex
+			val currentGame = games(currentPlayerIndex)
+			val perform = currentGame.takeAction
 
-			game.handleAction(action).when(!(_).state.ended) {
-				_.when(_.state.nextCardOrder < deck.length) { g =>
-					perform match {
-						case PerformAction.Play(_) | PerformAction.Discard(_) =>
-							val order = g.state.nextCardOrder
+			val newGames = games.map { game =>
+				val state = game.state
+				val action = performToAction(state, perform, currentPlayerIndex, Some(deck))
 
-							g.handleAction(DrawAction(
-								currentPlayerIndex,
-								order,
-								if (currentPlayerIndex == g.state.ourPlayerIndex) -1 else deck(order).suitIndex,
-								if (currentPlayerIndex == g.state.ourPlayerIndex) -1 else deck(order).rank,
-							))
-						case _ => g
+				game.handleAction(action).when(!(_).state.ended) {
+					_.when(_.state.nextCardOrder < deck.length) { g =>
+						perform match {
+							case PerformAction.Play(_) | PerformAction.Discard(_) =>
+								val order = g.state.nextCardOrder
+
+								g.handleAction(DrawAction(
+									currentPlayerIndex,
+									order,
+									if (currentPlayerIndex == g.state.ourPlayerIndex) -1 else deck(order).suitIndex,
+									if (currentPlayerIndex == g.state.ourPlayerIndex) -1 else deck(order).rank,
+								))
+							case _ => g
+						}
+
 					}
-
-				}
-				.pipe { g =>
-					g.handleAction(TurnAction(
-						g.state.turnCount,
-						g.state.nextPlayerIndex(currentPlayerIndex)
-					))
+					.pipe { g =>
+						g.handleAction(TurnAction(
+							g.state.turnCount,
+							g.state.nextPlayerIndex(currentPlayerIndex)
+						))
+					}
 				}
 			}
-		}
 
-		(newGames, actions :+ perform)
+			(newGames, actions :+ perform)
+		catch
+			case e =>
+				e.printStackTrace()
+				(games.updated(0, games(0).withState(_.copy(endgameTurns = Some(0)))), actions)
 
 	val initial = (games, Vector[PerformAction]())
 	val (finalGames, actions) = Iterator.iterate(initial)(advance)

@@ -57,7 +57,7 @@ def getResult(game: Game, hypo: Game, action: ClueAction): Double =
 								if (badTouch.length > newTouched.length)
 									-badTouch.length
 								else
-									List(0.0, 0.25, 0.5, 0.6, 0.7, 0.75)(newTouched.length - badTouch.length)
+									List(0.0, 0.125, 0.25, 0.35, 0.45, 0.55)(newTouched.length - badTouch.length)
 
 							val untouchedPlays = playables.count(!hypo.state.deck(_).clued)
 
@@ -103,7 +103,7 @@ def advance(game: Game, offset: Int): Double =
 		offset == 1 &&
 		bobChop.flatMap(state.deck(_).id()).exists(id => state.isCritical(id) || state.isPlayable(id))
 
-	if (playerIndex == state.ourPlayerIndex || state.endgameTurns.exists(_ == 0))
+	if (playerIndex == state.ourPlayerIndex || state.endgameTurns.contains(0))
 		evalGame(game)
 
 	else if (urgentDc.isEmpty && allPlayables.nonEmpty)
@@ -299,11 +299,13 @@ def evalGame(game: Game): Double =
 	val bdrVal = state.variant.allIds.map { id =>
 		val discarded = state.discardStacks(id.suitIndex)(id.rank - 1)
 
-		// Trust others to discard stuff duplicated in our hand
-		lazy val duplicated = state.hands.flatten.exists(state.deck(_).matches(id)) ||
+		lazy val duplicated = state.hands.flatten.exists { o =>
+			state.deck(o).matches(id) ||
+			game.me.thoughts(o).matches(id, infer = true) && game.meta(o).focused
+		} ||
+			// Trust others to discard stuff duplicated in our hand
 			discarded.forall(game.meta(_).by.exists(_ != state.ourPlayerIndex) &&
 				state.ourHand.exists(game.me.thoughts(_).possible.contains(id)))
-
 
 		if (state.isBasicTrash(id) || id.rank == 5 || discarded.isEmpty)
 			0

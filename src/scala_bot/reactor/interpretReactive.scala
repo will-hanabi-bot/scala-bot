@@ -84,11 +84,11 @@ def interpretReactiveColour(prev: Game, game: Game, action: ClueAction, focusSlo
 		}
 	}.headOption
 	.getOrElse {
-		// Didn't work, so target trash
-		val prevKT = prev.players(giver).thinksTrash(prev, receiver)
+		// Didn't work, so target trash (NOTE: this was temporarily giver's trash. why?)
+		val prevKt = prev.common.thinksTrash(prev, receiver)
 		val dcTargets = {
 			val unknownTrash = state.hands(receiver).zipWithIndex.filter { (o, _) =>
-				!prevKT.contains(o) &&
+				!prevKt.contains(o) &&
 				(state.isBasicTrash(state.deck(o).id().get) ||
 					state.hands(receiver).exists(o2 => o2 != o && state.deck(o).matches(state.deck(o2)))) // duped in the same hand
 			}.sortBy { (o, _) =>
@@ -105,7 +105,7 @@ def interpretReactiveColour(prev: Game, game: Game, action: ClueAction, focusSlo
 			}
 
 			lazy val sacrifices = state.hands(receiver).zipWithIndex.filter { (o, _) =>
-				!prevKT.contains(o) && !state.isCritical(state.deck(o).id().get)
+				!prevKt.contains(o) && !state.isCritical(state.deck(o).id().get)
 			}.sortBy { (o, _) =>
 				val id = state.deck(o).id().get
 				-game.common.playableAway(id) * 10 + (5 - id.rank)

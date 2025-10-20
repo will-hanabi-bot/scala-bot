@@ -11,12 +11,12 @@ enum Player:
 	case Alice, Bob, Cathy, Donald, Emily
 
 val VARIANTS = Map(
-	"No Variant" 		-> Variant(0, "No Variant", Vector("red", "yellow", "green", "blue", "purple"), Vector('r', 'y', 'g', 'b', 'p')),
-	"6 Suits" 			-> Variant(0, "6 Suits", Vector("red", "yellow", "green", "blue", "purple", "teal"), Vector('r', 'y', 'g', 'b', 'p', 't')),
-	"Rainbow (5 Suits)" -> Variant(16, "Rainbow", Vector("red", "yellow", "green", "blue", "rainbow"), Vector('r', 'y', 'g', 'b', 'm')),
-	"Black (5 Suits)" 	-> Variant(2, "Black", Vector("red", "yellow", "green", "blue", "black"), Vector('r', 'y', 'g', 'b', 'k')),
-	"Pink (5 Suits)" 	-> Variant(2, "Pink", Vector("red", "yellow", "green", "blue", "pink"), Vector('r', 'y', 'g', 'b', 'i')),
-	"Brown (5 Suits)" 	-> Variant(2, "Brown", Vector("red", "yellow", "green", "blue", "brown"), Vector('r', 'y', 'g', 'b', 'n'))
+	"No Variant" 		-> Variant(0, "No Variant", Vector("Red", "Yellow", "Green", "Blue", "Purple"), Vector('r', 'y', 'g', 'b', 'p')),
+	"6 Suits" 			-> Variant(0, "6 Suits", Vector("Red", "Yellow", "Green", "Blue", "Purple", "Teal"), Vector('r', 'y', 'g', 'b', 'p', 't')),
+	"Rainbow (5 Suits)" -> Variant(16, "Rainbow", Vector("Red", "Yellow", "Green", "Blue", "Rainbow"), Vector('r', 'y', 'g', 'b', 'm')),
+	"Black (5 Suits)" 	-> Variant(2, "Black", Vector("Red", "Yellow", "Green", "Blue", "Black"), Vector('r', 'y', 'g', 'b', 'k')),
+	"Pink (5 Suits)" 	-> Variant(2, "Pink", Vector("Red", "Yellow", "Green", "Blue", "Pink"), Vector('r', 'y', 'g', 'b', 'i')),
+	"Brown (5 Suits)" 	-> Variant(2, "Brown", Vector("Red", "Yellow", "Green", "Blue", "Brown"), Vector('r', 'y', 'g', 'b', 'n'))
 )
 
 val NAMES = Vector("Alice", "Bob", "Cathy", "Donald", "Emily")
@@ -182,7 +182,7 @@ def parseAction(state: State, action: String) =
 				throw new IllegalArgumentException(s"Not enough arguments provided (clue to us) in $action, needs '(slot x)'")
 			else
 				val list = slotsS.split(",").map(s => state.ourHand(s.toInt - 1))
-				ClueAction(giver, target, list, clue)
+				ClueAction(giver, target, list.toSeq, clue)
 
 		case playPattern(playerS, short, slotS) =>
 			val playerIndex = parsePlayer(playerS)
