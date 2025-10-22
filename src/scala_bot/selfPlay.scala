@@ -25,7 +25,7 @@ def simulateGame(deck: Vector[Identity], variant: Variant): GameSummary =
 		val names = Vector("Alice", "Bob", "Cathy")
 		val state = State(names, i, variant)
 
-		Game(tableID = 0, state, inProgress = false, convention = Reactor)
+		Reactor(tableID = 0, state, inProgress = false)
 			.copy(catchup = true)
 			.pipe { g =>
 				val state = g.state
@@ -44,7 +44,7 @@ def simulateGame(deck: Vector[Identity], variant: Variant): GameSummary =
 			}
 	}.toList
 
-	def advance(result: (List[Game], Vector[PerformAction])) =
+	def advance[G <: Game](result: (List[G], Vector[PerformAction]))(using ops: GameOps[G]) =
 		val (games, actions) = result
 
 		try

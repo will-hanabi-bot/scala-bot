@@ -5,7 +5,7 @@ import scala_bot.basics.given_Conversion_IdentitySet_Iterable
 import scala_bot.logger.Log
 import scala_bot.utils._
 
-private def reactiveContext(prev: Game, game: Game, action: ClueAction, reacter: Int) =
+private def reactiveContext(prev: Reactor, game: Reactor, action: ClueAction, reacter: Int) =
 	val ClueAction(giver = giver, target = receiver, clue = _, list = _) = action
 	val state = game.state
 
@@ -38,7 +38,7 @@ private def reactiveContext(prev: Game, game: Game, action: ClueAction, reacter:
 
 	(possibleConns, knownPlays, hypoState)
 
-def interpretReactiveColour(prev: Game, game: Game, action: ClueAction, focusSlot: Int, reacter: Int, inverted: Boolean): (Option[ClueInterp], Game) =
+def interpretReactiveColour(prev: Reactor, game: Reactor, action: ClueAction, focusSlot: Int, reacter: Int, inverted: Boolean): (Option[ClueInterp], Reactor) =
 	val ClueAction(giver = giver, target = receiver, clue = _, list = _) = action
 	val state = game.state
 	val (possibleConns, knownPlays, hypoState) = reactiveContext(prev, game, action, reacter)
@@ -156,7 +156,7 @@ def interpretReactiveColour(prev: Game, game: Game, action: ClueAction, focusSlo
 			.getOrElse(None, game)
 	}
 
-def interpretReactiveRank(prev: Game, game: Game, action: ClueAction, focusSlot: Int, reacter: Int): (Option[ClueInterp], Game) =
+def interpretReactiveRank(prev: Reactor, game: Reactor, action: ClueAction, focusSlot: Int, reacter: Int): (Option[ClueInterp], Reactor) =
 	val ClueAction(giver = _, target = receiver, clue = _, list = _) = action
 	val state = game.state
 	val (possibleConns, knownPlays, hypoState) = reactiveContext(prev, game, action, reacter)

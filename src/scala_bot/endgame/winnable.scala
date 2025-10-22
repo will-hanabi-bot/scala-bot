@@ -6,7 +6,7 @@ import scala.util.chaining.scalaUtilChainingOps
 import java.time.Instant
 // import scala_bot.logger.Log
 
-extension (solver: EndgameSolver)
+extension[G <: Game] (solver: EndgameSolver[G])
 	def cluelessWinnable(state: State, playerTurn: Int, deadline: Instant, depth: Int): Option[PerformAction] =
 		lazy val hash = state.hashCode()
 

@@ -19,7 +19,7 @@ def checkFix(prev: Game, game: Game, action: ClueAction) =
 			(cluedResets, duplicateReveals)
 	}
 
-def connectableSimple(game: Game, player: Player, start: Int, target: Int, id: Option[Identity] = None): List[Int] =
+def connectableSimple[G <: Game](game: G, player: Player, start: Int, target: Int, id: Option[Identity] = None)(using ops: GameOps[G]): List[Int] =
 	val state = game.state
 
 	if (id.exists(state.isPlayable))
@@ -44,3 +44,37 @@ def connectableSimple(game: Game, player: Player, start: Int, target: Int, id: O
 		}.flatten.find(_.nonEmpty)
 
 		connectables.getOrElse(connectableSimple(game, player, nextPlayerIndex, target, id))
+
+/** Returns the possible ids of a distribution clue. */
+def distributionClue(prev: Game, game: Game, action: ClueAction, focus: Int): Option[IdentitySet] =
+	val state = game.state
+	val ClueAction(_, target, list, clue) = action
+	val thought = game.common.thoughts(focus)
+
+	if (list.forall(prev.state.deck(_).clued) || (!state.inEndgame && state.remScore > state.variant.suits.length))
+		return None
+
+	if (thought.id(infer = true).exists(state.isBasicTrash))
+		return None
+
+	val poss = if (clue.kind == ClueKind.Colour)
+		thought.possible.toList
+	else
+		thought.possible.filter(_.rank == clue.value).toList
+
+	def loop(poss: List[Identity], useful: IdentitySet): Option[IdentitySet] =
+		if (poss.isEmpty) Some(useful) else
+			val p = poss.head
+			lazy val duplicated = state.hands.zipWithIndex.exists { (hand, i) =>
+				i != target && hand.exists(o => game.isTouched(o) && game.orderMatches(o, p, infer = true))
+			}
+
+			if (state.isBasicTrash(p))
+				loop(poss.tail, useful)
+			else if (duplicated)
+				loop(poss.tail, useful.union(p))
+			else
+				None
+
+	val useful = loop(poss, IdentitySet.empty)
+	useful.filter(_.nempty)

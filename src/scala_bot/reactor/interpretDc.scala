@@ -3,7 +3,7 @@ package scala_bot.reactor
 import scala_bot.basics._
 import scala_bot.logger.Log
 
-def interpretUsefulDc(game: Game, action: DiscardAction) =
+def interpretUsefulDc(game: Reactor, action: DiscardAction) =
 	val (common, state) = (game.common, game.state)
 	val DiscardAction(playerIndex, order, suitIndex, rank, _) = action
 	val id = Identity(suitIndex, rank)

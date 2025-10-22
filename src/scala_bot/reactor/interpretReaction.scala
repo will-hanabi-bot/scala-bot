@@ -8,8 +8,8 @@ def calcSlot(focusSlot: Int, slot: Int) =
 	val other = (focusSlot + 5 - slot) % 5
 	if (other == 0) 5 else other
 
-private def calcTargetSlot(prev: Game, game: Game, order: Int, wc: WaitingConnection) =
-	val WaitingConnection(_, reacter, receiver, receiverHand, _, focusSlot, _, _) = wc
+private def calcTargetSlot(prev: Reactor, game: Reactor, order: Int, wc: ReactorWC) =
+	val ReactorWC(_, reacter, receiver, receiverHand, _, focusSlot, _, _) = wc
 	val reactSlot = prev.state.hands(reacter).indexWhere(_ == order) + 1
 	val targetSlot = calcSlot(focusSlot, reactSlot)
 
@@ -135,7 +135,7 @@ def elimPlayPlay(state: State, common: Player, meta: Vector[ConvData], reacter: 
 			}
 	}
 
-def targetIDiscard(prev: Game, game: Game, wc: WaitingConnection, targetSlot: Int) =
+def targetIDiscard(prev: Reactor, game: Reactor, wc: ReactorWC, targetSlot: Int) =
 	val common = game.common
 	val order = wc.receiverHand(targetSlot - 1)
 	val meta = game.meta(order)
@@ -154,7 +154,7 @@ def targetIDiscard(prev: Game, game: Game, wc: WaitingConnection, targetSlot: In
 
 	(newCommon, newMeta)
 
-def targetIPlay(_prev: Game, game: Game, wc: WaitingConnection, targetSlot: Int) =
+def targetIPlay(_prev: Reactor, game: Reactor, wc: ReactorWC, targetSlot: Int) =
 	val state = game.state
 	val order = wc.receiverHand(targetSlot - 1)
 
@@ -183,9 +183,9 @@ def targetIPlay(_prev: Game, game: Game, wc: WaitingConnection, targetSlot: Int)
 
 	(newCommon, newMeta)
 
-def reactDiscard(prev: Game, game: Game, playerIndex: Int, order: Int, wc: WaitingConnection) =
+def reactDiscard(prev: Reactor, game: Reactor, playerIndex: Int, order: Int, wc: ReactorWC) =
 	val state = game.state
-	val WaitingConnection(_, reacter, receiver, receiverHand, clue, focusSlot, inverted, turn) = wc
+	val ReactorWC(_, reacter, receiver, receiverHand, clue, focusSlot, inverted, turn) = wc
 	lazy val knownTrash = prev.common.thinksTrash(prev, reacter)
 
 	if (playerIndex != reacter)
@@ -225,9 +225,9 @@ def reactDiscard(prev: Game, game: Game, playerIndex: Int, order: Int, wc: Waiti
 				game
 		}
 
-def reactPlay(prev: Game, game: Game, playerIndex: Int, order: Int, wc: WaitingConnection) =
+def reactPlay(prev: Reactor, game: Reactor, playerIndex: Int, order: Int, wc: ReactorWC) =
 	val state = game.state
-	val WaitingConnection(_, reacter, receiver, receiverHand, clue, focusSlot, inverted, turn) = wc
+	val ReactorWC(_, reacter, receiver, receiverHand, clue, focusSlot, inverted, turn) = wc
 	lazy val knownPlayables = prev.common.obviousPlayables(prev, reacter)
 
 	if (playerIndex != reacter)

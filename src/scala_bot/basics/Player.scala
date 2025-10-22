@@ -19,17 +19,6 @@ enum Link:
 		case _ => None
 	}
 
-case class WaitingConnection(
-	giver: Int,
-	reacter: Int,
-	receiver: Int,
-	receiverHand: Vector[Int],
-	clue: BaseClue,
-	focusSlot: Int,
-	inverted: Boolean,
-	turn: Int
-)
-
 case class Player(
 	playerIndex: Int,
 	name: String,
@@ -44,7 +33,7 @@ case class Player(
 	unknownPlays: Set[Int] = Set(),
 	hypoPlays: Set[Int] = Set(),
 
-	waiting: Option[WaitingConnection] = None,
+	waiting: List[WaitingConnection] = List()
 ):
 	def withThought(order: Int)(f: Thought => Thought) =
 		copy(thoughts = thoughts.updated(order, f(thoughts(order))))
@@ -55,7 +44,7 @@ case class Player(
 	def strPoss(state: State, order: Int) =
 		thoughts(order).possible.toSeq.sortBy(_.toOrd).map(state.logId).mkString(",")
 
-	def refer(game: Game, hand: List[Int], order: Int, left: Boolean = false) =
+	def refer(game: Game, hand: Vector[Int], order: Int, left: Boolean = false) =
 		val offset = if (left) -1 else 1
 		val index = hand.indexWhere(_ == order)
 		var targetIndex = (index + offset + hand.length) % hand.length
@@ -219,9 +208,14 @@ case class Player(
 				if (orders.length > ids.map(unknownIds(state, _)).sum) orders else List()
 		}
 
-	def updateHypoStacks(game: Game): Player =
+	def dependentConns(order: Int) =
+		waiting.filter { wc =>
+			wc.connections.zipWithIndex.exists((c, i) => i > wc.connIndex && c.order == order)
+		}
+
+	def updateHypoStacks[G <: Game](game: G)(using ops: GameOps[G]): Player =
 		case class HypoStruct(
-			hypo: Game,
+			hypo: G,
 			unknownPlays: Set[Int],
 			played: Set[Int],
 			viable: Set[Int]
@@ -246,7 +240,7 @@ case class Player(
 									h
 								else
 									successful = true
-									h.copy(state = h.state.withPlay(id))
+									h.withState(_.withPlay(id))
 							}
 						}
 
@@ -266,7 +260,7 @@ case class Player(
 					case Some(id) =>
 						if (hypo.state.isPlayable(id))
 							acc.copy(
-								hypo = hypo.copy(state = hypo.state.withPlay(id)),
+								hypo = hypo.withState(_.withPlay(id)),
 								unknownPlays = unknownPlays + order,
 								played = played + order,
 								viable = viable - order

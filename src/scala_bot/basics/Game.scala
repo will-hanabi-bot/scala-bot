@@ -20,140 +20,178 @@ enum PlayInterp extends Interp:
 enum DiscardInterp extends Interp:
 	case None, Mistake, Sarcastic, GentlemansDiscard
 
-trait Convention:
-	def interpretClue(prev: Game, game: Game, action: ClueAction): Game
-	def interpretDiscard(prev: Game, game: Game, action: DiscardAction): Game
-	def interpretPlay(prev: Game, game: Game, action: PlayAction): Game
-	def takeAction(game: Game): PerformAction
-	def updateTurn(prev: Game, game: Game, action: TurnAction): Game
+case class GameUpdates(
+	tableID: Option[Int] = None,
+	state: Option[State] = None,
+	players: Option[Vector[Player]] = None,
+	common: Option[Player] = None,
+	base: Option[(State, Vector[ConvData], Vector[Player], Player)] = None,
+	meta: Option[Vector[ConvData]] = None,
 
-	def findAllClues(game: Game, playerIndex: Int): List[PerformAction]
-	def findAllDiscards(game: Game, playerIndex: Int): List[PerformAction]
+	deckIds: Option[Vector[Option[Identity]]] = None,
+	catchup: Option[Boolean] = None,
+	notes: Option[Map[Int, Note]] = None,
+	lastMove: Option[Option[Interp]] = None,
+	queuedCmds: Option[List[(String, String)]] = None,
+	nextInterp: Option[Option[Interp]] = None,
+	noRecurse: Option[Boolean] = None,
+	rewindDepth: Option[Int] = None,
+	inProgress: Option[Boolean] = None
+)
 
-case class Game(
-	tableID: Int,
-	state: State,
-	players: Vector[Player],
-	common: Player,
-	base: (State, Vector[ConvData], Vector[Player], Player),
-	inProgress: Boolean,
-	convention: Convention,
+def genPlayers(state: State) =
+	val numPlayers = state.numPlayers
+	val allPossible = IdentitySet.from(state.variant.allIds)
+	val hypoStacks = Vector.fill(state.variant.suits.length)(0)
 
-	meta: Vector[ConvData] = Vector(),
-	deckIds: Vector[Option[Identity]] = Vector(),
-	catchup: Boolean = false,
-	notes: Map[Int, Note] = Map(),
-	lastMove: Option[Interp] = None,
-	queuedCmds: List[(String, String)] = List(),
-	nextInterp: Option[Interp] = None,
-	noRecurse: Boolean = false,
-	rewindDepth: Int = 0
-):
-	def blank(keepDeck: Boolean) =
-		Game(tableID, base._1, convention, inProgress)
-			.copy(
-				deckIds = if (keepDeck) deckIds else Vector(),
-				meta = base._2,
-				players = base._3,
-				common = base._4,
-				base = base
-			)
+	val players = (0 until numPlayers).map(i => Player(i, state.names(i), allPossible, hypoStacks)).toVector
+	val common = Player(-1, "common", allPossible, hypoStacks)
+	(players, common)
 
-	def withCard(order: Int)(f: Card => Card): Game =
-		copy(state = state.copy(deck = state.deck.updated(order, f(state.deck(order)))))
+trait Game:
+	def tableID: Int
+	def state: State
+	def players: Vector[Player]
+	def common: Player
+	def base: (State, Vector[ConvData], Vector[Player], Player)
+	def meta: Vector[ConvData]
 
-	def withThought(order: Int)(f: Thought => Thought): Game =
-		copy(common = common.copy(thoughts = common.thoughts.updated(order, f(common.thoughts(order)))))
+	def deckIds: Vector[Option[Identity]]
+	def catchup: Boolean
+	def notes: Map[Int, Note]
+	def lastMove: Option[Interp]
+	def queuedCmds: List[(String, String)]
+	def nextInterp: Option[Interp]
+	def noRecurse: Boolean
+	def rewindDepth: Int
+	def inProgress: Boolean
 
-	def withMeta(order: Int)(f: ConvData => ConvData): Game =
-		copy(meta = meta.updated(order, f(meta(order))))
+trait GameOps[G <: Game]:
+	def blank(game: G, keepDeck: Boolean): G
+	def copyWith(game: G, updates: GameUpdates): G
 
-	def withState(f: State => State): Game = copy(state = f(state))
+	def interpretClue(prev: G, game: G, action: ClueAction): G
+	def interpretDiscard(prev: G, game: G, action: DiscardAction): G
+	def interpretPlay(prev: G, game: G, action: PlayAction): G
+	def takeAction(game: G): PerformAction
+	def updateTurn(prev: G, game: G, action: TurnAction): G
 
-	def withId(order: Int, id: Identity): Game =
+	def findAllClues(game: G, playerIndex: Int): List[PerformAction]
+	def findAllDiscards(game: G, playerIndex: Int): List[PerformAction]
+
+extension[G <: Game](game: G)
+	def withThought(order: Int)(f: Thought => Thought)(using ops: GameOps[G]) =
+		val common = game.common
+		ops.copyWith(game, GameUpdates(
+			common = Some(common.copy(
+				thoughts = common.thoughts.updated(order, f(common.thoughts(order)))))))
+
+	def withMeta(order: Int)(f: ConvData => ConvData)(using ops: GameOps[G]) =
+		val meta = game.meta
+		ops.copyWith(game, GameUpdates(meta = Some(meta.updated(order, f(meta(order))))))
+
+	def withState(f: State => State)(using ops: GameOps[G]): G =
+		ops.copyWith(game, GameUpdates(state = Some(f(game.state))))
+
+	def withCard(order: Int)(f: Card => Card)(using ops: GameOps[G]): G =
+		val deck = game.state.deck
+		withState(_.copy(deck = deck.updated(order, f(deck(order)))))
+
+	def withId(order: Int, id: Identity)(using ops: GameOps[G]): G =
 		withCard(order)(c => c.copy(suitIndex = id.suitIndex, rank = id.rank))
-		.copy(deckIds = deckIds.updated(order, Some(id)))
+			.pipe(g => ops.copyWith(g, GameUpdates(deckIds = Some(g.deckIds.updated(order, Some(id))))))
 
-	def withCatchup(f: Game => Game) =
-		f(copy(catchup = true)).copy(catchup = false)
+	def withCatchup(f: G => G)(using ops: GameOps[G]) =
+		ops.copyWith(game, GameUpdates(catchup = Some(true)))
+			.pipe(f)
+			.pipe(ops.copyWith(_, GameUpdates(catchup = Some(false))))
 
-	def me = players(state.ourPlayerIndex)
+	def handleAction(action: Action)(using ops: GameOps[G]): G =
+		val state = game.state
 
-	def isTouched(order: Int) =
-		state.deck(order).clued || meta(order).status == CardStatus.CalledToPlay
-
-	def isBlindPlaying(order: Int) =
-		!state.deck(order).clued && meta(order).status == CardStatus.CalledToPlay
-
-	def handleAction(action: Action) =
 		if (state.actionList.length < state.turnCount)
 			throw new IllegalStateException(s"Turn count ${state.turnCount}, actionList ${state.actionList}")
-		val newGame = withState(_.copy(
-			actionList = addAction(state.actionList, action, state.turnCount)
-		))
+
+		val newGame = withState(_.copy(actionList = addAction(state.actionList, action, state.turnCount)))
 
 		action match {
-			case clue @ ClueAction(_, _, _, _) =>
+			case clue: ClueAction =>
 				Log.highlight(Console.YELLOW, s"Turn ${state.turnCount}: ${action.fmt(state)}")
-				newGame.handleClue(this, clue)
+				newGame.handleClue(game, clue)
 
-			case discard @ DiscardAction(_, _, _, _, _) =>
+			case discard: DiscardAction =>
 				Log.highlight(Console.YELLOW, s"Turn ${state.turnCount}: ${action.fmt(state)}")
-				convention.interpretDiscard(this, newGame.onDiscard(discard), discard)
+				ops.interpretDiscard(game, newGame.onDiscard(discard), discard)
 
-			case play @ PlayAction(_, _, _, _) =>
+			case play: PlayAction =>
 				Log.highlight(Console.YELLOW, s"Turn ${state.turnCount}: ${action.fmt(state)}")
-				convention.interpretPlay(this, newGame.onPlay(play), play)
+				ops.interpretPlay(game, newGame.onPlay(play), play)
 
 			case draw @ DrawAction(playerIndex, order, suitIndex, rank) =>
 				newGame.onDraw(draw)
 					.when(g => g.state.turnCount == 0 && g.state.hands.forall(_.length == HAND_SIZE(state.numPlayers)))
 						(_.withState(_.copy(turnCount = 1)))
 
-			case GameOverAction(_, _) =>
+			case _: GameOverAction =>
 				Log.highlight(Console.YELLOW, "Game over!")
-				copy(inProgress = false)
+				ops.copyWith(newGame, GameUpdates(inProgress = Some(false)))
 
 			case turn @ TurnAction(num, currentPlayerIndex) =>
-				val newGame2 = newGame.withState(_.copy(
+				newGame.withState(_.copy(
 					currentPlayerIndex = currentPlayerIndex,
 					turnCount = num + 1
 				))
-				convention.updateTurn(this, newGame2, turn).updateNotes()
+				.pipe(ops.updateTurn(game, _, turn).updateNotes())
 
 			case InterpAction(interp) =>
-				newGame.copy(nextInterp = Some(interp))
+				ops.copyWith(newGame, GameUpdates(nextInterp = Some(Some(interp))))
 
-			case _ =>
-				this
+			case _ => game
 		}
 
-	def handleClue(prev: Game, clue: ClueAction) =
-		val newGame = this.onClue(clue).elim(goodTouch = true)
-		convention.interpretClue(prev, newGame, clue)
+	def me = game.players(game.state.ourPlayerIndex)
 
-	def takeAction =
-		convention.takeAction(this)
+	def isTouched(order: Int) =
+		game.state.deck(order).clued ||
+		game.meta(order).status == CardStatus.CalledToPlay ||
+		game.meta(order).status == CardStatus.Finessed
 
-	def simulateClue(action: ClueAction, free: Boolean = false, log: Boolean = false, noRecurse: Boolean = false) =
+	def isBlindPlaying(order: Int) =
+		!game.state.deck(order).clued &&
+		(game.meta(order).status == CardStatus.CalledToPlay || game.meta(order).status == CardStatus.Finessed)
+
+	/** Tries all ways to see if the order matches. */
+	def orderMatches(order: Int, id: Identity, infer: Boolean = false) =
+		game.state.deck(order).id()
+		.orElse(game.deckIds(order))
+		.orElse(game.me.thoughts(order).id(infer = infer))
+		.exists(_ == id)
+
+	def handleClue(prev: G, clue: ClueAction)(using ops: GameOps[G]) =
+		ops.interpretClue(prev, game.onClue(clue).elim(goodTouch = true), clue)
+
+	def takeAction(using ops: GameOps[G]) =
+		ops.takeAction(game)
+
+	def simulateClue(action: ClueAction, free: Boolean = false, log: Boolean = false, noRecurse: Boolean = false)(using ops: GameOps[G]) =
 		val level = Logger.level
 
 		if (!log)
 			Logger.setLevel(LogLevel.Off)
 
-		val hypoGame = copy(catchup = true, noRecurse = noRecurse)
+		val hypoGame = ops.copyWith(game, GameUpdates(catchup = Some(true), noRecurse = Some(noRecurse)))
 			.withState(s => s.copy(
 				actionList = addAction(s.actionList, action, s.turnCount),
 				clueTokens = s.clueTokens + (if (free) 1 else 0)
 			))
-			.handleClue(this, action)
-			.copy(catchup = false)
-			.withState(s => s.copy(turnCount = state.turnCount + 1))
+			.handleClue(game, action)
+			.pipe(ops.copyWith(_, GameUpdates(catchup = Some(false))))
+			.withState(s => s.copy(turnCount = s.turnCount + 1))
 
 		Logger.setLevel(level)
 		hypoGame
 
-	def simulateAction(action: Action, draw: Option[Identity] = None, log: Boolean = false) =
+	def simulateAction(action: Action, draw: Option[Identity] = None, log: Boolean = false)(using ops: GameOps[G]): G =
 		val level = Logger.level
 
 		if (!log)
@@ -168,7 +206,7 @@ case class Game(
 				.when(_.state.cardsLeft > 0) { g2 =>
 					val order = g2.state.nextCardOrder
 
-					val action = deckIds.lift(order).flatten.orElse(draw) match {
+					val action = g2.deckIds.lift(order).flatten.orElse(draw) match {
 						case Some(id) => DrawAction(playerIndex, order, id.suitIndex, id.rank)
 						case None => DrawAction(playerIndex, order, -1, -1)
 					}
@@ -181,7 +219,9 @@ case class Game(
 		Logger.setLevel(level)
 		hypoGame
 
-	def rewind(turn: Int, action: Action): Either[String, Game] =
+	def rewind(turn: Int, action: Action)(using ops: GameOps[G]): Either[String, G] =
+		val state = game.state
+
 		if (turn < 1 || turn > state.actionList.length + 1)
 			return Left(s"attempted to rewind to invalid turn $turn")
 
@@ -190,7 +230,7 @@ case class Game(
 		if (state.actionList(turn).contains(action))
 			return Left("action was already rewinded")
 
-		if (rewindDepth > 2)
+		if (game.rewindDepth > 2)
 			return Left("rewind depth went too deep")
 
 		Log.highlight(Console.GREEN, "------- STARTING REWIND -------")
@@ -198,11 +238,13 @@ case class Game(
 		val level = Logger.level
 		Logger.setLevel(LogLevel.Off)
 
-		val newGame = blank(true)
-			.copy(
-				catchup = true,
-				rewindDepth = rewindDepth + 1,
-			)
+		val newGame = ops.blank(game, true)
+			.pipe { g =>
+				ops.copyWith(g, GameUpdates(
+					catchup = Some(true),
+					rewindDepth = Some(game.rewindDepth + 1),
+				))
+			}
 			.pipe {
 				state.actionList.take(turn).flatten.foldLeft(_){ (acc, action) => action match {
 					case DrawAction(playerIndex, order, _, _)
@@ -221,90 +263,87 @@ case class Game(
 
 		Log.highlight(Console.GREEN, s"------- REWIND COMPLETE -------")
 
-		Right(newGame.copy(
-			catchup = catchup,
-			notes = notes,
-			state = newGame.state.copy(
+		Right(ops.copyWith(newGame, GameUpdates(
+			catchup = Some(game.catchup),
+			notes = Some(game.notes),
+			state = Some(newGame.state.copy(
 				deck = newGame.state.deck.map { c =>
-					if (c.id().isEmpty)
-						deckIds(c.order).map { id =>
+					if (c.id().nonEmpty) c else
+						game.deckIds(c.order).fold(c) { id =>
 							c.copy(suitIndex = id.suitIndex, rank = id.rank)
-						}.getOrElse(c)
-					else
-						c
+						}
 				}
-			)
-		))
+			))
+		)))
 
-	def navigate(turn: Int) =
+	def navigate(turn: Int)(using ops: GameOps[G]) =
 		Log.highlight(Console.GREEN, s"------- NAVIGATING (turn $turn) -------")
 
-		var newGame = blank(false)
-		val actions = state.actionList
+		val actions = game.state.actionList
 
-		newGame = if (turn == 1 && state.ourPlayerIndex == 0)
-			actions.flatten.takeWhile {
-				case DrawAction(_, _, _, _) => true
-				case _ => false
-			}.foldLeft(newGame)(_.handleAction(_))
-		else
-			val level = Logger.level
-			Logger.setLevel(LogLevel.Off)
+		ops.blank(game, false)
+			.cond(_ => turn == 1 && game.state.ourPlayerIndex == 0)
+				(actions.flatten.takeWhile(_.isInstanceOf[DrawAction]).foldLeft(_)(_.handleAction(_)))
+				{
+					val level = Logger.level
+					Logger.setLevel(LogLevel.Off)
 
-			def loop(game: Game, actions: Iterator[Action]): Game =
-				if (game.state.turnCount == turn - 1)
-					Logger.setLevel(level)
+					def loop(g: G, actions: Iterator[Action]): G =
+						if (g.state.turnCount == turn - 1)
+							Logger.setLevel(level)
 
-				if (game.state.turnCount == turn || actions.isEmpty)
-					game
-				else
-					val action = actions.next()
-					if (action.isInstanceOf[InterpAction])
-						loop(game, actions)
-					else
-						loop(game.handleAction(action), actions)
+						if (g.state.turnCount == turn || actions.isEmpty)
+							g
+						else
+							val action = actions.next()
+							if (action.isInstanceOf[InterpAction])
+								loop(g, actions)
+							else
+								loop(g.handleAction(action), actions)
 
-			loop(newGame, actions.flatten.iterator)
-		.copy(catchup = catchup)
-
-		if (!newGame.catchup && newGame.state.currentPlayerIndex == state.ourPlayerIndex)
-			val perform = newGame.takeAction
-			Log.highlight(Console.BLUE, s"Suggested action: ${perform.fmt(newGame)}")
-
-		newGame.withState(_.copy(actionList = actions))
+					loop(_, actions.flatten.iterator)
+				}
+			.pipe(ops.copyWith(_, GameUpdates(catchup = Some(game.catchup))))
+			.when(g => !g.catchup && g.state.currentPlayerIndex == g.state.ourPlayerIndex) { g =>
+				val perform = g.takeAction
+				Log.highlight(Console.BLUE, s"Suggested action: ${perform.fmt(g)}")
+				g
+			}
+			.withState(_.copy(actionList = actions))
 
 	def getNote(order: Int): String =
-		if (meta(order).trash)
+		if (game.meta(order).trash)
 			return "kt"
 
-		val thought = common.thoughts(order)
+		val thought = game.common.thoughts(order)
 
 		val note = if (thought.inferred.isEmpty)
 			"??"
 		else if (thought.inferred == thought.possible)
 			""
 		else if (thought.inferred.length <= 6)
-			common.strInfs(state, order)
+			game.common.strInfs(game.state, order)
 		else
 			"..."
 
-		meta(order).status match {
+		game.meta(order).status match {
 			case CardStatus.CalledToPlay => s"[f]${if (note.isEmpty) "" else s" [$note]"}"
 			case CardStatus.ChopMoved => s"[cm]${if (note.isEmpty) "" else s" [$note]"}"
 			case CardStatus.CalledToDiscard => "dc"
 			case _ => note
 		}
 
-	def updateNotes(): Game =
-		val (cmds, newNotes) = state.hands.flatten.foldLeft((List[(String, String)](), notes)) { (acc, order) =>
+	def updateNotes()(using ops: GameOps[G]): G =
+		val (state, notes) = (game.state, game.notes)
+		val (cmds, newNotes) = game.state.hands.flatten.foldLeft((List[(String, String)](), notes)) { (acc, order) =>
 			val (cmds, newNotes) = acc
 			val card = state.deck(order)
 			lazy val note = getNote(order)
 
-			if ((!card.clued && meta(order).status == CardStatus.None) || note.isEmpty)
+			if ((!card.clued && game.meta(order).status == CardStatus.None) || note.isEmpty)
 				acc
 			else
-				val linkNote = common.links.foldLeft(List()) { (a, link) =>
+				val linkNote = game.common.links.foldLeft(List()) { (a, link) =>
 					if (link.getOrders.contains(order) && link.promise.isDefined)
 						a :+ state.logId(link.promise.get)
 					else a
@@ -320,8 +359,8 @@ case class Game(
 				if (write)
 					val full = notes.get(order).map(n => s"${n.full} | ").getOrElse("").appendedAll(s"t${state.turnCount}: $finalNote")
 
-					val newCmds = if (!catchup && inProgress)
-						("note", ujson.Obj("tableID" -> tableID, "order" -> order, "note" -> full).toString) +: cmds
+					val newCmds = if (!game.catchup && game.inProgress)
+						("note", ujson.Obj("tableID" -> game.tableID, "order" -> order, "note" -> full).toString) +: cmds
 					else
 						cmds
 
@@ -330,40 +369,4 @@ case class Game(
 					acc
 		}
 
-		copy(notes = newNotes, queuedCmds = queuedCmds ++ cmds)
-
-object Game {
-	private def genPlayers(state: State) =
-		val numPlayers = state.numPlayers
-		val allPossible = IdentitySet.from(state.variant.allIds)
-		val hypoStacks = Vector.fill(state.variant.suits.length)(0)
-
-		val players = (0 until numPlayers).map(i => Player(i, state.names(i), allPossible, hypoStacks)).toVector
-		val common = Player(-1, "common", allPossible, hypoStacks)
-		(players, common)
-
-	private def init(
-		tableID: Int,
-		state: State,
-		inProgress: Boolean,
-		convention: Convention,
-		t: (players: Vector[Player], common: Player)
-	): Game =
-		Game(
-			tableID = tableID,
-			state = state,
-			players = t.players,
-			common = t.common,
-			base = (state, Vector(), t.players, t.common),
-			inProgress = inProgress,
-			convention = convention,
-		)
-
-	def apply(
-		tableID: Int,
-		state: State,
-		convention: Convention,
-		inProgress: Boolean
-	) =
-		init(tableID, state, inProgress, convention, Game.genPlayers(state))
-}
+		ops.copyWith(game, GameUpdates(notes = Some(newNotes), queuedCmds = Some(game.queuedCmds ++ cmds)))

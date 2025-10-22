@@ -11,7 +11,7 @@ class Empathy extends munit.FunSuite:
 
 	test("it fails impossible setup") {
 		intercept[IllegalArgumentException] {
-			setup(Reactor, Vector(
+			setup(Reactor.apply, Vector(
 				Vector("xx", "xx", "xx", "xx", "xx"),
 				Vector("r1", "r1", "r1", "r1", "r1")
 			))
@@ -19,7 +19,7 @@ class Empathy extends munit.FunSuite:
 	}
 
 	test("it elims from count") {
-		val game = setup(Reactor, Vector(
+		val game = setup(Reactor.apply, Vector(
 			Vector("xx", "xx", "xx", "xx", "xx"),
 			Vector("r1", "r1", "r1", "r2", "r2")
 		),
@@ -30,7 +30,7 @@ class Empathy extends munit.FunSuite:
 	}
 
 	test("it visibly elims 5s") {
-		val game = setup(Reactor, Vector(
+		val game = setup(Reactor.apply, Vector(
 			Vector("xx", "xx", "xx", "xx"),		// p5, t5 in slots 3 and 4
 			Vector("g2", "b1", "r1", "g5"),
 			Vector("g3", "p1", "b3", "b5"),
@@ -53,7 +53,7 @@ class Empathy extends munit.FunSuite:
 	}
 
 	test("it visibly elims mixed cards") {
-		val game = setup(Reactor, Vector(
+		val game = setup(Reactor.apply, Vector(
 			Vector("xx", "xx", "xx", "xx", "xx"),
 			Vector("g2", "b1", "r4", "r5", "y3"),
 			Vector("y5", "p1", "b3", "b5", "g3")

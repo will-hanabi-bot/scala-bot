@@ -67,7 +67,7 @@ def fetchGame(args: Seq[String]) =
 
 	val state = State(players, index, variant)
 
-	Game(0, state, Reactor, false).copy(catchup = true)
+	Reactor(0, state, false).copy(catchup = true)
 		.pipe { g =>
 			(0 until state.numPlayers).foldLeft(g) { (a, playerIndex) =>
 				(0 until HAND_SIZE(state.numPlayers)).foldLeft(a) { (acc, _) =>

@@ -10,7 +10,7 @@ class Mistakes extends munit.FunSuite:
 	override def beforeAll() = Logger.setLevel(LogLevel.Off)
 
 	test("it cancels a missed reaction 1") {
-		val game = setup(Reactor, Vector(
+		val game = setup(Reactor.apply, Vector(
 			Vector("xx", "xx", "xx", "xx", "xx"),
 			Vector("g1", "r1", "g4", "b4", "b4"),
 			Vector("b1", "r3", "r4", "y4", "y4"),
@@ -33,7 +33,7 @@ class Mistakes extends munit.FunSuite:
 	}
 
 	test("it cancels a missed reaction 2") {
-		val game = setup(Reactor, Vector(
+		val game = setup(Reactor.apply, Vector(
 			Vector("xx", "xx", "xx", "xx", "xx"),
 			Vector("g1", "r1", "g4", "b4", "b4"),
 			Vector("b1", "r1", "r4", "y4", "y4"),

@@ -45,7 +45,7 @@ object Identity {
 }
 
 enum CardStatus:
-	case None, ChopMoved, CalledToPlay, CalledToDiscard, Sarcastic, GentlemansDiscard, ZeroClueChop
+	case None, ChopMoved, CalledToPlay, CalledToDiscard, Finessed, Sarcastic, GentlemansDiscard, ZeroClueChop
 
 	override def toString(): String =
 		this match {
@@ -53,6 +53,7 @@ enum CardStatus:
 			case CardStatus.ChopMoved => "chop moved"
 			case CardStatus.CalledToPlay => "called to play"
 			case CardStatus.CalledToDiscard => "called to discard"
+			case CardStatus.Finessed => "finessed"
 			case CardStatus.Sarcastic => "sarcastic"
 			case CardStatus.GentlemansDiscard => "gentleman's discard"
 			case CardStatus.ZeroClueChop => "zero clue chop"
@@ -77,6 +78,7 @@ case class Thought(
 	inferred: IdentitySet,
 	oldInferred: Option[IdentitySet] = None,
 	infoLock: Option[IdentitySet] = None,
+	rewinded: Boolean = false,
 	reset: Boolean = false
 ) extends Identifiable:
 	def id(infer: Boolean = false, symmetric: Boolean = false) =

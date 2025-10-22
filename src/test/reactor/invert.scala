@@ -10,7 +10,7 @@ class Invert extends munit.FunSuite:
 	override def beforeAll() = Logger.setLevel(LogLevel.Off)
 
 	test("it reacts to a response inversion") {
-		val game = setup(Reactor, Vector(
+		val game = setup(Reactor.apply, Vector(
 			Vector("xx", "xx", "xx", "xx", "xx"),
 			Vector("g1", "y5", "g4", "b4", "b4"),
 			Vector("b1", "r1", "r4", "y4", "y4"),
@@ -34,7 +34,7 @@ class Invert extends munit.FunSuite:
 	}
 
 	test("it receives a response inversion") {
-		val game = setup(Reactor, Vector(
+		val game = setup(Reactor.apply, Vector(
 			Vector("xx", "xx", "xx", "xx", "xx"),
 			Vector("g4", "y5", "g4", "b4", "b4"),
 			Vector("y4", "r1", "r4", "y4", "y1"),
@@ -58,7 +58,7 @@ class Invert extends munit.FunSuite:
 	}
 
 	test("it doesn't receive a declined inversion play") {
-		val game = setup(Reactor, Vector(
+		val game = setup(Reactor.apply, Vector(
 			Vector("xx", "xx", "xx", "xx", "xx"),
 			Vector("g4", "y5", "g4", "b4", "b4"),
 			Vector("y4", "r1", "r4", "y4", "y1"),
@@ -82,7 +82,7 @@ class Invert extends munit.FunSuite:
 	}
 
 	test("it doesn't receive a declined inversion discard") {
-		val game = setup(Reactor, Vector(
+		val game = setup(Reactor.apply, Vector(
 			Vector("xx", "xx", "xx", "xx", "xx"),
 			Vector("g4", "y5", "g4", "b4", "b3"),
 			Vector("y4", "r1", "r4", "y4", "y1"),
@@ -104,7 +104,7 @@ class Invert extends munit.FunSuite:
 	}
 
 	test("it understands a bad lock") {
-		val game = setup(Reactor, Vector(
+		val game = setup(Reactor.apply, Vector(
 			Vector("xx", "xx", "xx", "xx", "xx"),
 			Vector("g4", "y5", "g1", "b4", "b1"),
 			Vector("y4", "r1", "b4", "y4", "y3"),

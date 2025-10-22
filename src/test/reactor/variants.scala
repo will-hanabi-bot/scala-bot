@@ -1,7 +1,7 @@
 package tests.reactor.variants
 
 import scala_bot.reactor.Reactor
-import scala_bot.basics.{CardStatus, PerformAction}
+import scala_bot.basics._
 import scala_bot.test.{hasInfs, Player, setup, takeTurn}, Player._
 import scala_bot.logger.{Logger, LogLevel}
 import scala.util.chaining.scalaUtilChainingOps
@@ -10,7 +10,7 @@ class Variants extends munit.FunSuite:
 	override def beforeAll() = Logger.setLevel(LogLevel.Off)
 
 	test("it understands a playable pink promise") {
-		val game = setup(Reactor, Vector(
+		val game = setup(Reactor.apply, Vector(
 			Vector("xx", "xx", "xx", "xx", "xx"),
 			Vector("b1", "r1", "r4", "y4", "y4"),
 			Vector("g4", "g1", "g4", "b4", "b4")
@@ -31,7 +31,7 @@ class Variants extends munit.FunSuite:
 	}
 
 	test("it understands a brown tcm") {
-		val game = setup(Reactor, Vector(
+		val game = setup(Reactor.apply, Vector(
 			Vector("xx", "xx", "xx", "xx", "xx"),
 			Vector("b1", "r1", "r4", "y4", "y4"),
 			Vector("g4", "g1", "g4", "b4", "b4")

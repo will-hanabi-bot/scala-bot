@@ -21,8 +21,8 @@ val VARIANTS = Map(
 
 val NAMES = Vector("Alice", "Bob", "Cathy", "Donald", "Emily")
 
-def setup(
-	convention: Convention,
+def setup[G <: Game](
+	constructor: (Int, State, Boolean) => G,
 	hands: Vector[Vector[String]],
 	playStacks: Option[Vector[Int]] = None,
 	discarded: Vector[String] = Vector(),
@@ -30,26 +30,26 @@ def setup(
 	clueTokens: Int = 8,
 	starting: Player = Player.Alice,
 	variant: String = "No Variant",
-	init: (game: Game) => Game = x => x
-) =
+	init: G => G = (x: G) => x
+)(using ops: GameOps[G]) =
 	val playerNames = NAMES.slice(0, hands.length)
 	val _state = State(playerNames, 0, VARIANTS(variant))
 
-	Game(0, _state, convention, inProgress = false).copy(catchup = true)
+	ops.copyWith(constructor(0, _state, false), GameUpdates(catchup = Some(true)))
 		.pipe { g =>
 			playStacks.fold(g) { stacks =>
 				if (stacks.length != g.state.variant.suits.length)
 					throw new IllegalArgumentException("Invalid play stacks length")
-				g.copy(
-					state = g.state.copy(
+				ops.copyWith(g, GameUpdates(
+					state = Some(g.state.copy(
 						playStacks = stacks,
 						baseCount = stacks.zipWithIndex
 							.flatMap((stack, suitIndex) => (1 to stack).map(Identity(suitIndex, _)))
 							.foldLeft(g.state.baseCount)((acc, id) => acc.updated(id.toOrd, acc(id.toOrd) + 1))
-					),
-					players = g.players.map(_.copy(hypoStacks = stacks)),
-					common = g.common.copy(hypoStacks = stacks)
-				)
+					)),
+					players = Some(g.players.map(_.copy(hypoStacks = stacks))),
+					common = Some(g.common.copy(hypoStacks = stacks))
+				))
 			}
 		}
 		.pipe { g =>
@@ -94,12 +94,12 @@ def setup(
 		.pipe(init)
 		.pipe(_.elim(goodTouch = true))
 		.pipe { g =>
-			g.copy(
-				base = (g.state, g.meta, g.players, g.common)
-			)
+			ops.copyWith(g, GameUpdates(
+				base = Some(g.state, g.meta, g.players, g.common)
+			))
 		}
 
-def takeTurn(rawAction: String, drawS: String = "")(game: Game) =
+def takeTurn[G <: Game](rawAction: String, drawS: String = "")(game: G)(using ops: GameOps[G]) =
 	val state = game.state
 	val action = parseAction(state, rawAction)
 
@@ -111,8 +111,8 @@ def takeTurn(rawAction: String, drawS: String = "")(game: Game) =
 	if (action.playerIndex != state.currentPlayerIndex)
 		throw new IllegalArgumentException(s"Expected '${state.names(state.currentPlayerIndex)}'s turn for action (${action.fmt(state)})!")
 
-	game.copy(catchup = true)
-		.handleAction(action)
+	game.withCatchup {
+		_.handleAction(action)
 		.pipe { g =>
 			action match {
 				case PlayAction(_, _, _, _) | DiscardAction(_, _, _, _, _) =>
@@ -140,7 +140,7 @@ def takeTurn(rawAction: String, drawS: String = "")(game: Game) =
 			}
 		}
 		.handleAction(TurnAction(state.turnCount, state.nextPlayerIndex(action.playerIndex)))
-		.copy(catchup = false)
+	}
 
 def parseAction(state: State, action: String) =
 	val cluePattern = """(\w+) clues (\d|\w+) to (\w+)(?: \(slots? (\d(?:,\d)*)\))?""".r
@@ -268,7 +268,7 @@ case class TestClue(
 	def toBase =
 		BaseClue(kind, value)
 
-def preClue(playerIndex: Player, slot: Int, clues: Seq[TestClue])(game: Game) =
+def preClue[G <: Game](playerIndex: Player, slot: Int, clues: Seq[TestClue])(game: G)(using ops: GameOps[G]) =
 	val state = game.state
 	val order = state.hands(playerIndex.ordinal)(slot - 1)
 
@@ -283,23 +283,23 @@ def preClue(playerIndex: Player, slot: Int, clues: Seq[TestClue])(game: Game) =
 		clues.forall(c => state.variant.idTouched(i, c.toBase))
 	})
 
-	game.copy(
-		common = game.common.withThought(order) { _.copy(
+	ops.copyWith(game, GameUpdates(
+		common = Some(game.common.withThought(order) { _.copy(
 			inferred = possibilities,
 			possible = possibilities
-		)},
-		state = state.copy(
+		)}),
+		state = Some(state.copy(
 			deck = state.deck.updated(order, state.deck(order).copy(
 				clued = true,
 				clues = clues.map(c => CardClue(c.kind, c.value, c.giver.ordinal, 0)).toList
 			))
-		)
-	)
+		))
+	))
 
 /**
 * Pre-clues the slot with obth colour and rank (only works for simple variants).
 */
-def fullyKnown(playerIndex: Player, slot: Int, short: String)(game: Game) =
+def fullyKnown[G <: Game](playerIndex: Player, slot: Int, short: String)(game: G)(using ops: GameOps[G]) =
 	val state = game.state
 	val card = state.deck(state.hands(playerIndex.ordinal)(slot - 1))
 	val id = state.expandShort(short)

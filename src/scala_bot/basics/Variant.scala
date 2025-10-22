@@ -36,29 +36,28 @@ case class Variant(
 		else
 			Vector(3, 2, 2, 2, 1)(rank - 1)
 
-	def idTouched(id: Identity, clue: BaseClue): Boolean =
-		val BaseClue(kind, value) = clue
+	def idTouched(id: Identity, clue: ClueLike): Boolean =
 		val Identity(suitIndex, rank) = id
 		val suit = suits(suitIndex)
 
-		if (kind == ClueKind.Colour)
+		if (clue.kind == ClueKind.Colour)
 			if (WHITISH.matches(suit))
 				false
 			else if (RAINBOWISH.matches(suit))
 				true
 			else if (PRISM.matches(suit))
-				((rank - 1) % colourableSuits.length) == value
+				((rank - 1) % colourableSuits.length) == clue.value
 			else
-				suits(suitIndex) == colourableSuits(value)
+				suits(suitIndex) == colourableSuits(clue.value)
 		else
 			if (BROWNISH.matches(suit))
 				false
 			else if (PINKISH.matches(suit))
 				true
 			else
-				rank == value
+				rank == clue.value
 
-	def cardTouched(card: Identifiable, clue: BaseClue) =
+	def cardTouched(card: Identifiable, clue: ClueLike) =
 		card.id().exists(idTouched(_, clue))
 
 case class Suit(

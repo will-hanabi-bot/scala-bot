@@ -3,7 +3,7 @@ package scala_bot.reactor
 import scala_bot.basics._
 import scala_bot.logger.Log
 
-def getResult(game: Game, hypo: Game, action: ClueAction): Double =
+def getResult(game: Reactor, hypo: Reactor, action: ClueAction): Double =
 	val (common, state, meta) = (game.common, game.state, game.meta)
 	val ClueAction(giver, target, list, clue) = action
 
@@ -81,13 +81,13 @@ def getResult(game: Game, hypo: Game, action: ClueAction): Double =
 			}
 	}
 
-def advanceGame(game: Game, action: Action) =
+def advanceGame(game: Reactor, action: Action) =
 	action match {
-		case clue @ ClueAction(_, _, _, _) => game.simulateClue(clue, log = true)
+		case clue: ClueAction => game.simulateClue(clue, log = true)
 		case _ => game.simulateAction(action)
 	}
 
-def advance(game: Game, offset: Int): Double =
+def advance(game: Reactor, offset: Int): Double =
 	val (state, common, meta) = (game.state, game.common, game.meta)
 	val playerIndex = (state.ourPlayerIndex + offset) % state.numPlayers
 	val player = game.players(playerIndex)
@@ -188,7 +188,7 @@ def advance(game: Game, offset: Int): Double =
 				advance(advanceGame(game, action), offset + 1)
 		}
 
-def evalAction(game: Game, action: Action): Double =
+def evalAction(game: Reactor, action: Action): Double =
 	Log.highlight(Console.GREEN, s"===== Predicting value for ${action.fmt(game.state)} =====")
 	val state = game.state
 	val hypoGame = advanceGame(game, action)
@@ -202,7 +202,7 @@ def evalAction(game: Game, action: Action): Double =
 	val value = action match {
 		case _ if mistake => -100
 
-		case clue @ ClueAction(_, _, _, _) =>
+		case clue: ClueAction =>
 			val mult = if (!game.me.obviousPlayables(game, state.ourPlayerIndex).isEmpty)
 				if (state.inEndgame) 0.1 else 0.25
 			else
@@ -249,7 +249,7 @@ def evalState(state: State): Double =
 	Log.info(s"state eval: score: $scoreVal, clues: $clueVal, dc crit: $dcCritVal, strikes: $strikesVal")
 	scoreVal + clueVal + dcCritVal + strikesVal
 
-def evalGame(game: Game): Double =
+def evalGame(game: Reactor): Double =
 	val state = game.state
 
 	if (state.score == state.maxScore)

@@ -4,14 +4,14 @@ import scala.util.chaining.scalaUtilChainingOps
 
 import scala_bot.utils._
 
-extension (game: Game)
-	def onClue(action: ClueAction): Game =
+extension[G <: Game](game: G)
+	def onClue(action: ClueAction)(using ops: GameOps[G]): G =
 		val state = game.state
 		val ClueAction(giver, target, list, clue) = action
 		val BaseClue(kind, value) = clue
 		val newPossible = IdentitySet.from(state.variant.touchPossibilities(clue))
 
-		game.state.hands(target).foldLeft(game) { (newGame, order) =>
+		state.hands(target).foldLeft(game) { (newGame, order) =>
 			if (list.contains(order))
 				val touchedGame = newGame.withCard(order)(c => c.copy(
 						clued = true,
@@ -28,7 +28,7 @@ extension (game: Game)
 					.when(_ => newThought.possible.length == 1) { g =>
 						val id = newThought.possible.head
 						g.withCard(order)(c => c.copy(suitIndex = id.suitIndex, rank = id.rank))
-							.copy(deckIds = g.deckIds.updated(order, Some(id)))
+							.pipe(ops.copyWith(_, GameUpdates(deckIds = Some(g.deckIds.updated(order, Some(id))))))
 					}
 					.when(_ => newThought.inferred.length < game.common.thoughts(order).inferred.length)
 						(_.withMeta(order)(_.reason(state.turnCount)))
@@ -37,12 +37,13 @@ extension (game: Game)
 					inferred = t.inferred.difference(newPossible),
 					possible = t.possible.difference(newPossible)
 				))
-		}.withState { s => s.copy(
+		}
+		.withState { s => s.copy(
 			endgameTurns = s.endgameTurns.map(_ - 1),
 			clueTokens = s.clueTokens - 1
 		)}
 
-	def onDiscard(action: DiscardAction): Game =
+	def onDiscard(action: DiscardAction)(using ops: GameOps[G]): G =
 		val DiscardAction(playerIndex, order, suitIndex, rank, failed) = action
 		val id = Identity(suitIndex, rank)
 
@@ -58,18 +59,11 @@ extension (game: Game)
 		.when(_ => suitIndex != -1 && rank != -1) { g =>
 			g.withState(_.withDiscard(id, order))
 			.withId(order, id)
-			.copy(
-				common = g.common.withThought(order) {
-					_.copy(
-						suitIndex, rank,
-						inferred = IdentitySet.single(id),
-						possible = IdentitySet.single(id)
-					)
-				}
-			)
+			.withThought(order)
+				(_.copy(suitIndex, rank, inferred = IdentitySet.single(id), possible = IdentitySet.single(id)))
 		}
 
-	def onDraw(action: DrawAction): Game =
+	def onDraw(action: DrawAction)(using ops: GameOps[G]): G =
 		val DrawAction(playerIndex, order, suitIndex, rank) = action
 
 		val id = Option.when(suitIndex != -1 && rank != -1) {
@@ -84,10 +78,10 @@ extension (game: Game)
 			val deckIds = g.deckIds
 
 			if (deckIds.length == order)
-				g.copy(deckIds = deckIds :+ id)
+				ops.copyWith(g, GameUpdates(deckIds = Some(deckIds :+ id)))
 			else if (deckIds.length > order)
 				if (deckIds(order).isEmpty)
-					g.copy(deckIds = deckIds.updated(order, id))
+					ops.copyWith(g, GameUpdates(deckIds = Some(deckIds.updated(order, id))))
 				else
 					g
 			else
@@ -110,23 +104,23 @@ extension (game: Game)
 				(_.copy(endgameTurns = Some(s.numPlayers)))
 		}
 		.when(order == _.meta.length) { g =>
-			g.copy(
-				players = g.players.zipWithIndex.map((player, i) => player.copy(
+			ops.copyWith(g, GameUpdates(
+				players = Some(g.players.zipWithIndex.map((player, i) => player.copy(
 					thoughts = player.thoughts :+ Thought(
 						if (i != playerIndex) suitIndex else -1,
 						if (i != playerIndex) rank else -1,
 						order,
 						player.allPossible
 					)
-				)),
-				common = g.common.copy(
+				))),
+				common = Some(g.common.copy(
 					thoughts = g.common.thoughts :+ Thought(-1, -1, order, g.common.allPossible)
-				),
-				meta = g.meta :+ ConvData(order)
-			)
+				)),
+				meta = Some(g.meta :+ ConvData(order))
+			))
 		}
 
-	def onPlay(action: PlayAction) =
+	def onPlay(action: PlayAction)(using ops: GameOps[G]): G =
 		val PlayAction(playerIndex, order, suitIndex, rank) = action
 		val id = Identity(suitIndex, rank)
 
@@ -139,17 +133,15 @@ extension (game: Game)
 		.when(_ => suitIndex != -1 && rank != -1) { g =>
 			g.withState(_.withPlay(id))
 			.withId(order, id)
-			.copy(
-				common = g.common.withThought(order)(_.copy(
-					suitIndex,
-					rank,
-					inferred = IdentitySet.single(id),
-					possible = IdentitySet.single(id)
-				))
-			)
+			.withThought(order)(_.copy(
+				suitIndex,
+				rank,
+				inferred = IdentitySet.single(id),
+				possible = IdentitySet.single(id)
+			))
 		}
 
-	def elim(goodTouch: Boolean = true) =
+	def elim(goodTouch: Boolean = true)(using ops: GameOps[G]): G =
 		val state = game.state
 		var newThoughts = game.common.thoughts
 		var newMeta = game.meta
@@ -203,8 +195,8 @@ extension (game: Game)
 			newMeta = newMeta.updated(order, newMeta(order).copy(status = CardStatus.Sarcastic))
 		}
 
-		game.copy(
-			common = newCommon,
-			meta = newMeta,
-			players = newPlayers
-		)
+		ops.copyWith(game, GameUpdates(
+			common = Some(newCommon),
+			meta = Some(newMeta),
+			players = Some(newPlayers)
+		))

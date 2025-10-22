@@ -1,7 +1,7 @@
 package tests.reactor.stable
 
 import scala_bot.reactor.Reactor
-import scala_bot.basics.{CardStatus, ClueKind, PerformAction}
+import scala_bot.basics._
 import scala_bot.test.{Colour, hasInfs, Player, preClue, setup, takeTurn, TestClue}, Player._
 import scala.util.chaining.scalaUtilChainingOps
 import scala_bot.logger.{Logger, LogLevel}
@@ -10,7 +10,7 @@ class Stable extends munit.FunSuite:
 	override def beforeAll() = Logger.setLevel(LogLevel.Off)
 
 	test("it understands a ref play") {
-		val game = setup(Reactor, Vector(
+		val game = setup(Reactor.apply, Vector(
 			Vector("xx", "xx", "xx", "xx", "xx"),
 			Vector("b1", "g2", "r2", "r3", "g5"),
 			Vector("p4", "b5", "p2", "b1", "g4")
@@ -22,7 +22,7 @@ class Stable extends munit.FunSuite:
 	}
 
 	test("it understands a gapped ref play") {
-		val game = setup(Reactor, Vector(
+		val game = setup(Reactor.apply, Vector(
 			Vector("xx", "xx", "xx", "xx", "xx"),
 			Vector("p4", "b1", "p2", "b5", "g4"),
 			Vector("b1", "g2", "r2", "r3", "g5"),
@@ -34,7 +34,7 @@ class Stable extends munit.FunSuite:
 	}
 
 	test("it understands a chop ref play") {
-		val game = setup(Reactor, Vector(
+		val game = setup(Reactor.apply, Vector(
 			Vector("xx", "xx", "xx", "xx", "xx"),
 			Vector("b1", "b2", "p2", "b5", "g4"),
 			Vector("b1", "g2", "r2", "r3", "g5"),
@@ -45,7 +45,7 @@ class Stable extends munit.FunSuite:
 	}
 
 	test("it understands a ref discard") {
-		val game = setup(Reactor, Vector(
+		val game = setup(Reactor.apply, Vector(
 			Vector("xx", "xx", "xx", "xx", "xx"),
 			Vector("p4", "p2", "p2", "b5", "g3"),
 			Vector("b1", "g2", "r2", "r3", "g5"),
@@ -56,7 +56,7 @@ class Stable extends munit.FunSuite:
 	}
 
 	test("it gives a ref discard") {
-		val game = setup(Reactor, Vector(
+		val game = setup(Reactor.apply, Vector(
 			Vector("xx", "xx", "xx", "xx", "xx"),
 			Vector("p4", "p2", "p2", "b5", "g3"),
 			Vector("b3", "g2", "r2", "r3", "g5"),
@@ -67,7 +67,7 @@ class Stable extends munit.FunSuite:
 	}
 
 	test("it understands a lock") {
-		val game = setup(Reactor, Vector(
+		val game = setup(Reactor.apply, Vector(
 			Vector("xx", "xx", "xx", "xx", "xx"),
 			Vector("p4", "p2", "p2", "b5", "g4"),
 			Vector("b1", "g2", "r2", "r3", "g5"),
@@ -78,7 +78,7 @@ class Stable extends munit.FunSuite:
 	}
 
 	test("it doesn't focus the wrong card for the last id") {
-		val game = setup(Reactor, Vector(
+		val game = setup(Reactor.apply, Vector(
 			Vector("xx", "xx", "xx", "xx", "xx"),
 			Vector("r1", "y1", "g1", "b1", "p1"),
 			Vector("r1", "y1", "g1", "b1", "p1"),

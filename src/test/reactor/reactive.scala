@@ -11,7 +11,7 @@ class Reactive extends munit.FunSuite:
 	override def beforeAll() = Logger.setLevel(LogLevel.Off)
 
 	test("it understands a reactive play play") {
-		val game = setup(Reactor, Vector(
+		val game = setup(Reactor.apply, Vector(
 			Vector("xx", "xx", "xx", "xx", "xx"),
 			Vector("b1", "g2", "r2", "r3", "g5"),
 			Vector("g1", "b5", "p2", "b1", "g4"),
@@ -29,7 +29,7 @@ class Reactive extends munit.FunSuite:
 	}
 
 	test("it reacts to a reactive play play") {
-		val game = setup(Reactor, Vector(
+		val game = setup(Reactor.apply, Vector(
 			Vector("xx", "xx", "xx", "xx", "xx"),
 			Vector("b1", "g2", "r2", "r3", "g5"),
 			Vector("g1", "b5", "p2", "b1", "g4"),
@@ -45,7 +45,7 @@ class Reactive extends munit.FunSuite:
 	}
 
 	test("it receives a reactive play play") {
-		val game = setup(Reactor, Vector(
+		val game = setup(Reactor.apply, Vector(
 			Vector("xx", "xx", "xx", "xx", "xx"),
 			Vector("b1", "g2", "r2", "r3", "g5"),
 			Vector("g1", "b5", "p2", "b1", "g4"),
@@ -61,7 +61,7 @@ class Reactive extends munit.FunSuite:
 	}
 
 	test("it reacts to a reverse reactive play play") {
-		val game = setup(Reactor, Vector(
+		val game = setup(Reactor.apply, Vector(
 			Vector("xx", "xx", "xx", "xx", "xx"),
 			Vector("b1", "b2", "r2", "r3", "g5"),
 			Vector("g1", "b5", "p2", "g2", "g4"),
@@ -84,14 +84,14 @@ class Reactive extends munit.FunSuite:
 	}
 
 	test("it elims a reactive play play") {
-		val game = setup(Reactor, Vector(
+		val game = setup(Reactor.apply, Vector(
 			Vector("xx", "xx", "xx", "xx", "xx"),
 			Vector("r1", "g2", "r2", "y3", "g5"),
 			Vector("g3", "b5", "p2", "b1", "g4")
 		),
 			init =
 				// Bob's r2 is clued with red.
-				preClue(Bob, 3, Vector(TestClue(ClueKind.Colour, Colour.Red.ordinal, Alice))) andThen
+				preClue[Reactor](Bob, 3, Vector(TestClue(ClueKind.Colour, Colour.Red.ordinal, Alice))) andThen
 				// Bob's y3 is clued with 3.
 				preClue(Bob, 4, Vector(TestClue(ClueKind.Rank, 3, Alice)))
 		)
@@ -117,7 +117,7 @@ class Reactive extends munit.FunSuite:
 	}
 
 	test("it understands a reactive dc play") {
-		val game = setup(Reactor, Vector(
+		val game = setup(Reactor.apply, Vector(
 			Vector("xx", "xx", "xx", "xx", "xx"),
 			Vector("r3", "g2", "r2", "r3", "g5"),
 			Vector("g1", "b5", "p2", "b1", "g4"),
@@ -137,7 +137,7 @@ class Reactive extends munit.FunSuite:
 	}
 
 	test("it elims a reactive dc play") {
-		val game = setup(Reactor, Vector(
+		val game = setup(Reactor.apply, Vector(
 			Vector("xx", "xx", "xx", "xx", "xx"),
 			Vector("b1", "g2", "r2", "g5", "y3"),
 			Vector("b3", "b5", "p2", "b1", "g4"),
@@ -146,7 +146,7 @@ class Reactive extends munit.FunSuite:
 			clueTokens = 7,
 			init =
 				// Bob's r2 is clued with red.
-				preClue(Bob, 3, Vector(TestClue(ClueKind.Colour, Colour.Red.ordinal, Alice))) andThen
+				preClue[Reactor](Bob, 3, Vector(TestClue(ClueKind.Colour, Colour.Red.ordinal, Alice))) andThen
 				// Bob's g5 is clued with 5.
 				preClue(Bob, 4, Vector(TestClue(ClueKind.Rank, 5, Alice)))
 		)
@@ -169,7 +169,7 @@ class Reactive extends munit.FunSuite:
 	}
 
 	test("it elims a reactive play dc") {
-		val game = setup(Reactor, Vector(
+		val game = setup(Reactor.apply, Vector(
 			Vector("xx", "xx", "xx", "xx", "xx"),
 			Vector("b1", "g2", "r2", "g5", "y3"),
 			Vector("b1", "b5", "p2", "b3", "g4"),
@@ -179,7 +179,7 @@ class Reactive extends munit.FunSuite:
 			starting = Bob,
 			init =
 				// Alice's slots 2 and 3 are known red.
-				preClue(Alice, 2, Vector(TestClue(ClueKind.Colour, Colour.Red.ordinal, Cathy))) andThen
+				preClue[Reactor](Alice, 2, Vector(TestClue(ClueKind.Colour, Colour.Red.ordinal, Cathy))) andThen
 				preClue(Alice, 3, Vector(TestClue(ClueKind.Colour, Colour.Red.ordinal, Cathy)))
 		)
 		.pipe(takeTurn("Bob clues green to Alice (slot 4)"))
@@ -195,7 +195,7 @@ class Reactive extends munit.FunSuite:
 	}
 
 	test("it reacts to a reactive finesse") {
-		val game = setup(Reactor, Vector(
+		val game = setup(Reactor.apply, Vector(
 			Vector("xx", "xx", "xx", "xx", "xx"),
 			Vector("b2", "g2", "r2", "r3", "g5"),
 			Vector("g1", "b5", "p2", "b1", "g4"),
@@ -212,7 +212,7 @@ class Reactive extends munit.FunSuite:
 	}
 
 	test("it doesnt play target an unclued dupe") {
-		val game = setup(Reactor, Vector(
+		val game = setup(Reactor.apply, Vector(
 			Vector("xx", "xx", "xx", "xx", "xx"),
 			Vector("r3", "g2", "r2", "r3", "g5"),
 			Vector("g1", "b5", "p2", "b1", "g4"),
@@ -231,7 +231,7 @@ class Reactive extends munit.FunSuite:
 	}
 
 	test("it doesnt play target a discarding dupe") {
-		val game = setup(Reactor, Vector(
+		val game = setup(Reactor.apply, Vector(
 			Vector("xx", "xx", "xx", "xx", "xx"),
 			Vector("r3", "g2", "y3", "r3", "g5"),
 			Vector("g1", "b5", "p2", "b1", "g4"),
@@ -252,7 +252,7 @@ class Reactive extends munit.FunSuite:
 	}
 
 	test("it doesnt dc target an unclued dupe") {
-		val game = setup(Reactor, Vector(
+		val game = setup(Reactor.apply, Vector(
 			Vector("xx", "xx", "xx", "xx", "xx"),
 			Vector("r3", "y1", "r2", "r3", "g5"),
 			Vector("g1", "b5", "p2", "b1", "g4"),
@@ -270,7 +270,7 @@ class Reactive extends munit.FunSuite:
 	}
 
 	test("it reacts to a sacrifice") {
-		val game = setup(Reactor, Vector(
+		val game = setup(Reactor.apply, Vector(
 			Vector("xx", "xx", "xx", "xx", "xx"),
 			Vector("r4", "b2", "y3", "p3", "g5"),
 			Vector("g1", "b5", "p2", "b1", "g4"),
@@ -285,7 +285,7 @@ class Reactive extends munit.FunSuite:
 	}
 
 	test("it shifts a reaction") {
-		val game = setup(Reactor, Vector(
+		val game = setup(Reactor.apply, Vector(
 			Vector("xx", "xx", "xx", "xx", "xx"),
 			Vector("b1", "g2", "r2", "r3", "g5"),
 			Vector("g1", "b5", "p2", "b1", "g4"),
@@ -313,7 +313,7 @@ class Reactive extends munit.FunSuite:
 	}
 
 	test("it targets a self connection") {
-		val game = setup(Reactor, Vector(
+		val game = setup(Reactor.apply, Vector(
 			Vector("xx", "xx", "xx", "xx", "xx"),
 			Vector("b1", "r5", "b2", "b3", "g4"),
 			Vector("g5", "g2", "r2", "b1", "y3"),

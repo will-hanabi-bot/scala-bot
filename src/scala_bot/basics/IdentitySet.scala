@@ -6,6 +6,7 @@ extension(ids: IdentitySet)
 	inline def value: Long = ids
 	inline def length: Int = java.lang.Long.bitCount(ids)
 	inline def isEmpty: Boolean = length == 0
+	inline def nempty: Boolean = length > 0
 
 	inline def contains(id: Identity): Boolean =
 		(ids & IdentitySet.single(id)) != 0
@@ -41,17 +42,26 @@ extension(ids: IdentitySet)
 	inline def intersect(other: IdentitySet): IdentitySet =
 		ids & other
 
+	inline def intersect(other: Iterable[Identity]): IdentitySet =
+		ids & IdentitySet.from(other)
+
 	inline def union(other: IdentitySet): IdentitySet =
 		ids | other
 
 	inline def union(id: Identity): IdentitySet =
 		ids | IdentitySet.single(id)
 
+	inline def union(other: Iterable[Identity]): IdentitySet =
+		ids | IdentitySet.from(other)
+
 	inline def difference(other: IdentitySet): IdentitySet =
 		ids & ~other
 
 	inline def difference(id: Identity): IdentitySet =
 		ids & ~IdentitySet.single(id)
+
+	inline def difference(other: Iterable[Identity]): IdentitySet =
+		ids & ~IdentitySet.from(other)
 
 	def retain(cond: Identity => Boolean): IdentitySet =
 		var bits = ids

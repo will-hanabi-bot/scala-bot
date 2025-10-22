@@ -11,7 +11,7 @@ class General extends munit.FunSuite:
 	override def beforeAll() = Logger.setLevel(LogLevel.Off)
 
 	test("it understands good touch") {
-		val game = setup(Reactor, Vector(
+		val game = setup(Reactor.apply, Vector(
 			Vector("xx", "xx", "xx", "xx", "xx"),
 			Vector("r4", "g2", "r2", "r3", "g5"),
 			Vector("p4", "b5", "p2", "b1", "g4"),
@@ -31,7 +31,7 @@ class General extends munit.FunSuite:
 	}
 
 	test("it elims from focus") {
-		val game = setup(Reactor, Vector(
+		val game = setup(Reactor.apply, Vector(
 			Vector("xx", "xx", "xx", "xx", "xx"),
 			Vector("y4", "g2", "r2", "r3", "g5"),
 			Vector("p4", "b5", "p2", "b1", "g4"),
@@ -50,7 +50,7 @@ class General extends munit.FunSuite:
 	}
 
 	test("it understands a stable clue to Cathy") {
-		val game = setup(Reactor, Vector(
+		val game = setup(Reactor.apply, Vector(
 			Vector("xx", "xx", "xx", "xx", "xx"),
 			Vector("b1", "r4", "r4", "y4", "y4"),
 			Vector("g1", "g4", "g4", "b4", "b4"),
@@ -64,11 +64,11 @@ class General extends munit.FunSuite:
 		// hasInfs(game, None, Cathy, 1, Vector("g1"))
 		assertEquals(game.meta(game.state.hands(Cathy.ordinal)(0)).status, CardStatus.CalledToPlay)
 
-		takeTurn("Bob plays b1", "p4")
+		// takeTurn("Bob plays b1", "p4")
 	}
 
 	test("it understands a reverse reactive clue") {
-		val game = setup(Reactor, Vector(
+		val game = setup(Reactor.apply, Vector(
 			Vector("xx", "xx", "xx", "xx", "xx"),
 			Vector("b1", "r1", "r4", "y4", "y4"),
 			Vector("g4", "g1", "g4", "b4", "b4"),
@@ -88,7 +88,7 @@ class General extends munit.FunSuite:
 	}
 
 	test("it doesn t give a bad reverse reactive clue") {
-		val game = setup(Reactor, Vector(
+		val game = setup(Reactor.apply, Vector(
 			Vector("xx", "xx", "xx", "xx", "xx"),
 			Vector("b1", "r1", "r4", "y4", "y5"),
 			Vector("y1", "g4", "g4", "b4", "b4"),
@@ -112,7 +112,7 @@ class General extends munit.FunSuite:
 	}
 
 	test("it understands targeting dupes") {
-		val game = setup(Reactor, Vector(
+		val game = setup(Reactor.apply, Vector(
 			Vector("xx", "xx", "xx", "xx", "xx"),
 			Vector("b3", "r4", "r4", "y4", "y5"),
 			Vector("g4", "g1", "g4", "b4", "b4"),
@@ -120,7 +120,7 @@ class General extends munit.FunSuite:
 			starting = Cathy,
 			// Bob's slots 2 and 3 are clued with red.
 			init =
-				preClue(Bob, 2, Vector(TestClue(ClueKind.Colour, Colour.Red.ordinal, Alice))) andThen
+				preClue[Reactor](Bob, 2, Vector(TestClue(ClueKind.Colour, Colour.Red.ordinal, Alice))) andThen
 				preClue(Bob, 3, Vector(TestClue(ClueKind.Colour, Colour.Red.ordinal, Alice)))
 		)
 		// 4 + 2 = 1
@@ -136,7 +136,7 @@ class General extends munit.FunSuite:
 	}
 
 	test("it understands a known delayed stable play") {
-		val game = setup(Reactor, Vector(
+		val game = setup(Reactor.apply, Vector(
 			Vector("xx", "xx", "xx", "xx", "xx"),
 			Vector("g3", "y5", "g4", "b4", "b4"),
 			Vector("b1", "r1", "r4", "y4", "y4"),
@@ -145,8 +145,8 @@ class General extends munit.FunSuite:
 			playStacks = Some(Vector(0, 0, 1, 0, 0)),
 			// Alice has a known r1 (slot 1) and a known g2 (slot 2).
 			init =
-				fullyKnown(Alice, 1, "r1") andThen
-				fullyKnown(Alice, 2, "g2")
+				fullyKnown[Reactor](Alice, 1, "r1") andThen
+				fullyKnown[Reactor](Alice, 2, "g2")
 		)
 		.pipe(takeTurn("Cathy clues yellow to Bob"))
 
@@ -160,7 +160,7 @@ class General extends munit.FunSuite:
 	}
 
 	test("it understands an unknown delayed stable play") {
-		val game = setup(Reactor, Vector(
+		val game = setup(Reactor.apply, Vector(
 			Vector("xx", "xx", "xx", "xx", "xx"),
 			Vector("g2", "y5", "g4", "b4", "b4"),
 			Vector("b1", "r1", "r4", "y4", "y4"),
@@ -183,7 +183,7 @@ class General extends munit.FunSuite:
 	}
 
 	test("it doesn't give a bad connecting clue") {
-		val game = setup(Reactor, Vector(
+		val game = setup(Reactor.apply, Vector(
 			Vector("xx", "xx", "xx", "xx", "xx"),
 			Vector("b1", "y1", "g1", "g2", "p2"),
 			Vector("y1", "p3", "g5", "p5", "r5"),
@@ -191,8 +191,8 @@ class General extends munit.FunSuite:
 			playStacks = Some(Vector(1, 1, 1, 1, 1)),
 			// Bob's slots 4 and 5 are clued with 2.
 			init =
-				preClue(Bob, 4, Vector(TestClue(ClueKind.Rank, 2, Alice))) andThen
-				preClue(Bob, 5, Vector(TestClue(ClueKind.Rank, 2, Alice)))
+				preClue[Reactor](Bob, 4, Vector(TestClue(ClueKind.Rank, 2, Alice))) andThen
+				preClue[Reactor](Bob, 5, Vector(TestClue(ClueKind.Rank, 2, Alice)))
 		)
 
 		val clue = ClueAction(
@@ -209,7 +209,7 @@ class General extends munit.FunSuite:
 	}
 
 	test("it understands bob won't react if alternative is on them") {
-		val game = setup(Reactor, Vector(
+		val game = setup(Reactor.apply, Vector(
 			Vector("xx", "xx", "xx", "xx", "xx"),
 			Vector("y1", "r2", "g1", "g2", "p2"),
 			Vector("r3", "p4", "g5", "y4", "r4"),
@@ -226,7 +226,7 @@ class General extends munit.FunSuite:
 	}
 
 	test("it discards zcs") {
-		val game = setup(Reactor, Vector(
+		val game = setup(Reactor.apply, Vector(
 			Vector("xx", "xx", "xx", "xx", "xx"),
 			Vector("y4", "r2", "g1", "g2", "p2"),
 			Vector("r1", "p4", "g4", "y5", "r4"),
@@ -250,7 +250,7 @@ class General extends munit.FunSuite:
 	}
 
 	test("it interprets a gd") {
-		val game = setup(Reactor, Vector(
+		val game = setup(Reactor.apply, Vector(
 			Vector("xx", "xx", "xx", "xx", "xx"),
 			Vector("y1", "r2", "g1", "g2", "p2"),
 			Vector("r3", "p4", "g5", "y4", "r4"),
@@ -267,7 +267,7 @@ class General extends munit.FunSuite:
 	}
 
 	test("it interprets a sarcastic") {
-		val game = setup(Reactor, Vector(
+		val game = setup(Reactor.apply, Vector(
 			Vector("xx", "xx", "xx", "xx", "xx"),
 			Vector("y1", "r2", "g1", "g2", "p2"),
 			Vector("r3", "p4", "g5", "y4", "r4"),
@@ -286,13 +286,13 @@ class General extends munit.FunSuite:
 	}
 
 	test("it doesn't perform a bad gd") {
-		val game = setup(Reactor, Vector(
+		val game = setup(Reactor.apply, Vector(
 			Vector("xx", "xx", "xx", "xx", "xx"),
 			Vector("y1", "r2", "g1", "g2", "p2"),
 			Vector("r3", "p4", "g5", "y4", "r4"),
 		),
 			init =
-				fullyKnown(Alice, 5, "g1") andThen
+				fullyKnown[Reactor](Alice, 5, "g1") andThen
 				preClue(Bob, 3, Vector(TestClue(ClueKind.Colour, Colour.Green.ordinal, Alice))) andThen
 				preClue(Bob, 4, Vector(TestClue(ClueKind.Colour, Colour.Green.ordinal, Alice))),
 			clueTokens = 6

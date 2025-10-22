@@ -10,7 +10,7 @@ class Stalling extends munit.FunSuite:
 	override def beforeAll() = Logger.setLevel(LogLevel.Off)
 
 	test("it understands a bad play") {
-		val game = setup(Reactor, Vector(
+		val game = setup(Reactor.apply, Vector(
 			Vector("xx", "xx", "xx", "xx", "xx"),
 			Vector("r4", "r4", "y4", "y4", "g4"),
 			Vector("g1", "p4", "p4", "b4", "g4"),
@@ -22,7 +22,7 @@ class Stalling extends munit.FunSuite:
 	}
 
 	test("it doesnt react to a cathy play") {
-		val game = setup(Reactor, Vector(
+		val game = setup(Reactor.apply, Vector(
 			Vector("xx", "xx", "xx", "xx", "xx"),
 			Vector("r4", "r4", "y4", "y4", "g4"),
 			Vector("g4", "p4", "p1", "b4", "g5"),
@@ -34,7 +34,7 @@ class Stalling extends munit.FunSuite:
 	}
 
 	test("it reacts to cathy 1s") {
-		val game = setup(Reactor, Vector(
+		val game = setup(Reactor.apply, Vector(
 			Vector("xx", "xx", "xx", "xx", "xx"),
 			Vector("r4", "r4", "y4", "y4", "g1"),
 			Vector("g4", "p4", "p1", "b1", "g5"),
@@ -46,7 +46,7 @@ class Stalling extends munit.FunSuite:
 	}
 
 	test("it doesnt react to untargetable cathy 1s") {
-		val game = setup(Reactor, Vector(
+		val game = setup(Reactor.apply, Vector(
 			Vector("xx", "xx", "xx", "xx", "xx"),
 			Vector("r4", "r4", "y4", "y4", "g1"),
 			Vector("g4", "p4", "p1", "p3", "g5"),

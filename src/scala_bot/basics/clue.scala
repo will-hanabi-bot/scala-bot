@@ -3,9 +3,11 @@ package scala_bot.basics
 enum ClueKind:
 	case Colour, Rank
 
-case class BaseClue(kind: ClueKind, value: Int):
-	def hash: Int =
-		(if (kind == ClueKind.Colour) 0 else 10) + value
+trait ClueLike:
+	def kind: ClueKind
+	def value: Int
+
+	def base: BaseClue = BaseClue(kind, value)
 
 	def fmt(state: State, target: Int) =
 		val clueValue = kind match {
@@ -13,6 +15,13 @@ case class BaseClue(kind: ClueKind, value: Int):
 			case ClueKind.Rank => value.toString
 		}
 		s"($clueValue to ${state.names(target)})"
+
+	def eq(other: ClueLike): Boolean =
+		kind == other.kind && value == other.value
+
+case class BaseClue(kind: ClueKind, value: Int) extends ClueLike:
+	def hash: Int =
+		(if (kind == ClueKind.Colour) 0 else 10) + value
 
 object BaseClue:
 	def fromJSON(json: ujson.Value) =
@@ -28,13 +37,13 @@ case class CardClue(
 	value: Int,
 	giver: Int,
 	turn: Int
-)
+) extends ClueLike
 
 case class Clue(
 	kind: ClueKind,
 	value: Int,
 	target: Int
-):
+) extends ClueLike:
 	def toBase: BaseClue =
 		BaseClue(kind, value)
 

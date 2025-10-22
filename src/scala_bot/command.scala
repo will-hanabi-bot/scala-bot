@@ -18,7 +18,7 @@ val timer = new Timer
 def delay(f: () => Unit, n: Long) =
 	timer.schedule(new TimerTask() { def run = f() }, n)
 
-val BOT_VERSION = "v0.1.0 (scala-bot)"
+val BOT_VERSION = "v0.1.1 (scala-bot)"
 
 case class ChatMessage(
 	msg: String,
@@ -160,13 +160,14 @@ class BotClient(queue: Queue[IO, String], gameRef: Ref[IO, Option[Game]]):
 						case NavArg.PrevRound => state.turnCount - state.numPlayers
 					}
 
-					if (turn < 1 || turn >= state.actionList.length) {
+					if (turn < 1 || turn >= state.actionList.length)
 						Log.error(s"Turn $turn does not exist.")
 						IO.unit
-					}
-					else {
-						gameRef.set(Some(game.navigate(turn)))
-					}
+					else
+						game match {
+							case r: Reactor => gameRef.set(Some(r.navigate(turn)))
+							case _ => IO.unit
+						}
 			}
 		}
 
@@ -190,18 +191,20 @@ class BotClient(queue: Queue[IO, String], gameRef: Ref[IO, Option[Game]]):
 
 				gameRef.get.flatMap {
 					case None => throw new IllegalStateException("Game not initialized")
-					case Some(g) =>
-						gameRef.set(Some(g.copy(catchup = true))) *>
-						msg.list.init.traverse_ { action =>
-							handleAction(GameActionMessage(msg.tableID, action))
-						} *>
-						gameRef.get.flatMap {
-							case Some(g2) => gameRef.set(Some(g2.copy(catchup = false)))
-							case None => IO.unit
-						} *>
-						sendCmd("loaded", ujson.write(ujson.Obj("tableID" -> msg.tableID))) *>
-						IO.sleep(1000.millis) *>
-						handleAction(GameActionMessage(msg.tableID, msg.list.last))
+					case Some(g) => g match {
+						case r: Reactor =>
+							gameRef.set(Some(r.copy(catchup = true))) *>
+							msg.list.init.traverse_ { action =>
+								handleAction(GameActionMessage(msg.tableID, action))
+							} *>
+							gameRef.update {
+								case Some(g2: Reactor) => Some(g2.copy(catchup = false))
+								case other => other
+							} *>
+							sendCmd("loaded", ujson.write(ujson.Obj("tableID" -> msg.tableID))) *>
+							IO.sleep(1000.millis) *>
+							handleAction(GameActionMessage(msg.tableID, msg.list.last))
+					}
 				}
 
 			case "joined" =>
@@ -257,7 +260,7 @@ class BotClient(queue: Queue[IO, String], gameRef: Ref[IO, Option[Game]]):
 		val state = State(playerNames, ourPlayerIndex, variant)
 
 		IO { tableID = Some(tID) } *>
-		gameRef.set(Some(Game(tID, state, Reactor, inProgress = true))) *>
+		gameRef.set(Some(Reactor(tID, state, inProgress = true))) *>
 		sendCmd("getGameInfo2", ujson.write(ujson.Obj("tableID" -> tID)))
 
 	def handleChat(data: ChatMessage): IO[Unit] =
@@ -319,7 +322,10 @@ class BotClient(queue: Queue[IO, String], gameRef: Ref[IO, Option[Game]]):
 			case None => throw new IllegalStateException("Game not initialized")
 			case Some(g) =>
 				IO {
-					g.handleAction(action)
+					g match {
+						case r: Reactor => r.handleAction(action)
+						case _ => g
+					}
 				}
 				.flatMap { newGame =>
 					val state = newGame.state
@@ -328,8 +334,8 @@ class BotClient(queue: Queue[IO, String], gameRef: Ref[IO, Option[Game]]):
 						state.currentPlayerIndex == state.ourPlayerIndex &&
 						!state.ended &&
 						(action match {
-							case TurnAction(_, _) => true
-							case DrawAction(_, _, _, _) => state.turnCount == 1
+							case _: TurnAction => true
+							case _: DrawAction => state.turnCount == 1
 							case _ => false
 						})
 
@@ -341,7 +347,9 @@ class BotClient(queue: Queue[IO, String], gameRef: Ref[IO, Option[Game]]):
 					}
 
 					val actIO = IO.whenA(perform) {
-						val suggestedAction = newGame.takeAction
+						val suggestedAction = newGame match {
+							case r: Reactor => r.takeAction
+						}
 						Log.highlight(Console.BLUE, s"Suggested action: ${suggestedAction.fmt(newGame)}")
 						val arg = suggestedAction.json(tableID.get)
 
@@ -350,7 +358,12 @@ class BotClient(queue: Queue[IO, String], gameRef: Ref[IO, Option[Game]]):
 						}
 					}
 
-					gameRef.set(Some(newGame.copy(queuedCmds = List()))) *>
+					val x = newGame match {
+						case r: Reactor => r.copy(queuedCmds = List())
+						case _ => newGame
+					}
+
+					gameRef.set(Some(x)) *>
 					turn1IO *>
 					queuedCmds.traverse_(sendCmd(_, _)) *>
 					actIO

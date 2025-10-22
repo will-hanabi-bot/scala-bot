@@ -86,7 +86,7 @@ case class State(
 
 	def ourHand = hands(ourPlayerIndex)
 
-	def clueTouched(orders: Seq[Int], clue: BaseClue) =
+	def clueTouched(orders: Seq[Int], clue: ClueLike) =
 		orders.filter(order => variant.cardTouched(deck(order), clue))
 
 	def allValidClues(target: Int) =
@@ -145,6 +145,21 @@ case class State(
 
 	def logId(order: Int): String =
 		logId(deck(order).id())
+
+	def logConn(conn: Connection) =
+		val ids = conn.ids
+		val idStr = if (ids.length == 1) logId(ids.head) else s"[${ids.map(logId).mkString(",")}]"
+		val extra = conn match {
+			case f: FinesseConn => if (f.certain) " (certain)" else if (f.hidden) " (hidden)" else ""
+			case _ => ""
+		}
+
+		s"${conn.order} $idStr ${conn.kind} (${names(conn.reacting)})$extra"
+
+	def logConns(conns: Seq[Connection], nextId: Identity) =
+		val terminator = if (nextId.rank > 5) "" else s" -> ${logId(nextId)}?"
+
+		s"[${conns.map(logConn).mkString(" -> ")}$terminator]"
 
 object State:
 	def apply(

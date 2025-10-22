@@ -98,7 +98,7 @@ case class Arrangement(
 	remaining: RemainingMap
 )
 
-case class EndgameSolver(
+case class EndgameSolver[G <: Game](
 	var simpleCache: Map[Int, WinnableResult] = Map(),
 	var simplerCache: Map[Int, Boolean] = Map(),
 	var cluelessCache: Map[Int, Option[PerformAction]] = Map(),
@@ -106,7 +106,7 @@ case class EndgameSolver(
 	var successRate: Map[Int, Map[PerformAction, (Frac, Int)]] = Map(),
 	monteCarlo: Boolean = true
 ):
-	def solve(game: Game): Either[String, (PerformAction, Frac)] =
+	def solve(game: G)(using ops: GameOps[G]): Either[String, (PerformAction, Frac)] =
 		val state = game.state
 		if (state.score + 1 == state.maxScore)
 			val winningPlay = state.ourHand.find {
@@ -219,7 +219,7 @@ case class EndgameSolver(
 
 		Log.info(s"arrangements ${arrs.length}")
 
-		def evalPerforms(bestPerforms: Map[PerformAction, (Frac, Int)], eGame: Game, arr: GameArr) =
+		def evalPerforms(bestPerforms: Map[PerformAction, (Frac, Int)], eGame: G, arr: GameArr) =
 			val GameArr(prob, remaining, _) = arr
 			val eState = eGame.state
 			Log.highlight(Console.MAGENTA, s"\narrangement ${eState.ourHand.map(eState.logId).mkString(",")} $prob")
@@ -273,7 +273,7 @@ case class EndgameSolver(
 			Log.info(s"endgame winnable! ${bestAction.fmt(game)} (winrate $winrate)")
 			Right((bestAction, winrate))
 
-	def winnable(game: Game, playerTurn: Int, remaining: RemainingMap, deadline: Instant, depth: Int = 0): WinnableResult =
+	def winnable(game: G, playerTurn: Int, remaining: RemainingMap, deadline: Instant, depth: Int = 0)(using ops: GameOps[G]): WinnableResult =
 		val state = game.state
 		val hash = game.hashCode
 
@@ -332,7 +332,7 @@ case class EndgameSolver(
 		simpleCache = simpleCache.updated(hash, result)
 		result
 
-	def possibleActions(game: Game, playerTurn: Int, remaining: RemainingMap, deadline: Instant, depth: Int = 0, infer: Boolean = false): List[(PerformAction, List[Identity])] =
+	def possibleActions(game: G, playerTurn: Int, remaining: RemainingMap, deadline: Instant, depth: Int = 0, infer: Boolean = false)(using ops: GameOps[G]): List[(PerformAction, List[Identity])] =
 		boundary:
 			val state = game.state
 
@@ -376,10 +376,7 @@ case class EndgameSolver(
 			val defaultClue = PerformAction.Rank(0, 0)
 			val tooManyClues = state.actionList.flatten.reverse
 				.takeWhile(!_.requiresDraw)
-				.count {
-					case ClueAction(_, _, _, _) => true
-					case _ => false
-				} > game.state.numPlayers
+				.count(_.isInstanceOf[ClueAction]) > game.state.numPlayers
 
 			val clueWinnable = state.canClue &&
 				!tooManyClues &&
@@ -399,7 +396,7 @@ case class EndgameSolver(
 						}
 					}
 
-				val allClues = game.convention.findAllClues(game, playerTurn).map(_ -> List())
+				val allClues = ops.findAllClues(game, playerTurn).map(_ -> List())
 
 				(if (fullyKnown) allClues.take(1) else allClues).toList
 
@@ -407,7 +404,7 @@ case class EndgameSolver(
 				break(List())
 
 			val dcActions = if (state.pace <= 0) List() else
-				game.convention.findAllDiscards(game, playerTurn).map(tryAction).flatten.toList
+				ops.findAllDiscards(game, playerTurn).map(tryAction).flatten.toList
 
 			// If every hand other than ours is trash, try discarding before cluing
 			if (state.hands.zipWithIndex.forall((hand, i) => i == playerTurn || hand.forall(o => state.isBasicTrash(state.deck(o).id().get))))
@@ -415,7 +412,7 @@ case class EndgameSolver(
 			else
 				playActions.concat(clueActions).concat(dcActions)
 
-	def optimize(game: Game, arrs: (List[GameArr], List[GameArr]), actions: List[(PerformAction, List[Identity])], playerTurn: Int, deadline: Instant, depth: Int = 0): WinnableResult =
+	def optimize(game: G, arrs: (List[GameArr], List[GameArr]), actions: List[(PerformAction, List[Identity])], playerTurn: Int, deadline: Instant, depth: Int = 0)(using ops: GameOps[G]): WinnableResult =
 		boundary:
 			val (undrawn, drawn) = arrs
 			val nextPlayerIndex = game.state.nextPlayerIndex(playerTurn)

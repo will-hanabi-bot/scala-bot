@@ -1,6 +1,6 @@
 package tests.reactor.endgame
 
-import scala_bot.reactor.Reactor
+import scala_bot.reactor.Reactor, Reactor.given
 import scala_bot.basics._
 import scala_bot.endgame.EndgameSolver
 import scala_bot.fraction.Frac
@@ -12,7 +12,7 @@ class Endgame extends munit.FunSuite:
 	override def beforeAll() = Logger.setLevel(LogLevel.Off)
 
 	test("it clues to start b45 endgame") {
-		val game = setup(Reactor, Vector(
+		val game = setup(Reactor.apply, Vector(
 			Vector("xx", "xx", "xx", "xx"),
 			Vector("b4", "y1", "g1", "b5"),
 			Vector("g1", "b1", "b1", "r5"),
@@ -27,7 +27,7 @@ class Endgame extends munit.FunSuite:
 				"p2", "p3", "p4"
 			),	// Missing: r1, y1, r4, y4
 			init =
-				fullyKnown(Alice, 1, "y5") andThen
+				fullyKnown[Reactor](Alice, 1, "y5") andThen
 				fullyKnown(Bob, 1, "b4") andThen
 				fullyKnown(Bob, 4, "b5") andThen
 				fullyKnown(Cathy, 4, "r5") andThen
@@ -45,7 +45,7 @@ class Endgame extends munit.FunSuite:
 	}
 
 	test("it clues to start endgame on a_double player") {
-		val game = setup(Reactor, Vector(
+		val game = setup(Reactor.apply, Vector(
 			Vector("xx", "xx", "xx", "xx"),
 			Vector("g5", "y4", "g1", "r1"),
 			Vector("g1", "b1", "b1", "r1"),
@@ -60,7 +60,7 @@ class Endgame extends munit.FunSuite:
 				"p2", "p3", "p4"
 			),	// Missing: y1, y1, r4, g4, b4
 			init =
-				fullyKnown(Bob, 1, "g5") andThen
+				fullyKnown[Reactor](Bob, 1, "g5") andThen
 				fullyKnown(Bob, 2, "y4") andThen
 				fullyKnown(Donald, 1, "y4") andThen
 				fullyKnown(Donald, 4, "y5")
@@ -77,7 +77,7 @@ class Endgame extends munit.FunSuite:
 	}
 
 	test("it plays to start simple endgame") {
-		val game = setup(Reactor, Vector(
+		val game = setup(Reactor.apply, Vector(
 			Vector("xx", "xx", "xx", "xx"),
 			Vector("r1", "r1", "y1", "b5"),
 			Vector("g1", "g1", "y1", "p1"),
@@ -92,7 +92,7 @@ class Endgame extends munit.FunSuite:
 				"p2", "p3",	"p4"
 			),	// Missing: r2, y2, b2
 			init =
-				fullyKnown(Alice, 1, "r4") andThen
+				fullyKnown[Reactor](Alice, 1, "r4") andThen
 				fullyKnown(Alice, 2, "r4") andThen
 				fullyKnown(Bob, 4, "b5") andThen
 				fullyKnown(Donald, 4, "r5")
@@ -109,7 +109,7 @@ class Endgame extends munit.FunSuite:
 	}
 
 	test("it plays to start endgame when other has dupes") {
-		val game = setup(Reactor, Vector(
+		val game = setup(Reactor.apply, Vector(
 			Vector("xx", "xx", "xx", "xx"),
 			Vector("b1", "p4", "b1", "p4"),
 			Vector("r1", "y1", "g1", "p1"),
@@ -124,7 +124,7 @@ class Endgame extends munit.FunSuite:
 				"p2", "p3",
 			),	// Missing: p1, r4, y4, g4
 			init =
-				fullyKnown(Alice, 1, "p3") andThen
+				fullyKnown[Reactor](Alice, 1, "p3") andThen
 				fullyKnown(Bob, 2, "p4") andThen
 				fullyKnown(Bob, 4, "p4") andThen
 				fullyKnown(Donald, 4, "p5")
@@ -142,7 +142,7 @@ class Endgame extends munit.FunSuite:
 	}
 
 	test("it plays to start a_complex endgame where all cards are seen") {
-		val game = setup(Reactor, Vector(
+		val game = setup(Reactor.apply, Vector(
 			Vector("xx", "xx", "xx", "xx", "xx"),
 			Vector("b1", "r1", "g1", "p5", "p2"),
 			Vector("g1", "b1", "r4", "r1", "g5"),
@@ -157,7 +157,7 @@ class Endgame extends munit.FunSuite:
 			),	// Missing: y1, y1, p1, p1, p4
 			init =
 				// fullyKnown(Alice, 1, "p1")
-				fullyKnown(Alice, 2, "p3") andThen
+				fullyKnown[Reactor](Alice, 2, "p3") andThen
 				fullyKnown(Alice, 3, "p4") andThen
 				fullyKnown(Alice, 4, "r5") andThen
 				fullyKnown(Alice, 5, "r4") andThen
@@ -182,7 +182,7 @@ class Endgame extends munit.FunSuite:
 	}
 
 	test("it calculates basic winrate correctly") {
-		val game = setup(Reactor, Vector(
+		val game = setup(Reactor.apply, Vector(
 			Vector("xx", "xx", "xx", "xx", "xx"),
 			Vector("b1", "r1", "g1", "y1", "r4"),
 			Vector("b1", "r1", "g1", "y1", "r5"),
@@ -197,7 +197,7 @@ class Endgame extends munit.FunSuite:
 			),	// Missing: p1, p1, r4, y4, g4, y5
 			clueTokens = 0,
 			init =
-				fullyKnown(Alice, 5, "r3") andThen
+				fullyKnown[Reactor](Alice, 5, "r3") andThen
 				fullyKnown(Bob, 5, "r4") andThen
 				fullyKnown(Cathy, 5, "r5")
 		)

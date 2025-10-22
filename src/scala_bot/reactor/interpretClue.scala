@@ -18,7 +18,7 @@ private def reactiveFocus(state: State, receiver: Int, action: ClueAction) =
 			if (state.includesVariant(PINKISH)) clue.value else focusIndex + 1
 	}
 
-def interpretStable(prev: Game, game: Game, action: ClueAction, stall: Boolean) =
+def interpretStable(prev: Reactor, game: Reactor, action: ClueAction, stall: Boolean) =
 	val ClueAction(giver, target, _, _) = action
 
 	val (interp, newGame) = tryStable(prev, game, action, stall)
@@ -37,7 +37,7 @@ def interpretStable(prev: Game, game: Game, action: ClueAction, stall: Boolean) 
 		(interp, newGame)
 
 
-private def tryStable(prev: Game, game: Game, action: ClueAction, stall: Boolean): (Option[ClueInterp], Game) =
+private def tryStable(prev: Reactor, game: Reactor, action: ClueAction, stall: Boolean): (Option[ClueInterp], Reactor) =
 	Log.info(s"interpreting stable clue!")
 	val state = game.state
 	val ClueAction(giver, target, list, clue) = action
@@ -79,12 +79,16 @@ private def tryStable(prev: Game, game: Game, action: ClueAction, stall: Boolean
 					status = CardStatus.CalledToPlay
 				))
 
-	if (game.common.waiting.isEmpty && state.nextPlayerIndex(giver) != target)
-		val receiver = target
-		val focusSlot = reactiveFocus(state, receiver, action)
+	val newGame = game.copy(
+		common = newCommon,
+		meta = newMeta,
+		waiting = Option.when(game.common.waiting.isEmpty && state.nextPlayerIndex(giver) != target) {
+			val receiver = target
+			val focusSlot = reactiveFocus(state, receiver, action)
 
-		newCommon = newCommon.copy(
-			waiting = Some(WaitingConnection(
+			Log.info("writing potential response inversion!")
+
+			ReactorWC(
 				giver,
 				reacter = game.state.nextPlayerIndex(giver),
 				receiver,
@@ -93,11 +97,8 @@ private def tryStable(prev: Game, game: Game, action: ClueAction, stall: Boolean
 				focusSlot,
 				inverted = true,
 				turn = game.state.turnCount
-			))
-		)
-		Log.info("writing potential response inversion!")
-
-	val newGame = game.copy(common = newCommon, meta = newMeta)
+			)
+		})
 
 	if (cluedResets.nonEmpty || duplicateReveals.nonEmpty)
 		Log.info("fix clue!")
@@ -153,7 +154,7 @@ private def tryStable(prev: Game, game: Game, action: ClueAction, stall: Boolean
 /**
 * Returns a non-bad touching ref play clue or a ref dc clue on trash to the clue target, if it exists.
 */
-private def alternativeClue(game: Game, clueTarget: Int, playOnly: Boolean = false) =
+private def alternativeClue(game: Reactor, clueTarget: Int, playOnly: Boolean = false) =
 	Option.when(!game.noRecurse) {
 		val (common, state) = (game.common, game.state)
 
@@ -164,7 +165,7 @@ private def alternativeClue(game: Game, clueTarget: Int, playOnly: Boolean = fal
 
 			newlyTouched.nonEmpty && (clue.kind match {
 				case ClueKind.Colour =>
-					val playTarget = newlyTouched.map(common.refer(game, hand.toList, _, left = true)).max
+					val playTarget = newlyTouched.map(common.refer(game, hand, _, left = true)).max
 					val poss = IdentitySet.from(state.variant.touchPossibilities(clue.toBase))
 
 					state.isPlayable(state.deck(playTarget).id().get) &&
@@ -184,7 +185,7 @@ private def alternativeClue(game: Game, clueTarget: Int, playOnly: Boolean = fal
 		}
 	}.flatten
 
-def badStable(prev: Game, game: Game, action: ClueAction, interp: ClueInterp, stall: Boolean = false) =
+def badStable(prev: Reactor, game: Reactor, action: ClueAction, interp: ClueInterp, stall: Boolean = false) =
 	val state = game.state
 	val target = action.target
 
@@ -230,7 +231,7 @@ def badStable(prev: Game, game: Game, action: ClueAction, interp: ClueInterp, st
 	else
 		false
 
-def interpretReactive(prev: Game, game: Game, action: ClueAction, reacter: Int, inverted: Boolean): (Option[ClueInterp], Game) =
+def interpretReactive(prev: Reactor, game: Reactor, action: ClueAction, reacter: Int, inverted: Boolean): (Option[ClueInterp], Reactor) =
 	val state = game.state
 	val ClueAction(giver = giver, target = receiver, clue = clue, list = _) = action
 
@@ -240,18 +241,16 @@ def interpretReactive(prev: Game, game: Game, action: ClueAction, reacter: Int, 
 	val focusSlot = reactiveFocus(state, receiver, action)
 
 	val newGame = game.copy(
-		common = game.common.copy(
-			waiting = Some(WaitingConnection(
-				giver,
-				reacter,
-				receiver,
-				receiverHand = state.hands(receiver),
-				clue,
-				focusSlot,
-				inverted = false,
-				turn = state.turnCount
-			))
-		)
+		waiting = Some(ReactorWC(
+			giver,
+			reacter,
+			receiver,
+			receiverHand = state.hands(receiver),
+			clue,
+			focusSlot,
+			inverted = false,
+			turn = state.turnCount
+		))
 	)
 
 	if (receiver == state.ourPlayerIndex)
@@ -263,7 +262,7 @@ def interpretReactive(prev: Game, game: Game, action: ClueAction, reacter: Int, 
 		}
 
 
-def delayedPlays(game: Game, giver: Int, receiver: Int) =
+def delayedPlays(game: Reactor, giver: Int, receiver: Int) =
 	val (common, state, meta) = (game.common, game.state, game.meta)
 
 	playersUntil(state.numPlayers, state.nextPlayerIndex(giver), receiver).foldLeft(List[(Int, Identity)]()) { (acc, playerIndex) =>
@@ -290,10 +289,10 @@ def delayedPlays(game: Game, giver: Int, receiver: Int) =
 		}
 	}
 
-def refPlay(prev: Game, game: Game, action: ClueAction) =
+def refPlay(prev: Reactor, game: Reactor, action: ClueAction) =
 	val hand = game.state.hands(action.target)
 	val newlyTouched = action.list.filter(!prev.state.deck(_).clued)
-	val target = newlyTouched.map(game.common.refer(prev, hand.toList, _, left = true)).max
+	val target = newlyTouched.map(game.common.refer(prev, hand, _, left = true)).max
 
 	if (game.isBlindPlaying(target))
 		Log.warn("targeting an already known playable!")
@@ -305,7 +304,7 @@ def refPlay(prev: Game, game: Game, action: ClueAction) =
 		targetPlay(game, action, target, urgent = false, stable = true)
 
 
-def targetPlay(game: Game, action: ClueAction, target: Int, urgent: Boolean = false, stable: Boolean = true) =
+def targetPlay(game: Reactor, action: ClueAction, target: Int, urgent: Boolean = false, stable: Boolean = true) =
 	val state = game.state
 	val holder = state.holderOf(target)
 	val possibleConns = delayedPlays(game, action.giver, holder)
@@ -357,7 +356,7 @@ def targetPlay(game: Game, action: ClueAction, target: Int, urgent: Boolean = fa
 		Log.info(s"targeting play $target (${state.names(holder)}), infs ${newCommon.strInfs(state, target)}${if (urgent) ", urgent" else ""}")
 		(Some(ClueInterp.RefPlay), game.copy(common = newCommon, meta = newMeta))
 
-def targetDiscard(game: Game, action: ClueAction, target: Int, urgent: Boolean = false) =
+def targetDiscard(game: Reactor, action: ClueAction, target: Int, urgent: Boolean = false) =
 	val meta = game.meta(target)
 	val state = game.state
 
@@ -375,7 +374,7 @@ def targetDiscard(game: Game, action: ClueAction, target: Int, urgent: Boolean =
 	Log.info(s"targeting discard $target (${state.names(action.target)}), infs ${game.common.strInfs(state, target)}${if (urgent) ", urgent" else ""}")
 	newGame
 
-def refDiscard(prev: Game, game: Game, action: ClueAction, stall: Boolean): (Option[ClueInterp], Game) =
+def refDiscard(prev: Reactor, game: Reactor, action: ClueAction, stall: Boolean): (Option[ClueInterp], Reactor) =
 	val state = game.state
 	val ClueAction(giver = giver, target = receiver, list = list, clue = clue) = action
 	val hand = state.hands(receiver)
