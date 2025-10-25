@@ -9,6 +9,7 @@ import java.nio.file.{Files, Paths}
 import scala.util.Random
 import scala.util.{Try, chaining}, chaining.scalaUtilChainingOps
 import java.nio.charset.StandardCharsets
+import scala_bot.refSieve.RefSieve
 
 enum GameResult:
 	case Perfect, Strikeout, DiscardedCrit, OutOfPace
@@ -20,13 +21,12 @@ case class GameSummary(
 	notes: List[List[String]]
 )
 
-def simulateGame(deck: Vector[Identity], variant: Variant): GameSummary =
-	val games = (0 until 3).map { i =>
-		val names = Vector("Alice", "Bob", "Cathy")
-		val state = State(names, i, variant)
+def simulateGame[G <: Game](gameC: (Int, State, Boolean) => G, deck: Vector[Identity], variant: Variant, numPlayers: Int)(using ops: GameOps[G]): GameSummary =
+	val games = (0 until numPlayers).map { i =>
+		val names = Vector("Alice", "Bob", "Cathy", "Donald", "Emily")
+		val state = State(names.take(numPlayers), i, variant)
 
-		Reactor(tableID = 0, state, inProgress = false)
-			.copy(catchup = true)
+		ops.copyWith(gameC(0, state, false), GameUpdates(catchup = Some(true)))
 			.pipe { g =>
 				val state = g.state
 				(0 until state.numPlayers).foldLeft(g) { (acc, playerIndex) =>
@@ -124,6 +124,8 @@ def selfPlay(args: String*) =
 	val numGames = parsedArgs.getOrElse("games", "1").toInt
 	val seed = parsedArgs.getOrElse("seed", "0").toInt
 	val variantName = parsedArgs.getOrElse("variant", "No Variant")
+	val convention = Convention.from(parsedArgs.getOrElse("convention", "Reactor"))
+	val numPlayers = parsedArgs.getOrElse("players", "3").toInt
 
 	Logger.setLevel(LogLevel.Error)
 	Variant.init()
@@ -134,7 +136,10 @@ def selfPlay(args: String*) =
 	for (i <- (seed until seed + numGames)) {
 		Random.setSeed(i)
 		val shuffledDeck = Random.shuffle(deck).toVector
-		val GameSummary(score, result, actions, notes) = simulateGame(shuffledDeck, variant)
+		val GameSummary(score, result, actions, notes) = convention match {
+			case Convention.Reactor => simulateGame(Reactor.apply, shuffledDeck, variant, numPlayers)
+			case Convention.RefSieve => simulateGame(RefSieve.apply, shuffledDeck, variant, numPlayers)
+		}
 
 		val actionsJSON = actions.map(_.json(tableID = 0))
 		val data = ujson.Obj(

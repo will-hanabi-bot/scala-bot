@@ -77,6 +77,9 @@ extension(ids: IdentitySet)
 		}
 		res
 
+	def fmt(state: State) =
+		ids.map(state.logId).mkString(",")
+
 given Conversion[IdentitySet, Iterable[Identity]] = _.toIterable
 
 object IdentitySet:

@@ -1,24 +1,17 @@
 package scala_bot
 
-import cats.effect.IO
+import cats.effect.{kernel,IO,std}, kernel.Ref, std.Queue
 import cats.syntax.all._
-import cats.effect.std.Queue
-import cats.effect.kernel.Ref
 import upickle.default._
-import java.util.{Timer,TimerTask}
 import scala.concurrent.duration._
 
 import scala_bot.basics._
-import scala_bot.basics.given_Conversion_IdentitySet_Iterable
 import scala_bot.console.{ConsoleCmd, NavArg}
 import scala_bot.reactor.Reactor
 import scala_bot.logger._
+import scala_bot.refSieve.RefSieve
 
-val timer = new Timer
-def delay(f: () => Unit, n: Long) =
-	timer.schedule(new TimerTask() { def run = f() }, n)
-
-val BOT_VERSION = "v0.1.1 (scala-bot)"
+val BOT_VERSION = "v0.2.0 (scala-bot)"
 
 case class ChatMessage(
 	msg: String,
@@ -94,32 +87,49 @@ object GameActionListMessage:
 			json.obj("list").arr.map(Action.fromJSON).flatten.toSeq
 		)
 
+enum Convention:
+	case Reactor, RefSieve
+
+object Convention:
+	def from(s: String) = s match {
+		case "Reactor" => Convention.Reactor
+		case "RefSieve" => Convention.RefSieve
+		case _ => throw new IllegalArgumentException(s"Unknown convention $s")
+	}
+
+case class Settings(convention: Convention):
+	def str = convention match {
+		case Convention.Reactor => "Reactor 1.0"
+		case Convention.RefSieve => "Ref Sieve"
+	}
+
 class BotClient(queue: Queue[IO, String], gameRef: Ref[IO, Option[Game]]):
 	private var info: Option[SelfData] = None
 	private var tableID: Option[Int] = None
 	private var gameStarted = false
 	private var tables: Map[Int, Table] = Map()
+	private var settings: Settings = Settings(Convention.Reactor)
 
 	def debug(cmd: ConsoleCmd) = gameRef.get.flatMap {
 		case None => IO.println("no active game")
 		case Some(game) =>
 			val state = game.state
 			cmd match {
-				case ConsoleCmd.Hand(name, from) => state.names.indexWhere(_ == name) match {
+				case ConsoleCmd.Hand(name, from) => state.names.indexOf(name) match {
 					case -1 =>
 						Log.error(s"Player $name not found.")
 						IO.unit
 					case i =>
 						val hand = state.hands(i)
 						val player = from match {
-								case None => game.common
-								case Some(name) => state.names.indexWhere(_ == name) match {
-									case -1 =>
-										println(s"Player $from not found.")
-										null
-									case index =>
-										game.players(index)
-								}
+							case None => game.common
+							case Some(name) => state.names.indexOf(name) match {
+								case -1 =>
+									println(s"Player $from not found.")
+									null
+								case index =>
+									game.players(index)
+							}
 						}
 
 						if (player != null)
@@ -139,7 +149,7 @@ class BotClient(queue: Queue[IO, String], gameRef: Ref[IO, Option[Game]]):
 									List(
 										Some(s"$order: ${state.logId(order)} ${meta.status}"),
 										Some(s"inferred: [${player.strInfs(state, order)}]"),
-										player.thoughts(order).infoLock.map(info => s"info lock: [${info.map(state.logId).mkString(",")}]"),
+										player.thoughts(order).infoLock.map(info => s"info lock: [${info.fmt(state)}]"),
 										Some(s"possible: [${player.strPoss(state, order)}]"),
 										Some(s"reasoning: ${meta.reasoning}"),
 										Option.when(!flags.isEmpty)(s"flags: ${flags.toList}"),
@@ -166,6 +176,7 @@ class BotClient(queue: Queue[IO, String], gameRef: Ref[IO, Option[Game]]):
 					else
 						game match {
 							case r: Reactor => gameRef.set(Some(r.navigate(turn)))
+							case r: RefSieve => gameRef.set(Some(r.navigate(turn)))
 							case _ => IO.unit
 						}
 			}
@@ -199,6 +210,19 @@ class BotClient(queue: Queue[IO, String], gameRef: Ref[IO, Option[Game]]):
 							} *>
 							gameRef.update {
 								case Some(g2: Reactor) => Some(g2.copy(catchup = false))
+								case other => other
+							} *>
+							sendCmd("loaded", ujson.write(ujson.Obj("tableID" -> msg.tableID))) *>
+							IO.sleep(1000.millis) *>
+							handleAction(GameActionMessage(msg.tableID, msg.list.last))
+
+						case r: RefSieve =>
+							gameRef.set(Some(r.copy(catchup = true))) *>
+							msg.list.init.traverse_ { action =>
+								handleAction(GameActionMessage(msg.tableID, action))
+							} *>
+							gameRef.update {
+								case Some(g2: RefSieve) => Some(g2.copy(catchup = false))
 								case other => other
 							} *>
 							sendCmd("loaded", ujson.write(ujson.Obj("tableID" -> msg.tableID))) *>
@@ -259,8 +283,13 @@ class BotClient(queue: Queue[IO, String], gameRef: Ref[IO, Option[Game]]):
 		val variant = Variant.getVariant(options.variantName)
 		val state = State(playerNames, ourPlayerIndex, variant)
 
+		val game = settings.convention match {
+			case Convention.Reactor => Reactor(tID, state, inProgress = true)
+			case Convention.RefSieve => RefSieve(tID, state, inProgress = true)
+		}
+
 		IO { tableID = Some(tID) } *>
-		gameRef.set(Some(Reactor(tID, state, inProgress = true))) *>
+		gameRef.set(Some(game)) *>
 		sendCmd("getGameInfo2", ujson.write(ujson.Obj("tableID" -> tID)))
 
 	def handleChat(data: ChatMessage): IO[Unit] =
@@ -310,6 +339,9 @@ class BotClient(queue: Queue[IO, String], gameRef: Ref[IO, Option[Game]]):
 					}
 			}
 
+		else if (msg.startsWith("/settings"))
+			assignSettings(data, true)
+
 		else if (msg.startsWith("/version"))
 			sendPM(who, BOT_VERSION)
 
@@ -324,7 +356,8 @@ class BotClient(queue: Queue[IO, String], gameRef: Ref[IO, Option[Game]]):
 				IO {
 					g match {
 						case r: Reactor => r.handleAction(action)
-						case _ => g
+						case r: RefSieve => r.handleAction(action)
+						case _ => throw new Error("Unexpected game type")
 					}
 				}
 				.flatMap { newGame =>
@@ -349,6 +382,7 @@ class BotClient(queue: Queue[IO, String], gameRef: Ref[IO, Option[Game]]):
 					val actIO = IO.whenA(perform) {
 						val suggestedAction = newGame match {
 							case r: Reactor => r.takeAction
+							case r: RefSieve => r.takeAction
 						}
 						Log.highlight(Console.BLUE, s"Suggested action: ${suggestedAction.fmt(newGame)}")
 						val arg = suggestedAction.json(tableID.get)
@@ -360,7 +394,7 @@ class BotClient(queue: Queue[IO, String], gameRef: Ref[IO, Option[Game]]):
 
 					val x = newGame match {
 						case r: Reactor => r.copy(queuedCmds = List())
-						case _ => newGame
+						case r: RefSieve => r.copy(queuedCmds = List())
 					}
 
 					gameRef.set(Some(x)) *>
@@ -375,7 +409,15 @@ class BotClient(queue: Queue[IO, String], gameRef: Ref[IO, Option[Game]]):
 			case true => (msg: String) => sendPM(data.who, msg)
 			case false => (msg: String) => sendChat(msg)
 		}
-		reply(s"Currently playing with Reactor 1.0 conventions.")
+
+		data.msg.split(" ") match {
+			case Array(_) =>
+				reply(s"Currently playing with ${settings.str} conventions.")
+
+			case Array(_, conv) =>
+				settings = settings.copy(convention = Convention.from(conv))
+				reply(s"Currently playing with ${settings.str} conventions.")
+		}
 
 	def sendPM(recipient: String, msg: String) =
 		queue.offer(s"chatPM ${ujson.Obj(

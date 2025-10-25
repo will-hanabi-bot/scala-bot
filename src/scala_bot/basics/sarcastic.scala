@@ -1,9 +1,8 @@
-package scala_bot.reactor
+package scala_bot.basics
 
-import scala_bot.basics._
 import scala_bot.logger.Log
 
-def interpretUsefulDc(game: Reactor, action: DiscardAction) =
+def interpretUsefulDc[G <: Game](game: G, action: DiscardAction)(using ops: GameOps[G]) =
 	val (common, state) = (game.common, game.state)
 	val DiscardAction(playerIndex, order, suitIndex, rank, _) = action
 	val id = Identity(suitIndex, rank)
@@ -29,22 +28,22 @@ def interpretUsefulDc(game: Reactor, action: DiscardAction) =
 					(DiscardInterp.Mistake, game)
 				else
 					Log.info(s"gd to ${state.names(holder)}'s $target")
-					val newGame = game.copy(
-						common = common.withThought(target)(_.copy(
+					val newGame = ops.copyWith(game, GameUpdates(
+						common = Some(common.withThought(target)(_.copy(
 							inferred = IdentitySet.single(id)
-						)),
-						meta = game.meta.updated(target, game.meta(target).copy(
+						))),
+						meta = Some(game.meta.updated(target, game.meta(target).copy(
 							status = CardStatus.GentlemansDiscard
-						))
+						))))
 					)
 					(DiscardInterp.GentlemansDiscard, newGame)
 			else
 				val orders = state.hands(holder).filter(common.thoughts(_).possible.contains(id))
 				Log.info(s"sarcastic to ${state.names(holder)}'s $orders")
-				val newGame = game.copy(
-					common = common.copy(
+				val newGame = ops.copyWith(game, GameUpdates(
+					common = Some(common.copy(
 						links = Link.Sarcastic(orders.toList, id) +: common.links
-					)
+					)))
 				)
 				(DiscardInterp.Sarcastic, newGame)
 
@@ -57,13 +56,13 @@ def interpretUsefulDc(game: Reactor, action: DiscardAction) =
 			state.ourHand.reverse.find(game.me.thoughts(_).possible.contains(id)) match {
 				case Some(target) =>
 					Log.info(s"gd to our $target")
-					val newGame = game.copy(
-						common = common.withThought(target)(_.copy(
+					val newGame = ops.copyWith(game, GameUpdates(
+						common = Some(common.withThought(target)(_.copy(
 							inferred = IdentitySet.single(id)
-						)),
-						meta = game.meta.updated(target, game.meta(target).copy(
+						))),
+						meta = Some(game.meta.updated(target, game.meta(target).copy(
 							status = CardStatus.GentlemansDiscard
-						))
+						))))
 					)
 					(DiscardInterp.GentlemansDiscard, newGame)
 				case None =>
@@ -73,10 +72,10 @@ def interpretUsefulDc(game: Reactor, action: DiscardAction) =
 		case None =>
 			val orders = state.ourHand.filter(common.thoughts(_).possible.contains(id))
 			Log.info(s"sarcastic to our $orders")
-			val newGame = game.copy(
-				common = common.copy(
+			val newGame = ops.copyWith(game, GameUpdates(
+				common = Some(common.copy(
 					links = Link.Sarcastic(orders.toList, id) +: common.links
-				)
-			)
+				))
+			))
 			(DiscardInterp.Sarcastic, newGame)
 	}

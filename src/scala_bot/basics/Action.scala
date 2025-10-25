@@ -55,7 +55,7 @@ case class ClueAction(
 ) extends Action:
 	def fmt(state: State) =
 		val value = clue.kind match {
-			case ClueKind.Colour => state.variant.colourableSuits(clue.value)
+			case ClueKind.Colour => state.variant.colourableSuits(clue.value).toLowerCase()
 			case ClueKind.Rank => clue.value.toString
 		}
 		s"${state.names(giver)} clues $value to ${state.names(target)}"
@@ -231,11 +231,11 @@ enum PerformAction:
 
 		this match {
 			case PerformAction.Play(target) =>
-				val slot = state.ourHand.indexWhere(_ == target) + 1
+				val slot = state.ourHand.indexOf(target) + 1
 				s"Play slot $slot, inferences ${game.common.strInfs(state, target)}"
 
 			case PerformAction.Discard(target) =>
-				val slot = state.ourHand.indexWhere(_ == target) + 1
+				val slot = state.ourHand.indexOf(target) + 1
 				s"Discard slot $slot, inferences ${game.common.strInfs(state, target)}"
 
 			case PerformAction.Colour(target, value) =>

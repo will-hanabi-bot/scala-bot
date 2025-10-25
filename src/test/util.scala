@@ -148,7 +148,7 @@ def parseAction(state: State, action: String) =
 	val discardPattern = """(\w+) (discards|bombs) (\w\d)(?: \(slot (\d)\))?""".r
 
 	def parsePlayer(str: String) =
-		val index = state.names.indexWhere(_ == str)
+		val index = state.names.indexOf(str)
 		if (index == -1)
 			throw new IllegalArgumentException(s"Player $str not found in [${state.names}]")
 		index

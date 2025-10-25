@@ -10,6 +10,7 @@ import scala.util.{Try, chaining}, chaining.scalaUtilChainingOps
 import cats.effect.std.Queue
 import cats.effect.{IO, IOApp, ExitCode}
 import cats.effect.kernel.Ref
+import scala_bot.refSieve.RefSieve
 
 case class GameData(
 	players: Vector[String],
@@ -44,7 +45,7 @@ object GameData:
 def fetchGame(args: Seq[String]) =
 	val parsedArgs = parseArgs(args)
 
-	val List(id, indexR, file) = List("id", "index", "file").map(parsedArgs.lift(_))
+	val List(id, indexR, file, conventionR) = List("id", "index", "file", "convention").map(parsedArgs.lift(_))
 
 	if (id.isEmpty && file.isEmpty)
 		throw new IllegalArgumentException("Must provide either id or file argument.")
@@ -53,8 +54,9 @@ def fetchGame(args: Seq[String]) =
 		throw new IllegalArgumentException("Missing required argument 'index'!")
 
 	val index = indexR.get.toInt
+	val convention = Convention.from(conventionR.getOrElse("Reactor"))
 
-	val GameData(players, deck, actions, options) = id match {
+	val data @ GameData(players, deck, actions, options) = id match {
 		case Some(id) => GameData.fetchId(id)
 		case None => GameData.fetchFile(file.get)
 	}
@@ -66,11 +68,21 @@ def fetchGame(args: Seq[String]) =
 	val variant = Variant.getVariant(options.map(_.variant).getOrElse("No Variant"))
 
 	val state = State(players, index, variant)
+	convention match {
+		case Convention.Reactor =>
+			val game = Reactor(0, state, false).copy(catchup = true)
+			processGame(game, data, index)
+		case Convention.RefSieve =>
+			val game = RefSieve(0, state, false).copy(catchup = true)
+			processGame(game, data, index)
+	}
 
-	Reactor(0, state, false).copy(catchup = true)
+def processGame[G <: Game](game: G, data: GameData, index: Int)(using ops: GameOps[G]) =
+	val GameData(players, deck, actions, options) = data
+	game
 		.pipe { g =>
-			(0 until state.numPlayers).foldLeft(g) { (a, playerIndex) =>
-				(0 until HAND_SIZE(state.numPlayers)).foldLeft(a) { (acc, _) =>
+			(0 until g.state.numPlayers).foldLeft(g) { (a, playerIndex) =>
+				(0 until HAND_SIZE(g.state.numPlayers)).foldLeft(a) { (acc, _) =>
 					val order = acc.state.nextCardOrder
 					acc.handleAction(DrawAction(
 						playerIndex,
@@ -107,7 +119,7 @@ def fetchGame(args: Seq[String]) =
 					}
 			}
 		}
-		.copy(catchup = false)
+		.pipe(ops.copyWith(_, GameUpdates(catchup = Some(false))))
 
 object replay extends IOApp {
 	def run(args: List[String]) =

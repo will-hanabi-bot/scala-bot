@@ -10,7 +10,7 @@ def calcSlot(focusSlot: Int, slot: Int) =
 
 private def calcTargetSlot(prev: Reactor, game: Reactor, order: Int, wc: ReactorWC) =
 	val ReactorWC(_, reacter, receiver, receiverHand, _, focusSlot, _, _) = wc
-	val reactSlot = prev.state.hands(reacter).indexWhere(_ == order) + 1
+	val reactSlot = prev.state.hands(reacter).indexOf(order) + 1
 	val targetSlot = calcSlot(focusSlot, reactSlot)
 
 	receiverHand.lift(targetSlot - 1) match {

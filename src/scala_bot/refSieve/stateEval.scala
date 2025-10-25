@@ -1,9 +1,9 @@
-package scala_bot.reactor
+package scala_bot.refSieve
 
 import scala_bot.basics._
 import scala_bot.logger.Log
 
-def getResult(game: Reactor, hypo: Reactor, action: ClueAction): Double =
+def getResult(game: RefSieve, hypo: RefSieve, action: ClueAction): Double =
 	val (common, state, meta) = (game.common, game.state, game.meta)
 	val ClueAction(giver, target, list, clue) = action
 
@@ -81,23 +81,23 @@ def getResult(game: Reactor, hypo: Reactor, action: ClueAction): Double =
 			}
 	}
 
-def advanceGame(game: Reactor, action: Action) =
+def advanceGame(game: RefSieve, action: Action) =
 	action match {
 		case clue: ClueAction => game.simulateClue(clue, log = true)
 		case _ => game.simulateAction(action)
 	}
 
-def advance(orig: Reactor, game: Reactor, offset: Int): Double =
+def advance(orig: RefSieve, game: RefSieve, offset: Int): Double =
 	val (state, common, meta) = (game.state, game.common, game.meta)
 	val playerIndex = (state.ourPlayerIndex + offset) % state.numPlayers
 	val player = game.players(playerIndex)
 
 	val bob = state.nextPlayerIndex(playerIndex)
-	val bobChop = Option.when(state.numPlayers > 2)(Reactor.chop(game, bob)).flatten
+	val bobChop = Option.when(state.numPlayers > 2)(RefSieve.chop(game, bob)).flatten
 
 	lazy val trash = player.thinksTrash(game, playerIndex)
 	lazy val urgentDc = trash.find(meta(_).urgent)
-	lazy val allPlayables = player.obviousPlayables(game, playerIndex)
+	lazy val allPlayables = player.thinksPlayables(game, playerIndex)
 
 	lazy val bobClue = !state.hands(playerIndex).exists(meta(_).urgent) &&
 		offset == 1 &&
@@ -115,24 +115,28 @@ def advance(orig: Reactor, game: Reactor, offset: Int): Double =
 			}
 		}
 
-		val playActions = playables.map{ order =>
+		val (knownPlays, unknownPlays) = playables.foldLeft((List.empty[Double], List.empty[Double])) { case ((known, unknown), order) =>
 			val (id, action) = state.deck(order).id() match {
 				case None => (None, PlayAction(playerIndex, order, -1, -1))
 				case Some(id) =>
 					val action = if (state.isPlayable(id))
 						PlayAction(playerIndex, order, id.suitIndex, id.rank)
 					else
-						Log.warn(s"not playable! ${state.logId(id)}")
 						DiscardAction(playerIndex, order, id.suitIndex, id.rank, failed = true)
 					(Some(id), action)
 			}
 
-			Log.info(s"${state.names(playerIndex)} playing ${state.logId(id)}")
-			advance(orig, advanceGame(game, action), offset + 1)
-		}
-		playActions.max
+			Log.info(s"${state.names(playerIndex)} ${if (id.exists(state.isPlayable)) "playing" else "bombing"} ${state.logId(id)}")
+			val value = advance(orig, advanceGame(game, action), offset + 1)
 
-	else if (player.obviousLocked(game, playerIndex))
+			if (player.thoughts(order).id(infer = true).isDefined)
+				(value +: known, unknown)
+			else
+				(known, value +: unknown)
+		}
+		math.min(knownPlays.maxOption.getOrElse(99.9), unknownPlays.minOption.getOrElse(99.9))
+
+	else if (player.thinksLocked(game, playerIndex))
 		if (!state.canClue)
 			val lockedDc = player.lockedDiscard(state, playerIndex)
 			val Identity(suitIndex, rank) = state.deck(lockedDc).id().get
@@ -152,10 +156,11 @@ def advance(orig: Reactor, game: Reactor, offset: Int): Double =
 		val nextGame = game.withState(s => s.copy(clueTokens = s.clueTokens - 1))
 		Log.info(s"forcing ${state.names(playerIndex)} to clue bob!")
 		0.5 + advance(orig, nextGame, offset + 2)
+
 	else
 		urgentDc.orElse(trash.headOption) match {
 			case None =>
-				val chop = Reactor.chop(game, playerIndex).getOrElse(throw new Exception(s"Player ${state.names(playerIndex)} not locked but no chop! ${state.hands(playerIndex).map(state.deck(_))}"))
+				val chop = RefSieve.chop(game, playerIndex).getOrElse(throw new Exception(s"Player ${state.names(playerIndex)} not locked but no chop! ${state.hands(playerIndex).map(state.deck(_))}"))
 				val id = state.deck(chop).id().get
 				val action = DiscardAction(playerIndex, chop, id.suitIndex, id.rank)
 				val dcGame = advanceGame(game, action)
@@ -164,7 +169,7 @@ def advance(orig: Reactor, game: Reactor, offset: Int): Double =
 					val clueGame = game.withState(s => s.copy(clueTokens = s.clueTokens - 1))
 
 					val clueProb = if (offset == 1)
-						if (common.obviousLoaded(game, bob))
+						if (common.thinksLoaded(game, bob))
 							0.2
 						else if (bobChop.isDefined)
 							if (state.isBasicTrash(state.deck(bobChop.get).id().get)) 0.2 else 0.7
@@ -188,7 +193,7 @@ def advance(orig: Reactor, game: Reactor, offset: Int): Double =
 				advance(orig, advanceGame(game, action), offset + 1)
 		}
 
-def evalAction(game: Reactor, action: Action): Double =
+def evalAction(game: RefSieve, action: Action): Double =
 	Log.highlight(Console.GREEN, s"===== Predicting value for ${action.fmt(game.state)} =====")
 	val state = game.state
 	val hypoGame = advanceGame(game, action)
@@ -249,7 +254,7 @@ def evalState(state: State): Double =
 	Log.info(s"state eval: score: $scoreVal, clues: $clueVal, dc crit: $dcCritVal, strikes: $strikesVal")
 	scoreVal + clueVal + dcCritVal + strikesVal
 
-def evalGame(orig: Reactor, game: Reactor): Double =
+def evalGame(orig: RefSieve, game: RefSieve): Double =
 	val state = game.state
 
 	if (state.score == state.maxScore)
@@ -297,7 +302,8 @@ def evalGame(orig: Reactor, game: Reactor): Double =
 	}.sum
 
 	val bdrVal = state.variant.allIds.map { id =>
-		val discarded = state.discardStacks(id.suitIndex)(id.rank - 1)
+		val prevDiscarded = orig.state.discardStacks(id.suitIndex)(id.rank - 1)
+		val discarded = state.discardStacks(id.suitIndex)(id.rank - 1).filterNot(prevDiscarded.contains)
 
 		lazy val duplicated = state.hands.flatten.exists { o =>
 			state.deck(o).matches(id) ||
@@ -320,6 +326,13 @@ def evalGame(orig: Reactor, game: Reactor): Double =
 			}
 	}.sum * 2.5
 
+	val lockedPenalty = (0 until state.numPlayers).map { playerIndex =>
+		if (!game.players(playerIndex).thinksLocked(game, playerIndex)) 0 else (state.clueTokens match {
+			case c if c > 4 => -1
+			case _ => -2
+		})
+	}.sum
+
 	val endgamePenalty = state.endgameTurns.fold(0) { turns =>
 		val finalScore = (0 until turns).foldLeft(state.playStacks) { (stacks, i) =>
 			val playerIndex = (state.currentPlayerIndex + i + 1) % state.numPlayers
@@ -332,5 +345,5 @@ def evalGame(orig: Reactor, game: Reactor): Double =
 		(finalScore - state.maxScore) * 5
 	}
 
-	Log.info(s"state: $stateVal, future: $futureVal, bdr: $bdrVal${if (endgamePenalty != 0) s" endgame penalty: ${endgamePenalty}" else ""}")
+	Log.info(s"state: $stateVal, future: $futureVal, bdr: $bdrVal locked: $lockedPenalty${if (endgamePenalty != 0) s" endgame penalty: ${endgamePenalty}" else ""}")
 	stateVal + futureVal + bdrVal + endgamePenalty

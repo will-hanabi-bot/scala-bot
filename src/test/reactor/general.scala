@@ -87,7 +87,7 @@ class General extends munit.FunSuite:
 		assert(game.common.obviousPlayables(game, Cathy.ordinal).contains(game.state.hands(Cathy.ordinal)(1)))
 	}
 
-	test("it doesn t give a bad reverse reactive clue") {
+	test("it doesn't give a bad reverse reactive clue") {
 		val game = setup(Reactor.apply, Vector(
 			Vector("xx", "xx", "xx", "xx", "xx"),
 			Vector("b1", "r1", "r4", "y4", "y5"),

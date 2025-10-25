@@ -122,7 +122,7 @@ case class State(
 		if (short.length != 2)
 			throw new IllegalArgumentException(s"Short should be exactly 2 characters! (eg. r5)")
 
-		val suitIndex = variant.shortForms.indexWhere(_ == short.charAt(0))
+		val suitIndex = variant.shortForms.indexOf(short.charAt(0))
 		if (suitIndex == -1)
 			throw new IllegalArgumentException(s"Colour $short doesn't exist in selected variant!")
 

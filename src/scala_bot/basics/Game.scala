@@ -66,6 +66,8 @@ trait Game:
 	def rewindDepth: Int
 	def inProgress: Boolean
 
+	def goodTouch: Boolean
+
 trait GameOps[G <: Game]:
 	def blank(game: G, keepDeck: Boolean): G
 	def copyWith(game: G, updates: GameUpdates): G
@@ -76,7 +78,7 @@ trait GameOps[G <: Game]:
 	def takeAction(game: G): PerformAction
 	def updateTurn(prev: G, game: G, action: TurnAction): G
 
-	def findAllClues(game: G, playerIndex: Int): List[PerformAction]
+	def findAllClues(game: G, giver: Int): List[PerformAction]
 	def findAllDiscards(game: G, playerIndex: Int): List[PerformAction]
 
 extension[G <: Game](game: G)
@@ -137,11 +139,14 @@ extension[G <: Game](game: G)
 				ops.copyWith(newGame, GameUpdates(inProgress = Some(false)))
 
 			case turn @ TurnAction(num, currentPlayerIndex) =>
-				newGame.withState(_.copy(
-					currentPlayerIndex = currentPlayerIndex,
-					turnCount = num + 1
-				))
-				.pipe(ops.updateTurn(game, _, turn).updateNotes())
+				if (currentPlayerIndex == -1)	// game ended
+					newGame
+				else
+					newGame.withState(_.copy(
+						currentPlayerIndex = currentPlayerIndex,
+						turnCount = num + 1
+					))
+					.pipe(ops.updateTurn(game, _, turn).updateNotes())
 
 			case InterpAction(interp) =>
 				ops.copyWith(newGame, GameUpdates(nextInterp = Some(Some(interp))))
@@ -165,10 +170,10 @@ extension[G <: Game](game: G)
 		game.state.deck(order).id()
 		.orElse(game.deckIds(order))
 		.orElse(game.me.thoughts(order).id(infer = infer))
-		.exists(_ == id)
+		.contains(id)
 
 	def handleClue(prev: G, clue: ClueAction)(using ops: GameOps[G]) =
-		ops.interpretClue(prev, game.onClue(clue).elim(goodTouch = true), clue)
+		ops.interpretClue(prev, game.onClue(clue).elim(goodTouch = true), clue).elim(goodTouch = true)
 
 	def takeAction(using ops: GameOps[G]) =
 		ops.takeAction(game)
@@ -354,7 +359,7 @@ extension[G <: Game](game: G)
 				else
 					note
 
-				val write = notes.get(order).forall(prev => note != prev.last && state.turnCount > prev.turn)
+				val write = notes.get(order).forall(prev => finalNote != prev.last && state.turnCount > prev.turn)
 
 				if (write)
 					val full = notes.get(order).map(n => s"${n.full} | ").getOrElse("").appendedAll(s"t${state.turnCount}: $finalNote")

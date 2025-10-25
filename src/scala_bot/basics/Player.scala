@@ -46,7 +46,7 @@ case class Player(
 
 	def refer(game: Game, hand: Vector[Int], order: Int, left: Boolean = false) =
 		val offset = if (left) -1 else 1
-		val index = hand.indexWhere(_ == order)
+		val index = hand.indexOf(order)
 		var targetIndex = (index + offset + hand.length) % hand.length
 
 		while (game.isTouched(hand(targetIndex)) && targetIndex != index)
@@ -116,7 +116,7 @@ case class Player(
 		val thought = thoughts(order)
 
 		game.meta(order).status match {
-			case CardStatus.CalledToPlay =>
+			case CardStatus.CalledToPlay | CardStatus.Finessed =>
 				thought.possible.exists(state.isPlayable) &&
 				thought.infoLock.forall(_.exists(state.isPlayable))
 
@@ -124,31 +124,32 @@ case class Player(
 				thought.inferred.forall(state.isPlayable)
 
 			case _ =>
-			thought.possible.forall(state.isPlayable) ||
-			thought.infoLock.exists(_.forall(state.isPlayable))
+				thought.possible.forall(state.isPlayable) ||
+				thought.infoLock.exists(_.forall(state.isPlayable))
 		}
+
+	def orderPlayable(game: Game, order: Int) =
+		val state = game.state
+		lazy val unsafeLink = links.exists(link =>
+			link.getOrders.contains(order) && link.getOrders.max != order)
+
+		if (orderKp(game, order))
+			true
+		else if (game.meta(order).trash || unsafeLink)
+			false
+		else
+			val infer =
+				(playerIndex != state.ourPlayerIndex || state.strikes != 2 || game.meta(order).focused) &&
+				game.meta(order).status != CardStatus.CalledToDiscard
+
+			val poss = if (infer) thoughts(order).possibilities else thoughts(order).possible
+			poss.forall(state.isPlayable)
 
 	def obviousPlayables(game: Game, playerIndex: Int) =
 		game.state.hands(playerIndex).filter(orderKp(game, _))
 
 	def thinksPlayables(game: Game, playerIndex: Int) =
-		val state = game.state
-
-		state.hands(playerIndex).filter { order =>
-			lazy val unsafeLink = links.exists(link =>
-				link.getOrders.contains(order) && link.getOrders.max != order)
-
-			if (orderKp(game, order))
-				true
-			else if (game.meta(order).trash || unsafeLink)
-				false
-			else
-				val infer =
-					(playerIndex != state.ourPlayerIndex || state.strikes != 2 || game.meta(order).focused) &&
-					game.meta(order).status != CardStatus.CalledToDiscard
-				val poss = if (infer) thoughts(order).possibilities else thoughts(order).possible
-				poss.forall(state.isPlayable)
-		}
+		game.state.hands(playerIndex).filter(orderPlayable(game, _))
 
 	def thinksTrash(game: Game, playerIndex: Int) =
 		game.state.hands(playerIndex).filter(orderTrash(game, _))
@@ -158,14 +159,21 @@ case class Player(
 			orderTrash(game, order) || thoughts(order).possibilities.forall(isSieved(game, _, order))
 		}
 
-	def safeActions(game: Game, playerIndex: Int) =
-		obviousPlayables(game, playerIndex).concat(thinksTrash(game, playerIndex)).distinct
-
 	def thinksLoaded(game: Game, playerIndex: Int) =
-		!obviousPlayables(game, playerIndex).isEmpty || !thinksTrash(game, playerIndex).isEmpty
+		thinksPlayables(game, playerIndex).nonEmpty || thinksTrash(game, playerIndex).nonEmpty
 
 	def thinksLocked(game: Game, playerIndex: Int) =
 		!thinksLoaded(game, playerIndex) && game.state.hands(playerIndex).forall { order =>
+			game.state.deck(order).clued ||
+			game.meta(order).status == CardStatus.CalledToPlay ||
+			game.meta(order).cm
+		}
+
+	def obviousLoaded(game: Game, playerIndex: Int) =
+		obviousPlayables(game, playerIndex).nonEmpty || thinksTrash(game, playerIndex).nonEmpty
+
+	def obviousLocked(game: Game, playerIndex: Int) =
+		!obviousLoaded(game, playerIndex) && game.state.hands(playerIndex).forall { order =>
 			game.state.deck(order).clued ||
 			game.meta(order).status == CardStatus.CalledToPlay ||
 			game.meta(order).cm
@@ -226,7 +234,7 @@ case class Player(
 				val HypoStruct(hypo, unknownPlays, played, viable) = acc
 				val thought = thoughts(order)
 
-				val skip = !hypo.state.hasConsistentInfs(thought) || !orderKp(hypo, order)
+				val skip = !hypo.state.hasConsistentInfs(thought) || !(if (game.goodTouch) orderPlayable(hypo, order) else orderKp(hypo, order))
 
 				if (skip) acc else thought.id(infer = true, symmetric = true) match {
 					case None =>
@@ -244,19 +252,12 @@ case class Player(
 							}
 						}
 
-						if (successful)
-							acc.copy(
-								hypo = newHypo,
-								unknownPlays = unknownPlays + order,
-								played = played + order,
-								viable = viable - order
-							)
-						else
-							acc.copy(
-								unknownPlays = unknownPlays + order,
-								played = played + order,
-								viable = viable - order
-							)
+						acc.copy(
+							hypo = if (successful) newHypo else hypo,
+							unknownPlays = unknownPlays + order,
+							played = played + order,
+							viable = viable - order
+						)
 					case Some(id) =>
 						if (hypo.state.isPlayable(id))
 							acc.copy(

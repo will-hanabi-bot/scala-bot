@@ -27,7 +27,7 @@ class Stable extends munit.FunSuite:
 			Vector("p4", "b1", "p2", "b5", "g4"),
 			Vector("b1", "g2", "r2", "r3", "g5"),
 		))
-		.pipe(takeTurn( "Alice clues purple to Bob"))
+		.pipe(takeTurn("Alice clues purple to Bob"))
 
 		assertEquals(game.meta(game.state.hands(Bob.ordinal)(1)).status, CardStatus.CalledToPlay)
 		hasInfs(game, None, Bob, 2, Vector("r1", "y1", "g1", "b1"))
@@ -39,7 +39,7 @@ class Stable extends munit.FunSuite:
 			Vector("b1", "b2", "p2", "b5", "g4"),
 			Vector("b1", "g2", "r2", "r3", "g5"),
 		))
-		.pipe(takeTurn( "Alice clues blue to Bob"))
+		.pipe(takeTurn("Alice clues blue to Bob"))
 
 		hasInfs(game, None, Bob, 1, Vector("b1"))
 	}
@@ -66,6 +66,25 @@ class Stable extends munit.FunSuite:
 		assertEquals(game.takeAction, PerformAction.Rank(Bob.ordinal, 4))
 	}
 
+	test("eliminates direct ranks from focus") {
+		val game = setup(Reactor.apply, Vector(
+			Vector("xx", "xx", "xx", "xx", "xx"),
+			Vector("p4", "p2", "p2", "r5", "g3"),
+			Vector("b5", "y4", "g2", "r4", "y3")
+		),
+			starting = Cathy,
+			playStacks = Some(Vector(1, 1, 0, 1, 1))
+		)
+		.pipe(takeTurn("Cathy clues 1 to Alice (slots 2,3)"))
+
+		assertEquals(game.meta(game.state.hands(Alice.ordinal)(3)).status, CardStatus.None)
+		hasInfs(game, None, Alice, 2, Vector("g1"))
+
+		// Alice"s slot 3 should be trash
+		val trash = game.common.thinksTrash(game, Alice.ordinal)
+		assert(trash.contains(game.state.hands(Alice.ordinal)(2)))
+	}
+
 	test("it understands a lock") {
 		val game = setup(Reactor.apply, Vector(
 			Vector("xx", "xx", "xx", "xx", "xx"),
@@ -74,7 +93,7 @@ class Stable extends munit.FunSuite:
 		))
 		.pipe(takeTurn("Alice clues 4 to Bob"))
 
-		assert(game.common.thinksLocked(game, Bob.ordinal))
+		assert(game.common.obviousLocked(game, Bob.ordinal))
 	}
 
 	test("it doesn't focus the wrong card for the last id") {

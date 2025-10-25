@@ -50,13 +50,17 @@ private def tryStable(prev: Reactor, game: Reactor, action: ClueAction, stall: B
 	if (clue.kind == ClueKind.Rank && newlyTouched.nonEmpty)
 		var focus = newlyTouched.max
 
-		if ((0 until state.variant.suits.length).forall(suitIndex => state.isBasicTrash(Identity(suitIndex, clue.value))))
-			newCommon = newCommon.withThought(focus)(t => t.copy(inferred = t.inferred.retain(state.isBasicTrash)))
-			newMeta = newMeta.updated(focus, newMeta(focus).copy(trash = true))
-		else if ((0 until state.variant.suits.length).forall(suitIndex =>
+		val trashPush = (0 until state.variant.suits.length).forall(suitIndex => state.isBasicTrash(Identity(suitIndex, clue.value)))
+		lazy val playableRank = (0 until state.variant.suits.length).forall(suitIndex =>
 			val id = Identity(suitIndex, clue.value)
 			state.isBasicTrash(id) || state.isPlayable(id)
-		))
+		)
+
+		if (trashPush)
+			newCommon = newCommon.withThought(focus)(t => t.copy(inferred = t.inferred.retain(state.isBasicTrash)))
+			newMeta = newMeta.updated(focus, newMeta(focus).copy(trash = true))
+
+		else if (playableRank)
 			game.state.hands(target).filter(!prev.state.deck(_).clued).minOption.foreach { lockOrder =>
 				if (state.includesVariant(PINKISH) && list.contains(lockOrder))
 					focus = lockOrder
@@ -112,6 +116,12 @@ private def tryStable(prev: Reactor, game: Reactor, action: ClueAction, stall: B
 
 		Log.info(s"playables $playables, prev_playables $prevPlayables")
 
+		lazy val reveal = playables.find { o =>
+			list.contains(o) &&
+			!prevPlayables.contains(o) &&
+			(clue.kind == ClueKind.Rank || prev.state.deck(o).clued)
+		}
+
 		if (newlyTouched.isEmpty)
 			val safeActions = playables.concat(common.thinksTrash(newGame, target))
 			val oldSafeActions = prevPlayables.concat(prev.common.thinksTrash(prev, target))
@@ -126,8 +136,8 @@ private def tryStable(prev: Reactor, game: Reactor, action: ClueAction, stall: B
 				Log.warn("looked like fill-in/hard burn outside of a stalling situation!")
 				(None, newGame)
 
-		else if (playables.nonEmpty && playables.exists(o => list.contains(o) && !prevPlayables.contains(o) && prev.state.deck(o).clued))
-			Log.info(s"revealed a safe action! ${playables.find(o => !prevPlayables.contains(o) && prev.state.deck(o).clued).get} $prevPlayables")
+		else if (reveal.isDefined)
+			Log.info(s"revealed a safe action! ${reveal.get} $prevPlayables")
 			(Some(ClueInterp.Reveal), newGame)
 
 		else if (common.orderKt(game, newlyTouched.max))
@@ -176,7 +186,7 @@ private def alternativeClue(game: Reactor, clueTarget: Int, playOnly: Boolean = 
 					!hand.filter(!state.deck(_).clued).minOption.exists(list.contains) &&
 					{
 						val focus = newlyTouched.max
-						val focusPos = hand.indexWhere(_ == focus)
+						val focusPos = hand.indexOf(focus)
 						val targetIndex = hand.zipWithIndex.indexWhere((o, i) => i > focusPos && !state.deck(o).clued)
 
 						state.isBasicTrash(state.deck(hand(targetIndex)).id().get)
@@ -404,7 +414,7 @@ def refDiscard(prev: Reactor, game: Reactor, action: ClueAction, stall: Boolean)
 				(Some(ClueInterp.Lock), game.copy(common = newCommon, meta = newMeta))
 		case _ =>
 			val focus = newlyTouched.max
-			val focusPos = hand.indexWhere(_ == focus)
+			val focusPos = hand.indexOf(focus)
 			val targetIndex = hand.zipWithIndex.indexWhere((o, i) => i > focusPos && !state.deck(o).clued)
 			Log.info(s"ref discard on ${state.names(receiver)}'s slot ${targetIndex + 1}")
 

@@ -122,5 +122,5 @@ class Invert extends munit.FunSuite:
 
 		// Cathy is called to play slot 2.
 		assertEquals(game.meta(game.state.hands(Cathy.ordinal)(1)).status, CardStatus.CalledToPlay)
-		assert(!game.common.thinksLocked(game, Cathy.ordinal))
+		assert(!game.common.obviousLocked(game, Cathy.ordinal))
 	}

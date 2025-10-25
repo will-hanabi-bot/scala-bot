@@ -36,7 +36,9 @@ case class Reactor(
 	nextInterp: Option[Interp] = None,
 	noRecurse: Boolean = false,
 	rewindDepth: Int = 0,
-	inProgress: Boolean = false
+	inProgress: Boolean = false,
+
+	goodTouch: Boolean = false
 ) extends Game
 
 object Reactor:
@@ -150,7 +152,7 @@ object Reactor:
 							else
 								interpretStable(prev, g, action, stall = false)
 
-						case None if prev.common.thinksLocked(prev, giver) || state.inEndgame || prev.state.clueTokens == 8 =>
+						case None if prev.common.obviousLocked(prev, giver) || state.inEndgame || prev.state.clueTokens == 8 =>
 							interpretStable(prev, g, action, stall = true)
 
 						case None =>
@@ -393,7 +395,7 @@ object Reactor:
 				val as = allClues.concat(allPlays).concat(allDiscards)
 
 				chop(game, state.ourPlayerIndex) match {
-					case Some(chop) if !cantDiscard && (!state.canClue || allPlays.isEmpty) && allDiscards.isEmpty && !me.thinksLocked(game, state.ourPlayerIndex) =>
+					case Some(chop) if !cantDiscard && (!state.canClue || allPlays.isEmpty) && allDiscards.isEmpty && !me.obviousLocked(game, state.ourPlayerIndex) =>
 						as :+ (PerformAction.Discard(chop), DiscardAction(state.ourPlayerIndex, chop, -1, -1, false))
 					case _ => as
 				}

@@ -126,8 +126,8 @@ def main(args: String*): Unit =
 				.header("Cookie", cookie)
 				.send(backend)
 		} yield ()
-	}.handleErrorWith { error =>
-		IO.println(s"Failed connecting to hanab.live: ${error.getMessage}") *> IO { error.printStackTrace() }
+	}.handleErrorWith { err =>
+		IO { err.printStackTrace() } *> IO.raiseError(err)
 	}
 
 	program.unsafeRunSync()
