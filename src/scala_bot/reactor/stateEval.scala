@@ -152,6 +152,7 @@ def advance(orig: Reactor, game: Reactor, offset: Int): Double =
 		val nextGame = game.withState(s => s.copy(clueTokens = s.clueTokens - 1))
 		Log.info(s"forcing ${state.names(playerIndex)} to clue bob!")
 		0.5 + advance(orig, nextGame, offset + 2)
+
 	else
 		urgentDc.orElse(trash.headOption) match {
 			case None =>

@@ -160,7 +160,8 @@ def targetIPlay(_prev: Reactor, game: Reactor, wc: ReactorWC, targetSlot: Int) =
 
 	val newCommon = game.common.withThought(order)(t => t.copy(
 		oldInferred = Some(t.inferred),
-		inferred = t.inferred.retain(state.isPlayable)
+		inferred = t.inferred.retain(state.isPlayable),
+		infoLock = Some(t.inferred.retain(state.isPlayable))
 	))
 
 	val shifted =

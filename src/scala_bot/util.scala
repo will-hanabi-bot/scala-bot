@@ -20,7 +20,7 @@ def visibleFind(
 	infer: Boolean = false,
 	symmetric: Boolean = false,
 	assume: Boolean = false,
-	cond: (Int, Int) => Boolean = (_, _) => true
+	cond: (playerIndex: Int, order: Int) => Boolean = (_, _) => true
 ) =
 	state.hands.zipWithIndex.flatMap { (hand, playerIndex) =>
 		hand.filter { order =>

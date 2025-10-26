@@ -80,7 +80,7 @@ class Stable extends munit.FunSuite:
 		assertEquals(game.meta(game.state.hands(Alice.ordinal)(3)).status, CardStatus.None)
 		hasInfs(game, None, Alice, 2, Vector("g1"))
 
-		// Alice"s slot 3 should be trash
+		// Alice's slot 3 should be trash
 		val trash = game.common.thinksTrash(game, Alice.ordinal)
 		assert(trash.contains(game.state.hands(Alice.ordinal)(2)))
 	}
@@ -111,4 +111,23 @@ class Stable extends munit.FunSuite:
 		.pipe(takeTurn("Cathy clues 3 to Alice (slots 2,5)"))
 
 		assertEquals(game.takeAction, PerformAction.Play(0))
+	}
+
+	test("it interprets a fix") {
+		val game = setup(Reactor.apply, Vector(
+			Vector("xx", "xx", "xx", "xx", "xx"),
+			Vector("r1", "p2", "p2", "b5", "g4"),
+			Vector("r1", "g2", "r2", "r3", "g5"),
+		),
+			starting = Cathy
+		)
+		.pipe(takeTurn("Cathy clues 2 to Bob"))
+		.pipe(takeTurn("Alice plays y1 (slot 1)"))
+		.pipe(takeTurn("Bob clues green to Cathy"))
+		.pipe(takeTurn("Cathy plays r1", "g3"))
+		.pipe(takeTurn("Alice clues red to Bob"))
+
+		// Bob's slot 1 should be known trash.
+		assert(game.common.thinksTrash(game, Player.Bob.ordinal).contains(game.state.hands(Player.Bob.ordinal)(0)))
+		hasInfs(game, None, Bob, 1, Vector("r1"))
 	}

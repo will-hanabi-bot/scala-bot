@@ -29,6 +29,7 @@ class Finesses extends munit.FunSuite:
 			Vector("b1", "b4", "b4", "y4", "g4"),
 			Vector("b2", "r4", "y4", "p4", "g4")
 		),
+			clueTokens = 7,
 			init = preClue(Cathy, 1, Vector(TestClue(ClueKind.Colour, Colour.Blue.ordinal, Alice)))
 		)
 		.pipe(takeTurn("Alice clues 2 to Cathy"))
@@ -93,6 +94,7 @@ class Finesses extends munit.FunSuite:
 			Vector("r1", "r4", "r4", "p4", "g4"),
 			Vector("r2", "y4", "b4", "g4", "p4")
 		),
+			clueTokens = 7,
 			init =
 				// Cathy's slot 1 is clued with red.
 				preClue(Cathy, 1, Vector(TestClue(ClueKind.Colour, Colour.Red.ordinal, Alice)))
@@ -111,6 +113,7 @@ class Finesses extends munit.FunSuite:
 			Vector("y4", "y4", "b4", "g4", "p4")
 		),
 			starting = Player.Cathy,
+			clueTokens = 7,
 			init =
 				// Bob's slot 1 is clued with red.
 				preClue(Bob, 1, Vector(TestClue(ClueKind.Colour, Colour.Red.ordinal, Alice)))
@@ -186,6 +189,7 @@ class Finesses extends munit.FunSuite:
 			Vector("xx", "xx", "xx", "xx", "xx"),
 			Vector("r1", "r2", "b4", "g4", "p4")
 		),
+			clueTokens = 7,
 			init =
 				// Bob's slot 2 is clued with red.
 				preClue(Bob, 2, Vector(TestClue(ClueKind.Colour, Colour.Red.ordinal, Alice)))
@@ -226,6 +230,7 @@ class Finesses extends munit.FunSuite:
 			Vector("r2", "r5", "g5", "r3", "p4")
 		),
 			playStacks = Some(Vector(1, 0, 0, 0, 0)),
+			clueTokens = 7,
 			init =
 				// Bob has r5 and r3 clued with red.
 				preClue[RefSieve](Bob, 2, Vector(TestClue(ClueKind.Colour, Colour.Red.ordinal, Alice))) andThen

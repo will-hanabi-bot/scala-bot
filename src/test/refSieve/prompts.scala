@@ -24,7 +24,7 @@ class Prompts extends munit.FunSuite:
 		.pipe(takeTurn("Cathy plays g1", "p3"))
 		.pipe(takeTurn("Alice clues purple to Cathy"))	// getting r2
 
-		// Bob"s r1 should be prompted.
+		// Bob's r1 should be prompted.
 		hasInfs(game, None, Bob, 2, Vector("r1"))
 	}
 
@@ -34,15 +34,14 @@ class Prompts extends munit.FunSuite:
 			Vector("b1", "r1", "y4", "y4", "g4"),
 			Vector("g1", "r2", "b4", "p4", "g4")
 		),
-			starting = Cathy
+			clueTokens = 7,
+			init =
+				preClue[RefSieve](Bob, 2, Vector(TestClue(ClueKind.Colour, Colour.Red.ordinal, Alice))) andThen
+				preClue(Cathy, 2, Vector(TestClue(ClueKind.Colour, Colour.Red.ordinal, Alice)))
 		)
-		.pipe(takeTurn("Cathy clues red to Bob"))		// getting b1. r1 clued
-		.pipe(takeTurn("Alice clues red to Cathy"))		// getting g1. r2 clued
-		.pipe(takeTurn("Bob plays b1", "p3"))
-		.pipe(takeTurn("Cathy plays g1", "p3"))
 		.pipe(takeTurn("Alice clues 2 to Cathy"))	// getting r2
 
-		// Bob"s r1 should be prompted.
+		// Bob's r1 should be prompted.
 		hasInfs(game, None, Bob, 2, Vector("r1"))
 	}
 
@@ -70,8 +69,9 @@ class Prompts extends munit.FunSuite:
 			Vector("b4", "r2", "r1", "y4", "g4"),
 			Vector("y4", "r3", "b4", "p4", "g4")
 		),
+			clueTokens = 7,
 			init =
-				// Bob"s slots 2 and 3 are clued with red.
+				// Bob's slots 2 and 3 are clued with red.
 				preClue[RefSieve](Bob, 2, Seq(TestClue(ClueKind.Colour, Colour.Red.ordinal, Alice))) andThen
 				preClue(Bob, 3, Seq(TestClue(ClueKind.Colour, Colour.Red.ordinal, Alice))) andThen
 				// Cathy's slot 2 is clued with red.
@@ -91,7 +91,7 @@ class Prompts extends munit.FunSuite:
 			Vector("y4", "r3", "b4", "p4", "g4")
 		),
 			init =
-				// Bob"s slots 2 and 3 are clued with red.
+				// Bob's slots 2 and 3 are clued with red.
 				preClue[RefSieve](Bob, 2, Seq(TestClue(ClueKind.Colour, Colour.Red.ordinal, Alice))) andThen
 				preClue(Bob, 3, Seq(TestClue(ClueKind.Colour, Colour.Red.ordinal, Alice)))
 		)
@@ -108,6 +108,7 @@ class Prompts extends munit.FunSuite:
 			Vector("y4", "y4", "g4", "r4", "p4")
 		),
 			starting = Player.Cathy,
+			clueTokens = 7,
 			init =
 				// Alice and Bob have a card clued with red in slot 2.
 				preClue[RefSieve](Alice, 2, Seq(TestClue(ClueKind.Colour, Colour.Red.ordinal, Cathy))) andThen
@@ -127,6 +128,7 @@ class Prompts extends munit.FunSuite:
 			Vector("g5", "b4", "r3", "y3", "g3")
 		),
 			starting = Donald,
+			clueTokens = 7,
 			init =
 				// Alice, Bob, and Cathy all have cards clued with red in slot 1.
 				preClue[RefSieve](Alice, 1, Seq(TestClue(ClueKind.Colour, Colour.Red.ordinal, Donald))) andThen

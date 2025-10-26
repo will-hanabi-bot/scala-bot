@@ -8,7 +8,7 @@ import scala_bot.logger.{Logger, LogLevel}
 import scala.util.chaining.scalaUtilChainingOps
 
 class DelayedPlays extends munit.FunSuite:
-	// override def beforeAll() = Logger.setLevel(LogLevel.Off)
+	override def beforeAll() = Logger.setLevel(LogLevel.Off)
 
 	test("gives a delayed play clue through a playable card") {
 		val game = setup(RefSieve.apply, Vector(
@@ -52,7 +52,7 @@ class DelayedPlays extends munit.FunSuite:
 		assertEquals(game.lastMove, Some(ClueInterp.Mistake))
 	}
 
-	test("understands a self-delayed play clue".only) {
+	test("understands a self-delayed play clue") {
 		val game = setup(RefSieve.apply, Vector(
 			Vector("xx", "xx", "xx", "xx", "xx"),
 			Vector("b1", "b4", "y4", "y4", "g4"),

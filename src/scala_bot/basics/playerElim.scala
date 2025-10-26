@@ -68,7 +68,12 @@ extension (p: Player) {
 							thoughts(order) = if (reset)
 								thought.resetInferences()
 							else
-								thought.copy(inferred = newInferred, possible = newPossible)
+								thought.copy(
+									inferred = newInferred,
+									possible = newPossible,
+									infoLock = thought.infoLock.map(_.difference(id))
+								)
+
 
 							if (reset)
 								resets += order

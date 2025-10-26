@@ -99,12 +99,15 @@ case class Thought(
 		if (reset) {
 			return this
 		}
+
+		val newInfoLock = if (infoLock.exists(_.nempty)) infoLock else None
 		this.copy(
 			reset = true,
-			inferred = infoLock match {
+			inferred = newInfoLock match {
 				case None => possible
 				case Some(ids) => possible.intersect(ids)
-			}
+			},
+			infoLock = newInfoLock
 		)
 
 object Thought:

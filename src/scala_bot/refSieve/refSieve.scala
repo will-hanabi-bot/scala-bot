@@ -63,6 +63,20 @@ object RefSieve:
 			}
 		}
 
+	def hasPtd(game: RefSieve, playerIndex: Int) =
+		!game.common.thinksLocked(game, playerIndex) &&
+		!game.common.thinksLoaded(game, playerIndex) &&
+		!mustClue(game, playerIndex)
+
+	def mustClue(game: RefSieve, playerIndex: Int) =
+		val state = game.state
+
+		state.canClue &&
+		state.numPlayers > 2 && {
+			val bobChop = RefSieve.chop(game, state.nextPlayerIndex(playerIndex))
+			bobChop.flatMap(state.deck(_).id()).exists(id => state.isCritical(id) || state.isPlayable(id))
+		}
+
 	def findPrompt(prev: RefSieve, game: RefSieve, accordingTo: Player, playerIndex: Int, id: Identity, connected: Set[Int] = Set(), ignore: Set[Int] = Set(), forcePink: Boolean = false) =
 		val state = game.state
 		val order = state.hands(playerIndex).findLast { order =>
@@ -139,7 +153,7 @@ object RefSieve:
 			)
 
 		def interpretClue(prev: RefSieve, game: RefSieve, action: ClueAction): RefSieve =
-			val ClueAction(_, target, list, clue) = action
+			val ClueAction(giver, target, list, clue) = action
 			val newlyTouched = list.filter(!prev.state.deck(_).clued)
 			val (clueResets, duplicateReveals) = checkFix(prev, game, action)
 
@@ -170,6 +184,7 @@ object RefSieve:
 
 			val prevPlayables = prev.common.thinksPlayables(prev, target)
 			val prevLoaded = prev.common.thinksLoaded(prev, target)
+			val stalling = prev.common.thinksLocked(prev, giver) || prev.state.clueTokens == 8
 
 			lazy val focus = determineFocus(prev, game, action, push = trashPush || clue.kind == ClueKind.Colour)
 			lazy val cluedGame = game.withMeta(focus)(_.copy(focused = true))
@@ -179,16 +194,30 @@ object RefSieve:
 
 			val (interp, newGame) =
 				if (!fix && prevLoaded)
-					if (newlyTouched.nonEmpty)
-						refPlay(prev, game, action, right = clue.kind == ClueKind.Rank && !trashPush)
-					else
+					if (newlyTouched.nonEmpty)		// Loaded ref play
+						if (clue.kind == ClueKind.Rank && stalling)
+							Log.info("rank stall!")
+							(Some(ClueInterp.Stall), game)
+						else
+							refPlay(prev, game, action, right = clue.kind == ClueKind.Rank && !trashPush)
+
+					else if (stalling)
+						Log.info("fill-in stall!")
+						(Some(ClueInterp.Stall), game)
+
+					else	// Loaded reclue
 						targetPlay(prev, game, action, list.max)
 
 				else if (newlyTouched.isEmpty)
 					if (loaded)
 						Log.info(s"revealed a safe action, not continuing")
 						(Some(ClueInterp.Reveal), game)
-					else
+
+					else if (stalling)
+						Log.info("fill-in stall!")
+						(Some(ClueInterp.Stall), game)
+
+					else	// Reclue
 						targetPlay(game, game, action, list.max)
 
 				else if (trashPush)
@@ -245,7 +274,12 @@ object RefSieve:
 				}
 
 			val discardOrders = me.discardable(game, state.ourPlayerIndex)
-			val playableOrders = me.thinksPlayables(game, state.ourPlayerIndex)
+			val playableOrders = {
+				val playables = me.thinksPlayables(game, state.ourPlayerIndex)
+
+				// Exclude cards if there is a duplicate that is fully known.
+				playables.filterNot(p1 => playables.exists(p2 => p1 != p2 && me.thoughts(p2).id().exists(me.thoughts(p1).matches(_, infer = true))))
+			}
 
 			Log.info(s"playables $playableOrders")
 			Log.info(s"discardable $discardOrders")
@@ -274,6 +308,7 @@ object RefSieve:
 			}
 
 			val cantDiscard = state.clueTokens == 8 ||
+				RefSieve.mustClue(game, state.ourPlayerIndex) ||
 				(state.pace == 0 && (allClues.nonEmpty || allPlays.nonEmpty))
 			Log.info(s"can discard: ${!cantDiscard} ${state.clueTokens}")
 

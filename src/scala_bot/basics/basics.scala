@@ -19,7 +19,8 @@ extension[G <: Game](game: G)
 					))
 					.withThought(order)(t => t.copy(
 						inferred = t.inferred.intersect(newPossible),
-						possible = t.possible.intersect(newPossible)
+						possible = t.possible.intersect(newPossible),
+						infoLock = t.infoLock.map(_.intersect(newPossible))
 					))
 
 				val newThought = touchedGame.common.thoughts(order)
@@ -35,7 +36,8 @@ extension[G <: Game](game: G)
 			else
 				newGame.withThought(order)(t => t.copy(
 					inferred = t.inferred.difference(newPossible),
-					possible = t.possible.difference(newPossible)
+					possible = t.possible.difference(newPossible),
+					infoLock = t.infoLock.map(_.difference(newPossible))
 				))
 		}
 		.withState { s => s.copy(

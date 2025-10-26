@@ -21,10 +21,11 @@ case class GameSummary(
 	notes: List[List[String]]
 )
 
+val NAMES = Vector("Alice", "Bob", "Cathy", "Donald", "Emily")
+
 def simulateGame[G <: Game](gameC: (Int, State, Boolean) => G, deck: Vector[Identity], variant: Variant, numPlayers: Int)(using ops: GameOps[G]): GameSummary =
 	val games = (0 until numPlayers).map { i =>
-		val names = Vector("Alice", "Bob", "Cathy", "Donald", "Emily")
-		val state = State(names.take(numPlayers), i, variant)
+		val state = State(NAMES.take(numPlayers), i, variant)
 
 		ops.copyWith(gameC(0, state, false), GameUpdates(catchup = Some(true)))
 			.pipe { g =>
@@ -143,7 +144,7 @@ def selfPlay(args: String*) =
 
 		val actionsJSON = actions.map(_.json(tableID = 0))
 		val data = ujson.Obj(
-			"players" -> Seq("Alice", "Bob", "Cathy"),
+			"players" -> NAMES.take(numPlayers),
 			"deck" -> shuffledDeck.map(id => ujson.Obj("suitIndex" -> id.suitIndex, "rank" -> id.rank)),
 			"actions" -> actionsJSON,
 			"notes" -> notes,

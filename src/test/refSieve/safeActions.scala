@@ -44,7 +44,7 @@ class SafeActions extends munit.FunSuite:
 		assertEquals(game.meta(game.state.hands(Alice.ordinal)(3)).status, CardStatus.None)
 		hasInfs(game, None, Alice, 2, Vector("g1"))
 
-		// Alice"s slot 3 should be trash
+		// Alice's slot 3 should be trash
 		val trash = game.common.thinksTrash(game, Alice.ordinal)
 		assert(trash.contains(game.state.hands(Alice.ordinal)(2)))
 	}

@@ -98,12 +98,16 @@ case class Player(
 		val meta = game.meta(order)
 		val thought = thoughts(order)
 
+		lazy val conventionalTrash =
+			thought.possible.forall(isTrash(game, _, order) ||
+			thought.infoLock.exists(_.forall(isTrash(game, _, order))) ||
+			meta.trash ||
+			meta.status == CardStatus.CalledToDiscard)
+
 		if (thought.possible.forall(game.state.isCritical))
 			false
-		else if (thought.possible.forall(isTrash(game, _, order) || meta.trash || meta.status == CardStatus.CalledToDiscard))
-			true
 		else
-			thought.possibilities.forall(isTrash(game, _, order))
+			conventionalTrash || thought.possibilities.forall(isTrash(game, _, order))
 
 	def orderKt(game: Game, order: Int) =
 		val thought = thoughts(order)

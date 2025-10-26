@@ -235,7 +235,7 @@ extension[G <: Game](game: G)
 		if (state.actionList(turn).contains(action))
 			return Left("action was already rewinded")
 
-		if (game.rewindDepth > 2)
+		if (game.rewindDepth > 4)
 			return Left("rewind depth went too deep")
 
 		Log.highlight(Console.GREEN, "------- STARTING REWIND -------")

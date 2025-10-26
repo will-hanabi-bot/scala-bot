@@ -62,14 +62,18 @@ def refDiscard(prev: RefSieve, game: RefSieve, action: ClueAction): (Option[Clue
 	val targetIndex = hand.indexWhere(o => o < focus && !state.deck(o).clued)
 
 	if (targetIndex == -1)
-		Log.highlight(Console.YELLOW, "lock!")
+		if (prev.common.thinksLocked(prev, action.giver) || prev.state.clueTokens == 8)
+			Log.info(s"rank stall!")
+			(Some(ClueInterp.Stall), game)
+		else
+			Log.highlight(Console.YELLOW, "lock!")
 
-		val newGame = hand.foldLeft(game) { (acc, o) =>
-			acc.withMeta(o)(_.copy(status = CardStatus.ChopMoved, by = Some(action.giver)))
-		}
-		.withMeta(focus)(_.copy(focused = true))
+			val newGame = hand.foldLeft(game) { (acc, o) =>
+				acc.withMeta(o)(_.copy(status = CardStatus.ChopMoved, by = Some(action.giver)))
+			}
+			.withMeta(focus)(_.copy(focused = true))
 
-		(Some(ClueInterp.Lock), newGame)
+			(Some(ClueInterp.Lock), newGame)
 	else
 		val target = hand(targetIndex)
 		Log.info(s"ref discard on ${state.names(clueTarget)}'s slot ${targetIndex + 1} (focus $focus)")
@@ -88,7 +92,7 @@ def targetPlay(prev: RefSieve, game: RefSieve, action: ClueAction, targetOrder: 
 	val unknown = common.thoughts(targetOrder).id(infer = true, symmetric = true).isEmpty
 
 	val focusPoss = (for
-		inf <- common.thoughts(targetOrder).inferred if visibleFind(state, common, inf, infer = true).isEmpty
+		inf <- common.thoughts(targetOrder).inferred if visibleFind(state, common, inf, infer = true, cond = (_, order) => order != targetOrder).isEmpty
 		conns <- connect(prev, game, targetOrder, inf, action, unknown)
 	yield
 		FocusPossibility(inf, conns, ClueInterp.RefPlay)).toList

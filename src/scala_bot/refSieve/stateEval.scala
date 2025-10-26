@@ -2,6 +2,8 @@ package scala_bot.refSieve
 
 import scala_bot.basics._
 import scala_bot.logger.Log
+import scala_bot.logger.Logger
+import scala_bot.logger.LogLevel
 
 def getResult(game: RefSieve, hypo: RefSieve, action: ClueAction): Double =
 	val (common, state, meta) = (game.common, game.state, game.meta)
@@ -87,6 +89,35 @@ def advanceGame(game: RefSieve, action: Action) =
 		case _ => game.simulateAction(action)
 	}
 
+def forceClue(orig: RefSieve, game: RefSieve, offset: Int, bobOnly: Boolean): Double =
+	val state = game.state
+	val playerIndex = (state.ourPlayerIndex + offset) % state.numPlayers
+	val bob = state.nextPlayerIndex(playerIndex)
+	// 0.5 + advance(orig, nextGame, offset + 2)
+
+	val allClues =
+		for
+			i <- 0 until state.numPlayers if i != playerIndex && (!bobOnly || i == bob)
+			clue <- state.allValidClues(i)
+		yield
+			val list = state.clueTouched(state.hands(i), clue)
+			ClueAction(playerIndex, i, list, clue.toBase)
+
+	val level = Logger.level
+	allClues.map { action =>
+		Logger.setLevel(LogLevel.Off)
+		val hypoGame = advanceGame(game, action)
+
+		if (hypoGame.lastMove == Some(ClueInterp.Mistake))
+			Logger.setLevel(level)
+			-100.0
+		else
+			val value = advance(orig, hypoGame, offset + 1)
+			Logger.setLevel(level)
+			Log.highlight(Console.YELLOW, s"${action.fmt(state)}: $value")
+			value
+	}.maxOption.getOrElse(0.0)
+
 def advance(orig: RefSieve, game: RefSieve, offset: Int): Double =
 	val (state, common, meta) = (game.state, game.common, game.meta)
 	val playerIndex = (state.ourPlayerIndex + offset) % state.numPlayers
@@ -98,10 +129,6 @@ def advance(orig: RefSieve, game: RefSieve, offset: Int): Double =
 	lazy val trash = player.thinksTrash(game, playerIndex)
 	lazy val urgentDc = trash.find(meta(_).urgent)
 	lazy val allPlayables = player.thinksPlayables(game, playerIndex)
-
-	lazy val bobClue = !state.hands(playerIndex).exists(meta(_).urgent) &&
-		offset == 1 &&
-		bobChop.flatMap(state.deck(_).id()).exists(id => state.isCritical(id) || state.isPlayable(id))
 
 	if (playerIndex == state.ourPlayerIndex || state.endgameTurns.contains(0))
 		evalGame(orig, game)
@@ -144,18 +171,15 @@ def advance(orig: RefSieve, game: RefSieve, offset: Int): Double =
 			Log.info(s"locked discard! $lockedDc")
 			advance(orig, advanceGame(game, action), offset + 1)
 		else
-			val nextGame = game.withState(s => s.copy(clueTokens = s.clueTokens - 1))
-			advance(orig, nextGame, offset + 1)
+			forceClue(orig, game, offset, bobOnly = false)
 
 	else if (state.clueTokens == 8)
-		val nextGame = game.withState(s => s.copy(clueTokens = s.clueTokens - 1))
 		Log.info("forced clue at 8 clues!")
-		advance(orig, nextGame, offset + 1)
+		forceClue(orig, game, offset, bobOnly = false)
 
-	else if (bobClue)
-		val nextGame = game.withState(s => s.copy(clueTokens = s.clueTokens - 1))
-		Log.info(s"forcing ${state.names(playerIndex)} to clue bob!")
-		0.5 + advance(orig, nextGame, offset + 2)
+	else if (RefSieve.mustClue(game, playerIndex))
+		Log.info(s"forcing ${state.names(playerIndex)} to clue their Bob!")
+		forceClue(orig, game, offset, bobOnly = true)
 
 	else
 		urgentDc.orElse(trash.headOption) match {
@@ -208,7 +232,7 @@ def evalAction(game: RefSieve, action: Action): Double =
 		case _ if mistake => -100
 
 		case clue: ClueAction =>
-			val mult = if (!game.me.obviousPlayables(game, state.ourPlayerIndex).isEmpty)
+			val mult = if (!game.me.thinksPlayables(game, state.ourPlayerIndex).isEmpty)
 				if (state.inEndgame) 0.1 else 0.25
 			else
 				0.5
@@ -308,10 +332,7 @@ def evalGame(orig: RefSieve, game: RefSieve): Double =
 		lazy val duplicated = state.hands.flatten.exists { o =>
 			state.deck(o).matches(id) ||
 			game.me.thoughts(o).matches(id, infer = true) && game.meta(o).focused
-		} ||
-			// Trust others to discard stuff duplicated in our hand
-			discarded.forall(game.meta(_).by.exists(_ != state.ourPlayerIndex) &&
-				orig.state.ourHand.exists(game.me.thoughts(_).possible.contains(id)))
+		}
 
 		if (state.isBasicTrash(id) || id.rank == 5 || discarded.isEmpty)
 			0

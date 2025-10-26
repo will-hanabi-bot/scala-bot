@@ -271,7 +271,6 @@ def interpretReactive(prev: Reactor, game: Reactor, action: ClueAction, reacter:
 			case ClueKind.Rank => interpretReactiveRank(prev, newGame, action, focusSlot, reacter)
 		}
 
-
 def delayedPlays(game: Reactor, giver: Int, receiver: Int) =
 	val (common, state, meta) = (game.common, game.state, game.meta)
 

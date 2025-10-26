@@ -11,7 +11,7 @@ import scala_bot.reactor.Reactor
 import scala_bot.logger._
 import scala_bot.refSieve.RefSieve
 
-val BOT_VERSION = "v0.2.0 (scala-bot)"
+val BOT_VERSION = "v0.2.1 (scala-bot)"
 
 case class ChatMessage(
 	msg: String,

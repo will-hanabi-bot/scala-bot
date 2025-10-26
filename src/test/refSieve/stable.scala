@@ -99,10 +99,12 @@ class Stable extends munit.FunSuite:
 			Vector("xx", "xx", "xx", "xx", "xx"),
 			Vector("p5", "p2", "p2", "b4", "g4"),
 			Vector("b1", "g2", "r2", "r3", "g5"),
-		))
+		),
+			clueTokens = 7,
+		)
 		.pipe(takeTurn("Alice clues 4 to Bob"))
 
-		assert(game.common.obviousLocked(game, Bob.ordinal))
+		assert(game.common.thinksLocked(game, Bob.ordinal))
 	}
 
 	test("it doesn't focus the wrong card for the last id") {
@@ -113,7 +115,7 @@ class Stable extends munit.FunSuite:
 		),
 			playStacks = Some(Vector(3, 3, 3, 3, 2)),
 			starting = Cathy,
-			// Alice"s slot 5 is clued with purple.
+			// Alice's slot 5 is clued with purple.
 			init = preClue(Alice, 5, Vector(TestClue(ClueKind.Colour, Colour.Purple.ordinal, Cathy)))
 		)
 		// Although Alice could play slot 2, she should play slot 5 first.
