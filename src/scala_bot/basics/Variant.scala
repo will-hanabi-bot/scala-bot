@@ -11,6 +11,7 @@ val PINKISH = "Pink|Omni".r
 val BROWNISH = "Brown|Muddy|Cocoa|Null".r
 val DARK = "Black|Dark|Gray|Cocoa".r
 val PRISM = "Prism".r
+val MUDDY = "Muddy|Cocoa".r
 val NO_COLOUR = "White|Gray|Light|Null|Rainbow|Omni|Prism".r
 
 case class JSONVariant(id: Int, name: String, suits: IndexedSeq[String]) derives ReadWriter

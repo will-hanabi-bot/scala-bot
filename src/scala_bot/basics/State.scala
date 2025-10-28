@@ -118,6 +118,9 @@ case class State(
 			throw new IllegalArgumentException(s"Tried to get holder of $order, hands were $hands!")
 		holder
 
+	def inStartingHand(order: Int)=
+		order < numPlayers * HAND_SIZE(numPlayers)
+
 	def expandShort(short: String) =
 		if (short.length != 2)
 			throw new IllegalArgumentException(s"Short should be exactly 2 characters! (eg. r5)")

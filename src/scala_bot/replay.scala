@@ -3,6 +3,8 @@ package scala_bot
 import scala_bot.basics._
 import scala_bot.console.{ConsoleCmd, spawnConsole}
 import scala_bot.reactor.Reactor
+import scala_bot.refSieve.RefSieve
+import scala_bot.hgroup.HGroup
 import scala_bot.utils._
 
 import scala.io.Source._
@@ -10,7 +12,6 @@ import scala.util.{Try, chaining}, chaining.scalaUtilChainingOps
 import cats.effect.std.Queue
 import cats.effect.{IO, IOApp, ExitCode}
 import cats.effect.kernel.Ref
-import scala_bot.refSieve.RefSieve
 
 case class GameData(
 	players: Vector[String],
@@ -74,6 +75,9 @@ def fetchGame(args: Seq[String]) =
 			processGame(game, data, index)
 		case Convention.RefSieve =>
 			val game = RefSieve(0, state, false).copy(catchup = true)
+			processGame(game, data, index)
+		case Convention.HGroup =>
+			val game = HGroup(0, state, false).copy(catchup = true)
 			processGame(game, data, index)
 	}
 

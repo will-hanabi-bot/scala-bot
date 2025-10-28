@@ -125,6 +125,7 @@ case class ConvData(
 	urgent: Boolean = false,
 	trash: Boolean = false,
 	status: CardStatus = CardStatus.None,
+	hidden: Boolean = false,
 	reasoning: List[Int] = List(),
 	by: Option[Int] = None
 ):

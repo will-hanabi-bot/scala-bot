@@ -3,13 +3,14 @@ package scala_bot
 import scala_bot.basics._
 import scala_bot.logger.{Logger, LogLevel}
 import scala_bot.reactor.Reactor
+import scala_bot.refSieve.RefSieve
+import scala_bot.hgroup.HGroup
 import scala_bot.utils._
 
 import java.nio.file.{Files, Paths}
 import scala.util.Random
 import scala.util.{Try, chaining}, chaining.scalaUtilChainingOps
 import java.nio.charset.StandardCharsets
-import scala_bot.refSieve.RefSieve
 
 enum GameResult:
 	case Perfect, Strikeout, DiscardedCrit, OutOfPace
@@ -140,6 +141,7 @@ def selfPlay(args: String*) =
 		val GameSummary(score, result, actions, notes) = convention match {
 			case Convention.Reactor => simulateGame(Reactor.apply, shuffledDeck, variant, numPlayers)
 			case Convention.RefSieve => simulateGame(RefSieve.apply, shuffledDeck, variant, numPlayers)
+			case Convention.HGroup => simulateGame(HGroup.apply, shuffledDeck, variant, numPlayers)
 		}
 
 		val actionsJSON = actions.map(_.json(tableID = 0))

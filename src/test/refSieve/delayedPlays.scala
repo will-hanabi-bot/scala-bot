@@ -21,7 +21,7 @@ class DelayedPlays extends munit.FunSuite:
 		.pipe(takeTurn("Cathy clues 1 to Bob"))
 		.pipe(takeTurn("Alice clues blue to Cathy"))
 
-		assertEquals(game.lastMove, Some(ClueInterp.RefPlay))
+		assertEquals(game.lastMove, Some(ClueInterp.Play))
 	}
 
 	test("gives a delayed play clue through the leftmost playable card") {
@@ -35,7 +35,7 @@ class DelayedPlays extends munit.FunSuite:
 		.pipe(takeTurn("Cathy clues 1 to Bob"))
 		.pipe(takeTurn("Alice clues blue to Cathy"))
 
-		assertEquals(game.lastMove, Some(ClueInterp.RefPlay))
+		assertEquals(game.lastMove, Some(ClueInterp.Play))
 	}
 
 	test("doesn't give a delayed play clue through a non-leftmost playable card") {

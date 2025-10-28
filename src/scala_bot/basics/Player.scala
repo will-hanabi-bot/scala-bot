@@ -1,6 +1,7 @@
 package scala_bot.basics
 
 import scala_bot.logger.Log
+import scala.util.chaining.scalaUtilChainingOps
 
 enum Link:
 	case Promised(orders: List[Int], id: Identity, target: Int)
@@ -182,6 +183,43 @@ case class Player(
 			game.meta(order).status == CardStatus.CalledToPlay ||
 			game.meta(order).cm
 		}
+
+	def findPrompt(prev: Game, game: Game, playerIndex: Int, id: Identity, connected: Set[Int] = Set(), ignore: Set[Int] = Set(), forcePink: Boolean = false, rightmost: Boolean = false) =
+		val state = game.state
+		val hand = state.hands(playerIndex).pipe(h => if (rightmost) h.reverse else identity(h))
+		val order = hand.find { order =>
+			val card = state.deck(order)
+			val thought = thoughts(order)
+
+			lazy val pinkMatch = {
+				// Not trying to prompt a pink id, or forcing pink prompt
+				if (!PINKISH.matches(state.variant.suits(id.suitIndex)) || forcePink)
+					true
+				else
+					val clues = card.clues
+					val misranked =
+						clues.forall(_.eq(clues.head)) &&
+						clues.head.kind == ClueKind.Rank &&
+						clues.head.value != id.rank
+
+					lazy val colourMatch = card.clues.exists { c =>
+						c.kind == ClueKind.Colour &&
+						PINKISH.matches(state.variant.colourableSuits(c.value))
+					}
+
+					!misranked && colourMatch
+			}
+
+			!connected.contains(order) &&				// not already connected
+			prev.state.deck(order).clued &&
+			thought.possible.contains(id) &&			// must be a possibility
+			thought.infoLock.forall(_.contains(id)) &&
+			(thought.inferred.length != 1 || thought.inferred.head.matches(id)) &&	// not info-locked on a different id
+			card.clues.exists(state.variant.idTouched(id, _)) &&	// at least one clue matches
+			pinkMatch
+		}
+
+		order.filter(!ignore.contains(_))
 
 	/**
 	* Returns how far the identity is from playable (through cards known by this player).

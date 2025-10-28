@@ -10,8 +10,9 @@ import scala_bot.console.{ConsoleCmd, NavArg}
 import scala_bot.reactor.Reactor
 import scala_bot.logger._
 import scala_bot.refSieve.RefSieve
+import scala_bot.hgroup.HGroup
 
-val BOT_VERSION = "v0.2.1 (scala-bot)"
+val BOT_VERSION = "v0.2.2 (scala-bot)"
 
 case class ChatMessage(
 	msg: String,
@@ -88,12 +89,13 @@ object GameActionListMessage:
 		)
 
 enum Convention:
-	case Reactor, RefSieve
+	case Reactor, RefSieve, HGroup
 
 object Convention:
 	def from(s: String) = s match {
 		case "Reactor" => Convention.Reactor
 		case "RefSieve" => Convention.RefSieve
+		case "HGroup" => Convention.HGroup
 		case _ => throw new IllegalArgumentException(s"Unknown convention $s")
 	}
 
@@ -101,6 +103,7 @@ case class Settings(convention: Convention):
 	def str = convention match {
 		case Convention.Reactor => "Reactor 1.0"
 		case Convention.RefSieve => "Ref Sieve"
+		case Convention.HGroup => "H-Group"
 	}
 
 class BotClient(queue: Queue[IO, String], gameRef: Ref[IO, Option[Game]]):
@@ -177,6 +180,7 @@ class BotClient(queue: Queue[IO, String], gameRef: Ref[IO, Option[Game]]):
 						game match {
 							case r: Reactor => gameRef.set(Some(r.navigate(turn)))
 							case r: RefSieve => gameRef.set(Some(r.navigate(turn)))
+							case r: HGroup => gameRef.set(Some(r.navigate(turn)))
 							case _ => IO.unit
 						}
 			}
@@ -203,33 +207,23 @@ class BotClient(queue: Queue[IO, String], gameRef: Ref[IO, Option[Game]]):
 				gameRef.get.flatMap {
 					case None => throw new IllegalStateException("Game not initialized")
 					case Some(g) => g match {
-						case r: Reactor =>
-							gameRef.set(Some(r.copy(catchup = true))) *>
-							msg.list.init.traverse_ { action =>
-								handleAction(GameActionMessage(msg.tableID, action))
-							} *>
-							gameRef.update {
-								case Some(g2: Reactor) => Some(g2.copy(catchup = false))
-								case other => other
-							} *>
-							sendCmd("loaded", ujson.write(ujson.Obj("tableID" -> msg.tableID))) *>
-							IO.sleep(1000.millis) *>
-							handleAction(GameActionMessage(msg.tableID, msg.list.last))
-
-						case r: RefSieve =>
-							gameRef.set(Some(r.copy(catchup = true))) *>
-							msg.list.init.traverse_ { action =>
-								handleAction(GameActionMessage(msg.tableID, action))
-							} *>
-							gameRef.update {
-								case Some(g2: RefSieve) => Some(g2.copy(catchup = false))
-								case other => other
-							} *>
-							sendCmd("loaded", ujson.write(ujson.Obj("tableID" -> msg.tableID))) *>
-							IO.sleep(1000.millis) *>
-							handleAction(GameActionMessage(msg.tableID, msg.list.last))
+						case r: Reactor => gameRef.set(Some(r.copy(catchup = true)))
+						case r: RefSieve => gameRef.set(Some(r.copy(catchup = true)))
+						case h: HGroup => gameRef.set(Some(h.copy(catchup = true)))
 					}
-				}
+				} *>
+				msg.list.init.traverse_ { action =>
+					handleAction(GameActionMessage(msg.tableID, action))
+				} *>
+				gameRef.update {
+					case Some(g2: Reactor) => Some(g2.copy(catchup = false))
+					case Some(g2: RefSieve) => Some(g2.copy(catchup = false))
+					case Some(g2: HGroup) => Some(g2.copy(catchup = false))
+					case other => other
+				} *>
+				sendCmd("loaded", ujson.write(ujson.Obj("tableID" -> msg.tableID))) *>
+				IO.sleep(1000.millis) *>
+				handleAction(GameActionMessage(msg.tableID, msg.list.last))
 
 			case "joined" =>
 				tableID = Some(ujson.read(args)("tableID").num.toInt)
@@ -286,6 +280,7 @@ class BotClient(queue: Queue[IO, String], gameRef: Ref[IO, Option[Game]]):
 		val game = settings.convention match {
 			case Convention.Reactor => Reactor(tID, state, inProgress = true)
 			case Convention.RefSieve => RefSieve(tID, state, inProgress = true)
+			case Convention.HGroup => HGroup(tID, state, inProgress = true)
 		}
 
 		IO { tableID = Some(tID) } *>
@@ -357,7 +352,7 @@ class BotClient(queue: Queue[IO, String], gameRef: Ref[IO, Option[Game]]):
 					g match {
 						case r: Reactor => r.handleAction(action)
 						case r: RefSieve => r.handleAction(action)
-						case _ => throw new Error("Unexpected game type")
+						case h: HGroup => h.handleAction(action)
 					}
 				}
 				.flatMap { newGame =>
@@ -383,6 +378,7 @@ class BotClient(queue: Queue[IO, String], gameRef: Ref[IO, Option[Game]]):
 						val suggestedAction = newGame match {
 							case r: Reactor => r.takeAction
 							case r: RefSieve => r.takeAction
+							case h: HGroup => h.takeAction
 						}
 						Log.highlight(Console.BLUE, s"Suggested action: ${suggestedAction.fmt(newGame)}")
 						val arg = suggestedAction.json(tableID.get)
@@ -395,6 +391,7 @@ class BotClient(queue: Queue[IO, String], gameRef: Ref[IO, Option[Game]]):
 					val x = newGame match {
 						case r: Reactor => r.copy(queuedCmds = List())
 						case r: RefSieve => r.copy(queuedCmds = List())
+						case h: HGroup => h.copy(queuedCmds = List())
 					}
 
 					gameRef.set(Some(x)) *>

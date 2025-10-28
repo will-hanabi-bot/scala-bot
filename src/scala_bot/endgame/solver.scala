@@ -1,7 +1,6 @@
 package scala_bot.endgame
 
 import scala_bot.basics._
-import scala_bot.basics.given_Conversion_IdentitySet_Iterable
 import scala_bot.fraction.Frac
 import scala_bot.logger.{Log, Logger, LogLevel}
 import scala_bot.utils._
@@ -49,7 +48,7 @@ def findRemainingIds(game: Game) =
 					(newSeen, newOwn, inferIds)
 
 				case None if i == state.ourPlayerIndex =>
-					game.me.thoughts(order).id(infer = true) match {
+					game.me.thoughts(order).id() match {
 						case Some(id) =>
 							val newInfer = inferIds.updated(id, inferIds.lift(id).map(_ :+ order).getOrElse(Vector(order)))
 							(seenIds, ownIds, newInfer)
@@ -155,14 +154,14 @@ case class EndgameSolver[G <: Game](
 
 			state.deck(order).id().exists(_ != id) ||
 			!thought.possible.contains(id) ||
-			(if (!state.isBasicTrash(id))
-				!thought.possibilities.contains(id)
-			else
-				!thought.possibilities.isEmpty && !thought.possibilities.exists(state.isBasicTrash) &&
+			(// if (!state.isBasicTrash(id))
+				// !thought.possible.contains(id)
+			// else
+				// thought.possibilities.nempty && !thought.possibilities.exists(state.isBasicTrash) &&
 				// We cannot assign a trash id if it is linked and all other orders are already trash
-				(!linkedOrders.contains(order) || game.me.links.forall{ l =>
+				(linkedOrders.contains(order) && game.me.links.exists { l =>
 					val orders = l.getOrders
-					!orders.contains(order) || orders.forall { o =>
+					orders.contains(order) && orders.forall { o =>
 						o == order ||
 						(0 until ids.length).exists(i => o == unknownOwn(i) && state.isBasicTrash(ids(i)))
 					}

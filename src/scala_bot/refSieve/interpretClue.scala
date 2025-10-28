@@ -85,7 +85,7 @@ def refDiscard(prev: RefSieve, game: RefSieve, action: ClueAction): (Option[Clue
 			.reason(state.turnCount))
 			.withMeta(focus)(_.copy(focused = true))
 
-		(Some(ClueInterp.RefDiscard), newGame)
+		(Some(ClueInterp.Discard), newGame)
 
 def targetPlay(prev: RefSieve, game: RefSieve, action: ClueAction, targetOrder: Int): (Option[ClueInterp], RefSieve) =
 	val (common, state) = (game.common, game.state)
@@ -95,7 +95,7 @@ def targetPlay(prev: RefSieve, game: RefSieve, action: ClueAction, targetOrder: 
 		inf <- common.thoughts(targetOrder).inferred if visibleFind(state, common, inf, infer = true, cond = (_, order) => order != targetOrder).isEmpty
 		conns <- connect(prev, game, targetOrder, inf, action, unknown)
 	yield
-		FocusPossibility(inf, conns, ClueInterp.RefPlay)).toList
+		FocusPossibility(inf, conns, ClueInterp.Play)).toList
 
 	Log.info(s"focus possibilities [${focusPoss.map(fp => state.logId(fp.id)).mkString(",")}]")
 
@@ -110,11 +110,11 @@ def targetPlay(prev: RefSieve, game: RefSieve, action: ClueAction, targetOrder: 
 				Log.warn(s"targeting an unplayable card!")
 				(None, game)
 			else
-				val newFps = focusPoss :+ FocusPossibility(id, conns.get, ClueInterp.RefPlay)
-				(Some(ClueInterp.RefPlay), resolvePlay(game, action, targetOrder, newFps, targetId))
+				val newFps = focusPoss :+ FocusPossibility(id, conns.get, ClueInterp.Play)
+				(Some(ClueInterp.Play), resolvePlay(game, action, targetOrder, newFps, targetId))
 
 		case _ =>
-			(Some(ClueInterp.RefPlay), resolvePlay(game, action, targetOrder, focusPoss, targetId))
+			(Some(ClueInterp.Play), resolvePlay(game, action, targetOrder, focusPoss, targetId))
 	}
 
 def resolvePlay(game: RefSieve, action: ClueAction, targetOrder: Int, focusPoss: List[FocusPossibility], targetId: Option[Identity]): RefSieve =

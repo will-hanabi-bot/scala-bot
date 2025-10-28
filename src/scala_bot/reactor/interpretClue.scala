@@ -363,7 +363,7 @@ def targetPlay(game: Reactor, action: ClueAction, target: Int, urgent: Boolean =
 		))
 
 		Log.info(s"targeting play $target (${state.names(holder)}), infs ${newCommon.strInfs(state, target)}${if (urgent) ", urgent" else ""}")
-		(Some(ClueInterp.RefPlay), game.copy(common = newCommon, meta = newMeta))
+		(Some(ClueInterp.Play), game.copy(common = newCommon, meta = newMeta))
 
 def targetDiscard(game: Reactor, action: ClueAction, target: Int, urgent: Boolean = false) =
 	val meta = game.meta(target)
@@ -424,5 +424,5 @@ def refDiscard(prev: Reactor, game: Reactor, action: ClueAction, stall: Boolean)
 					by = Some(giver))
 					.reason(state.turnCount))
 				.updated(focus, newMeta(focus).copy(focused = true))
-			(Some(ClueInterp.RefDiscard), game.copy(common = newCommon, meta = newMeta))
+			(Some(ClueInterp.Discard), game.copy(common = newCommon, meta = newMeta))
 	}

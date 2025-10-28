@@ -32,7 +32,7 @@ def findConnecting(prev: RS, game: RS, id: Identity, playerIndex: Int, connected
 	if (looksDirect || playable.nonEmpty)
 		return None
 
-	RS.findPrompt(prev, game, game.common, playerIndex, id, connected, ignore).map { prompt =>
+	game.common.findPrompt(prev, game, playerIndex, id, connected, ignore, rightmost = true).map { prompt =>
 		if (!state.deck(prompt).matches(id, assume = findOwn))
 			if (state.deck(prompt).id().isDefined)
 				Log.warn(s"wrong prompt! ${state.logId(prompt)} looks like ${state.logId(id)}")

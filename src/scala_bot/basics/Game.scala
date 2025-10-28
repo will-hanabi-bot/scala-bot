@@ -4,6 +4,7 @@ import scala_bot.utils._
 import scala_bot.logger._
 
 import scala.util.chaining.scalaUtilChainingOps
+import scala.util.matching.Regex
 
 val HAND_SIZE = Vector(0, 0, 5, 5, 4, 4, 3)
 
@@ -12,7 +13,7 @@ case class Note(turn: Int, last: String, full: String)
 sealed trait Interp
 
 enum ClueInterp extends Interp:
-	case Mistake, Reactive, RefPlay, RefDiscard, Lock, Reveal, Fix, Stall
+	case Mistake, Reactive, Play, Save, Discard, Lock, Reveal, Fix, Stall, Distribution
 
 enum PlayInterp extends Interp:
 	case None
@@ -49,6 +50,7 @@ def genPlayers(state: State) =
 	(players, common)
 
 trait Game:
+	type InterpType <: Interp
 	def tableID: Int
 	def state: State
 	def players: Vector[Player]
@@ -171,6 +173,10 @@ extension[G <: Game](game: G)
 		.orElse(game.deckIds(order))
 		.orElse(game.me.thoughts(order).id(infer = infer))
 		.contains(id)
+
+	/** Returns whether the order is known to be a particular special suit from empathy. */
+	def knownAs(order: Int, regex: Regex) =
+		game.common.thoughts(order).possible.forall(i => regex.matches(game.state.variant.suits(i.suitIndex)))
 
 	def handleClue(prev: G, clue: ClueAction)(using ops: GameOps[G]) =
 		ops.interpretClue(prev, game.onClue(clue).elim(goodTouch = true), clue).elim(goodTouch = true)

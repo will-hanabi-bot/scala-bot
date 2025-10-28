@@ -1,9 +1,7 @@
 package scala_bot.refSieve
 
 import scala_bot.basics._
-import scala_bot.logger.Log
-import scala_bot.logger.Logger
-import scala_bot.logger.LogLevel
+import scala_bot.logger.{Log, Logger, LogLevel}
 
 def getResult(game: RefSieve, hypo: RefSieve, action: ClueAction): Double =
 	val (common, state, meta) = (game.common, game.state, game.meta)
@@ -38,7 +36,7 @@ def getResult(game: RefSieve, hypo: RefSieve, action: ClueAction): Double =
 					-100
 				case None =>
 					hypo.lastMove match {
-						case Some(ClueInterp.RefPlay) if playables.isEmpty && !state.inEndgame =>
+						case Some(ClueInterp.Play) if playables.isEmpty && !state.inEndgame =>
 							Log.warn(s"clue ${clue.fmt(state, target)} looks like ref play but gets no playables!")
 							-100
 						case Some(ClueInterp.Reveal) if playables.isEmpty && trash.nonEmpty && trash.forall(state.deck(_).clued) =>
@@ -93,7 +91,6 @@ def forceClue(orig: RefSieve, game: RefSieve, offset: Int, bobOnly: Boolean): Do
 	val state = game.state
 	val playerIndex = (state.ourPlayerIndex + offset) % state.numPlayers
 	val bob = state.nextPlayerIndex(playerIndex)
-	// 0.5 + advance(orig, nextGame, offset + 2)
 
 	val allClues =
 		for

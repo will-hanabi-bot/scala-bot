@@ -1,12 +1,9 @@
 package scala_bot.refSieve
 
 import scala_bot.basics._
-import scala_bot.basics.given_Conversion_IdentitySet_Iterable
 import scala_bot.endgame.EndgameSolver
 import scala_bot.utils._
 import scala_bot.logger.{Log, Logger, LogLevel}
-
-import scala.util.chaining.scalaUtilChainingOps
 
 case class RefSieve(
 	tableID: Int,
@@ -76,42 +73,6 @@ object RefSieve:
 			val bobChop = RefSieve.chop(game, state.nextPlayerIndex(playerIndex))
 			bobChop.flatMap(state.deck(_).id()).exists(id => state.isCritical(id) || state.isPlayable(id))
 		}
-
-	def findPrompt(prev: RefSieve, game: RefSieve, accordingTo: Player, playerIndex: Int, id: Identity, connected: Set[Int] = Set(), ignore: Set[Int] = Set(), forcePink: Boolean = false) =
-		val state = game.state
-		val order = state.hands(playerIndex).findLast { order =>
-			val card = state.deck(order)
-			val thought = accordingTo.thoughts(order)
-
-			lazy val pinkMatch = {
-				// Not trying to prompt a pink id, or forcing pink prompt
-				if (!PINKISH.matches(state.variant.suits(id.suitIndex)) || forcePink)
-					true
-				else
-					val clues = card.clues
-					val misranked =
-						clues.forall(_.eq(clues.head)) &&
-						clues.head.kind == ClueKind.Rank &&
-						clues.head.value != id.rank
-
-					lazy val colourMatch = card.clues.exists { c =>
-						c.kind == ClueKind.Colour &&
-						PINKISH.matches(state.variant.colourableSuits(c.value))
-					}
-
-					!misranked && colourMatch
-			}
-
-			!connected.contains(order) &&				// not already connected
-			prev.state.deck(order).clued &&
-			thought.possible.contains(id) &&			// must be a possibility
-			thought.infoLock.forall(_.contains(id)) &&
-			(thought.inferred.length != 1 || thought.inferred.head.matches(id)) &&	// not info-locked on a different id
-			card.clues.exists(state.variant.idTouched(id, _)) &&	// at least one clue matches
-			pinkMatch
-		}
-
-		order.filter(!ignore.contains(_))
 
 	def findFinesse(game: RefSieve, playerIndex: Int, connected: Set[Int] = Set(), ignore: Set[Int] = Set()) =
 		val order = game.state.hands(playerIndex).find { o =>

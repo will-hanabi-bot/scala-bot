@@ -36,7 +36,7 @@ def getResult(game: Reactor, hypo: Reactor, action: ClueAction): Double =
 					-100
 				case None =>
 					hypo.lastMove match {
-						case Some(ClueInterp.RefPlay) if playables.isEmpty && !state.inEndgame =>
+						case Some(ClueInterp.Play) if playables.isEmpty && !state.inEndgame =>
 							Log.warn(s"clue ${clue.fmt(state, target)} looks like ref play but gets no playables!")
 							-100
 						case Some(ClueInterp.Reveal) if playables.isEmpty && trash.nonEmpty && trash.forall(state.deck(_).clued) =>

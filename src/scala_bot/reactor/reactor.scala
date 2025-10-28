@@ -422,7 +422,7 @@ object Reactor:
 				else
 					Log.highlight(Console.GREEN, s"===== Predicting value for ${clue.fmt(state)} =====")
 					val hypoGame = game.simulateClue(action, log = true)
-					getResult(game, hypoGame, action) > 0
+					getResult(game, hypoGame, action) > -1
 
 			val allClues =
 				(for
