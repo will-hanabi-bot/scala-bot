@@ -29,7 +29,7 @@ def stallSeverity(game: HGroup, player: Player, giver: Int, infoPlayer: Option[P
 		game.dcStatus == DcStatus.Scream ||
 		game.dcStatus == DcStatus.Shout ||
 		game.dda.exists { id =>
-			HGroup.chop(game, giver).exists { chop =>
+			game.chop(giver).exists { chop =>
 				infoPlayer.getOrElse(player).thoughts(chop).possible.contains(id)
 			}
 		}
@@ -93,7 +93,7 @@ def isStall(prev: HGroup, game: HGroup, action: ClueAction, focusResult: FocusRe
 		Log.info(s"8 clue stall!")
 		return Some(StallInterp.Clues8)
 
-	if (severity >= 1 && reclue && fill.isEmpty)
+	if (severity >= 2 && reclue && fill.isEmpty)
 		Log.info(s"hard burn!")
 		return Some(StallInterp.Burn)
 
@@ -129,9 +129,9 @@ def alternativeClue(prev: HGroup, game: HGroup, giver: Int, maxStall: Int, origC
 		clue <- state.allValidClues(target) if clue != origClue
 		list = state.clueTouched(state.hands(target), clue)
 		action = ClueAction(giver, target, list, clue.toBase)
-		hypo = prev.simulateClue(action) if satisfied(hypo, target)
+		hypo = prev.simulateClue(action, noRecurse = true) if satisfied(hypo, target)
 	yield
-		val newWCs = hypo.common.waiting.filter { wc =>
+		val newWCs = hypo.waiting.filter { wc =>
 			wc.turn == hypo.state.turnCount && wc.connections.forall { conn =>
 				// Only count valid wcs based on the new info we have
 				conn.ids.exists(game.common.thoughts(conn.order).possible.contains)

@@ -30,11 +30,9 @@ case class Player(
 	thoughts: Vector[Thought] = Vector(),
 	allInferred: IdentitySet,
 
-	links: List[Link] = List(),
+	links: List[Link] = Nil,
 	unknownPlays: Set[Int] = Set(),
 	hypoPlays: Set[Int] = Set(),
-
-	waiting: List[WaitingConnection] = List()
 ):
 	def withThought(order: Int)(f: Thought => Thought) =
 		copy(thoughts = thoughts.updated(order, f(thoughts(order))))
@@ -121,7 +119,7 @@ case class Player(
 		val thought = thoughts(order)
 
 		game.meta(order).status match {
-			case CardStatus.CalledToPlay | CardStatus.Finessed =>
+			case CardStatus.CalledToPlay =>
 				thought.possible.exists(state.isPlayable) &&
 				thought.infoLock.forall(_.exists(state.isPlayable))
 
@@ -184,8 +182,8 @@ case class Player(
 			game.meta(order).cm
 		}
 
-	def findPrompt(prev: Game, game: Game, playerIndex: Int, id: Identity, connected: Set[Int] = Set(), ignore: Set[Int] = Set(), forcePink: Boolean = false, rightmost: Boolean = false) =
-		val state = game.state
+	def findPrompt(prev: Game, playerIndex: Int, id: Identity, connected: List[Int] = Nil, ignore: Set[Int] = Set(), forcePink: Boolean = false, rightmost: Boolean = false) =
+		val state = prev.state
 		val hand = state.hands(playerIndex).pipe(h => if (rightmost) h.reverse else identity(h))
 		val order = hand.find { order =>
 			val card = state.deck(order)
@@ -211,7 +209,7 @@ case class Player(
 			}
 
 			!connected.contains(order) &&				// not already connected
-			prev.state.deck(order).clued &&
+			state.deck(order).clued &&
 			thought.possible.contains(id) &&			// must be a possibility
 			thought.infoLock.forall(_.contains(id)) &&
 			(thought.inferred.length != 1 || thought.inferred.head.matches(id)) &&	// not info-locked on a different id
@@ -220,6 +218,19 @@ case class Player(
 		}
 
 		order.filter(!ignore.contains(_))
+
+
+	def findClued(prev: Game, playerIndex: Int, id: Identity, ignore: Set[Int] = Set()) =
+		val state = prev.state
+		state.hands(playerIndex).filter { order =>
+			val thought = thoughts(order)
+
+			!ignore.contains(order) &&				// not already connected
+			state.deck(order).clued &&
+			thought.possible.contains(id) &&			// must be a possibility
+			thought.infoLock.forall(_.contains(id)) &&
+			(thought.inferred.length != 1 || thought.inferred.head.matches(id))	// not info-locked on a different id
+		}
 
 	/**
 	* Returns how far the identity is from playable (through cards known by this player).
@@ -256,11 +267,6 @@ case class Player(
 				if (orders.length > unknownIds(state, id)) orders else List()
 			case Link.Unpromised(orders, ids) =>
 				if (orders.length > ids.map(unknownIds(state, _)).sum) orders else List()
-		}
-
-	def dependentConns(order: Int) =
-		waiting.filter { wc =>
-			wc.connections.zipWithIndex.exists((c, i) => i > wc.connIndex && c.order == order)
 		}
 
 	def updateHypoStacks[G <: Game](game: G)(using ops: GameOps[G]): Player =

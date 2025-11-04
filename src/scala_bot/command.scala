@@ -389,9 +389,9 @@ class BotClient(queue: Queue[IO, String], gameRef: Ref[IO, Option[Game]]):
 					}
 
 					val x = newGame match {
-						case r: Reactor => r.copy(queuedCmds = List())
-						case r: RefSieve => r.copy(queuedCmds = List())
-						case h: HGroup => h.copy(queuedCmds = List())
+						case r: Reactor => r.copy(queuedCmds = Nil)
+						case r: RefSieve => r.copy(queuedCmds = Nil)
+						case h: HGroup => h.copy(queuedCmds = Nil)
 					}
 
 					gameRef.set(Some(x)) *>

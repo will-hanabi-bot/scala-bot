@@ -118,7 +118,7 @@ def targetPlay(prev: RefSieve, game: RefSieve, action: ClueAction, targetOrder: 
 	}
 
 def resolvePlay(game: RefSieve, action: ClueAction, targetOrder: Int, focusPoss: List[FocusPossibility], targetId: Option[Identity]): RefSieve =
-	val ClueAction(giver = giver, list = list, target = _, clue = _) = action
+	val ClueAction(giver = giver, list = list, target = clueTarget, clue = _) = action
 	val matchedFps = focusPoss.filter(fp => targetId.exists(_.matches(fp.id)))
 
 	val initial = (game, Set[Int]())
@@ -140,13 +140,18 @@ def resolvePlay(game: RefSieve, action: ClueAction, targetOrder: Int, focusPoss:
 		}
 		(newGame, modified + order)
 	}._1
-	.pipe { g =>
-		g.copy(common = g.common.copy(
-			waiting = g.common.waiting :++ focusPoss.collect {
-				case fp if fp.connections.nonEmpty =>
-					val symmetric = targetId.exists(!(_).matches(fp.id))
-					WaitingConnection(fp.connections, giver, targetOrder, 0, g.state.turnCount, targetOrder, fp.id, symmetric)
-		}))
+	.pipe { g => g.copy(
+		waiting = g.waiting :++ focusPoss.collect {
+			case fp if fp.connections.nonEmpty => WaitingConnection(
+				fp.connections,
+				giver,
+				clueTarget,
+				g.state.turnCount,
+				targetOrder,
+				fp.id,
+				symmetric = targetId.exists(!(_).matches(fp.id))
+			)
+		})
 	}
 	.withThought(targetOrder) { t =>
 		val poss = IdentitySet.from(focusPoss.map(_.id))

@@ -121,7 +121,7 @@ def advance(orig: RefSieve, game: RefSieve, offset: Int): Double =
 	val player = game.players(playerIndex)
 
 	val bob = state.nextPlayerIndex(playerIndex)
-	val bobChop = Option.when(state.numPlayers > 2)(RefSieve.chop(game, bob)).flatten
+	val bobChop = Option.when(state.numPlayers > 2)(game.chop(bob)).flatten
 
 	lazy val trash = player.thinksTrash(game, playerIndex)
 	lazy val urgentDc = trash.find(meta(_).urgent)
@@ -174,14 +174,14 @@ def advance(orig: RefSieve, game: RefSieve, offset: Int): Double =
 		Log.info("forced clue at 8 clues!")
 		forceClue(orig, game, offset, bobOnly = false)
 
-	else if (RefSieve.mustClue(game, playerIndex))
+	else if (game.mustClue(playerIndex))
 		Log.info(s"forcing ${state.names(playerIndex)} to clue their Bob!")
 		forceClue(orig, game, offset, bobOnly = true)
 
 	else
 		urgentDc.orElse(trash.headOption) match {
 			case None =>
-				val chop = RefSieve.chop(game, playerIndex).getOrElse(throw new Exception(s"Player ${state.names(playerIndex)} not locked but no chop! ${state.hands(playerIndex).map(state.deck(_))}"))
+				val chop = game.chop(playerIndex).getOrElse(throw new Exception(s"Player ${state.names(playerIndex)} not locked but no chop! ${state.hands(playerIndex).map(state.deck(_))}"))
 				val id = state.deck(chop).id().get
 				val action = DiscardAction(playerIndex, chop, id.suitIndex, id.rank)
 				val dcGame = advanceGame(game, action)

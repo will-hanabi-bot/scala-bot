@@ -89,6 +89,10 @@ case class State(
 	def clueTouched(orders: Seq[Int], clue: ClueLike) =
 		orders.filter(order => variant.cardTouched(deck(order), clue))
 
+	def allColourClues(target: Int) =
+		(0 until variant.colourableSuits.length).view.map(Clue(ClueKind.Colour, _, target))
+			.filter(clue => !clueTouched(hands(target), clue.toBase).isEmpty)
+
 	def allValidClues(target: Int) =
 		val rankClues = (1 to 5).view.map(Clue(ClueKind.Rank, _, target))
 		val colourClues = (0 until variant.colourableSuits.length).view.map(Clue(ClueKind.Colour, _, target))
@@ -158,6 +162,9 @@ case class State(
 		}
 
 		s"${conn.order} $idStr ${conn.kind} (${names(conn.reacting)})$extra"
+
+	def logConns(conns: Seq[Connection]) =
+		s"[${conns.map(logConn).mkString(" -> ")}]"
 
 	def logConns(conns: Seq[Connection], nextId: Identity) =
 		val terminator = if (nextId.rank > 5) "" else s" -> ${logId(nextId)}?"

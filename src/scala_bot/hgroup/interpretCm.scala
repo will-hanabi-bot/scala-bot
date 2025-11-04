@@ -45,7 +45,7 @@ def interpretTcm(prev: HGroup, game: HGroup, action: ClueAction, focus: Int): Op
 def interpret5cm(prev: HGroup, game: HGroup, action: ClueAction, focus: Int): Option[Vector[Int]] =
 	val state = game.state
 	val ClueAction(_, target, list, clue) = action
-	val chop = HGroup.chop(prev, target)
+	val chop = prev.chop(target)
 
 	val not5cm = clue != BaseClue(ClueKind.Rank, 5) ||
 		prev.state.deck(focus).clued ||
@@ -56,7 +56,7 @@ def interpret5cm(prev: HGroup, game: HGroup, action: ClueAction, focus: Int): Op
 		return None
 
 	list.filter(o => o > chop.get && !prev.state.deck(o).clued).minOption.flatMap { oldest5 =>
-		val distance = HGroup.chopDistance(prev, target, oldest5)
+		val distance = prev.chopDistance(target, oldest5)
 
 		if (distance != 1)
 			Log.info(s"rightmost 5 was clued $distance-away from chop, not 5cm!")

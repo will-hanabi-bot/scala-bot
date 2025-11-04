@@ -17,14 +17,47 @@ case class RefSieve(
 	catchup: Boolean = false,
 	notes: Map[Int, Note] = Map(),
 	lastMove: Option[Interp] = None,
-	queuedCmds: List[(String, String)] = List(),
+	queuedCmds: List[(String, String)] = Nil,
 	nextInterp: Option[Interp] = None,
 	noRecurse: Boolean = false,
 	rewindDepth: Int = 0,
 	inProgress: Boolean = false,
 
-	goodTouch: Boolean = true
-) extends Game
+	goodTouch: Boolean = true,
+	waiting: List[WaitingConnection] = Nil,
+) extends Game:
+	def chop(playerIndex: Int) =
+		state.hands(playerIndex).find { order =>
+			val status = meta(order).status
+			status == CardStatus.ZeroClueChop || status == CardStatus.CalledToDiscard
+		}
+		.orElse {
+			state.hands(playerIndex).find { order =>
+				!state.deck(order).clued && meta(order).status == CardStatus.None
+			}
+		}
+
+	def hasPtd(playerIndex: Int) =
+		!common.thinksLocked(this, playerIndex) &&
+		!common.thinksLoaded(this, playerIndex) &&
+		!mustClue(playerIndex)
+
+	def mustClue(playerIndex: Int) =
+		state.canClue &&
+		state.numPlayers > 2 && {
+			val bobChop = chop(state.nextPlayerIndex(playerIndex))
+			bobChop.flatMap(state.deck(_).id()).exists(id => state.isCritical(id) || state.isPlayable(id))
+		}
+
+	def findFinesse(playerIndex: Int, connected: List[Int] = Nil, ignore: Set[Int] = Set()) =
+		val order = state.hands(playerIndex).find { o =>
+			!this.isTouched(o) && !connected.contains(o)
+		}
+
+		order.filter(!ignore.contains(_))
+
+	def dependentConns(order: Int) =
+		waiting.filter(_.connections.exists(_.order == order))
 
 object RefSieve:
 	private def init(
@@ -34,52 +67,16 @@ object RefSieve:
 		t: (players: Vector[Player], common: Player)
 	): RefSieve =
 	RefSieve(
-			tableID = tableID,
-			state = state,
-			players = t.players,
-			common = t.common,
-			base = (state, Vector(), t.players, t.common),
-			inProgress = inProgress
-		)
+		tableID = tableID,
+		state = state,
+		players = t.players,
+		common = t.common,
+		base = (state, Vector(), t.players, t.common),
+		inProgress = inProgress
+	)
 
-	def apply(
-		tableID: Int,
-		state: State,
-		inProgress: Boolean
-	) =
+	def apply(tableID: Int, state: State, inProgress: Boolean) =
 		init(tableID, state, inProgress, genPlayers(state))
-
-	def chop(game: RefSieve, playerIndex: Int) =
-		game.state.hands(playerIndex).find { order =>
-			val status = game.meta(order).status
-			status == CardStatus.ZeroClueChop || status == CardStatus.CalledToDiscard
-		}
-		.orElse {
-			game.state.hands(playerIndex).find { order =>
-				!game.state.deck(order).clued && game.meta(order).status == CardStatus.None
-			}
-		}
-
-	def hasPtd(game: RefSieve, playerIndex: Int) =
-		!game.common.thinksLocked(game, playerIndex) &&
-		!game.common.thinksLoaded(game, playerIndex) &&
-		!mustClue(game, playerIndex)
-
-	def mustClue(game: RefSieve, playerIndex: Int) =
-		val state = game.state
-
-		state.canClue &&
-		state.numPlayers > 2 && {
-			val bobChop = RefSieve.chop(game, state.nextPlayerIndex(playerIndex))
-			bobChop.flatMap(state.deck(_).id()).exists(id => state.isCritical(id) || state.isPlayable(id))
-		}
-
-	def findFinesse(game: RefSieve, playerIndex: Int, connected: Set[Int] = Set(), ignore: Set[Int] = Set()) =
-		val order = game.state.hands(playerIndex).find { o =>
-			!game.isTouched(o) && !connected.contains(o)
-		}
-
-		order.filter(!ignore.contains(_))
 
 	given GameOps[RefSieve] with
 		def copyWith(game: RefSieve, updates: GameUpdates) =
@@ -98,7 +95,9 @@ object RefSieve:
 				nextInterp = updates.nextInterp.getOrElse(game.nextInterp),
 				noRecurse = updates.noRecurse.getOrElse(game.noRecurse),
 				rewindDepth = updates.rewindDepth.getOrElse(game.rewindDepth),
-				inProgress = updates.inProgress.getOrElse(game.inProgress)
+				inProgress = updates.inProgress.getOrElse(game.inProgress),
+
+				waiting = game.waiting
 			)
 
 		def blank(game: RefSieve, keepDeck: Boolean) =
@@ -269,7 +268,7 @@ object RefSieve:
 			}
 
 			val cantDiscard = state.clueTokens == 8 ||
-				RefSieve.mustClue(game, state.ourPlayerIndex) ||
+				game.mustClue(state.ourPlayerIndex) ||
 				(state.pace == 0 && (allClues.nonEmpty || allPlays.nonEmpty))
 			Log.info(s"can discard: ${!cantDiscard} ${state.clueTokens}")
 
@@ -287,7 +286,7 @@ object RefSieve:
 			val allActions = {
 				val as = allClues.concat(allPlays).concat(allDiscards)
 
-				chop(game, state.ourPlayerIndex) match {
+				game.chop(state.ourPlayerIndex) match {
 					case Some(chop) if !cantDiscard && (!state.canClue || allPlays.isEmpty) && allDiscards.isEmpty && !me.thinksLocked(game, state.ourPlayerIndex) =>
 						as :+ (PerformAction.Discard(chop), DiscardAction(state.ourPlayerIndex, chop, -1, -1, false))
 					case _ => as
@@ -299,7 +298,7 @@ object RefSieve:
 
 			allActions.maxBy((_, action) => evalAction(game, action))._1
 
-		def updateTurn(prev: RefSieve, game: RefSieve, action: TurnAction): RefSieve =
+		def updateTurn(game: RefSieve, action: TurnAction): RefSieve =
 			val currentPlayerIndex = action.currentPlayerIndex
 			val state = game.state
 
@@ -349,7 +348,7 @@ object RefSieve:
 		def findAllDiscards(game: RefSieve, playerIndex: Int): List[PerformAction] =
 			val trash = game.common.discardable(game, playerIndex)
 			val target = trash.headOption
-				.orElse(chop(game, playerIndex))
+				.orElse(game.chop(playerIndex))
 				.getOrElse(game.players(playerIndex).lockedDiscard(game.state, playerIndex))
 
 			List(PerformAction.Discard(target))

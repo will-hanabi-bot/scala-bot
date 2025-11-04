@@ -32,7 +32,7 @@ case class Reactor(
 	catchup: Boolean = false,
 	notes: Map[Int, Note] = Map(),
 	lastMove: Option[Interp] = None,
-	queuedCmds: List[(String, String)] = List(),
+	queuedCmds: List[(String, String)] = Nil,
 	nextInterp: Option[Interp] = None,
 	noRecurse: Boolean = false,
 	rewindDepth: Int = 0,
@@ -275,7 +275,7 @@ object Reactor:
 				.pipe(_.elim(goodTouch = false))
 				.when(_ => prev.state.canClue)(resetZcs)
 
-		def updateTurn(prev: Reactor, game: Reactor, action: TurnAction): Reactor =
+		def updateTurn(game: Reactor, action: TurnAction): Reactor =
 			val currentPlayerIndex = action.currentPlayerIndex
 			val state = game.state
 

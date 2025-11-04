@@ -86,7 +86,7 @@ private def tryStable(prev: Reactor, game: Reactor, action: ClueAction, stall: B
 	val newGame = game.copy(
 		common = newCommon,
 		meta = newMeta,
-		waiting = Option.when(game.common.waiting.isEmpty && state.nextPlayerIndex(giver) != target) {
+		waiting = Option.when(game.waiting.isEmpty && state.nextPlayerIndex(giver) != target) {
 			val receiver = target
 			val focusSlot = reactiveFocus(state, receiver, action)
 

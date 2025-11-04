@@ -78,7 +78,7 @@ trait GameOps[G <: Game]:
 	def interpretDiscard(prev: G, game: G, action: DiscardAction): G
 	def interpretPlay(prev: G, game: G, action: PlayAction): G
 	def takeAction(game: G): PerformAction
-	def updateTurn(prev: G, game: G, action: TurnAction): G
+	def updateTurn(game: G, action: TurnAction): G
 
 	def findAllClues(game: G, giver: Int): List[PerformAction]
 	def findAllDiscards(game: G, playerIndex: Int): List[PerformAction]
@@ -148,7 +148,7 @@ extension[G <: Game](game: G)
 						currentPlayerIndex = currentPlayerIndex,
 						turnCount = num + 1
 					))
-					.pipe(ops.updateTurn(game, _, turn).updateNotes())
+					.pipe(ops.updateTurn(_, turn).updateNotes())
 
 			case InterpAction(interp) =>
 				ops.copyWith(newGame, GameUpdates(nextInterp = Some(Some(interp))))
@@ -156,7 +156,7 @@ extension[G <: Game](game: G)
 			case _ => game
 		}
 
-	def me = game.players(game.state.ourPlayerIndex)
+	inline def me = game.players(game.state.ourPlayerIndex)
 
 	def isTouched(order: Int) =
 		game.state.deck(order).clued ||
@@ -164,8 +164,10 @@ extension[G <: Game](game: G)
 		game.meta(order).status == CardStatus.Finessed
 
 	def isBlindPlaying(order: Int) =
-		!game.state.deck(order).clued &&
-		(game.meta(order).status == CardStatus.CalledToPlay || game.meta(order).status == CardStatus.Finessed)
+		!game.state.deck(order).clued && (
+			game.meta(order).status == CardStatus.CalledToPlay ||
+			game.meta(order).status == CardStatus.Finessed
+		)
 
 	/** Tries all ways to see if the order matches. */
 	def orderMatches(order: Int, id: Identity, infer: Boolean = false) =
@@ -176,10 +178,13 @@ extension[G <: Game](game: G)
 
 	/** Returns whether the order is known to be a particular special suit from empathy. */
 	def knownAs(order: Int, regex: Regex) =
-		game.common.thoughts(order).possible.forall(i => regex.matches(game.state.variant.suits(i.suitIndex)))
+		game.common.thoughts(order).possible.forall { i =>
+			regex.matches(game.state.variant.suits(i.suitIndex))
+		}
 
 	def handleClue(prev: G, clue: ClueAction)(using ops: GameOps[G]) =
-		ops.interpretClue(prev, game.onClue(clue).elim(goodTouch = true), clue).elim(goodTouch = true)
+		ops.interpretClue(prev, game.onClue(clue).elim(goodTouch = true), clue)
+			.elim(goodTouch = true)
 
 	def takeAction(using ops: GameOps[G]) =
 		ops.takeAction(game)

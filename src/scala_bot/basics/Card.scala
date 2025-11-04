@@ -45,7 +45,17 @@ object Identity {
 }
 
 enum CardStatus:
-	case None, ChopMoved, CalledToPlay, CalledToDiscard, Finessed, Sarcastic, GentlemansDiscard, ZeroClueChop
+	case None,
+		ChopMoved,
+		CalledToPlay,
+		CalledToDiscard,
+		Finessed,
+		Sarcastic,
+		GentlemansDiscard,
+		ZeroClueChop,
+		FMaybeBluffed,
+		MaybeBluffed,
+		Bluffed
 
 	override def toString(): String =
 		this match {
@@ -57,6 +67,9 @@ enum CardStatus:
 			case CardStatus.Sarcastic => "sarcastic"
 			case CardStatus.GentlemansDiscard => "gentleman's discard"
 			case CardStatus.ZeroClueChop => "zero clue chop"
+			case CardStatus.FMaybeBluffed => "finessed, maybe bluffed"
+			case CardStatus.MaybeBluffed => "maybe bluffed"
+			case CardStatus.Bluffed => "bluffed"
 		}
 
 case class Card(
@@ -65,7 +78,7 @@ case class Card(
 	order: Int,
 	drawnIndex: Int,
 	clued: Boolean = false,
-	clues: List[CardClue] = List()
+	clues: List[CardClue] = Nil
 ) extends Identifiable:
 	def id(infer: Boolean = false, symmetric: Boolean = false) =
 		Option.when(suitIndex != -1 && rank != -1)(Identity(suitIndex, rank))
@@ -126,7 +139,7 @@ case class ConvData(
 	trash: Boolean = false,
 	status: CardStatus = CardStatus.None,
 	hidden: Boolean = false,
-	reasoning: List[Int] = List(),
+	reasoning: List[Int] = Nil,
 	by: Option[Int] = None
 ):
 	inline def cm = status == CardStatus.ChopMoved

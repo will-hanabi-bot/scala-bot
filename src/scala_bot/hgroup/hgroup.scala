@@ -2,12 +2,11 @@ package scala_bot.hgroup
 
 import scala_bot.basics._
 import scala_bot.basics.given_Conversion_IdentitySet_Iterable
-import scala_bot.endgame.EndgameSolver
+// import scala_bot.endgame.EndgameSolver
 import scala_bot.utils._
 import scala_bot.logger.{Log, Logger, LogLevel}
 
 import scala.util.chaining.scalaUtilChainingOps
-import scala.util.matching.Regex
 
 case class FocusResult(
 	focus: Int,
@@ -35,6 +34,13 @@ object Level {
 	val Context = 12
 }
 
+case class XConvData(
+	idUncertain: Boolean = false,
+	maybeFinessed: Boolean = false,
+	turnFinessed: Option[Int] = None,
+	finesseIds: Option[IdentitySet] = None
+)
+
 case class HGroup(
 	tableID: Int,
 	state: State,
@@ -47,7 +53,7 @@ case class HGroup(
 	catchup: Boolean = false,
 	notes: Map[Int, Note] = Map(),
 	lastMove: Option[Interp] = None,
-	queuedCmds: List[(String, String)] = List(),
+	queuedCmds: List[(String, String)] = Nil,
 	nextInterp: Option[Interp] = None,
 	noRecurse: Boolean = false,
 	rewindDepth: Int = 0,
@@ -55,100 +61,79 @@ case class HGroup(
 
 	goodTouch: Boolean = true,
 	level: Int = 1,
+	waiting: List[WaitingConnection] = Nil,
 	stalled5: Boolean = false,
 	cluedOnChop: Set[Int] = Set(),
 	dcStatus: DcStatus = DcStatus.None,
 	dda: Option[Identity] = None,
-	inEarlyGame: Boolean = false,
-	stallInterp: Option[StallInterp] = None
-) extends Game
+	inEarlyGame: Boolean = true,
+	stallInterp: Option[StallInterp] = None,
+	lastActions: Vector[Option[Action]] = Vector(),
+	xmeta: Vector[XConvData] = Vector()
+) extends Game:
+	def withXMeta(order: Int)(f: XConvData => XConvData) =
+		copy(xmeta = xmeta.updated(order, f(xmeta(order))))
 
-object HGroup:
-	private def init(
-		tableID: Int,
-		state: State,
-		inProgress: Boolean,
-		t: (players: Vector[Player], common: Player)
-	): HGroup =
-	HGroup(
-			tableID = tableID,
-			state = state,
-			players = t.players,
-			common = t.common,
-			base = (state, Vector(), t.players, t.common),
-			inProgress = inProgress
-		)
-
-	def apply(
-		tableID: Int,
-		state: State,
-		inProgress: Boolean
-	) =
-		init(tableID, state, inProgress, genPlayers(state))
-
-	def chop(game: HGroup, playerIndex: Int) =
-		game.state.hands(playerIndex).findLast { o =>
-			!game.state.deck(o).clued && game.meta(o).status == CardStatus.None
+	def chop(playerIndex: Int) =
+		state.hands(playerIndex).findLast { o =>
+			!state.deck(o).clued && meta(o).status == CardStatus.None
 		}
 
 	/** Returns how far a card is from chop. A card on chop is 0-away. */
-	def chopDistance(game: HGroup, playerIndex: Int, order: Int) =
-		chop(game, playerIndex) match {
+	def chopDistance(playerIndex: Int, order: Int) =
+		chop(playerIndex) match {
 			case None =>
-				throw new IllegalArgumentException(s"${game.state.names(playerIndex)} has no chop!")
+				throw new IllegalArgumentException(s"${state.names(playerIndex)} has no chop!")
 			case Some(c) =>
 				if (order < c)
 					throw new IllegalArgumentException(s"order $order is right of chop $c!")
 
-				game.state.hands(playerIndex).count { o =>
+				state.hands(playerIndex).count { o =>
 					o < order && o > c &&
-					!game.state.deck(o).clued &&
-					game.meta(o).status == CardStatus.None
+					!state.deck(o).clued &&
+					meta(o).status == CardStatus.None
 				}
 		}
 
-	def findFinesse(game: HGroup, playerIndex: Int, connected: Set[Int] = Set(), ignore: Set[Int] = Set()) =
-		val order = game.state.hands(playerIndex).find { o =>
-			!game.isTouched(o) && !connected.contains(o)
+	def findFinesse(playerIndex: Int, connected: List[Int] = Nil, ignore: Set[Int] = Set()) =
+		val order = state.hands(playerIndex).find { o =>
+			(!this.isTouched(o) || this.xmeta(o).maybeFinessed) && !connected.contains(o)
 		}
 
 		order.filter(!ignore.contains(_))
 
-	def unknown1(game: HGroup, order: Int) =
-		val clues = game.state.deck(order).clues
+	def unknown1(order: Int) =
+		val clues = state.deck(order).clues
 
 		clues.nonEmpty && clues.forall(_.eq(ClueKind.Rank, 1))
 
-	def order1s(game: HGroup, orders: Seq[Int], noFilter: Boolean = false) =
+	def order1s(orders: Seq[Int], noFilter: Boolean = false) =
 		val unknown1s = if (noFilter) orders else
 			orders.filter { o =>
-				unknown1(game, o) &&
-				game.common.thoughts(o).possible.forall(_.rank == 1)
+				unknown1(o) && common.thoughts(o).possible.forall(_.rank == 1)
 			}
 
 		unknown1s.sortBy { o =>
-			if (game.state.inStartingHand(o) && game.meta(o).status != CardStatus.ChopMoved)
+			if (state.inStartingHand(o) && meta(o).status != CardStatus.ChopMoved)
 				o
-			else if (game.cluedOnChop.contains(o))
+			else if (cluedOnChop.contains(o))
 				-100 - o
 			else
 				-o
 		}
 
-	def priority(game: HGroup, orders: List[Int]) =
-		val state = game.state
-
+	def priority(orders: List[Int]) =
 		val initial = (0 to 5).map(_ => Vector.empty[Int])
 		orders.foldLeft(initial) { (acc, o) =>
-			val thought = game.me.thoughts(o)
+			val thought = this.me.thoughts(o)
 
-			val inFinesse = game.isBlindPlaying(o)	// TODO: play link?
-			lazy val unknownCM = game.meta(o).status == CardStatus.ChopMoved &&
-				!game.state.deck(o).clued &&
+			val inFinesse = this.isBlindPlaying(o)	// TODO: play link?
+			lazy val unknownCM = meta(o).status == CardStatus.ChopMoved &&
+				!state.deck(o).clued &&
 				thought.possible.exists(!state.isPlayable(_))
 
 			def connecting(playerIndex: Int, id: Identity) =
-				state.hands(playerIndex).exists(game.me.thoughts(_).matches(id.next, infer = true))
+				state.hands(playerIndex).exists(this.me.thoughts(_).matches(id.next, infer = true))
 
 			lazy val connectsTo = (0 until state.numPlayers).filter { playerIndex =>
 				thought.possibilities.exists(i => connecting(playerIndex, i))
@@ -179,26 +164,25 @@ object HGroup:
 		.pipe { ps =>
 			// Speed-up clues first, then oldest finesse to newest
 			ps.updated(0, ps(0).sortBy { o =>
-				if (game.isBlindPlaying(o))
+				if (this.isBlindPlaying(o))
 					-200 - o
-				else if (game.state.deck(o).clued)
+				else if (state.deck(o).clued)
 					-100 - o
-				else if (game.meta(o).hidden)
+				else if (meta(o).hidden)
 					-o
 				else
 					o
 			})
 			// Lowest rank, then leftmost
 			.updated(5, ps(5).sortBy { o =>
-				game.me.thoughts(o).possibilities.map(_.rank).min * 100 - o
+				this.me.thoughts(o).possibilities.map(_.rank).min * 100 - o
 			})
 		}
 
-	def determineFocus(prev: HGroup, game: HGroup, action: ClueAction): FocusResult =
-		val state = game.state
+	def determineFocus(prev: HGroup, action: ClueAction): FocusResult =
 		val ClueAction(giver, target, list, clue) = action
 		val hand = state.hands(target)
-		val chop = HGroup.chop(prev, target)
+		val chop = prev.chop(target)
 		val reclue = list.forall(prev.state.deck(_).clued)
 
 		lazy val pinkChoiceTempo = clue.kind == ClueKind.Rank &&
@@ -206,22 +190,22 @@ object HGroup:
 			reclue &&
 			clue.value <= hand.length &&
 			list.contains(hand(clue.value - 1)) &&
-			List(list.max, hand(clue.value - 1)).forall(game.knownAs(_, PINKISH))
+			List(list.max, hand(clue.value - 1)).forall(this.knownAs(_, PINKISH))
 
 		lazy val brownTempo = clue.kind == ClueKind.Colour &&
-			Regex("Brown").matches(state.variant.colourableSuits(clue.value)) &&
+			state.variant.colourableSuits(clue.value).contains("Brown") &&
 			reclue
 
-		lazy val ordered1s = order1s(game, list.filter(unknown1(game, _)), noFilter = true)
+		lazy val ordered1s = order1s(list.filter(unknown1), noFilter = true)
 
 		lazy val muddySuitIndex = state.variant.suits.indexWhere(MUDDY.matches)
-		lazy val muddyCards = list.filter(game.knownAs(_, MUDDY))
+		lazy val muddyCards = list.filter(this.knownAs(_, MUDDY))
 		lazy val mudClue = clue.kind == ClueKind.Colour &&
 			state.includesVariant(MUDDY) &&
 			muddyCards.nonEmpty &&
 			reclue &&
 			// Mud clues should only work if the leftmost card is muddy.
-			game.common.thoughts(list.max).possible.exists(_.suitIndex == muddySuitIndex)
+			common.thoughts(list.max).possible.exists(_.suitIndex == muddySuitIndex)
 
 		lazy val pinkStall5 = clue.eq(BaseClue(ClueKind.Rank, 5)) &&
 			state.includesVariant(PINKISH) &&
@@ -259,15 +243,58 @@ object HGroup:
 				case None => throw new Error("No focus found!")
 			}
 
+	def importantAction(playerIndex: Int): Boolean = ???
+
+object HGroup:
+	private def init(
+		tableID: Int,
+		state: State,
+		inProgress: Boolean,
+		t: (players: Vector[Player], common: Player)
+	): HGroup =
+	HGroup(
+		tableID = tableID,
+		state = state,
+		players = t.players,
+		common = t.common,
+		base = (state, Vector(), t.players, t.common),
+		inProgress = inProgress,
+		lastActions = Vector.fill(state.numPlayers)(None)
+	)
+
+	def apply(tableID: Int, state: State, inProgress: Boolean) =
+		init(tableID, state, inProgress, genPlayers(state))
+
+	private def revert(g: HGroup, order: Int, ids: List[Identity], warn: Boolean = true) =
+		// println(s"reverting conn ${g.state.logConn(conn)}")
+		val newInferred = g.common.thoughts(order).inferred.difference(ids)
+
+		if (newInferred.isEmpty)
+			g.withThought(order) { t =>
+				t.copy(
+					inferred = t.oldInferred.map(_.intersect(t.possible)).getOrElse {
+						if (warn)
+							Log.error(s"no old inferences on ${order}!")
+						t.possible
+					},
+					oldInferred = None
+				)
+			}
+			.withMeta(order)(_.copy(status = CardStatus.None))
+		else
+			g.withThought(order)(_.copy(inferred = newInferred))
+
 	given GameOps[HGroup] with
 		def copyWith(game: HGroup, updates: GameUpdates) =
+			val meta = updates.meta.getOrElse(game.meta)
+
 			game.copy(
 				tableID = updates.tableID.getOrElse(game.tableID),
 				state = updates.state.getOrElse(game.state),
 				players = updates.players.getOrElse(game.players),
 				common = updates.common.getOrElse(game.common),
 				base = updates.base.getOrElse(game.base),
-				meta = updates.meta.getOrElse(game.meta),
+				meta = meta,
 				deckIds = updates.deckIds.getOrElse(game.deckIds),
 				catchup = updates.catchup.getOrElse(game.catchup),
 				notes = updates.notes.getOrElse(game.notes),
@@ -284,7 +311,10 @@ object HGroup:
 				cluedOnChop = game.cluedOnChop,
 				dcStatus = game.dcStatus,
 				dda = game.dda,
-				inEarlyGame = game.inEarlyGame
+				inEarlyGame = game.inEarlyGame,
+				stallInterp = game.stallInterp,
+				lastActions = game.lastActions,
+				xmeta = game.xmeta.padTo(meta.length, XConvData())
 			)
 
 		def blank(game: HGroup, keepDeck: Boolean) =
@@ -296,174 +326,101 @@ object HGroup:
 				meta = game.base._2,
 				players = game.base._3,
 				common = game.base._4,
-				base = game.base
+				base = game.base,
+
+				stalled5 = false,
+				dcStatus = DcStatus.None,
+				dda = None,
+				inEarlyGame = true,
+				stallInterp = None,
+				lastActions = Vector.fill(game.state.numPlayers)(None),
+				xmeta = Vector.fill(game.base._2.length)(XConvData())
 			)
 
 		def interpretClue(prev: HGroup, game: HGroup, action: ClueAction): HGroup =
-			val state = game.state
-			val ClueAction(giver, target, list, clue) = action
-
-			val focusResult @ FocusResult(focus, chop, positional) = determineFocus(prev, game, action)
-			val (cluedResets, duplicateReveals) = checkFix(prev, game, action)
-
-			if (cluedResets.nonEmpty || duplicateReveals.nonEmpty)
-				Log.info(s"fix clue! not inferring anything else")
-
-				lazy val oldOrdered1s = order1s(prev, list.filter(unknown1(prev, _)), noFilter = true)
-				val pinkFix1s = state.includesVariant(PINKISH) &&
-					clue.kind == ClueKind.Rank && clue.value != 1 &&
-					oldOrdered1s.nonEmpty
-
-				return game.when (_ => pinkFix1s) { g =>
-					val fixedOrder = oldOrdered1s.head
-
-					if (chop && (clue.value == 2 || clue.value == 5))
-						Log.info(s"pink fix!")
-						g.withThought(fixedOrder)(t => t.copy(
-							inferred = t.possible.retain(!state.isPlayable(_))
-						))
-					else
-						Log.info(s"pink fix promise!")
-						g.withThought(fixedOrder)(t => t.copy(
-							inferred = t.inferred.retain(i => i.rank == clue.value && !state.isPlayable(i))
-						))
+			interpClue(prev, game, action)
+				.pipe { g =>
+					g.copy(lastActions = g.lastActions.updated(action.playerIndex, Some(action)))
 				}
-				.withMeta(focus) {
-					// Focus doesn't matter for a fix clue
-					_.copy(focused = prev.meta(focus).focused)
-				}
-				.copy(lastMove = Some(ClueInterp.Fix))
-
-			val stall = stallingSituation(prev, game, action, focusResult)
-
-			if (stall.isDefined)
-				val (interp, thinksStall) = stall.get
-
-				if (thinksStall.size > 0 && thinksStall.size < state.numPlayers)
-					Log.warn(s"asymmetric move! interpreting mistake")
-					return game.copy(lastMove = Some(ClueInterp.Mistake))
-
-				if (thinksStall.size == state.numPlayers)
-					Log.info(s"stalling situation $interp")
-
-					return game
-						.when(g => interp == StallInterp.Stall5 && g.inEarlyGame) {
-							_.copy(stalled5 = true)
-						}
-						// Pink promise on stalls
-						.when(g => g.state.includesVariant(PINKISH) && clue.kind == ClueKind.Rank) {
-							_.withThought(focus)(t => t.copy(inferred = t.inferred.retain(_.rank == clue.value)))
-						}
-						.copy(
-							lastMove = Some(ClueInterp.Stall),
-							stallInterp = Some(interp)
-						)
-
-			val distributionIds = distributionClue(prev, game, action, focus)
-
-			if (distributionIds.isDefined)
-				Log.info(s"distribution clue!")
-
-				return game
-					.withThought(focus) { t => t.copy(
-						inferred = t.possible.intersect(distributionIds.get),
-						infoLock = Some(t.possible.intersect(distributionIds.get)),
-						reset = false
-					)}
-					.copy(
-						lastMove = Some(ClueInterp.Distribution)
-					)
-
-			if (game.level >= Level.BasicCM && !state.inEndgame)
-				val tcm = interpretTcm(prev, game, action, focus)
-
-				if (tcm.isDefined)
-					// All newly cards are trash
-					return list.foldLeft(game) { (acc, order) =>
-						if (prev.state.deck(order).clued)
-							acc
-						else
-							acc.withThought(order) { t =>
-								val newInferred = t.possible.retain(state.isBasicTrash)
-								t.copy(
-									inferred = newInferred,
-									infoLock = Some(newInferred)
-								)
-							}
-							.withMeta(order)(_.copy(trash = true))
-					}
-					.pipe(performCM(_, tcm.get))
-					.copy(lastMove = Some(ClueInterp.Discard))
-
-				val cm5 = interpret5cm(prev, game, action, focus)
-
-				if (cm5.isDefined)
-					return performCM(game, cm5.get)
-						.copy(lastMove = Some(ClueInterp.Discard))
-
-			val pinkTrashFix = state.includesVariant(PINKISH) &&
-				!positional && clue.kind == ClueKind.Rank &&
-				list.forall(o => prev.state.deck(o).clued && game.knownAs(o, PINKISH)) &&
-				state.variant.suits.zipWithIndex.forall { (suit, suitIndex) =>
-					!PINKISH.matches(suit) ||
-					game.common.isTrash(game, Identity(suitIndex, clue.value), focus)
-				}
-
-			if (pinkTrashFix)
-				Log.info(s"pink trash fix!")
-				return game
-					.withThought(focus) { t =>
-						val newInferred = t.possible.retain(game.common.isTrash(game, _, focus))
-						t.copy(
-							inferred = t.possible.retain(game.common.isTrash(game, _, focus)),
-							infoLock = Some(newInferred)
-						)
-					}
-					.withMeta(focus){ m => m.copy(
-						trash = m.trash || state.variant.suits.zipWithIndex.forall { (suit, suitIndex) =>
-							!PINKISH.matches(suit) ||
-							game.state.isBasicTrash(Identity(suitIndex, clue.value))
-						}
-					)}
-					.copy(lastMove = Some(ClueInterp.Fix))
-
-
-
-			game
 
 		def interpretDiscard(prev: HGroup, game: HGroup, action: DiscardAction): HGroup =
-			???
+			game.pipe { g =>
+				g.copy(lastActions = g.lastActions.updated(action.playerIndex, Some(action)))
+			}
 
 		def interpretPlay(prev: HGroup, game: HGroup, action: PlayAction): HGroup =
-			game
+			game.pipe { g =>
+				g.copy(lastActions = g.lastActions.updated(action.playerIndex, Some(action)))
+			}
 
 		def takeAction(game: HGroup): PerformAction =
 			???
 
-		def updateTurn(prev: HGroup, game: HGroup, action: TurnAction): HGroup =
-			val currentPlayerIndex = action.currentPlayerIndex
-			val state = game.state
+		def updateTurn(game: HGroup, action: TurnAction): HGroup =
+			val lastPlayerIndex = game.state.lastPlayerIndex(action.currentPlayerIndex)
 
-			val (newCommon, newMeta) = state.hands(currentPlayerIndex).foldLeft((game.common, game.meta)) { case ((c, m), order) =>
-				if (m(order).status == CardStatus.CalledToPlay)
-					val newInferred = c.thoughts(order).inferred.retain(state.isPlayable)
+			val initial = (
+				game.copy(waiting = Nil),
+				List[WaitingConnection](),
+				Map[Int, IdentitySet]()
+			)
+			game.waiting.foldRight(initial) { case (wc, (newGame, newWCs, demos)) =>
+				updateWc(game, wc, lastPlayerIndex) match {
+					case UpdateResult.Keep =>
+						(newGame, wc +: newWCs, demos)
 
-					if (newInferred.isEmpty)
-						val newCommon = c.withThought(order)(_.resetInferences())
-						val newMeta = m.updated(order, m(order).copy(
-							status = CardStatus.None,
-							by = None,
-							trash = true
-						))
-						(newCommon, newMeta)
-					else
-						(c.withThought(order)(_.copy(inferred = newInferred)), m)
-				else
-					(c, m)
+					case UpdateResult.Advance(nextIndex, skipped) => (
+						if (skipped)
+							(0 until nextIndex).map(wc.connections)
+								.foldLeft(newGame)((a, c) => revert(a, c.order, c.ids))
+						else
+							newGame,
+						wc.copy(connections = wc.connections.drop(nextIndex)) +: newWCs,
+						demos
+					)
+					case UpdateResult.AmbiguousPassback => (
+						newGame,
+						wc.copy(ambiguousPassback = true) +: newWCs,
+						demos
+					)
+					case UpdateResult.Demonstrated(order, id, nextIndex, skipped) => (
+						if (skipped)
+							(0 until nextIndex.getOrElse(wc.connections.length))
+								.map(wc.connections).foldLeft(newGame)((a, c) => revert(a, c.order, c.ids))
+						else
+							newGame,
+						nextIndex match {
+							case Some(i) => wc.copy(connections = wc.connections.drop(i)) +: newWCs
+							case None => newWCs
+						},
+						demos + (order -> (demos.getOrElse(order, IdentitySet.empty).union(id)))
+					)
+					case UpdateResult.Remove => (
+						wc.connections.foldLeft(newGame)((a, c) => revert(a, c.order, c.ids))
+							.pipe(revert(_, wc.focus, List(wc.inference), warn = false)),
+						newWCs,
+						demos
+					)
+					case UpdateResult.Complete => (newGame, newWCs, demos)
+				}
 			}
-
-			game.copy(common = newCommon, meta = newMeta)
-				.elim(goodTouch = true)
+			.pipe { (newGame, newWCs, demos) => (
+				demos.foldLeft(newGame) { case (acc, (order, ids)) =>
+					acc.withThought(order) { t =>
+						val newInferred = t.inferred.intersect(ids)
+						t.copy(
+							inferred = newInferred,
+							infoLock = Some(newInferred)
+						)
+					}
+					.withXMeta(order)(_.copy(maybeFinessed = false))
+				},
+				newWCs.filterNot { wc =>
+					demos.get(wc.focus).exists(d => d.contains(wc.inference))
+				})
+			}
+			.pipe((newGame, newWCs) => newGame.copy(waiting = newWCs))
+			.elim(goodTouch = true)
 
 		def findAllClues(game: HGroup, giver: Int): List[PerformAction] =
 			val state = game.state
@@ -490,7 +447,7 @@ object HGroup:
 		def findAllDiscards(game: HGroup, playerIndex: Int): List[PerformAction] =
 			val trash = game.common.discardable(game, playerIndex)
 			val target = trash.headOption
-				.orElse(chop(game, playerIndex))
+				.orElse(game.chop(playerIndex))
 				.getOrElse(game.players(playerIndex).lockedDiscard(game.state, playerIndex))
 
 			List(PerformAction.Discard(target))

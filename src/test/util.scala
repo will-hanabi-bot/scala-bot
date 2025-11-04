@@ -150,7 +150,7 @@ def parseAction(state: State, action: String) =
 	def parsePlayer(str: String) =
 		val index = state.names.indexOf(str)
 		if (index == -1)
-			throw new IllegalArgumentException(s"Player $str not found in [${state.names}]")
+			throw new IllegalArgumentException(s"Player $str not found in [${state.names.mkString(",")}]")
 		index
 
 	action match {
@@ -167,7 +167,7 @@ def parseAction(state: State, action: String) =
 				else
 					val colour = state.variant.suits.indexWhere(_.toLowerCase() == valueS.toLowerCase())
 					if (colour == -1)
-						throw new IllegalArgumentException(s"Colour $valueS not found in [${state.variant.suits}]")
+						throw new IllegalArgumentException(s"Colour $valueS not found in [${state.variant.suits.mkString(",")}]")
 
 					BaseClue(ClueKind.Colour, colour)
 

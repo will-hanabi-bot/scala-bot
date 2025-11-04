@@ -78,3 +78,27 @@ def distributionClue(prev: Game, game: Game, action: ClueAction, focus: Int): Op
 
 	val useful = loop(poss, IdentitySet.empty)
 	useful.filter(_.nempty)
+
+def rainbowMismatch(game: Game, action: ClueAction, id: Identity, prompt: Int, focus: Int) =
+	val state = game.state
+	val ClueAction(_, target, list, clue) = action
+
+	lazy val rainbowFocus =
+		if (target == state.ourPlayerIndex)
+			game.me.thoughts(focus).possible.forall { c =>
+				RAINBOWISH.matches(state.variant.suits(c.suitIndex))
+			}
+		else
+			RAINBOWISH.matches(state.variant.suits(state.deck(focus).suitIndex))
+
+	lazy val matchingClues = state.allColourClues(target).filter { c =>
+		state.clueTouched(state.hands(target), c).sorted == list.sorted &&	// touches the same cards
+		state.deck(prompt).clues.contains(c)								// prompt was clued with this
+	}
+
+	clue.kind == ClueKind.Colour &&
+	RAINBOWISH.matches(state.variant.suits(id.suitIndex)) &&
+	!game.knownAs(prompt, RAINBOWISH) &&
+	rainbowFocus &&
+	// There was free choice to clue a matching colour, but didn't
+	matchingClues.nonEmpty && !matchingClues.exists(_.eq(clue))

@@ -82,3 +82,6 @@ def performToAction(state: State, action: PerformAction, playerIndex: Int, deck:
 /** Returns all player indices between the start (inclusive) and end (exclusive) in play order. */
 def playersUntil(numPlayers: Int, start: Int, `end`: Int) =
 	Iterator.iterate(start)(i => (i + 1) % numPlayers).takeWhile(_ != `end`)
+
+def inBetween(numPlayers: Int, playerIndex: Int, start: Int, `end`: Int) =
+	playersUntil(numPlayers, start, `end`).contains(playerIndex)
