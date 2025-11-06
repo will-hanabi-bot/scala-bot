@@ -267,7 +267,6 @@ def validBluff(game: HGroup, action: ClueAction, blind: Identity, truth: Identit
 	val focus = connected.head
 
 	lazy val disconnect = symmetric ||
-
 		(clue.kind == ClueKind.Rank && clue.value != blind.rank + 1) ||
 		blind.next.forall(!game.common.thoughts(focus).possible.contains(_))
 
