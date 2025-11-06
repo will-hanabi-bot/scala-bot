@@ -8,10 +8,12 @@ import scala_bot.logger.Log
   * Checks whether a Trash Chop Move was performed.
   * Returns the orders of any chop moved cards.
  */
-def interpretTcm(prev: HGroup, game: HGroup, action: ClueAction, focus: Int): Option[Vector[Int]] =
-	val state = game.state
+def interpretTcm(ctx: ClueContext): Option[Vector[Int]] =
+	val ClueContext(prev, game, action) = ctx
+	val state = ctx.state
 	val ClueAction(_, target, list, clue) = action
-	val thought = game.common.thoughts(focus)
+	val focus = ctx.focusResult.focus
+	val thought = ctx.common.thoughts(focus)
 
 	lazy val promisedIds = if (clue.kind == ClueKind.Rank)
 		thought.possible.retain(_.rank == clue.value)
@@ -42,9 +44,11 @@ def interpretTcm(prev: HGroup, game: HGroup, action: ClueAction, focus: Int): Op
   * Checks whether a 5's Chop Move was performed.
   * Returns the orders of any chop moved cards.
  */
-def interpret5cm(prev: HGroup, game: HGroup, action: ClueAction, focus: Int): Option[Vector[Int]] =
+def interpret5cm(ctx: ClueContext): Option[Vector[Int]] =
+	val ClueContext(prev, game, action) = ctx
 	val state = game.state
 	val ClueAction(_, target, list, clue) = action
+	val focus = ctx.focusResult.focus
 	val chop = prev.chop(target)
 
 	val not5cm = clue != BaseClue(ClueKind.Rank, 5) ||

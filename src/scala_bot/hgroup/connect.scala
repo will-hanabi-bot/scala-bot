@@ -4,8 +4,24 @@ import scala_bot.basics._
 import scala_bot.basics.given_Conversion_IdentitySet_Iterable
 import scala_bot.logger.Log
 import scala_bot.utils.inBetween
+import scala_bot.utils.playersUntil
 
-def findKnownConn(game: HGroup, giver: Int, id: Identity, ignore: Set[Int] = Set()) =
+case class ConnectContext(
+	looksDirect: Boolean,
+	thinksStall: Set[Int],
+	connected: List[Int],
+	ignore: Set[Int] = Set()
+)
+
+case class ConnectOpts(
+	knownOnly: Set[Int] = Set(),
+	assumeTruth: Boolean = false,
+	bluff: Boolean = false,
+	findOwn: Option[Int] = None,
+	noLayer: Boolean = false,
+)
+
+def findKnownConn(game: HGroup, giver: Int, id: Identity, ignore: Set[Int]) =
 	val state = game.state
 
 	def validKnown(order: Int) =
@@ -27,7 +43,7 @@ def findKnownConn(game: HGroup, giver: Int, id: Identity, ignore: Set[Int] = Set
 		game.state.deck(order).matches(id, assume = true) &&
 		game.common.thoughts(order).inferred.contains(id) &&
 		!game.xmeta(order).maybeFinessed &&
-		game.common.orderPlayable(game, order)
+		game.common.orderPlayable(game, order, excludeTrash = true)
 
 	// Globally known
 	val knownConns = for
@@ -44,7 +60,7 @@ def findKnownConn(game: HGroup, giver: Int, id: Identity, ignore: Set[Int] = Set
 	yield
 		PlayableConn(playerIndex, order, id, linked = link.getOrders)
 
-	println(s"finding known ${state.logId(id)} $ignore ${game.common.linkedOrders(state)}")
+	// println(s"finding known ${state.logId(id)} $ignore ${game.common.linkedOrders(state)}")
 
 	// Visible and going to be played (excludes giver)
 	val playableConns = for
@@ -57,16 +73,17 @@ def findKnownConn(game: HGroup, giver: Int, id: Identity, ignore: Set[Int] = Set
 	.orElse(linkedConns.headOption)
 	.orElse(playableConns.headOption)
 
-def findUnknownConnecting(prev: HGroup, game: HGroup, action: ClueAction, reacting: Int, id: Identity, connected: List[Int], ignore: Set[Int], noLayer: Boolean, assumeTruth: Boolean, bluff: Boolean, findOwn: Boolean = false): Option[Connection] =
+def findUnknownConnecting(ctx: ClueContext, reacting: Int, id: Identity, connected: List[Int], ignore: Set[Int], opts: ConnectOpts): Option[Connection] =
+	val ClueContext(prev, game, action) = ctx
 	val (state, level) = (game.state, game.level)
 	val ClueAction(giver, target, _, _) = action
 	val FocusResult(focus, _, _) = game.determineFocus(prev, action)
 
-	println(s"finding unknown connecting for ${state.logId(id)} (${state.names(reacting)}), $connected, own? $findOwn")
+	// println(s"finding unknown connecting for ${state.logId(id)} (${state.names(reacting)}), $connected, own? ${opts.findOwn}")
 
-	if (bluff)
+	if (opts.bluff)
 		val clued = prev.common.findClued(prev, reacting, id, ignore ++ connected)
-		val matched = clued.find(state.deck(_).matches(id, assume = findOwn))
+		val matched = clued.find(state.deck(_).matches(id, assume = opts.findOwn.isDefined))
 
 		if (matched.isDefined)
 			return Some(PlayableConn(matched.get, reacting, id, linked = clued.toList))
@@ -75,7 +92,7 @@ def findUnknownConnecting(prev: HGroup, game: HGroup, action: ClueAction, reacti
 		Option.when(!rainbowMismatch(prev, action, id, order, focus)) {
 			state.deck(order).id() match {
 				case None =>
-					Option.when(findOwn && game.me.thoughts(order).possible.contains(id))
+					Option.when(opts.findOwn.exists(game.players(_).thoughts(order).possible.contains(id)))
 						(PromptConn(reacting, order, id))
 
 				case Some(promptId) =>
@@ -118,12 +135,12 @@ def findUnknownConnecting(prev: HGroup, game: HGroup, action: ClueAction, reacti
 		return None
 
 	finesse.flatMap(state.deck(_).id()) match {
-		case None if findOwn && finesse.isDefined =>
-			val thought = game.me.thoughts(finesse.get)
+		case None if opts.findOwn.isDefined && finesse.isDefined =>
+			val thought = game.players(opts.findOwn.get).thoughts(finesse.get)
 			val bluffableIds = thought.inferred.retain { i =>
 				validBluff(prev, action, i, id, reacting, connected)
 			}
-			val possiblyBluff = !assumeTruth &&
+			val possiblyBluff = !opts.assumeTruth &&
 				bluffableIds.nonEmpty &&
 				thought.possible.contains(id)
 
@@ -131,16 +148,16 @@ def findUnknownConnecting(prev: HGroup, game: HGroup, action: ClueAction, reacti
 				thought.matches(id, assume = true)
 
 			Option.when(trueFinesse || bluffableIds.nonEmpty) {
-				val certain = state.hands(giver).view
-					.map(state.deck)
-					.exists(c => c.matches(id) && c.clued)
+				val certain = state.hands(giver).exists { o =>
+					val card = state.deck(o)
+					card.matches(id) && card.clued
+				}
 
 				FinesseConn(
 					reacting,
 					finesse.get,
 					ids = if (trueFinesse) List(id) else bluffableIds.toList,
-					self = true,
-					bluff = !assumeTruth && !thought.possible.contains(id),
+					bluff = !opts.assumeTruth && !thought.possible.contains(id),
 					possiblyBluff = possiblyBluff,
 					certain = certain)
 			}
@@ -148,10 +165,10 @@ def findUnknownConnecting(prev: HGroup, game: HGroup, action: ClueAction, reacti
 		case None => None
 
 		case Some(finesseId) =>
-			val possiblyBluff = !assumeTruth &&
+			val possiblyBluff = !opts.assumeTruth &&
 				validBluff(prev, action, finesseId, id, reacting, connected, symmetric = true)
 
-			if (finesseId == id)
+			if (finesseId == id || opts.findOwn.exists(i => i != state.ourPlayerIndex && game.players(i).thoughts(finesse.get).possible.contains(id)))
 				// At level 1, only forward finesses are allowed.
 				if (level == 1 && !inBetween(state.numPlayers, reacting, giver, target))
 					Log.warn(s"found non-forward finesse ${state.logId(id)} in ${state.names(reacting)}'s hand at lv 1!")
@@ -159,7 +176,7 @@ def findUnknownConnecting(prev: HGroup, game: HGroup, action: ClueAction, reacti
 				else
 					Some(FinesseConn(reacting, finesse.get, List(id), bluff = false, possiblyBluff = possiblyBluff))
 
-			else if (!noLayer && level >= Level.IntermediateFinesses && state.isPlayable(finesseId))
+			else if (!opts.noLayer && level >= Level.IntermediateFinesses && state.isPlayable(finesseId))
 				val bluff = validBluff(prev, action, finesseId, id, reacting, connected)
 
 				// TODO: Check in resolver that we don't give uncertain finesses or likely dupes
@@ -173,7 +190,49 @@ def findUnknownConnecting(prev: HGroup, game: HGroup, action: ClueAction, reacti
 				None
 	}
 
-def findConnecting(prev: HGroup, game: HGroup, action: ClueAction, id: Identity, looksDirect: Boolean, thinksStall: Set[Int], connected: List[Int], ignore: Set[Int] = Set(), knownOnly: Set[Int] = Set(), assumeTruth: Boolean = false, bluff: Boolean = false, findOwn: Boolean = false): Option[List[Connection]] =
+def findSingleConn(ctx: ClueContext, reacting: Int, id: Identity, connCtx: ConnectContext, opts: ConnectOpts, connections: List[Connection] = Nil): Option[List[Connection]] =
+	val ClueContext(prev, game, action) = ctx
+	val state = game.state
+	val ClueAction(giver, target, _, _) = action
+
+	lazy val allVisible = {
+		val remaining = state.cardCount(id.toOrd) - state.baseCount(id.toOrd)
+
+		// Everyone between giver and reacting must be able to see them,
+		// otherwise they will try to react
+		val visible = playersUntil(state.numPlayers, reacting, giver)
+			.map(state.hands(_).count(state.deck(_).matches(id)))
+			.sum
+
+		remaining == visible
+	}
+
+	val skip = reacting == giver ||
+		opts.knownOnly.contains(reacting) ||
+		(reacting == target && connCtx.looksDirect && !allVisible) ||
+		connCtx.thinksStall.contains(reacting)
+
+	// TODO: When resolving, disallow prompting/finessing a player that may need to prove sth to us
+	if (skip)
+		// println(s"skipping ${state.names(reacting)}, giver $giver target $target $connCtx ")
+		None
+	else
+		findUnknownConnecting(ctx, reacting, id, connCtx.connected, connCtx.ignore, opts) match {
+			case None => None
+
+			// Try again
+			case Some(conn) if conn.hidden =>
+				val hypo = state.deck(conn.order).id()
+					.fold(game)(id => game.withState(_.withPlay(id)).elim(goodTouch = true))
+
+				findSingleConn(ctx.copy(game = hypo), reacting, id, connCtx, opts, conn +: connections)
+
+			case Some(conn) =>
+				Some((conn +: connections).reverse)
+		}
+
+def findConnecting(ctx: ClueContext, id: Identity, connCtx: ConnectContext, opts: ConnectOpts): Option[List[Connection]] =
+	val ClueContext(prev, game, action) = ctx
 	val state = game.state
 	val ClueAction(giver, target, _, _) = action
 
@@ -183,7 +242,7 @@ def findConnecting(prev: HGroup, game: HGroup, action: ClueAction, id: Identity,
 		Log.info(s"all ${state.logId(id)} in trash!")
 		return None
 
-	val known = findKnownConn(prev, giver, id, ignore ++ connected)
+	val known = findKnownConn(game, giver, id, connCtx.ignore ++ connCtx.connected)
 
 	if (known.isDefined)
 		return Some(known.toList)
@@ -196,41 +255,11 @@ def findConnecting(prev: HGroup, game: HGroup, action: ClueAction, id: Identity,
 		List(target),	// allow self-layered if no one will fix a self-clandestine
 	).flatten
 
-	@annotation.tailrec
-	def loop(hypo: HGroup, i: Int = 0, connections: List[Connection] = Nil): Option[List[Connection]] =
-		if (i == connPlayerOrder.length)
-			return None
-
-		val playerIndex = connPlayerOrder(i)
-		val skip = playerIndex == giver ||
-			knownOnly.contains(playerIndex) ||
-			(playerIndex == target && looksDirect) ||
-			thinksStall.contains(playerIndex)
-
-		// TODO: When resolving, disallow prompting/finessing a player that may need to prove sth to us
-		if (skip)
-			// println(s"skipping $giver $target $looksDirect ${state.names(playerIndex)} $knownOnly $thinksStall")
-			loop(hypo, i + 1)
-		else
-			val noLayer = i == 0
-			findUnknownConnecting(prev, game, action, playerIndex, id, connected, ignore, noLayer, assumeTruth, bluff, findOwn) match {
-				case None =>
-					loop(hypo, i + 1)
-
-				case Some(conn) if conn.hidden =>
-					val newGame = state.deck(conn.order).id().fold(hypo)(id => hypo.withState(_.withPlay(id)))
-					// Try again with same player
-					loop(newGame, i, conn +: connections)
-
-				case Some(_) if playerIndex == target && looksDirect =>
-					Log.warn(s"looks direct!")
-					None
-
-				case Some(conn) =>
-					Some((conn +: connections).reverse)
-			}
-
-	loop(game)
+	connPlayerOrder.zipWithIndex.view.map { (reacting, i) =>
+		findSingleConn(ctx, reacting, id, connCtx, opts.copy(noLayer = i == 0))
+	}
+	.find(_.isDefined)
+	.flatten
 
 def validBluff(game: HGroup, action: ClueAction, blind: Identity, truth: Identity, reacting: Int, connected: List[Int], symmetric: Boolean = false) =
 	val state = game.state
@@ -238,12 +267,9 @@ def validBluff(game: HGroup, action: ClueAction, blind: Identity, truth: Identit
 	val focus = connected.head
 
 	lazy val disconnect = symmetric ||
-		(blind.rank == 5) ||
-		(clue.kind == ClueKind.Rank && clue.value != blind.rank + 1) ||
-		!game.common.thoughts(focus).possible.contains(blind.next)
 
-	lazy val selfColourBluff =
-		clue.kind == ClueKind.Colour && reacting == target
+		(clue.kind == ClueKind.Rank && clue.value != blind.rank + 1) ||
+		blind.next.forall(!game.common.thoughts(focus).possible.contains(_))
 
 	lazy val interferes = state.hands(reacting).exists { o =>
 		game.players(reacting).thoughts(o).possible.contains(truth) &&
@@ -254,7 +280,7 @@ def validBluff(game: HGroup, action: ClueAction, blind: Identity, truth: Identit
 	state.nextPlayerIndex(giver) == reacting &&
 	connected.length == 1 &&
 	disconnect &&
-	!selfColourBluff &&
+	!(clue.kind == ClueKind.Colour && reacting == target) &&	// not self-colour bluff
 	!interferes
 
 /** Returns whether the colour clue could be a save on the given identity. */
@@ -340,13 +366,14 @@ def rankSave(prev: HGroup, action: ClueAction, id: Identity, focus: Int): Boolea
 
 	state.isCritical(id) || rank == 2
 
-def connect(prev: HGroup, game: HGroup, action: ClueAction, id: Identity, focusResult: FocusResult, looksDirect: Boolean, thinksStall: Set[Int], assumeTruth: Boolean = false, findOwn: Boolean = false): Option[FocusPossibility] =
+def connect(ctx: ClueContext, id: Identity, looksDirect: Boolean, thinksStall: Set[Int], assumeTruth: Boolean = false, findOwn: Option[Int] = None): Option[FocusPossibility] =
+	val ClueContext(prev, game, action) = ctx
 	val state = game.state
-	val FocusResult(focus, _, positional) = focusResult
+	val FocusResult(focus, _, positional) = ctx.focusResult
 	val Identity(suitIndex, rank) = id
 	var attemptedBluff = false
 
-	// Log.info(s"trying to connect ${state.logId(id)}")
+	// Log.info(s"trying to connect ${state.logId(id)} $looksDirect")
 
 	@annotation.tailrec
 	def loop(hypo: HGroup, nextRank: Int, connections: List[Connection]): Option[List[Connection]] =
@@ -355,36 +382,47 @@ def connect(prev: HGroup, game: HGroup, action: ClueAction, id: Identity, focusR
 		else
 			val nextId = Identity(suitIndex, nextRank)
 			val connected = focus +: connections.map(_.order)
-			val direct = looksDirect && !connections.exists(_.isInstanceOf[FinesseConn])
+			val direct = looksDirect && {
+					(action.clue.kind == ClueKind.Colour &&
+						game.common.thoughts(focus).possible.contains(nextId)) ||
+					!connections.exists {
+						case f: FinesseConn => f.reacting != action.target && !f.hidden
+						case _ => false
+					}
+				}
 			val bluffed = connections.exists {
 				case f: FinesseConn => f.bluff
 				case _ => false
 			}
 			attemptedBluff ||= bluffed
 
-			val conn = findConnecting(prev, game, action, nextId, direct, thinksStall, connected, bluff = bluffed)
-				.orElse(Option.when(findOwn) {
-					findConnecting(prev, game, action, nextId, direct, thinksStall, connected, bluff = bluffed, findOwn = true)
-				}.flatten)
+			val opts = ConnectOpts(assumeTruth = assumeTruth, bluff = bluffed)
+			val connCtx = ConnectContext(direct, thinksStall, connected)
+			val newCtx = ctx.copy(game = hypo)
+
+			val conn = findConnecting(newCtx, nextId, connCtx, opts)
+				.orElse(findOwn.flatMap { i =>
+					findSingleConn(newCtx, i, nextId, connCtx, opts.copy(findOwn = findOwn))
+				})
 
 			conn match {
 				case None =>
-					// Log.info(s"failed connection to ${state.logId(id)}: ${state.logConns(connections, nextId)}")
+					// Log.info(s"failed connection to ${state.logId(id)}: ${state.logConns(connections, nextId)} $findOwn")
 					None
 				case Some(conns) =>
-					// println(s"found conns ${state.logConns(conns)}")
+					// Log.info(s"found conns ${state.logConns(conns)} $findOwn")
 					val newGame = conns.foldLeft(hypo) { (acc, conn) =>
 						acc.state.deck(conn.order).id()
 							.orElse(Option.when(conn.ids.length == 1)(conn.ids.head))
-							.fold(acc)(i => acc.withState(_.withPlay(i)))
+							.fold(acc)(i => acc.withState(_.withPlay(i)).elim(goodTouch = true))
 					}
 					loop(newGame, nextRank + 1, connections ++ conns)
 			}
 
 	loop(game, state.playStacks(suitIndex) + 1, List()).map { conns =>
-		val selfClandestine = !findOwn && conns.zipWithIndex.exists { (conn, i) =>
+		val selfClandestine = findOwn.isEmpty && conns.zipWithIndex.exists { (conn, i) =>
 			conn.reacting == action.target && conn.isInstanceOf[FinesseConn] && conn.hidden &&
-			game.common.thoughts(focus).possible.contains(conn.ids.head.next) &&
+			conn.ids.head.next.exists(game.common.thoughts(focus).possible.contains) &&
 			// Someone else finessing will prove this is a clandestine self.
 			!conns.take(i).exists(conn2 => conn2.isInstanceOf[FinesseConn] && conn2.reacting != action.target)
 		}
@@ -392,13 +430,22 @@ def connect(prev: HGroup, game: HGroup, action: ClueAction, id: Identity, focusR
 		if (selfClandestine)
 			Log.warn("illegal clandestine self-finesse!")
 
-		Log.info(s"found connections: ${state.logConns(conns, id)}")
-		FocusPossibility(id, connections = conns, interp = ClueInterp.Play, illegal = selfClandestine)
+		val symmetric = !state.deck(focus).matches(id, assume = true) ||
+			!game.players(action.target).thoughts(focus).possible.contains(id)
+
+		Log.info(s"found connections: ${state.logConns(conns, id)}${if (symmetric) " (symmetric)" else ""}")
+		FocusPossibility(
+			id,
+			conns,
+			ClueInterp.Play,
+			symmetric,
+			illegal = selfClandestine
+		)
 	}
 	.orElse {
 		Option.when (game.level > Level.Bluffs && !assumeTruth && attemptedBluff) {
 			Log.highlight(Console.YELLOW, "bluff connection failed, retrying true finesse")
 
-			connect(prev, game, action, id, focusResult, looksDirect, thinksStall, assumeTruth = true, findOwn)
+			connect(ctx, id, looksDirect, thinksStall, assumeTruth = true, findOwn)
 		}.flatten
 	}

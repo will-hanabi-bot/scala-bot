@@ -7,11 +7,22 @@ import scala_bot.logger.Log
 
 import scala.util.chaining.scalaUtilChainingOps
 
-def interpClue(prev: HGroup, game: HGroup, action: ClueAction): HGroup =
+case class ClueContext(
+	prev: HGroup,
+	game: HGroup,
+	action: ClueAction
+):
+	inline def common = game.common
+	inline def state = game.state
+
+	lazy val focusResult = game.determineFocus(prev, action)
+
+def interpClue(ctx: ClueContext): HGroup =
+	val ClueContext(prev, game, action) = ctx
 	val (common, state) = (game.common, game.state)
 	val ClueAction(giver, target, list, clue) = action
 
-	val focusResult @ FocusResult(focus, chop, positional) = game.determineFocus(prev, action)
+	val FocusResult(focus, chop, positional) = ctx.focusResult
 	val (cluedResets, duplicateReveals) = checkFix(prev, game, action)
 
 	if (cluedResets.nonEmpty || duplicateReveals.nonEmpty)
@@ -42,7 +53,7 @@ def interpClue(prev: HGroup, game: HGroup, action: ClueAction): HGroup =
 		}
 		.copy(lastMove = Some(ClueInterp.Fix))
 
-	val stall = stallingSituation(prev, game, action, focusResult)
+	val stall = stallingSituation(ctx)
 
 	if (stall.isDefined)
 		val (interp, thinksStall) = stall.get
@@ -81,7 +92,7 @@ def interpClue(prev: HGroup, game: HGroup, action: ClueAction): HGroup =
 			.copy(lastMove = Some(ClueInterp.Distribution))
 
 	if (game.level >= Level.BasicCM && !state.inEndgame)
-		val tcm = interpretTcm(prev, game, action, focus)
+		val tcm = interpretTcm(ctx)
 
 		if (tcm.isDefined)
 			// All newly cards are trash
@@ -101,7 +112,7 @@ def interpClue(prev: HGroup, game: HGroup, action: ClueAction): HGroup =
 			.pipe(performCM(_, tcm.get))
 			.copy(lastMove = Some(ClueInterp.Discard))
 
-		val cm5 = interpret5cm(prev, game, action, focus)
+		val cm5 = interpret5cm(ctx)
 
 		if (cm5.isDefined)
 			return performCM(game, cm5.get)
@@ -157,37 +168,44 @@ def interpClue(prev: HGroup, game: HGroup, action: ClueAction): HGroup =
 			!savePoss.exists(_.id == inf)
 		}
 		.flatMap {
-			connect(prev, game, action, _, focusResult, looksDirect, thinksStall)
+			connect(ctx, _, looksDirect, thinksStall)
 		}
 	}.toList
 
-	val matched = savePoss ++ focusPoss.filterNot(_.illegal)
+	val simplest = {
+		val possible = (savePoss ++ focusPoss.filterNot(_.illegal))
+			.filter(fp => game.players(target).thoughts(focus).possible.contains(fp.id))
 
-	// Card matches an inference
-	if (matched.exists(fp => state.deck(focus).matches(fp.id)))
-		val simplest = occamsRazor(matched, target)
+		occamsRazor(possible, target)
+	}
+
+	val noSelf = giver == state.ourPlayerIndex ||
+		simplest.exists(fp => state.deck(focus).matches(fp.id))
+
+	if (noSelf)
 		Log.info(s"simplest focus possibilities [${simplest.map(fp => state.logId(fp.id)).mkString(",")}]")
-		return resolveClue(game, action, focusResult, simplest)
+		resolveClue(ctx, simplest)
+	else
+		Log.info(s"finding own!")
 
-	Log.info(s"finding own!")
+		val ownFps = {
+			val looksDirect = common.thoughts(focus).id(symmetric = true).isEmpty && {
+				clue.kind == ClueKind.Colour ||
+				// Looks like an existing possibility
+				focusPoss.exists(_.connections.forall { c =>
+					c.isInstanceOf[KnownConn] ||
+					(c.isInstanceOf[PlayableConn] && c.reacting != state.ourPlayerIndex)
+				})
+			}
 
-	val ownFps = {
-		val looksDirect = common.thoughts(focus).id(symmetric = true).isEmpty && {
-			clue.kind == ClueKind.Colour ||
-			// Looks like an existing possibility
-			focusPoss.exists(_.connections.forall { c =>
-				c.isInstanceOf[KnownConn] || (c.isInstanceOf[PlayableConn] && c.reacting != state.ourPlayerIndex)
-			})
-		}
+			common.thoughts(focus).inferred.filter { inf =>
+				visibleFind(state, common, inf, infer = true, cond = (_, order) => order != focus).isEmpty &&
+				!(savePoss.exists(_.id == inf) || simplest.exists(_.id == inf))
+			}
+			.flatMap {
+				connect(ctx, _, looksDirect, thinksStall, findOwn = Some(state.ourPlayerIndex))
+			}
+		}.toList
 
-		common.thoughts(focus).inferred.filter { inf =>
-			visibleFind(state, common, inf, infer = true, cond = (_, order) => order != focus).isEmpty &&
-			!(savePoss.exists(_.id == inf) || focusPoss.exists(_.id == inf))
-		}
-		.flatMap {
-			connect(prev, game, action, _, focusResult, looksDirect, thinksStall, findOwn = true)
-		}
-	}.toList
-
-	val simplest = occamsRazor(matched ++ ownFps, state.ourPlayerIndex, game.me.thoughts(focus).id())
-	resolveClue(game, action, focusResult, simplest)
+		val simplestOwn = occamsRazor(simplest ++ ownFps, state.ourPlayerIndex, game.me.thoughts(focus).id())
+		resolveClue(ctx, simplestOwn)

@@ -235,7 +235,7 @@ extension (p: Player) {
 		val (newThoughts, resets) = elimCandidates.foldLeft((p.thoughts, List[Int]())) {
 			case ((thoughts, resets), order) => {
 				val thought = thoughts(order)
-				val newInferred = thought.inferred.retain(!trashIds.contains(_))
+				val newInferred = thought.inferred.difference(trashIds)
 				val reset = newInferred.isEmpty && !thought.reset
 
 				val newThought = if (reset)

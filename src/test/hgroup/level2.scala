@@ -1,7 +1,7 @@
 package tests.hgroup.level2
 
 import scala_bot.basics._
-import scala_bot.test.{Colour, hasInfs, Player, preClue, setup, takeTurn, TestClue}, Player._
+import scala_bot.test.{Colour, hasInfs, Player, setup, takeTurn}, Player._
 import scala_bot.hgroup.HGroup
 import scala_bot.logger.{Logger, LogLevel}
 
@@ -70,262 +70,199 @@ class Level2 extends munit.FunSuite:
 		hasInfs(game, Some(Alice), Alice, 1, Vector("r2"))
 	}
 
-	test("plays into self-finesses") {
+	test("doesn't self-prompt when a clue could be direct") {
 		val game = setup(HGroup.apply, Vector(
 			Vector("xx", "xx", "xx", "xx", "xx"),
-			Vector("g1", "p4", "b4", "b4", "y4")
+			Vector("g5", "b4", "r4", "r5", "g2"),
+			Vector("b2", "y3", "r4", "p2", "p3")
+		),
+			starting = Cathy,
+			init = _.copy(level = 2)
+		)
+		.pipe(takeTurn("Cathy clues blue to Alice (slots 4,5)"))
+		.pipe(takeTurn("Alice plays b1 (slot 5)"))
+		.pipe(takeTurn("Bob clues blue to Alice (slots 1,5)"))
+
+		// Alice's slot 1 should only be [b2,b3], not [b2,b3,b4].
+		hasInfs(game, Some(Alice), Alice, 1, Vector("b2", "b3"))
+	}
+
+	test("waits for a reverse finesse even when it could be direct") {
+		val game = setup(HGroup.apply, Vector(
+			Vector("xx", "xx", "xx", "xx", "xx"),
+			Vector("g1", "b2", "y4", "r3", "r5"),
+			Vector("g5", "y3", "r4", "p2", "r3")
+		),
+			starting = Cathy,
+			playStacks = Some(Vector(0, 2, 0, 0, 0)),
+			init = _.copy(level = 2)
+		)
+		.pipe(takeTurn("Cathy clues 3 to Alice (slot 2)"))
+
+		// While Alice's slot 2 could be y3, it could also be g3 (reverse finesse on Bob + self-finesse).
+		hasInfs(game, None, Alice, 2, Vector("y3", "g3"))
+	}
+
+	test("assumes direct play over a 'stomped' finesse involving a self-component") {
+		val game = setup(HGroup.apply, Vector(
+			Vector("xx", "xx", "xx", "xx"),
+			Vector("r5", "b2", "y4", "r3"),
+			Vector("g5", "y3", "r4", "p2"),
+			Vector("g1", "r3", "y2", "b3")
+		),
+			starting = Bob,
+			playStacks = Some(Vector(0, 2, 0, 0, 0)),
+			init = _.copy(level = 2)
+		)
+		.pipe(takeTurn("Bob clues 3 to Alice (slot 4)"))
+		.pipe(takeTurn("Cathy clues green to Donald"))
+
+		// Alice should assume the simpler explanation that she doesn't have to play g2.
+		hasInfs(game, None, Alice, 4, Vector("y3"))
+		assertEquals(game.meta(game.state.hands(Alice.ordinal)(0)).status, CardStatus.None)
+	}
+
+	test("allows connecting through multiple possibilities") {
+		val game = setup(HGroup.apply, Vector(
+			Vector("xx", "xx", "xx", "xx"),
+			Vector("g2", "b4", "g3", "r4"),
+			Vector("g4", "y3", "r4", "p2"),
+			Vector("g1", "g5", "y1", "b4")
 		),
 			starting = Bob,
 			init = _.copy(level = 2)
 		)
-		.pipe(takeTurn("Bob clues 2 to Alice (slot 1)"))
-		.tap { g =>
-			assertEquals(g.meta(g.state.hands(Alice.ordinal)(1)).status, CardStatus.Finessed)
-		}
-		.pipe(takeTurn("Alice plays g1 (slot 2)"))
+		.pipe(takeTurn("Bob clues 1 to Donald"))
+		.pipe(takeTurn("Cathy clues 3 to Bob"))
 
-		hasInfs(game, None, Alice, 2, Vector("g2"))
+		// There should be y2 -> y3 and g2 -> g3 waiting connections.
+		assert(game.waiting.exists(_.inference == Identity(Colour.Yellow.ordinal, 3)))
+		assert(game.waiting.exists(_.inference == Identity(Colour.Green.ordinal, 3)))
 	}
 
-	test("doesn't give bad self-finesses") {
-		val game = setup(HGroup.apply, Vector(
-			Vector("xx", "xx", "xx", "xx", "xx"),
-			Vector("g1", "p4", "b4", "b4", "y4"),
-			Vector("g3", "g2", "r4", "r4", "y4")
-		),
-			starting = Cathy,
-			playStacks = Some(Vector(2, 0, 0, 0, 0)),
-			init = _.copy(level = 2)
-		)
-		.pipe(takeTurn("Cathy clues green to Bob"))
-		.pipe(takeTurn("Alice clues 3 to Cathy"))
-
-		// This clue is illegal.
-		assertEquals(game.lastMove, Some(ClueInterp.Mistake))
-	}
-
-	test("interprets self-finesses when giver knows less") {
-		val game = setup(HGroup.apply, Vector(
-			Vector("xx", "xx", "xx", "xx", "xx"),
-			Vector("g3", "r1", "g4", "b1", "g3"),
-			Vector("g1", "g2", "r5", "y3", "p3")
-		),
-			init = _.copy(level = 2)
-		)
-		.pipe(takeTurn("Alice clues 1 to Bob"))
-		.pipe(takeTurn("Bob clues 2 to Cathy"))
-
-		// Cathy's slot 1 should be finessed.
-		assertEquals(game.meta(game.state.hands(Cathy.ordinal)(0)).status, CardStatus.Finessed)
-	}
-
-	test("interprets self-finesses when other possibilities are impossible") {
+	test("prefers not starting with self, even with known playables before") {
 		val game = setup(HGroup.apply, Vector(
 			Vector("xx", "xx", "xx", "xx"),
-			Vector("r3", "b4", "g4", "p1"),
-			Vector("b2", "b3", "p1", "g3"),
-			Vector("b5", "b2", "r4", "p5")
+			Vector("y3", "b2", "y4", "r3"),
+			Vector("g1", "y3", "r4", "p2"),
+			Vector("g2", "p4", "y5", "b4")
 		),
-			starting = Donald,
+			playStacks = Some(Vector(0, 2, 0, 0, 0)),
 			init = _.copy(level = 2)
 		)
-		.pipe(takeTurn("Donald clues purple to Alice (slot 2)"))	// p1 play
-		.pipe(takeTurn("Alice plays p1 (slot 2)"))
-		.pipe(takeTurn("Bob clues blue to Cathy"))					// b2 reverse on us
-		.pipe(takeTurn("Cathy clues 5 to Donald"))
+		.pipe(takeTurn("Alice clues green to Donald"))
+		.pipe(takeTurn("Bob clues 4 to Alice (slot 2)"))
+		.pipe(takeTurn("Cathy plays g1", "r1"))
+		.pipe(takeTurn("Donald plays g2", "b1"))
 
-		.pipe(takeTurn("Donald clues 4 to Bob"))					// connect b4
-		.pipe(takeTurn("Alice plays b1 (slot 1)"))					// b1, p1 now played
-		.pipe(takeTurn("Bob clues 2 to Alice (slot 3)"))			// neg purple, b2 is clued
+		hasInfs(game, None, Alice, 2, Vector("y4"))
 
-		// Alice's slot 1 should be finessed.
-		assertEquals(game.meta(game.state.hands(Alice.ordinal)(0)).status, CardStatus.Finessed)
-		hasInfs(game, None, Alice, 3, Vector("r2", "y2", "g2"))
+		// Alice's slot 1 is not playable (yet).
+		assert(game.common.thinksPlayables(game, Alice.ordinal).isEmpty)
 	}
 
-	test("doesn't give self-finesses that look like prompts") {
+	test("prefers not starting with self (symmetrically), even with known playables before") {
 		val game = setup(HGroup.apply, Vector(
-			Vector("xx", "xx", "xx", "xx", "xx"),
-			Vector("r3", "b4", "g4", "p1", "b2"),
-			Vector("y2", "b2", "r5", "y3", "r1")
+			Vector("xx", "xx", "xx", "xx"),
+			Vector("g2", "y2", "r4", "p2"),
+			Vector("g5", "p4", "y5", "y3"),
+			Vector("b2", "b2", "y4", "r3")
+		),
+			starting = Bob,
+			playStacks = Some(Vector(0, 2, 1, 0, 0)),
+			discarded = Vector("r3", "y3"),
+			init = _.copy(level = 2)
+		)
+		.pipe(takeTurn("Bob clues 3 to Cathy"))
+		.pipe(takeTurn("Cathy clues 5 to Alice (slot 4)"))
+		.pipe(takeTurn("Donald clues green to Bob"))
+		.pipe(takeTurn("Alice clues 4 to Donald"))
+
+		// g4 (g2 known -> g3 finesse, self) requires a self-component, compared to y3 (prompt) which does not.
+		hasInfs(game, None, Donald, 3, Vector("y4"))
+	}
+
+	test("includes the correct interpretation, even if it requires more blind plays") {
+		val game = setup(HGroup.apply, Vector(
+			Vector("xx", "xx", "xx", "xx"),
+			Vector("g2", "g3", "g4", "r3"),
+			Vector("g4", "y3", "r4", "p2"),
+			Vector("g1", "b4", "y5", "y2")
 		),
 			starting = Bob,
 			playStacks = Some(Vector(0, 1, 0, 0, 0)),
 			init = _.copy(level = 2)
 		)
-		.pipe(takeTurn("Bob clues red to Cathy"))
-		.pipe(takeTurn("Cathy plays r1", "y3"))
-		.pipe(takeTurn("Alice clues 3 to Cathy"))
+		.pipe(takeTurn("Bob clues 2 to Donald"))
+		.pipe(takeTurn("Cathy clues 4 to Bob"))
 
-		// This clue is illegal, since r5 will prompt as r2.
-		assertEquals(game.lastMove, Some(ClueInterp.Mistake))
+		// There should be y2 -> y3 and g2 -> g3 -> g4 waiting connections.
+		assert(game.waiting.exists(_.inference == Identity(Colour.Yellow.ordinal, 4)))
+		assert(game.waiting.exists(_.inference == Identity(Colour.Green.ordinal, 4)))
 	}
 
-	test("gives self-finesses that don't look like prompts") {
-		val game = setup(HGroup.apply, Vector(
-			Vector("xx", "xx", "xx", "xx", "xx"),
-			Vector("r3", "b3", "g1", "p1", "y2"),
-			Vector("g2", "b3", "p1", "g3", "b2")
-		),
-			playStacks = Some(Vector(2, 0, 0, 0, 0)),
-			init = _.copy(level = 2)
-		)
-		.pipe(takeTurn("Alice clues 3 to Bob"))
-		.pipe(takeTurn("Bob plays r3", "g3"))
-		.pipe(takeTurn("Cathy clues 5 to Alice (slot 5)"))
-
-		.pipe(takeTurn("Alice clues 3 to Bob"))
-
-		// g1 self-finesse, g2 finesse on Cathy
-		assertEquals(game.meta(game.state.hands(Bob.ordinal)(2)).status, CardStatus.Finessed)
-		assertEquals(game.meta(game.state.hands(Cathy.ordinal)(0)).status, CardStatus.Finessed)
-	}
-
-	test("doesn't give self-finesses that aren't the simplest interpretation") {
+	test("connects when a card plays early") {
 		val game = setup(HGroup.apply, Vector(
 			Vector("xx", "xx", "xx", "xx"),
-			Vector("g1", "p3", "r3", "g3"),
-			Vector("p3", "g5", "p4", "g2"),
-			Vector("b1", "b2", "p1", "g4")
+			Vector("p5", "y4", "r1", "b3"),
+			Vector("p1", "g5", "y3", "y1"),
+			Vector("g1", "p2", "y1", "b5")
 		),
 			starting = Donald,
 			init = _.copy(level = 2)
 		)
-		.pipe(takeTurn("Donald clues 2 to Cathy"))
-		.pipe(takeTurn("Alice clues 3 to Bob"))
+		.pipe(takeTurn("Donald clues 2 to Alice (slot 4)"))
+		.pipe(takeTurn("Alice clues 1 to Donald"))
+		.pipe(takeTurn("Bob clues 3 to Cathy"))
+		.pipe(takeTurn("Cathy clues 5 to Donald"))
 
-		// This clue is illegal, since the focus will look like b3.
-		assertEquals(game.lastMove, Some(ClueInterp.Mistake))
+		.pipe(takeTurn("Donald plays y1", "r4"))
+
+		// Note at level 5, Alice can't play y2 since it could be a hidden finesse.
+		.pipe(takeTurn("Alice plays y2 (slot 4)"))
+
+		hasInfs(game, None, Cathy, 3, Vector("y3"))
 	}
 
-	test("maintains a self-finesse even as inferences are reduced") {
-		val game = setup(HGroup.apply, Vector(
-			Vector("xx", "xx", "xx", "xx"),
-			Vector("y1", "b4", "b1", "g1"),
-			Vector("r1", "r3", "r1", "b4"),
-			Vector("y1", "r4", "p3", "g1")
-		),
-			init = _.copy(level = 2)
-		)
-		.pipe(takeTurn("Alice clues 1 to Bob"))
-		.pipe(takeTurn("Bob plays y1", "p4"))
-		.pipe(takeTurn("Cathy clues 3 to Alice (slot 2)"))
-		.tap { g =>
-			// All of these are valid self-finesses.
-			hasInfs(g, None, Alice, 1, Vector("y2", "g2", "b2"))
-			assertEquals(g.meta(g.state.hands(Alice.ordinal)(0)).status, CardStatus.Finessed)
-		}
-		.pipe(takeTurn("Donald clues green to Alice (slot 4)"))
-
-		// After knowing we have g2 in slot 4, the finesse should still be on.
-		hasInfs(game, None, Alice, 4, Vector("g2"))
-		hasInfs(game, None, Alice, 1, Vector("y2", "b2"))
-		assertEquals(game.meta(game.state.hands(Alice.ordinal)(0)).status, CardStatus.Finessed)
-	}
-
-	// test("prefers the simplest connection even when needing to self-finesse") {
-	// 	val game = setup(HGroup.apply, Vector(
-	// 		Vector("xx", "xx", "xx", "xx"),
-	// 		Vector("b1", "r3", "y3", "g4"),
-	// 		Vector("p3", "g5", "p4", "g3"),
-	// 		Vector("p1", "b4", "g1", "b2")
-	// 	),
-	// 		starting = Cathy,
-	// 		playStacks = Some(Vector(0, 2, 1, 0, 1)),
-	// 		init =
-	// 			preClue[HGroup](Bob, 3, Vector(TestClue(ClueKind.Colour, Colour.Yellow.ordinal, Cathy))) andThen
-	// 			preClue(Donald, 4, Vector(TestClue(ClueKind.Rank, 2, Cathy))) andThen
-	// 			(_.copy(level = 2))
-	// 	)
-	// 	.pipe(takeTurn("Cathy clues 4 to Alice (slot 1)"))
-	// }
-
-	test("understands asymmetric self-finesses") {
-		val game = setup(HGroup.apply, Vector(
-			Vector("xx", "xx", "xx", "xx"),
-			Vector("r3", "r5", "y3", "g4"),
-			Vector("r4", "b5", "p4", "g3"),
-			Vector("p1", "b4", "g1", "b2")
-		),
-			starting = Cathy,
-			playStacks = Some(Vector(2, 0, 0, 4, 0)),
-			init = _.copy(level = 2)
-		)
-		.pipe(takeTurn("Cathy clues 5 to Bob"))
-		.pipe(takeTurn("Donald clues 5 to Bob"))
-
-		// Donald, Bob and Alice can see b5, so we all know this is an r5 finesse.
-		hasInfs(game, None, Bob, 2, Vector("r5"))
-		assertEquals(game.meta(game.state.hands(Bob.ordinal)(0)).status, CardStatus.Finessed)
-	}
-
-	test("realizes a self-finesse after other possibilities are stomped") {
-		val game = setup(HGroup.apply, Vector(
-			Vector("xx", "xx", "xx", "xx"),
-			Vector("y4", "r5", "y3", "g4"),
-			Vector("r2", "g4", "p1", "g1"),
-			Vector("r3", "b4", "g1", "b2")
-		),
-			starting = Donald,
-			playStacks = Some(Vector(1, 1, 0, 0, 0)),
-			init =
-				preClue[HGroup](Cathy, 3, Vector(TestClue(ClueKind.Rank, 1, Bob))) andThen
-				preClue[HGroup](Cathy, 4, Vector(TestClue(ClueKind.Rank, 1, Bob))) andThen
-				(g => g.copy(level = 2))
-		)
-		.pipe(takeTurn("Donald clues 4 to Alice (slot 3)"))		// could be r,g,p
-		.pipe(takeTurn("Alice discards y3 (slot 4)"))
-		.pipe(takeTurn("Bob clues red to Donald"))				// finessing r2, proving !r
-
-		hasInfs(game, None, Alice, 4, Vector("y4", "g4", "p4"))
-		assertEquals(game.meta(game.state.hands(Alice.ordinal)(2)).status, CardStatus.Finessed)
-	}
-
-	test("understands a very delayed finesse") {
-		val game = setup(HGroup.apply, Vector(
-			Vector("xx", "xx", "xx", "xx"),
-			Vector("p4", "y4", "g1", "r4"),
-			Vector("b1", "g1", "y2", "y2"),
-			Vector("b3", "y1", "p1", "p3")
-		),
-			init = _.copy(level = 2)
-		)
-		.pipe(takeTurn("Alice clues 1 to Cathy"))
-		.pipe(takeTurn("Bob clues 3 to Alice (slot 4)"))
-		.pipe(takeTurn("Cathy plays g1", "y5"))
-		.pipe(takeTurn("Donald clues yellow to Bob"))
-
-		.pipe(takeTurn("Alice clues 5 to Cathy"))			// 5 Stall
-		.pipe(takeTurn("Bob clues red to Alice (slot 3)"))
-		.pipe(takeTurn("Cathy plays b1", "g2"))
-		.pipe(takeTurn("Donald clues 5 to Alice (slot 2)"))
-
-		.pipe(takeTurn("Alice plays y1 (slot 1)"))
-
-		// The finesse is revealed to be yellow.
-		hasInfs(game, None, Alice, 4, Vector("y3"))
-	}
-
-	test("understands a fake self-finesse") {
+	test("connects to a finesse after a fake finesse was just disproven") {
 		val game = setup(HGroup.apply, Vector(
 			Vector("xx", "xx", "xx", "xx", "xx"),
-			Vector("y2", "y5", "b4", "y3", "r1"),
-			Vector("r4", "g5", "p4", "g3", "b5")
+			Vector("b2", "y4", "r1", "b3", "y1"),
+			Vector("g1", "y3", "p4", "y1", "b5")
 		),
 			starting = Cathy,
-			playStacks = Some(Vector(0, 1, 1, 0, 0)),
-			init =
-				preClue[HGroup](Bob, 5, Vector(TestClue(ClueKind.Rank, 1, Alice))) andThen
-				(g => g.copy(level = 2))
+			playStacks = Some(Vector(2, 1, 1, 1, 2)),
+			init = _.copy(level = 2)
 		)
-		.pipe(takeTurn("Cathy clues 3 to Bob"))
-		.tap { g =>
-			hasInfs(g, None, Bob, 4, Vector("r3", "y3", "g3"))
+		.pipe(takeTurn("Cathy clues 3 to Alice (slots 2,5)"))
+		.tap {
+			hasInfs(_, None, Alice, 5, Vector("r3", "b3", "p3"))
 		}
 		.pipe(takeTurn("Alice clues 5 to Cathy"))
-		.pipe(takeTurn("Bob plays r1", "b3"))
+		.pipe(takeTurn("Bob clues purple to Cathy"))
 
-		// Bob needs to play r1 first to respect r3. We should not be finessed.
-		assertEquals(game.meta(game.state.hands(Alice.ordinal)(0)).status, CardStatus.None)
-		hasInfs(game, None, Bob, 5, Vector("r3", "y3", "g3"))
+		// Alice's slot 2 can be any 3 (not prompted to be p3).
+		hasInfs(game, None, Alice, 5, Vector("p3"))
+		hasInfs(game, None, Alice, 2, Vector("r3", "y3", "g3", "b3", "p3"))
+	}
+
+	test("doesn't consider already-finessed possibilities".only) {
+		val game = setup(HGroup.apply, Vector(
+			Vector("xx", "xx", "xx", "xx"),
+			Vector("r2", "y4", "r1", "b5"),
+			Vector("r3", "y3", "p4", "y1"),
+			Vector("y1", "b3", "b2", "r4"),
+			Vector("p4", "p1", "r1", "y2")
+		),
+			starting = Donald,
+			playStacks = Some(Vector(0, 1, 1, 0, 0)),
+			init = _.copy(level = 2)
+		)
+		.pipe(takeTurn("Donald clues red to Emily"))	// known r1
+		.pipe(takeTurn("Emily clues red to Donald"))	// r4 double finesse
+		.pipe(takeTurn("Alice clues 5 to Bob"))
+		.pipe(takeTurn("Bob clues 2 to Alice (slot 2)"))
+
+		// Alice's slot 2 shouldn't be r2.
+		hasInfs(game, None, Alice, 2, Vector("y2", "g2"))
 	}

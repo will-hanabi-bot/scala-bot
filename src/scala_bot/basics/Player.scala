@@ -131,7 +131,7 @@ case class Player(
 				thought.infoLock.exists(_.forall(state.isPlayable))
 		}
 
-	def orderPlayable(game: Game, order: Int) =
+	def orderPlayable(game: Game, order: Int, excludeTrash: Boolean = false) =
 		val state = game.state
 		lazy val unsafeLink = links.exists(link =>
 			link.getOrders.contains(order) && link.getOrders.max != order)
@@ -146,13 +146,14 @@ case class Player(
 				game.meta(order).status != CardStatus.CalledToDiscard
 
 			val poss = if (infer) thoughts(order).possibilities else thoughts(order).possible
-			poss.forall(state.isPlayable)
+			poss.forall(i => state.isPlayable(i) || (excludeTrash && state.isBasicTrash(i)))
 
 	def obviousPlayables(game: Game, playerIndex: Int) =
 		game.state.hands(playerIndex).filter(orderKp(game, _))
 
 	def thinksPlayables(game: Game, playerIndex: Int) =
-		game.state.hands(playerIndex).filter(orderPlayable(game, _))
+		val raw = game.state.hands(playerIndex).filter(orderPlayable(game, _))
+		game.filterPlayables(this, playerIndex, raw)
 
 	def thinksTrash(game: Game, playerIndex: Int) =
 		game.state.hands(playerIndex).filter(orderTrash(game, _))

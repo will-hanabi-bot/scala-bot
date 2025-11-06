@@ -22,17 +22,11 @@ case class Identity(suitIndex: Int, rank: Int) extends Identifiable:
 	inline def toOrd: Int =
 		suitIndex * 5 + (rank - 1)
 
-	def prev: Identity =
-		if (rank == 1)
-			throw new Error(s"Tried to get prev of $this!")
+	def prev: Option[Identity] =
+		Option.when(rank > 1)(Identity(suitIndex, rank - 1))
 
-		Identity(suitIndex, rank - 1)
-
-	def next: Identity =
-		if (rank == 5)
-			throw new Error(s"Tried to get next of $this!")
-
-		Identity(suitIndex, rank + 1)
+	def next: Option[Identity] =
+		Option.when(rank < 5)(Identity(suitIndex, rank + 1))
 
 object Identity {
 	inline def fromOrd(ord: Int): Identity =

@@ -45,10 +45,11 @@ def stallSeverity(game: HGroup, player: Player, giver: Int, infoPlayer: Option[P
 	else
 		0
 
-def isStall(prev: HGroup, game: HGroup, action: ClueAction, focusResult: FocusResult, severity: Int): Option[StallInterp] =
-	val state = game.state
+def isStall(ctx: ClueContext, severity: Int): Option[StallInterp] =
+	val ClueContext(prev, game, action) = ctx
+	val state = ctx.state
 	val ClueAction(_, target, list, clue) = action
-	val FocusResult(focus, chop, _) = focusResult
+	val FocusResult(focus, chop, _) = ctx.focusResult
 
 	val focusNew = !prev.state.deck(focus).clued
 	val reclue = list.forall(prev.state.deck(_).clued)
@@ -146,13 +147,14 @@ def alternativeClue(prev: HGroup, game: HGroup, giver: Int, maxStall: Int, origC
 		seenBy)
 	.foldLeft(Set[Int]())(_ ++ _)
 
-def stallingSituation(prev: HGroup, game: HGroup, action: ClueAction, focusResult: FocusResult): Option[(StallInterp, Set[Int])] =
-	val ClueAction(giver, target, list, clue) = action
-	val severity = stallSeverity(prev, prev.common, giver, infoPlayer = Some(game.common))
+def stallingSituation(ctx: ClueContext): Option[(StallInterp, Set[Int])] =
+	val ClueContext(prev, game, action) = ctx
+	val ClueAction(giver, target, list, clue) = ctx.action
+	val severity = stallSeverity(ctx.prev, ctx.prev.common, giver, infoPlayer = Some(ctx.game.common))
 
 	Log.info(s"severity $severity")
 
-	isStall(prev, game, action, focusResult, severity).flatMap { stall =>
+	isStall(ctx, severity).flatMap { stall =>
 		val giverLoaded = prev.common.thinksPlayables(prev, giver).nonEmpty ||
 			(prev.common.thinksTrash(prev, giver).nonEmpty && prev.state.clueTokens < 8)
 

@@ -325,7 +325,7 @@ def targetPlay(game: Reactor, action: ClueAction, target: Int, urgent: Boolean =
 		possibleConns.find(_._2 == id).foreach { (connOrder, _) =>
 			newCommon = newCommon.withThought(connOrder)(_.copy(
 				oldInferred = Some(newCommon.thoughts(connOrder).inferred),
-				inferred = IdentitySet.single(id.prev)
+				inferred = IdentitySet.single(id.prev.get)
 			))
 			val meta = newMeta(connOrder)
 			newMeta = newMeta.updated(connOrder, meta.copy(
@@ -334,7 +334,7 @@ def targetPlay(game: Reactor, action: ClueAction, target: Int, urgent: Boolean =
 				by = Some(action.giver))
 			.reason(state.turnCount))
 
-			Log.info(s"updating connecting $connOrder as ${state.logId(id.prev)} to be urgent")
+			Log.info(s"updating connecting $connOrder as ${state.logId(id.prev.get)} to be urgent")
 		}
 	}
 

@@ -4,6 +4,8 @@ import scala_bot.basics._
 import scala_bot.basics.given_Conversion_IdentitySet_Iterable
 import scala_bot.logger.Log
 
+import scala.util.chaining.scalaUtilChainingOps
+
 enum UpdateResult:
 	case Remove
 	case Complete
@@ -12,20 +14,9 @@ enum UpdateResult:
 	case Demonstrated(order: Int, id: Identity, nextIndex: Option[Int], skipped: Boolean = false)
 	case AmbiguousPassback
 
-def stompedWc(game: HGroup, wc: WaitingConnection, lastPlayerIndex: Int) =
-	game.lastActions(lastPlayerIndex).exists {
+def stompedWc(prev: HGroup, game: HGroup, action: Action, wc: WaitingConnection) =
+	action match {
 		case action @ ClueAction(giver, target, list, clue) =>
-			// Reconstruct previous game
-			val prev = game.withState { s => s.copy(
-				deck = list.foldLeft(s.deck) { (acc, o) =>
-					val clues = acc(o).clues
-					if (clues.length == 1 && clues.head.turn == s.turnCount - 1)
-						acc.updated(o, acc(o).copy(clued = false, clues = Nil))
-					else
-						acc
-				})
-			}
-
 			val focus = game.determineFocus(prev, action).focus
 
 			wc.connections.exists { conn =>
@@ -35,11 +26,115 @@ def stompedWc(game: HGroup, wc: WaitingConnection, lastPlayerIndex: Int) =
 		case _ => false
 	}
 
-def updateWc(game: HGroup, wc: WaitingConnection, lastPlayerIndex: Int): UpdateResult =
+def unplayableAlt(game: HGroup, action: Action, wc: WaitingConnection) =
+	val (order, reacting) = (wc.currConn.order, wc.currConn.reacting)
+
+	game.waiting.find { w =>
+		w != wc && w.focus == wc.focus &&
+		// We can't defer if we know that this finesse is symmetric
+		!(w.symmetric && reacting == game.state.ourPlayerIndex) &&
+		// We can only allow a defer if the reacting player has to wait for someone else, or they already tried to play
+		(w.currConn.reacting != reacting || action.isInstanceOf[PlayAction]) &&
+		w.connections.exists { conn =>
+			conn.order == order &&
+			conn.ids.exists { i =>
+				!game.state.isPlayable(i) ||
+				(action match {
+					case PlayAction(_, _, suitIndex, rank) => i.prev.contains(Identity(suitIndex, rank))
+					case _ => false
+				})
+			}
+		}
+	}
+
+private def revert(g: HGroup, order: Int, ids: List[Identity], warn: Boolean = true) =
+	// println(s"reverting conn ${g.state.logConn(conn)}")
+	val newInferred = g.common.thoughts(order).inferred.difference(ids)
+
+	if (newInferred.isEmpty)
+		g.withThought(order) { t =>
+			t.copy(
+				inferred = t.oldInferred.map(_.intersect(t.possible)).getOrElse {
+					if (warn)
+						Log.error(s"no old inferences on ${order}!")
+					t.possible
+				},
+				oldInferred = None
+			)
+		}
+		.withMeta(order)(_.copy(status = CardStatus.None))
+	else
+		g.withThought(order)(_.copy(inferred = newInferred))
+
+def refreshWCs(prev: HGroup, game: HGroup, action: Action): HGroup =
+	val initial = (
+		game.copy(waiting = Nil),
+		List[WaitingConnection](),
+		Map[Int, IdentitySet]()
+	)
+	game.waiting.foldRight(initial) { case (wc, (newGame, newWCs, demos)) =>
+		updateWc(prev, game, action, wc) match {
+			case UpdateResult.Keep =>
+				(newGame, wc +: newWCs, demos)
+
+			case UpdateResult.Advance(nextIndex, skipped) => (
+				if (skipped)
+					(0 until nextIndex).map(wc.connections)
+						.foldLeft(newGame)((a, c) => revert(a, c.order, c.ids))
+				else
+					newGame,
+				wc.copy(connections = wc.connections.drop(nextIndex)) +: newWCs,
+				demos
+			)
+			case UpdateResult.AmbiguousPassback => (
+				newGame,
+				wc.copy(ambiguousPassback = true) +: newWCs,
+				demos
+			)
+			case UpdateResult.Demonstrated(order, id, nextIndex, skipped) => (
+				if (skipped)
+					(0 until nextIndex.getOrElse(wc.connections.length))
+						.map(wc.connections).foldLeft(newGame)((a, c) => revert(a, c.order, c.ids))
+				else
+					newGame,
+				nextIndex match {
+					case Some(i) => wc.copy(connections = wc.connections.drop(i)) +: newWCs
+					case None => newWCs
+				},
+				demos + (order -> (demos.getOrElse(order, IdentitySet.empty).union(id)))
+			)
+			case UpdateResult.Remove => (
+				wc.connections.foldLeft(newGame)((a, c) => revert(a, c.order, c.ids))
+					.pipe(revert(_, wc.focus, List(wc.inference), warn = false)),
+				newWCs,
+				demos
+			)
+			case UpdateResult.Complete => (newGame, newWCs, demos)
+		}
+	}
+	.pipe { (newGame, newWCs, demos) => (
+		demos.foldLeft(newGame) { case (acc, (order, ids)) =>
+			acc.withThought(order) { t =>
+				val newInferred = t.inferred.intersect(ids)
+				t.copy(
+					inferred = newInferred,
+					infoLock = Some(newInferred)
+				)
+			}
+			.withXMeta(order)(_.copy(maybeFinessed = false))
+		},
+		newWCs.filterNot { wc =>
+			demos.get(wc.focus).exists(d => d.contains(wc.inference))
+		})
+	}
+	.pipe((newGame, newWCs) => newGame.copy(waiting = newWCs))
+	.elim(goodTouch = true)
+
+def updateWc(prev: HGroup, game: HGroup, action: Action, wc: WaitingConnection): UpdateResult =
 	val state = game.state
 	val reacting = wc.currConn.reacting
 
-	Log.info(s"waiting for connecting ${wc.currConn.ids.map(state.logId).mkString(",")} ${wc.currConn.kind} for ${state.logId(wc.inference)}")
+	Log.info(s"waiting for connecting ${wc.currConn.ids.map(state.logId).mkString(",")} (${wc.currConn.order}) ${wc.currConn.kind} for ${state.logId(wc.inference)}")
 
 	val impossibleConn = wc.connections.find { conn =>
 		game.common.thoughts(conn.order).possible.intersect(conn.ids).isEmpty
@@ -47,6 +142,8 @@ def updateWc(game: HGroup, wc: WaitingConnection, lastPlayerIndex: Int): UpdateR
 
 	lazy val impossibleFocus = wc.connections.headOption.forall(!_.isInstanceOf[PositionalConn]) &&
 		!game.common.thoughts(wc.focus).possible.contains(wc.inference)
+
+	lazy val altWc = unplayableAlt(game, action, wc)
 
 	if (impossibleConn.isDefined)
 		val c = impossibleConn.get
@@ -57,21 +154,25 @@ def updateWc(game: HGroup, wc: WaitingConnection, lastPlayerIndex: Int): UpdateR
 		Log.warn(s"connection depends on focus ${wc.focus} having id ${state.logId(wc.inference)}, removing")
 		UpdateResult.Remove
 
-	else if (stompedWc(game, wc, lastPlayerIndex))
+	else if (stompedWc(prev, game, action, wc))
 		Log.warn(s"connection was clued directly, cancelling")
 		UpdateResult.Remove
 
-	else if (otherPlay(game, wc, lastPlayerIndex))
-		Log.highlight(Console.CYAN, s"${state.names(lastPlayerIndex)} played connecting card, continuing")
+	else if (otherPlay(game, action, wc))
+		Log.highlight(Console.CYAN, s"${state.names(action.playerIndex)} played connecting card, continuing")
 		resolveOtherPlay(game, wc)
 
-	// After the turn we were waiting for
-	else if (lastPlayerIndex == reacting)
+	else if (altWc.isDefined)
+		Log.highlight(Console.CYAN, s"not all possibilities playable ${game.state.logConns(altWc.get.connections)}, waiting")
+		UpdateResult.Keep
+
+	// The turn we were waiting for
+	else if (action.playerIndex == reacting)
 		if (state.hands(reacting).contains(wc.currConn.order))
-			resolveRetained(game, wc)
+			resolveRetained(game, action, wc)
 		else
-			game.lastActions(reacting) match {
-				case Some(PlayAction(_, order, _, _)) =>
+			action match {
+				case PlayAction(_, order, _, _) =>
 					resolvePlayed(game, wc, order)
 				case _ =>
 					Log.highlight(Console.YELLOW, s"waiting card ${state.logId(wc.currConn.order)} discarded??")
@@ -81,16 +182,16 @@ def updateWc(game: HGroup, wc: WaitingConnection, lastPlayerIndex: Int): UpdateR
 	else
 		UpdateResult.Keep
 
-def otherPlay(game: HGroup, wc: WaitingConnection, lastPlayerIndex: Int) =
+def otherPlay(game: HGroup, action: Action, wc: WaitingConnection) =
 	val thought = game.me.thoughts(wc.currConn.order)
 
 	// The card needs to match our thoughts as well as the hypothesized identity in the connection
-	game.lastActions(lastPlayerIndex).exists {
+	(action match {
 		case PlayAction(_, order, suitIndex, rank) =>
 			order != wc.currConn.order &&
 			thought.matches(Identity(suitIndex, rank), infer = true)
 		case _ => false
-	} &&
+	}) &&
 	// currConn.ids.length == 1 &&
 	// thought.matches(currConn.ids.head, infer = true) &&
 	!wc.currConn.hidden	// Don't advance if the real connection is layered, because that player won't skip
@@ -106,7 +207,7 @@ def resolveOtherPlay(game: HGroup, wc: WaitingConnection) =
 		}
 
 
-def resolveRetained(game: HGroup, wc: WaitingConnection): UpdateResult =
+def resolveRetained(game: HGroup, action: Action, wc: WaitingConnection): UpdateResult =
 	val state = game.state
 	val (reacting, connOrder) = (wc.currConn.reacting, wc.currConn.order)
 	val name = state.names(reacting)
@@ -120,7 +221,7 @@ def resolveRetained(game: HGroup, wc: WaitingConnection): UpdateResult =
 		}
 	}
 
-	val unplayableIds = game.common.thoughts(connOrder).inferred.filter { i =>
+	val unplayableIds = wc.currConn.ids.filter { i =>
 		!state.isBasicTrash(i) && !state.isPlayable(i)
 	}
 
@@ -164,7 +265,7 @@ def resolveRetained(game: HGroup, wc: WaitingConnection): UpdateResult =
 		Log.info(s"allowing $name to clue, need to wait for unplayable older finesse")
 		return UpdateResult.Keep
 
-	game.lastActions(reacting).get match {
+	action match {
 		case _: ClueAction =>
 			if (wc.currConn.isInstanceOf[PromptConn] && game.lastMove.exists(m => m != ClueInterp.Mistake && m != ClueInterp.Stall))
 				Log.info(s"allowing $name to defer a prompt by giving a useful clue")
@@ -179,7 +280,7 @@ def resolveRetained(game: HGroup, wc: WaitingConnection): UpdateResult =
 
 		case PlayAction(_, order, _, _) =>
 			if (wc.currConn.isInstanceOf[FinesseConn] && game.isBlindPlaying(order))
-				if (order < connOrder)
+				if (game.xmeta(order).turnFinessed.get < game.xmeta(connOrder).turnFinessed.get)
 					Log.info(s"$name played into older finesse, continuing to wait")
 					return UpdateResult.Keep
 
@@ -213,7 +314,7 @@ def resolveRetained(game: HGroup, wc: WaitingConnection): UpdateResult =
 		Log.info(s"$name didn't play into ${wc.currConn.kind} but they need to play multiple non-hidden cards, passing back")
 		return UpdateResult.AmbiguousPassback
 
-	Log.highlight(Console.CYAN, s"$name discarded with a waiting connection, removing ${state.logId(wc.inference)}")
+	Log.highlight(Console.CYAN, s"$name didn't react with a waiting connection, removing ${state.logId(wc.inference)}")
 	UpdateResult.Remove
 
 def resolvePlayed(game: HGroup, wc: WaitingConnection, play: Int): UpdateResult =

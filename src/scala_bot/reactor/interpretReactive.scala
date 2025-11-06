@@ -221,7 +221,7 @@ def interpretReactiveRank(prev: Reactor, game: Reactor, action: ClueAction, focu
 				val prevPlays = prev.common.obviousPlayables(prev, reacter)
 
 				lazy val unplayable = !game.common.thoughts(reactOrder).possible.exists(i => state.isPlayable(i) || possibleConns.exists(_._2 == i)) ||
-					!game.common.thoughts(reactOrder).possible.contains(state.deck(receiveOrder).id().get.prev)
+					!game.common.thoughts(reactOrder).possible.contains(state.deck(receiveOrder).id().get.prev.get)
 
 				if (prevPlays.contains(reactOrder))
 					Log.warn(s"attempted finesse would result in reacter naturally playing ${state.logId(reactOrder)} $reactOrder!")
@@ -238,7 +238,7 @@ def interpretReactiveRank(prev: Reactor, game: Reactor, action: ClueAction, focu
 						case None => Some(None, newGame)
 						case Some(_) =>
 							val newGame2 = newGame.withThought(reactOrder) { t =>
-								t.copy(inferred = IdentitySet.single(state.deck(receiveOrder).id().get.prev))
+								t.copy(inferred = IdentitySet.single(state.deck(receiveOrder).id().get.prev.get))
 							}
 
 							Log.info(s"reactive finesse, reacter ${state.names(reacter)} (slot ${reactSlot}) receiver ${state.names(receiver)} (slot ${targetSlot}), focus slot ${focusSlot}")

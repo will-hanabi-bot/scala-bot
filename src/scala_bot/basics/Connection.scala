@@ -52,7 +52,6 @@ case class FinesseConn(
 	reacting: Int,
 	order: Int,
 	ids: List[Identity],
-	self: Boolean = false,
 	hidden: Boolean = false,
 	bluff: Boolean = false,
 	possiblyBluff: Boolean = false,
@@ -76,6 +75,7 @@ case class FocusPossibility(
 	id: Identity,
 	connections: List[Connection],
 	interp: Interp,
+	symmetric: Boolean = false,
 	save: Boolean = false,
 	illegal: Boolean = false
 ):

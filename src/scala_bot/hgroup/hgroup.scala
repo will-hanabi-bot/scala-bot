@@ -4,7 +4,7 @@ import scala_bot.basics._
 import scala_bot.basics.given_Conversion_IdentitySet_Iterable
 // import scala_bot.endgame.EndgameSolver
 import scala_bot.utils._
-import scala_bot.logger.{Log, Logger, LogLevel}
+import scala_bot.logger.{Logger, LogLevel}
 
 import scala.util.chaining.scalaUtilChainingOps
 
@@ -71,6 +71,9 @@ case class HGroup(
 	lastActions: Vector[Option[Action]] = Vector(),
 	xmeta: Vector[XConvData] = Vector()
 ) extends Game:
+	override def filterPlayables(player: Player, _playerIndex: Int, orders: Vector[Int]): Vector[Int] =
+		orders.filter(o => player.orderKp(this, o) || !xmeta(o).maybeFinessed)
+
 	def withXMeta(order: Int)(f: XConvData => XConvData) =
 		copy(xmeta = xmeta.updated(order, f(xmeta(order))))
 
@@ -133,7 +136,11 @@ case class HGroup(
 				thought.possible.exists(!state.isPlayable(_))
 
 			def connecting(playerIndex: Int, id: Identity) =
-				state.hands(playerIndex).exists(this.me.thoughts(_).matches(id.next, infer = true))
+				state.hands(playerIndex).exists { o =>
+					id.next.exists { i =>
+						this.me.thoughts(o).matches(i, infer = true)
+					}
+				}
 
 			lazy val connectsTo = (0 until state.numPlayers).filter { playerIndex =>
 				thought.possibilities.exists(i => connecting(playerIndex, i))
@@ -265,25 +272,6 @@ object HGroup:
 	def apply(tableID: Int, state: State, inProgress: Boolean) =
 		init(tableID, state, inProgress, genPlayers(state))
 
-	private def revert(g: HGroup, order: Int, ids: List[Identity], warn: Boolean = true) =
-		// println(s"reverting conn ${g.state.logConn(conn)}")
-		val newInferred = g.common.thoughts(order).inferred.difference(ids)
-
-		if (newInferred.isEmpty)
-			g.withThought(order) { t =>
-				t.copy(
-					inferred = t.oldInferred.map(_.intersect(t.possible)).getOrElse {
-						if (warn)
-							Log.error(s"no old inferences on ${order}!")
-						t.possible
-					},
-					oldInferred = None
-				)
-			}
-			.withMeta(order)(_.copy(status = CardStatus.None))
-		else
-			g.withThought(order)(_.copy(inferred = newInferred))
-
 	given GameOps[HGroup] with
 		def copyWith(game: HGroup, updates: GameUpdates) =
 			val meta = updates.meta.getOrElse(game.meta)
@@ -338,89 +326,29 @@ object HGroup:
 			)
 
 		def interpretClue(prev: HGroup, game: HGroup, action: ClueAction): HGroup =
-			interpClue(prev, game, action)
+			refreshWCs(prev, game, action)
+				.pipe(g => interpClue(ClueContext(prev, g, action)))
 				.pipe { g =>
 					g.copy(lastActions = g.lastActions.updated(action.playerIndex, Some(action)))
 				}
 
 		def interpretDiscard(prev: HGroup, game: HGroup, action: DiscardAction): HGroup =
-			game.pipe { g =>
-				g.copy(lastActions = g.lastActions.updated(action.playerIndex, Some(action)))
-			}
+			refreshWCs(prev, game, action)
+				.pipe { g =>
+					g.copy(lastActions = g.lastActions.updated(action.playerIndex, Some(action)))
+				}
 
 		def interpretPlay(prev: HGroup, game: HGroup, action: PlayAction): HGroup =
-			game.pipe { g =>
-				g.copy(lastActions = g.lastActions.updated(action.playerIndex, Some(action)))
-			}
+			refreshWCs(prev, game, action)
+				.pipe { g =>
+					g.copy(lastActions = g.lastActions.updated(action.playerIndex, Some(action)))
+				}
 
 		def takeAction(game: HGroup): PerformAction =
 			???
 
-		def updateTurn(game: HGroup, action: TurnAction): HGroup =
-			val lastPlayerIndex = game.state.lastPlayerIndex(action.currentPlayerIndex)
-
-			val initial = (
-				game.copy(waiting = Nil),
-				List[WaitingConnection](),
-				Map[Int, IdentitySet]()
-			)
-			game.waiting.foldRight(initial) { case (wc, (newGame, newWCs, demos)) =>
-				updateWc(game, wc, lastPlayerIndex) match {
-					case UpdateResult.Keep =>
-						(newGame, wc +: newWCs, demos)
-
-					case UpdateResult.Advance(nextIndex, skipped) => (
-						if (skipped)
-							(0 until nextIndex).map(wc.connections)
-								.foldLeft(newGame)((a, c) => revert(a, c.order, c.ids))
-						else
-							newGame,
-						wc.copy(connections = wc.connections.drop(nextIndex)) +: newWCs,
-						demos
-					)
-					case UpdateResult.AmbiguousPassback => (
-						newGame,
-						wc.copy(ambiguousPassback = true) +: newWCs,
-						demos
-					)
-					case UpdateResult.Demonstrated(order, id, nextIndex, skipped) => (
-						if (skipped)
-							(0 until nextIndex.getOrElse(wc.connections.length))
-								.map(wc.connections).foldLeft(newGame)((a, c) => revert(a, c.order, c.ids))
-						else
-							newGame,
-						nextIndex match {
-							case Some(i) => wc.copy(connections = wc.connections.drop(i)) +: newWCs
-							case None => newWCs
-						},
-						demos + (order -> (demos.getOrElse(order, IdentitySet.empty).union(id)))
-					)
-					case UpdateResult.Remove => (
-						wc.connections.foldLeft(newGame)((a, c) => revert(a, c.order, c.ids))
-							.pipe(revert(_, wc.focus, List(wc.inference), warn = false)),
-						newWCs,
-						demos
-					)
-					case UpdateResult.Complete => (newGame, newWCs, demos)
-				}
-			}
-			.pipe { (newGame, newWCs, demos) => (
-				demos.foldLeft(newGame) { case (acc, (order, ids)) =>
-					acc.withThought(order) { t =>
-						val newInferred = t.inferred.intersect(ids)
-						t.copy(
-							inferred = newInferred,
-							infoLock = Some(newInferred)
-						)
-					}
-					.withXMeta(order)(_.copy(maybeFinessed = false))
-				},
-				newWCs.filterNot { wc =>
-					demos.get(wc.focus).exists(d => d.contains(wc.inference))
-				})
-			}
-			.pipe((newGame, newWCs) => newGame.copy(waiting = newWCs))
-			.elim(goodTouch = true)
+		def updateTurn(game: HGroup, action: TurnAction) =
+			game
 
 		def findAllClues(game: HGroup, giver: Int): List[PerformAction] =
 			val state = game.state

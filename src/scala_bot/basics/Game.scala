@@ -70,6 +70,9 @@ trait Game:
 
 	def goodTouch: Boolean
 
+	def filterPlayables(_player: Player, _playerIndex: Int, orders: Vector[Int]): Vector[Int] =
+		orders
+
 trait GameOps[G <: Game]:
 	def blank(game: G, keepDeck: Boolean): G
 	def copyWith(game: G, updates: GameUpdates): G

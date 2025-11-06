@@ -17,23 +17,20 @@ def assignConns(game: HGroup, action: ClueAction, fps: List[FocusPossibility], f
 		}
 	}
 	// 'Playable' cards used in every bluff connection
-	val mustBluffPlayables = bluffPlayables.headOption.map { ps =>
-		ps.filter(p => bluffPlayables.forall(_.contains(p)))
-	}.getOrElse(List())
+	val mustBluffPlayables = bluffPlayables.headOption.fold(Nil) {
+		_.filter(p => bluffPlayables.forall(_.contains(p)))
+	}
 
 	fps.foldLeft((Set[Int](), game)) { case ((m, a), fp) =>
-		val matches = game.state.deck(focus).matches(fp.id, assume = true) &&
-			game.players(target).thoughts(focus).possible.contains(fp.id)
-
-		// Don't assign save connections or known false connections
-		if (fp.save || !matches)
+		// Don't assign symmetric/save connections
+		if (fp.symmetric || fp.save)
 			(m, a)
 		else
 			fp.connections.foldLeft((m, a)) { case ((modified, acc), conn) =>
 				if (conn.isInstanceOf[PlayableConn] && fp.isBluff && !mustBluffPlayables.contains(conn.order))
 					(modified, acc)
 				else
-					Log.info(s"assigning connection ${state.logConn(conn)}")
+					// Log.info(s"assigning connection ${state.logConn(conn)}")
 					val isBluff = conn match {
 						case f: FinesseConn => f.bluff
 						case _ => false
@@ -109,6 +106,7 @@ def assignConns(game: HGroup, action: ClueAction, fps: List[FocusPossibility], f
 						}.map(IdentitySet.from)
 
 						val maybeFinessed =
+							giver != state.ourPlayerIndex &&
 							conn.reacting != state.ourPlayerIndex && {
 								// Finesse that could be ambiguous
 								(conn.isInstanceOf[FinesseConn] && fps.length > 1) ||
@@ -148,6 +146,9 @@ def assignConns(game: HGroup, action: ClueAction, fps: List[FocusPossibility], f
 								status = status,
 								hidden = f.hidden
 							)}
+							.withXMeta(conn.order) {
+								_.copy(turnFinessed = Some(state.turnCount))
+							}
 						case c: PlayableConn if isUnknownPlayable =>
 							val existingLink = g.common.links.exists {
 								case Link.Promised(orders, id, target) =>
@@ -173,10 +174,11 @@ def assignConns(game: HGroup, action: ClueAction, fps: List[FocusPossibility], f
 			}
 		}._2
 
-def resolveClue(game: HGroup, action: ClueAction, focusResult: FocusResult, fps: List[FocusPossibility]) =
+def resolveClue(ctx: ClueContext, fps: List[FocusPossibility]) =
+	val ClueContext(prev, game, action) = ctx
 	val state = game.state
 	val ClueAction(giver, target, _, _) = action
-	val focus = focusResult.focus
+	val focus = ctx.focusResult.focus
 
 	val interp = if (state.deck(focus).id().exists(id => !fps.exists(_.id == id)))
 		Log.error(s"resolving clue but focus ${state.logId(focus)} doesn't match [${fps.map(fp => state.logId(fp.id)).mkString(",")}]!")
@@ -192,10 +194,38 @@ def resolveClue(game: HGroup, action: ClueAction, focusResult: FocusResult, fps:
 		game.dcStatus == DcStatus.Scream &&
 		state.numPlayers > 2
 
-	game.withThought(focusResult.focus) { t =>
-		val newInferred = t.inferred.intersect(IdentitySet.from(fps.map(_.id)))
+	val symmetricFps =
+		if (target == state.ourPlayerIndex || interp == ClueInterp.Save)
+			List()
+		else
+			Log.highlight(Console.YELLOW, "finding symmetric connections!")
+			val symmetricFps = {
+				val looksDirect = game.common.thoughts(focus).id(symmetric = true).isEmpty &&
+					fps.exists { fp =>
+						game.players(target).thoughts(focus).possible.contains(fp.id) &&
+						fp.connections.forall { c =>
+							c.isInstanceOf[KnownConn] ||
+							(c.isInstanceOf[PlayableConn] && c.reacting != state.ourPlayerIndex)
+						}
+					}
+
+				game.common.thoughts(focus).inferred.filter { inf =>
+					visibleFind(state, game.common, inf, infer = true, cond = (_, order) => order != focus).isEmpty &&
+					!fps.exists(_.id == inf)
+				}
+				.flatMap {
+					connect(ctx, _, looksDirect, thinksStall = Set(), findOwn = Some(target))
+				}
+			}.toList
+
+			occamsRazor(symmetricFps, target)
+
+	val allFps = fps ++ symmetricFps
+
+	game.withThought(focus) { t =>
+		val newInferred = t.inferred.intersect(IdentitySet.from(allFps.map(_.id)))
 			// If a non-finesse connection exists, the focus can't be a copy of it
-			.retain(i => !fps.flatMap(_.connections).exists {
+			.retain(i => !allFps.flatMap(_.connections).exists {
 				case c: KnownConn => c.id == i
 				case c: PlayableConn => c.id == i
 				case c: PromptConn => c.id == i
@@ -206,23 +236,20 @@ def resolveClue(game: HGroup, action: ClueAction, focusResult: FocusResult, fps:
 	}
 	.pipe(assignConns(_, action, fps, focus))
 	.pipe { g =>
-		def matches(fp: FocusPossibility) =
-			state.deck(focus).matches(fp.id, assume = true) &&
-			game.players(target).thoughts(focus).possible.contains(fp.id)
-
-		def requiresWc(fp: FocusPossibility) =
-			fp.connections.exists(c => c.isInstanceOf[PromptConn] || c.isInstanceOf[FinesseConn])
+		def requiresWc(fp: FocusPossibility) = fp.connections.exists { c =>
+			c.isInstanceOf[PromptConn] || c.isInstanceOf[FinesseConn]
+		}
 
 		g.copy(
-			waiting = g.waiting ++ fps.collect {
-				case fp if matches(fp) && requiresWc(fp) => WaitingConnection(
+			waiting = g.waiting ++ allFps.collect {
+				case fp if requiresWc(fp) => WaitingConnection(
 					fp.connections,
 					giver,
 					target,
 					state.turnCount,
 					focus,
 					fp.id,
-					symmetric = !matches(fp)
+					symmetric = fp.symmetric
 				)
 			},
 			lastMove = Some(interp)
