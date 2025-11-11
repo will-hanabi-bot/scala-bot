@@ -47,18 +47,14 @@ def unplayableAlt(game: HGroup, action: Action, wc: WaitingConnection) =
 		}
 	}
 
-private def revert(g: HGroup, order: Int, ids: List[Identity], warn: Boolean = true) =
-	// println(s"reverting conn ${g.state.logConn(conn)}")
+private def revert(g: HGroup, order: Int, ids: List[Identity]) =
+	// println(s"reverting, removing ${ids.map(g.state.logId)} from $order")
 	val newInferred = g.common.thoughts(order).inferred.difference(ids)
 
 	if (newInferred.isEmpty)
 		g.withThought(order) { t =>
 			t.copy(
-				inferred = t.oldInferred.map(_.intersect(t.possible)).getOrElse {
-					if (warn)
-						Log.error(s"no old inferences on ${order}!")
-					t.possible
-				},
+				inferred = t.oldInferred.map(_.intersect(t.possible)).getOrElse(t.possible),
 				oldInferred = None
 			)
 		}
@@ -70,48 +66,56 @@ def refreshWCs(prev: HGroup, game: HGroup, action: Action): HGroup =
 	val initial = (
 		game.copy(waiting = Nil),
 		List[WaitingConnection](),
+		List[Connection](),
 		Map[Int, IdentitySet]()
 	)
-	game.waiting.foldRight(initial) { case (wc, (newGame, newWCs, demos)) =>
+	game.waiting.foldRight(initial) { case (wc, (newGame, newWCs, toRemove, demos)) =>
 		updateWc(prev, game, action, wc) match {
 			case UpdateResult.Keep =>
-				(newGame, wc +: newWCs, demos)
+				(newGame, wc +: newWCs, toRemove, demos)
 
 			case UpdateResult.Advance(nextIndex, skipped) => (
-				if (skipped)
-					(0 until nextIndex).map(wc.connections)
-						.foldLeft(newGame)((a, c) => revert(a, c.order, c.ids))
-				else
-					newGame,
+				newGame,
 				wc.copy(connections = wc.connections.drop(nextIndex)) +: newWCs,
+				if (!skipped) toRemove else (0 until nextIndex).map(wc.connections) ++: toRemove,
 				demos
 			)
 			case UpdateResult.AmbiguousPassback => (
 				newGame,
 				wc.copy(ambiguousPassback = true) +: newWCs,
+				toRemove,
 				demos
 			)
 			case UpdateResult.Demonstrated(order, id, nextIndex, skipped) => (
-				if (skipped)
-					(0 until nextIndex.getOrElse(wc.connections.length))
-						.map(wc.connections).foldLeft(newGame)((a, c) => revert(a, c.order, c.ids))
-				else
-					newGame,
+				newGame,
 				nextIndex match {
 					case Some(i) => wc.copy(connections = wc.connections.drop(i)) +: newWCs
 					case None => newWCs
 				},
+				if (!skipped) toRemove else (0 until nextIndex.getOrElse(wc.connections.length)).map(wc.connections) ++: toRemove,
 				demos + (order -> (demos.getOrElse(order, IdentitySet.empty).union(id)))
 			)
 			case UpdateResult.Remove => (
-				wc.connections.foldLeft(newGame)((a, c) => revert(a, c.order, c.ids))
-					.pipe(revert(_, wc.focus, List(wc.inference), warn = false)),
+				newGame,
 				newWCs,
+				PromptConn(-1, wc.focus, wc.inference) +: wc.connections ++: toRemove,
 				demos
 			)
-			case UpdateResult.Complete => (newGame, newWCs, demos)
+			case UpdateResult.Complete => (newGame, newWCs, toRemove, demos)
 		}
 	}
+	.pipe { (newGame, newWCs, toRemove, demos) => (
+		toRemove.foldLeft(newGame) { (acc, conn) =>
+			val shared = newWCs.exists { wc =>
+				(wc.focus == conn.order && conn.ids.forall(_ == wc.inference)) ||
+				(wc.connections.exists(c => c.order == conn.order && c.ids.length == conn.ids.length && c.ids.forall(conn.ids.contains)))
+			}
+
+			if (shared || conn.isInstanceOf[KnownConn] || conn.isInstanceOf[PlayableConn]) acc else revert(acc, conn.order, conn.ids)
+		},
+		newWCs,
+		demos
+	)}
 	.pipe { (newGame, newWCs, demos) => (
 		demos.foldLeft(newGame) { case (acc, (order, ids)) =>
 			acc.withThought(order) { t =>
@@ -280,7 +284,7 @@ def resolveRetained(game: HGroup, action: Action, wc: WaitingConnection): Update
 
 		case PlayAction(_, order, _, _) =>
 			if (wc.currConn.isInstanceOf[FinesseConn] && game.isBlindPlaying(order))
-				if (game.xmeta(order).turnFinessed.get < game.xmeta(connOrder).turnFinessed.get)
+				if (game.xmeta(order).turnFinessed.get < wc.turn)
 					Log.info(s"$name played into older finesse, continuing to wait")
 					return UpdateResult.Keep
 

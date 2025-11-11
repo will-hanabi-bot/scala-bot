@@ -2,9 +2,9 @@ package scala_bot.hgroup
 
 import scala_bot.basics._
 import scala_bot.basics.given_Conversion_IdentitySet_Iterable
-// import scala_bot.endgame.EndgameSolver
+import scala_bot.endgame.EndgameSolver
 import scala_bot.utils._
-import scala_bot.logger.{Logger, LogLevel}
+import scala_bot.logger.{Log, Logger, LogLevel}
 
 import scala.util.chaining.scalaUtilChainingOps
 
@@ -69,7 +69,9 @@ case class HGroup(
 	inEarlyGame: Boolean = true,
 	stallInterp: Option[StallInterp] = None,
 	lastActions: Vector[Option[Action]] = Vector(),
-	xmeta: Vector[XConvData] = Vector()
+	xmeta: Vector[XConvData] = Vector(),
+
+	allowFindOwn: Boolean = true
 ) extends Game:
 	override def filterPlayables(player: Player, _playerIndex: Int, orders: Vector[Int]): Vector[Int] =
 		orders.filter(o => player.orderKp(this, o) || !xmeta(o).maybeFinessed)
@@ -97,6 +99,14 @@ case class HGroup(
 					meta(o).status == CardStatus.None
 				}
 		}
+
+	def mustClue(playerIndex: Int) =
+		val bob = state.nextPlayerIndex(playerIndex)
+
+		state.canClue &&
+		state.numPlayers > 2 &&
+		!common.thinksLoaded(this, bob) &&
+		chop(bob).flatMap(state.deck(_).id()).exists(id => state.isCritical(id))
 
 	def findFinesse(playerIndex: Int, connected: List[Int] = Nil, ignore: Set[Int] = Set()) =
 		val order = state.hands(playerIndex).find { o =>
@@ -257,7 +267,8 @@ object HGroup:
 		tableID: Int,
 		state: State,
 		inProgress: Boolean,
-		t: (players: Vector[Player], common: Player)
+		t: (players: Vector[Player], common: Player),
+		level: Int
 	): HGroup =
 	HGroup(
 		tableID = tableID,
@@ -266,11 +277,12 @@ object HGroup:
 		common = t.common,
 		base = (state, Vector(), t.players, t.common),
 		inProgress = inProgress,
-		lastActions = Vector.fill(state.numPlayers)(None)
+		lastActions = Vector.fill(state.numPlayers)(None),
+		level = level
 	)
 
-	def apply(tableID: Int, state: State, inProgress: Boolean) =
-		init(tableID, state, inProgress, genPlayers(state))
+	def apply(tableID: Int, state: State, inProgress: Boolean, level: Int) =
+		init(tableID, state, inProgress, genPlayers(state), level)
 
 	given GameOps[HGroup] with
 		def copyWith(game: HGroup, updates: GameUpdates) =
@@ -295,6 +307,7 @@ object HGroup:
 
 				goodTouch = game.goodTouch,
 				level = game.level,
+				waiting = game.waiting,
 				stalled5 = game.stalled5,
 				cluedOnChop = game.cluedOnChop,
 				dcStatus = game.dcStatus,
@@ -306,21 +319,15 @@ object HGroup:
 			)
 
 		def blank(game: HGroup, keepDeck: Boolean) =
-			game.copy(
+			HGroup(
 				tableID = game.tableID,
 				state = game.base._1,
-				inProgress = game.inProgress,
-				deckIds = if (keepDeck) game.deckIds else Vector(),
 				meta = game.base._2,
 				players = game.base._3,
 				common = game.base._4,
 				base = game.base,
 
-				stalled5 = false,
-				dcStatus = DcStatus.None,
-				dda = None,
-				inEarlyGame = true,
-				stallInterp = None,
+				deckIds = if (keepDeck) game.deckIds else Vector(),
 				lastActions = Vector.fill(game.state.numPlayers)(None),
 				xmeta = Vector.fill(game.base._2.length)(XConvData())
 			)
@@ -345,7 +352,66 @@ object HGroup:
 				}
 
 		def takeAction(game: HGroup): PerformAction =
-			???
+			val (state, me) = (game.state, game.me)
+
+			if (state.inEndgame && state.remScore <= state.variant.suits.length + 1)
+				Log.highlight(Console.MAGENTA, "trying to solve endgame...")
+
+				EndgameSolver(monteCarlo = true).solve(game) match {
+					case Left(err) => Log.info(s"couldn't solve endgame: $err")
+					case Right((perform, _)) =>
+						Log.info(s"endgame solved!")
+						return perform
+				}
+
+			val discardOrders = me.thinksTrash(game, state.ourPlayerIndex)
+			val playableOrders = me.thinksPlayables(game, state.ourPlayerIndex)
+
+			Log.info(s"playables $playableOrders")
+			Log.info(s"discardable $discardOrders")
+
+			val allClues =
+				for
+					target <- (0 until state.numPlayers) if state.canClue && target != state.ourPlayerIndex
+					clue <- state.allValidClues(target)
+				yield
+					val perform = clueToPerform(clue)
+					val action = performToAction(state, perform, state.ourPlayerIndex)
+					(perform, action)
+
+			val allPlays = playableOrders.map { o =>
+				val action = PlayAction(state.ourPlayerIndex, o, me.thoughts(o).id(infer = true))
+				(PerformAction.Play(o), action)
+			}
+
+			val cantDiscard = state.clueTokens == 8 ||
+				(state.pace == 0 && (allClues.nonEmpty || allPlays.nonEmpty))
+			Log.info(s"can discard: ${!cantDiscard} ${state.clueTokens}")
+
+			val allDiscards = if (cantDiscard) List() else
+				discardOrders.map { o =>
+					val action = DiscardAction(state.ourPlayerIndex, o, me.thoughts(o).id(infer = true))
+					(PerformAction.Discard(o), action)
+				}
+
+			val allActions = {
+				val as = allClues.concat(allPlays).concat(allDiscards)
+
+				game.chop(state.ourPlayerIndex) match {
+					case Some(chop) if !cantDiscard && (!state.canClue || allPlays.isEmpty) && allDiscards.isEmpty && !me.thinksLocked(game, state.ourPlayerIndex) =>
+						as :+ (PerformAction.Discard(chop), DiscardAction(state.ourPlayerIndex, chop, -1, -1, false))
+					case _ => as
+				}
+			}
+
+			if (allActions.isEmpty)
+				if (state.clueTokens == 8)
+					Log.error("No actions available at 8 clues! Playing slot 1")
+					return PerformAction.Play(state.ourHand.head)
+				else
+					return PerformAction.Discard(me.lockedDiscard(state, state.ourPlayerIndex))
+
+			allActions.maxBy((_, action) => evalAction(game, action))._1
 
 		def updateTurn(game: HGroup, action: TurnAction) =
 			game
@@ -373,9 +439,13 @@ object HGroup:
 			allClues
 
 		def findAllDiscards(game: HGroup, playerIndex: Int): List[PerformAction] =
-			val trash = game.common.discardable(game, playerIndex)
+			val trash = game.common.thinksTrash(game, playerIndex)
 			val target = trash.headOption
 				.orElse(game.chop(playerIndex))
 				.getOrElse(game.players(playerIndex).lockedDiscard(game.state, playerIndex))
 
 			List(PerformAction.Discard(target))
+
+	def atLevel(level: Int) =
+		(tableID: Int, state: State, inProgress: Boolean) =>
+			HGroup(tableID, state, inProgress, level)

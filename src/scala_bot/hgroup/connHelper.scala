@@ -26,7 +26,7 @@ def assignConns(game: HGroup, action: ClueAction, fps: List[FocusPossibility], f
 		if (fp.symmetric || fp.save)
 			(m, a)
 		else
-			fp.connections.foldLeft((m, a)) { case ((modified, acc), conn) =>
+			fp.connections.zipWithIndex.foldLeft((m, a)) { case ((modified, acc), (conn, connI)) =>
 				if (conn.isInstanceOf[PlayableConn] && fp.isBluff && !mustBluffPlayables.contains(conn.order))
 					(modified, acc)
 				else
@@ -150,19 +150,20 @@ def assignConns(game: HGroup, action: ClueAction, fps: List[FocusPossibility], f
 								_.copy(turnFinessed = Some(state.turnCount))
 							}
 						case c: PlayableConn if isUnknownPlayable =>
+							val target = fp.connections.lift(connI + 1).map(_.order).getOrElse(focus)
 							val existingLink = g.common.links.exists {
 								case Link.Promised(orders, id, target) =>
-									id == fp.id && orders.toSet == c.linked.toSet
+									id == c.id && orders.toSet == c.linked.toSet
 								case _ => false
 							}
 
 							if (existingLink)
 								g
 							else
-								Log.info(s"adding promised link ${conn.ids.map(state.logId).mkString(",")}")
+								Log.info(s"adding promised link ${c.linked} ${conn.ids.map(state.logId).mkString(",")} $target")
 								g.copy(
 									common = g.common.copy(
-										links = Link.Promised(c.linked, c.id, focus) +: g.common.links
+										links = Link.Promised(c.linked, c.id, target) +: g.common.links
 									)
 								)
 						case _ => g
@@ -210,7 +211,7 @@ def resolveClue(ctx: ClueContext, fps: List[FocusPossibility]) =
 					}
 
 				game.common.thoughts(focus).inferred.filter { inf =>
-					visibleFind(state, game.common, inf, infer = true, cond = (_, order) => order != focus).isEmpty &&
+					visibleFind(state, game.common, inf, infer = true, excludeOrder = focus).isEmpty &&
 					!fps.exists(_.id == inf)
 				}
 				.flatMap {
@@ -225,16 +226,42 @@ def resolveClue(ctx: ClueContext, fps: List[FocusPossibility]) =
 	game.withThought(focus) { t =>
 		val newInferred = t.inferred.intersect(IdentitySet.from(allFps.map(_.id)))
 			// If a non-finesse connection exists, the focus can't be a copy of it
-			.retain(i => !allFps.flatMap(_.connections).exists {
+			.retain(i => !fps.filterNot(_.symmetric).flatMap(_.connections).exists {
 				case c: KnownConn => c.id == i
 				case c: PlayableConn => c.id == i
 				case c: PromptConn => c.id == i
 				case _: FinesseConn => false
 			})
-		Log.highlight(Console.CYAN, s"final infs [${newInferred.fmt(state)}]")
+		Log.highlight(Console.CYAN, s"final infs [${newInferred.fmt(state)}] $focus")
 		t.copy(inferred = newInferred)
 	}
 	.pipe(assignConns(_, action, fps, focus))
+	.pipe {
+		allFps.foldLeft(_) { (a, fp) =>
+			fp.connections.zipWithIndex.foldLeft(a) { case (acc, (conn, i)) => conn match {
+				case PlayableConn(reacting, order, id, linked, layered) =>
+					val playLinks = acc.common.playLinks
+					val target = fp.connections.lift(i + 1).map(_.order).getOrElse(focus)
+					val existingIndex = playLinks.indexWhere { l =>
+						l.orders == linked && l.target == target
+					}
+
+					if (existingIndex == -1)
+						val link = PlayLink(linked, IdentitySet.single(id), target)
+						Log.info(s"adding play link $linked -> $target")
+						acc.copy(common = acc.common.copy(playLinks = link +: playLinks))
+					else
+						val existing = playLinks(existingIndex)
+						val newLink = existing.copy(prereqs = existing.prereqs.union(id))
+						acc.copy(
+							common = acc.common.copy(
+								playLinks = playLinks.updated(existingIndex, newLink)
+							)
+						)
+				case _ => acc
+			}
+		}}
+	}
 	.pipe { g =>
 		def requiresWc(fp: FocusPossibility) = fp.connections.exists { c =>
 			c.isInstanceOf[PromptConn] || c.isInstanceOf[FinesseConn]
@@ -261,3 +288,4 @@ def resolveClue(ctx: ClueContext, fps: List[FocusPossibility]) =
 			g.withMeta(oldChop)(_.copy(status = CardStatus.None))
 		}
 	}
+	.withMeta(focus)(_.copy(focused = true))

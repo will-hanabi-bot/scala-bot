@@ -24,11 +24,9 @@ case class GameSummary(
 
 val NAMES = Vector("Alice", "Bob", "Cathy", "Donald", "Emily")
 
-def simulateGame[G <: Game](gameC: (Int, State, Boolean) => G, deck: Vector[Identity], variant: Variant, numPlayers: Int)(using ops: GameOps[G]): GameSummary =
-	val games = (0 until numPlayers).map { i =>
-		val state = State(NAMES.take(numPlayers), i, variant)
-
-		ops.copyWith(gameC(0, state, false), GameUpdates(catchup = Some(true)))
+def simulateGame[G <: Game](gs: Seq[G], deck: Vector[Identity])(using ops: GameOps[G]): GameSummary =
+	val games = gs.zipWithIndex.map { (g, i) =>
+		ops.copyWith(g, GameUpdates(catchup = Some(true)))
 			.pipe { g =>
 				val state = g.state
 				(0 until state.numPlayers).foldLeft(g) { (acc, playerIndex) =>
@@ -126,10 +124,11 @@ def selfPlay(args: String*) =
 	val numGames = parsedArgs.getOrElse("games", "1").toInt
 	val seed = parsedArgs.getOrElse("seed", "0").toInt
 	val variantName = parsedArgs.getOrElse("variant", "No Variant")
-	val convention = Convention.from(parsedArgs.getOrElse("convention", "Reactor"))
+	val convention = parsedArgs.lift("convention").flatMap(Convention.from).getOrElse(Convention.Reactor)
+	val level = parsedArgs.getOrElse("level", "1").toInt
 	val numPlayers = parsedArgs.getOrElse("players", "3").toInt
 
-	Logger.setLevel(LogLevel.Error)
+	Logger.setLevel(LogLevel.Off)
 	Variant.init()
 	val variant = Variant.getVariant(variantName)
 
@@ -138,10 +137,11 @@ def selfPlay(args: String*) =
 	for (i <- (seed until seed + numGames)) {
 		Random.setSeed(i)
 		val shuffledDeck = Random.shuffle(deck).toVector
+		val states = (0 until numPlayers).map(State(NAMES.take(numPlayers), _, variant))
 		val GameSummary(score, result, actions, notes) = convention match {
-			case Convention.Reactor => simulateGame(Reactor.apply, shuffledDeck, variant, numPlayers)
-			case Convention.RefSieve => simulateGame(RefSieve.apply, shuffledDeck, variant, numPlayers)
-			case Convention.HGroup => simulateGame(HGroup.apply, shuffledDeck, variant, numPlayers)
+			case Convention.Reactor => simulateGame(states.map(Reactor(0, _, false)), shuffledDeck)
+			case Convention.RefSieve => simulateGame(states.map(RefSieve(0, _, false)), shuffledDeck)
+			case Convention.HGroup => simulateGame(states.map(HGroup(0, _, false, level)), shuffledDeck)
 		}
 
 		val actionsJSON = actions.map(_.json(tableID = 0))

@@ -20,6 +20,12 @@ enum Link:
 		case _ => None
 	}
 
+case class PlayLink(
+	orders: List[Int],
+	prereqs: IdentitySet,
+	target: Int
+)
+
 case class Player(
 	playerIndex: Int,
 	name: String,
@@ -31,6 +37,7 @@ case class Player(
 	allInferred: IdentitySet,
 
 	links: List[Link] = Nil,
+	playLinks: List[PlayLink] = Nil,
 	unknownPlays: Set[Int] = Set(),
 	hypoPlays: Set[Int] = Set(),
 ):
@@ -112,23 +119,27 @@ case class Player(
 		val thought = thoughts(order)
 
 		(game.meta(order).trash && thought.possible.forall(id => !game.state.isCritical(id))) ||
-		thought.possible.forall(game.state.isBasicTrash)
+		thought.possible.forall(game.state.isBasicTrash) ||
+		(thought.inferred.isEmpty && thought.reset)
 
-	def orderKp(game: Game, order: Int) =
+	def orderKp(game: Game, order: Int, excludeTrash: Boolean = false) =
 		val state = game.state
 		val thought = thoughts(order)
 
+		def isPlayable(i: Identity) =
+			state.isPlayable(i) || (excludeTrash && state.isBasicTrash(i))
+
 		game.meta(order).status match {
 			case CardStatus.CalledToPlay =>
-				thought.possible.exists(state.isPlayable) &&
-				thought.infoLock.forall(_.exists(state.isPlayable))
+				thought.possible.exists(isPlayable) &&
+				thought.infoLock.forall(_.exists(isPlayable))
 
 			case CardStatus.Sarcastic | CardStatus.GentlemansDiscard =>
-				thought.inferred.forall(state.isPlayable)
+				thought.inferred.forall(isPlayable)
 
 			case _ =>
-				thought.possible.forall(state.isPlayable) ||
-				thought.infoLock.exists(_.forall(state.isPlayable))
+				thought.possible.forall(isPlayable) ||
+				thought.infoLock.exists(_.forall(isPlayable))
 		}
 
 	def orderPlayable(game: Game, order: Int, excludeTrash: Boolean = false) =
@@ -136,7 +147,7 @@ case class Player(
 		lazy val unsafeLink = links.exists(link =>
 			link.getOrders.contains(order) && link.getOrders.max != order)
 
-		if (orderKp(game, order))
+		if (orderKp(game, order, excludeTrash))
 			true
 		else if (game.meta(order).trash || unsafeLink)
 			false
@@ -152,8 +163,18 @@ case class Player(
 		game.state.hands(playerIndex).filter(orderKp(game, _))
 
 	def thinksPlayables(game: Game, playerIndex: Int) =
-		val raw = game.state.hands(playerIndex).filter(orderPlayable(game, _))
-		game.filterPlayables(this, playerIndex, raw)
+		game.state.hands(playerIndex).filter(orderPlayable(game, _))
+			.pipe { playables =>
+				// Exclude unknown cards if there is a duplicate that is fully known.
+				playables.filterNot { p1 =>
+					thoughts(p1).id().isEmpty &&
+					playables.exists { p2 =>
+						p1 != p2 &&
+						thoughts(p2).id().exists(thoughts(p1).matches(_, infer = true))
+					}
+				}
+			}
+			.pipe(game.filterPlayables(this, playerIndex, _))
 
 	def thinksTrash(game: Game, playerIndex: Int) =
 		game.state.hands(playerIndex).filter(orderTrash(game, _))
@@ -169,7 +190,7 @@ case class Player(
 	def thinksLocked(game: Game, playerIndex: Int) =
 		!thinksLoaded(game, playerIndex) && game.state.hands(playerIndex).forall { order =>
 			game.state.deck(order).clued ||
-			game.meta(order).status == CardStatus.CalledToPlay ||
+			game.isBlindPlaying(order) ||
 			game.meta(order).cm
 		}
 
@@ -283,26 +304,30 @@ case class Player(
 				val HypoStruct(hypo, unknownPlays, played, viable) = acc
 				val thought = thoughts(order)
 
-				val skip = !hypo.state.hasConsistentInfs(thought) || !(if (game.goodTouch) orderPlayable(hypo, order) else orderKp(hypo, order))
+				val playable = hypo.state.hasConsistentInfs(thought) && {
+					(if (game.goodTouch) orderPlayable(hypo, order) else orderKp(hypo, order)) ||
+					playLinks.exists(l => l.target == order && l.orders.forall(played.contains))
+				}
 
-				if (skip) acc else thought.id(infer = true, symmetric = true) match {
+				// Should this be symmetric? Checking whether a playable or not should be, but another player can know what id it is
+				if (!playable) acc else thought.id(infer = true, symmetric = true) match {
 					case None =>
-						val fulfilledLinks = links.filter(l => l.getOrders.contains(order) && l.getOrders.forall(played.contains(_)))
-						var successful = false
-
+						val fulfilledLinks = links.filter { l =>
+							val orders = l.getOrders
+							orders.contains(order) && orders.forall(o => o == order || played.contains(o))
+						}
 						val newHypo = fulfilledLinks.foldLeft(hypo) { (h, link) =>
 							link.promise.fold(h) { id =>
 								if (!h.state.isPlayable(id))
-									Log.warn(s"tried to add linked ${h.state.logId(id)} ($order) onto hypo stacks, but they were at ${h.state.playStacks} $played")
+									Log.warn(s"tried to add linked ${h.state.logId(id)} ($order) onto hypo stacks, but they were at ${h.state.playStacks} $played ($name)")
 									h
 								else
-									successful = true
 									h.withState(_.withPlay(id))
 							}
 						}
 
 						acc.copy(
-							hypo = if (successful) newHypo else hypo,
+							hypo = newHypo,
 							unknownPlays = unknownPlays + order,
 							played = played + order,
 							viable = viable - order
@@ -311,12 +336,12 @@ case class Player(
 						if (hypo.state.isPlayable(id))
 							acc.copy(
 								hypo = hypo.withState(_.withPlay(id)),
-								unknownPlays = unknownPlays + order,
+								unknownPlays,
 								played = played + order,
 								viable = viable - order
 							)
 						else
-							Log.warn(s"tried to add ${hypo.state.logId(id)} ($order) onto hypo stacks, but they were at ${hypo.state.playStacks} $played")
+							Log.warn(s"tried to add ${hypo.state.logId(id)} ($order) onto hypo stacks, but they were at ${hypo.state.playStacks} $played ($name)")
 							acc.copy(viable = viable - order)
 				}
 			}

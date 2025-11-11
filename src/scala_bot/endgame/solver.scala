@@ -353,7 +353,7 @@ case class EndgameSolver[G <: Game](
 			if (urgentAction.isDefined)
 				return urgentAction.get
 
-			val playables = if (infer)
+			val playables = if (infer || game.goodTouch)
 				game.players(playerTurn).thinksPlayables(game, playerTurn)
 			else
 				game.players(playerTurn).obviousPlayables(game, playerTurn)
@@ -452,7 +452,7 @@ case class EndgameSolver[G <: Game](
 						val colour = if (depth == 0) Console.YELLOW else Console.WHITE
 						winnable(newGame, nextPlayerIndex, remaining, deadline, depth + 1) match {
 							case Left(msg) =>
-								Log.highlight(colour, s"${indent(depth)}} ${perform.fmtObj(game, nextPlayerIndex)} unwinnable ($msg)")
+								Log.highlight(colour, s"${indent(depth)}} ${perform.fmtObj(game, playerTurn)} unwinnable ($msg)")
 								calcWinrate(arrs.tail, winrate, remProb)
 
 							case Right((performs, wr)) =>

@@ -345,27 +345,20 @@ object Reactor:
 			Log.info(s"playables $playableOrders")
 			Log.info(s"discardable $discardOrders")
 
-			val allClues =
-				if (!state.canClue || game.waiting.exists(_.receiver == state.ourPlayerIndex))
-					List()
-				else
-					for
-						offset <- 1 until state.numPlayers
-						target = (state.ourPlayerIndex + offset) % state.numPlayers
-						clue <- state.allValidClues(target)
-					yield
-						val perform = clueToPerform(clue)
-						val action = performToAction(state, perform, state.ourPlayerIndex)
-						(perform, action)
+			val canClue = state.canClue && !game.waiting.exists(_.receiver == state.ourPlayerIndex)
 
-			val allPlays = playableOrders.map { order =>
-				val action = me.thoughts(order).id(infer = true) match {
-					case Some(Identity(suitIndex, rank)) =>
-						PlayAction(state.ourPlayerIndex, order, suitIndex, rank)
-					case None =>
-						PlayAction(state.ourPlayerIndex, order, -1, -1)
-				}
-				(PerformAction.Play(order), action)
+			val allClues =
+				for
+					target <- (0 until state.numPlayers) if canClue && target != state.ourPlayerIndex
+					clue <- state.allValidClues(target)
+				yield
+					val perform = clueToPerform(clue)
+					val action = performToAction(state, perform, state.ourPlayerIndex)
+					(perform, action)
+
+			val allPlays = playableOrders.map { o =>
+				val action = PlayAction(state.ourPlayerIndex, o, me.thoughts(o).id(infer = true))
+				(PerformAction.Play(o), action)
 			}
 
 			val potentialReacter = state.nextPlayerIndex(state.ourPlayerIndex)
@@ -373,7 +366,13 @@ object Reactor:
 			// We have a play and the reacter might play on top of us
 			lazy val potentialForcedPlay = allPlays.nonEmpty &&
 				game.waiting.exists(_.reacter == potentialReacter) &&
-				playableOrders.exists(o => game.me.thoughts(o).inferred.exists(id => id.rank != 5 && state.hands(potentialReacter).exists(state.deck(_).id().get == id.next)))
+				playableOrders.exists {
+					game.me.thoughts(_).inferred.exists { id =>
+						state.hands(potentialReacter).exists { o =>
+							id.next.contains(state.deck(o).id().get)
+						}
+					}
+				}
 
 			val cantDiscard = state.clueTokens == 8 ||
 				(state.pace == 0 && (allClues.nonEmpty || allPlays.nonEmpty)) ||
@@ -381,14 +380,9 @@ object Reactor:
 			Log.info(s"can discard: ${!cantDiscard} ${state.clueTokens}")
 
 			val allDiscards = if (cantDiscard) List() else
-				discardOrders.map { order =>
-					val action = me.thoughts(order).id() match {
-						case Some(Identity(suitIndex, rank)) =>
-							DiscardAction(state.ourPlayerIndex, order, suitIndex, rank, false)
-						case None =>
-							DiscardAction(state.ourPlayerIndex, order, -1, -1, false)
-					}
-					(PerformAction.Discard(order), action)
+				discardOrders.map { o =>
+					val action = DiscardAction(state.ourPlayerIndex, o, me.thoughts(o).id(infer = true))
+					(PerformAction.Discard(o), action)
 				}
 
 			val allActions = {
@@ -402,7 +396,11 @@ object Reactor:
 			}
 
 			if (allActions.isEmpty)
-				return PerformAction.Discard(me.lockedDiscard(state, state.ourPlayerIndex))
+				if (state.clueTokens == 8)
+					Log.error("No actions available at 8 clues! Playing slot 1")
+					return PerformAction.Play(state.ourHand.head)
+				else
+					return PerformAction.Discard(me.lockedDiscard(state, state.ourPlayerIndex))
 
 			allActions.maxBy((_, action) => evalAction(game, action))._1
 

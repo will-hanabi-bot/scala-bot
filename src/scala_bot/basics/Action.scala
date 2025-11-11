@@ -119,6 +119,14 @@ object PlayAction:
 			json.obj("rank").num.toInt
 		)
 
+	def apply(playerIndex: Int, order: Int, id: Option[Identity]): PlayAction =
+		id match {
+			case Some(Identity(suitIndex, rank)) =>
+				PlayAction(playerIndex, order, suitIndex, rank)
+			case None =>
+				PlayAction(playerIndex, order, -1, -1)
+		}
+
 case class DiscardAction(
 	playerIndex: Int,
 	order: Int,
@@ -141,6 +149,14 @@ object DiscardAction:
 			json.obj("rank").num.toInt,
 			json.obj("failed").bool
 		)
+
+	def apply(playerIndex: Int, order: Int, id: Option[Identity]): DiscardAction =
+		id match {
+			case Some(Identity(suitIndex, rank)) =>
+				DiscardAction(playerIndex, order, suitIndex, rank)
+			case None =>
+				DiscardAction(playerIndex, order, -1, -1)
+		}
 
 case class StrikeAction(
 	num: Int,

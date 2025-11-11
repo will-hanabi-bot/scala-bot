@@ -92,7 +92,7 @@ def targetPlay(prev: RefSieve, game: RefSieve, action: ClueAction, targetOrder: 
 	val unknown = common.thoughts(targetOrder).id(infer = true, symmetric = true).isEmpty
 
 	val focusPoss = (for
-		inf <- common.thoughts(targetOrder).inferred if visibleFind(state, common, inf, infer = true, cond = (_, order) => order != targetOrder).isEmpty
+		inf <- common.thoughts(targetOrder).inferred if visibleFind(state, common, inf, infer = true, excludeOrder = targetOrder).isEmpty
 		conns <- connect(prev, game, targetOrder, inf, action, unknown)
 	yield
 		FocusPossibility(inf, conns, ClueInterp.Play)).toList

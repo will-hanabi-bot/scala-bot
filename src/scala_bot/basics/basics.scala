@@ -166,7 +166,7 @@ extension[G <: Game](game: G)
 			newCommon = newCommon2
 
 		val (sarcastics, _newCommon) = newCommon.refreshLinks(game, goodTouch)
-		newCommon = _newCommon.updateHypoStacks(game)
+		newCommon = _newCommon.refreshPlayLinks(game).updateHypoStacks(game)
 
 		val newPlayers = game.players.map { p =>
 			p.copy(
@@ -179,11 +179,14 @@ extension[G <: Game](game: G)
 							infoLock = thought.infoLock,
 							reset = thought.reset
 					)
-				}
+				},
+				links = newCommon.links,
+				playLinks = newCommon.playLinks
 			).cardElim(state)._2
 			.when(_ => goodTouch)
 				(_.goodTouchElim(game)._2)
 			.refreshLinks(game, goodTouch)._2
+			.refreshPlayLinks(game)
 			.updateHypoStacks(game)
 		}
 

@@ -43,11 +43,12 @@ case class RefSieve(
 		!mustClue(playerIndex)
 
 	def mustClue(playerIndex: Int) =
+		val bob = state.nextPlayerIndex(playerIndex)
+
 		state.canClue &&
-		state.numPlayers > 2 && {
-			val bobChop = chop(state.nextPlayerIndex(playerIndex))
-			bobChop.flatMap(state.deck(_).id()).exists(id => state.isCritical(id) || state.isPlayable(id))
-		}
+		state.numPlayers > 2 &&
+		!common.thinksLoaded(this, bob) &&
+		chop(bob).flatMap(state.deck(_).id()).exists(id => state.isCritical(id) || state.isPlayable(id))
 
 	def findFinesse(playerIndex: Int, connected: List[Int] = Nil, ignore: Set[Int] = Set()) =
 		val order = state.hands(playerIndex).find { o =>
@@ -234,37 +235,23 @@ object RefSieve:
 				}
 
 			val discardOrders = me.discardable(game, state.ourPlayerIndex)
-			val playableOrders = {
-				val playables = me.thinksPlayables(game, state.ourPlayerIndex)
-
-				// Exclude cards if there is a duplicate that is fully known.
-				playables.filterNot(p1 => playables.exists(p2 => p1 != p2 && me.thoughts(p2).id().exists(me.thoughts(p1).matches(_, infer = true))))
-			}
+			val playableOrders = me.thinksPlayables(game, state.ourPlayerIndex)
 
 			Log.info(s"playables $playableOrders")
 			Log.info(s"discardable $discardOrders")
 
 			val allClues =
-				if (!state.canClue)
-					List()
-				else
-					for
-						offset <- 1 until state.numPlayers
-						target = (state.ourPlayerIndex + offset) % state.numPlayers
-						clue <- state.allValidClues(target)
-					yield
-						val perform = clueToPerform(clue)
-						val action = performToAction(state, perform, state.ourPlayerIndex)
-						(perform, action)
+				for
+					target <- (0 until state.numPlayers) if state.canClue && target != state.ourPlayerIndex
+					clue <- state.allValidClues(target)
+				yield
+					val perform = clueToPerform(clue)
+					val action = performToAction(state, perform, state.ourPlayerIndex)
+					(perform, action)
 
-			val allPlays = playableOrders.map { order =>
-				val action = me.thoughts(order).id(infer = true) match {
-					case Some(Identity(suitIndex, rank)) =>
-						PlayAction(state.ourPlayerIndex, order, suitIndex, rank)
-					case None =>
-						PlayAction(state.ourPlayerIndex, order, -1, -1)
-				}
-				(PerformAction.Play(order), action)
+			val allPlays = playableOrders.map { o =>
+				val action = PlayAction(state.ourPlayerIndex, o, me.thoughts(o).id(infer = true))
+				(PerformAction.Play(o), action)
 			}
 
 			val cantDiscard = state.clueTokens == 8 ||
@@ -273,14 +260,9 @@ object RefSieve:
 			Log.info(s"can discard: ${!cantDiscard} ${state.clueTokens}")
 
 			val allDiscards = if (cantDiscard) List() else
-				discardOrders.map { order =>
-					val action = me.thoughts(order).id() match {
-						case Some(Identity(suitIndex, rank)) =>
-							DiscardAction(state.ourPlayerIndex, order, suitIndex, rank, false)
-						case None =>
-							DiscardAction(state.ourPlayerIndex, order, -1, -1, false)
-					}
-					(PerformAction.Discard(order), action)
+				discardOrders.map { o =>
+					val action = DiscardAction(state.ourPlayerIndex, o, me.thoughts(o).id(infer = true))
+					(PerformAction.Discard(o), action)
 				}
 
 			val allActions = {
@@ -294,7 +276,11 @@ object RefSieve:
 			}
 
 			if (allActions.isEmpty)
-				return PerformAction.Discard(me.lockedDiscard(state, state.ourPlayerIndex))
+				if (state.clueTokens == 8)
+					Log.error("No actions available at 8 clues! Playing slot 1")
+					return PerformAction.Play(state.ourHand.head)
+				else
+					return PerformAction.Discard(me.lockedDiscard(state, state.ourPlayerIndex))
 
 			allActions.maxBy((_, action) => evalAction(game, action))._1
 

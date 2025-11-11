@@ -192,13 +192,15 @@ extension[G <: Game](game: G)
 	def takeAction(using ops: GameOps[G]) =
 		ops.takeAction(game)
 
-	def simulateClue(action: ClueAction, free: Boolean = false, log: Boolean = false, noRecurse: Boolean = false)(using ops: GameOps[G]) =
+	def simulateClue(action: ClueAction, free: Boolean = false, log: Boolean = false)(using ops: GameOps[G]) =
 		val level = Logger.level
 
 		if (!log)
 			Logger.setLevel(LogLevel.Off)
 
-		val hypoGame = ops.copyWith(game, GameUpdates(catchup = Some(true), noRecurse = Some(noRecurse)))
+		// Log.info(s"----- SIMULATING CLUE ${action.fmt(game.state)} -----")
+
+		val hypoGame = ops.copyWith(game, GameUpdates(catchup = Some(true)))
 			.withState(s => s.copy(
 				actionList = addAction(s.actionList, action, s.turnCount),
 				clueTokens = s.clueTokens + (if (free) 1 else 0)
@@ -206,6 +208,8 @@ extension[G <: Game](game: G)
 			.handleClue(game, action)
 			.pipe(ops.copyWith(_, GameUpdates(catchup = Some(false))))
 			.withState(s => s.copy(turnCount = s.turnCount + 1))
+
+		// Log.info(s"----- END SIMULATING CLUE: ${hypoGame.lastMove} -----")
 
 		Logger.setLevel(level)
 		hypoGame
@@ -347,6 +351,7 @@ extension[G <: Game](game: G)
 
 		game.meta(order).status match {
 			case CardStatus.CalledToPlay => s"[f]${if (note.isEmpty) "" else s" [$note]"}"
+			case CardStatus.Finessed => s"[f]${if (note.isEmpty) "" else s" [$note]"}"
 			case CardStatus.ChopMoved => s"[cm]${if (note.isEmpty) "" else s" [$note]"}"
 			case CardStatus.CalledToDiscard => "dc"
 			case _ => note

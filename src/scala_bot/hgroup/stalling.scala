@@ -130,8 +130,10 @@ def alternativeClue(prev: HGroup, game: HGroup, giver: Int, maxStall: Int, origC
 		clue <- state.allValidClues(target) if clue != origClue
 		list = state.clueTouched(state.hands(target), clue)
 		action = ClueAction(giver, target, list, clue.toBase)
-		hypo = prev.simulateClue(action, noRecurse = true) if satisfied(hypo, target)
+		hypo = prev.copy(allowFindOwn = false, noRecurse = true)
+			.simulateClue(action) if satisfied(hypo, target)
 	yield
+		Log.info(s"found alt clue ${clue.fmt(state)} ${hypo.lastMove.get}")
 		val newWCs = hypo.waiting.filter { wc =>
 			wc.turn == hypo.state.turnCount && wc.connections.forall { conn =>
 				// Only count valid wcs based on the new info we have
@@ -145,7 +147,7 @@ def alternativeClue(prev: HGroup, game: HGroup, giver: Int, maxStall: Int, origC
 			})
 		}
 		seenBy)
-	.foldLeft(Set[Int]())(_ ++ _)
+	.foldLeft((0 until state.numPlayers).toSet)(_ -- _)
 
 def stallingSituation(ctx: ClueContext): Option[(StallInterp, Set[Int])] =
 	val ClueContext(prev, game, action) = ctx

@@ -12,7 +12,7 @@ import scala_bot.logger._
 import scala_bot.refSieve.RefSieve
 import scala_bot.hgroup.HGroup
 
-val BOT_VERSION = "v0.2.4 (scala-bot)"
+val BOT_VERSION = "v0.3.0 (scala-bot)"
 
 case class ChatMessage(
 	msg: String,
@@ -93,17 +93,17 @@ enum Convention:
 
 object Convention:
 	def from(s: String) = s match {
-		case "Reactor" => Convention.Reactor
-		case "RefSieve" => Convention.RefSieve
-		case "HGroup" => Convention.HGroup
-		case _ => throw new IllegalArgumentException(s"Unknown convention $s")
+		case "Reactor" => Some(Convention.Reactor)
+		case "RefSieve" => Some(Convention.RefSieve)
+		case "HGroup" => Some(Convention.HGroup)
+		case _ => None
 	}
 
-case class Settings(convention: Convention):
+case class Settings(convention: Convention, level: Int = 1):
 	def str = convention match {
 		case Convention.Reactor => "Reactor 1.0"
 		case Convention.RefSieve => "Ref Sieve"
-		case Convention.HGroup => "H-Group"
+		case Convention.HGroup => s"H-Group $level"
 	}
 
 class BotClient(queue: Queue[IO, String], gameRef: Ref[IO, Option[Game]]):
@@ -280,7 +280,7 @@ class BotClient(queue: Queue[IO, String], gameRef: Ref[IO, Option[Game]]):
 		val game = settings.convention match {
 			case Convention.Reactor => Reactor(tID, state, inProgress = true)
 			case Convention.RefSieve => RefSieve(tID, state, inProgress = true)
-			case Convention.HGroup => HGroup(tID, state, inProgress = true)
+			case Convention.HGroup => HGroup(tID, state, inProgress = true, settings.level)
 		}
 
 		IO { tableID = Some(tID) } *>
@@ -411,9 +411,23 @@ class BotClient(queue: Queue[IO, String], gameRef: Ref[IO, Option[Game]]):
 			case Array(_) =>
 				reply(s"Currently playing with ${settings.str} conventions.")
 
-			case Array(_, conv) =>
-				settings = settings.copy(convention = Convention.from(conv))
-				reply(s"Currently playing with ${settings.str} conventions.")
+			case Array(_, conv) => Convention.from(conv) match {
+				case None => reply(s"Unrecognized convention $conv.")
+				case Some(c) =>
+					settings = settings.copy(convention = c)
+					reply(s"Currently playing with ${settings.str} conventions.")
+			}
+
+			case Array(_, conv, level) => Convention.from(conv) match {
+				case None => reply(s"Unrecognized convention $conv.")
+				case Some(c) =>
+					level.toIntOption match {
+						case None => reply(s"Unrecognized convention $conv.")
+						case Some(l) =>
+							settings = settings.copy(convention = c, level = l)
+							reply(s"Currently playing with ${settings.str} conventions.")
+					}
+			}
 		}
 
 	def sendPM(recipient: String, msg: String) =

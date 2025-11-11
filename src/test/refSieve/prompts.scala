@@ -120,7 +120,7 @@ class Prompts extends munit.FunSuite:
 		hasInfs(game, None, Alice, 2, Vector("r1"))
 	}
 
-	test("doesnt play into a satisfied prompt".only) {
+	test("doesnt play into a satisfied prompt") {
 		val game = setup(RefSieve.apply, Vector(
 			Vector("xx", "xx", "xx", "xx", "xx"),
 			Vector("r1", "y4", "b4", "p4", "g4"),

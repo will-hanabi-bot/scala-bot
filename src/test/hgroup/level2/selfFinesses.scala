@@ -11,12 +11,11 @@ class SelfFinesses extends munit.FunSuite:
 	override def beforeAll() = Logger.setLevel(LogLevel.Off)
 
 	test("plays into a self-finesse") {
-		val game = setup(HGroup.apply, Vector(
+		val game = setup(HGroup.atLevel(2), Vector(
 			Vector("xx", "xx", "xx", "xx", "xx"),
 			Vector("g1", "p4", "b4", "b4", "y4")
 		),
-			starting = Bob,
-			init = _.copy(level = 2)
+			starting = Bob
 		)
 		.pipe(takeTurn("Bob clues 2 to Alice (slot 1)"))
 		.tap { g =>
@@ -28,14 +27,13 @@ class SelfFinesses extends munit.FunSuite:
 	}
 
 	test("doesn't give a bad self-finesse") {
-		val game = setup(HGroup.apply, Vector(
+		val game = setup(HGroup.atLevel(2), Vector(
 			Vector("xx", "xx", "xx", "xx", "xx"),
 			Vector("g1", "p4", "b4", "b4", "y4"),
 			Vector("g3", "g2", "r4", "r4", "y4")
 		),
 			starting = Cathy,
-			playStacks = Some(Vector(2, 0, 0, 0, 0)),
-			init = _.copy(level = 2)
+			playStacks = Some(Vector(2, 0, 0, 0, 0))
 		)
 		.pipe(takeTurn("Cathy clues green to Bob"))
 		.pipe(takeTurn("Alice clues 3 to Cathy"))
@@ -45,13 +43,11 @@ class SelfFinesses extends munit.FunSuite:
 	}
 
 	test("interprets a self-finesse when giver knows less") {
-		val game = setup(HGroup.apply, Vector(
+		val game = setup(HGroup.atLevel(2), Vector(
 			Vector("xx", "xx", "xx", "xx", "xx"),
 			Vector("g3", "r1", "g4", "b1", "g3"),
 			Vector("g1", "g2", "r5", "y3", "p3")
-		),
-			init = _.copy(level = 2)
-		)
+		))
 		.pipe(takeTurn("Alice clues 1 to Bob"))
 		.pipe(takeTurn("Bob clues 2 to Cathy"))
 
@@ -60,14 +56,13 @@ class SelfFinesses extends munit.FunSuite:
 	}
 
 	test("interprets a self-finesse when other possibilities are impossible") {
-		val game = setup(HGroup.apply, Vector(
+		val game = setup(HGroup.atLevel(2), Vector(
 			Vector("xx", "xx", "xx", "xx"),
 			Vector("r3", "b4", "g4", "p1"),
 			Vector("b2", "b3", "p1", "g3"),
 			Vector("b5", "b2", "r4", "p5")
 		),
-			starting = Donald,
-			init = _.copy(level = 2)
+			starting = Donald
 		)
 		.pipe(takeTurn("Donald clues purple to Alice (slot 2)"))	// p1 play
 		.pipe(takeTurn("Alice plays p1 (slot 2)"))
@@ -84,14 +79,13 @@ class SelfFinesses extends munit.FunSuite:
 	}
 
 	test("doesn't give a self-finesse that look like a prompt") {
-		val game = setup(HGroup.apply, Vector(
+		val game = setup(HGroup.atLevel(2), Vector(
 			Vector("xx", "xx", "xx", "xx", "xx"),
 			Vector("r3", "b4", "g4", "p1", "b2"),
 			Vector("y2", "b2", "r5", "y3", "r1")
 		),
 			starting = Bob,
-			playStacks = Some(Vector(0, 1, 0, 0, 0)),
-			init = _.copy(level = 2)
+			playStacks = Some(Vector(0, 1, 0, 0, 0))
 		)
 		.pipe(takeTurn("Bob clues red to Cathy"))
 		.pipe(takeTurn("Cathy plays r1", "y3"))
@@ -102,13 +96,12 @@ class SelfFinesses extends munit.FunSuite:
 	}
 
 	test("gives a self-finesse that doesn't look like a prompt") {
-		val game = setup(HGroup.apply, Vector(
+		val game = setup(HGroup.atLevel(2), Vector(
 			Vector("xx", "xx", "xx", "xx", "xx"),
 			Vector("r3", "b3", "g1", "p1", "y2"),
 			Vector("g2", "b3", "p1", "g3", "b2")
 		),
-			playStacks = Some(Vector(2, 0, 0, 0, 0)),
-			init = _.copy(level = 2)
+			playStacks = Some(Vector(2, 0, 0, 0, 0))
 		)
 		.pipe(takeTurn("Alice clues 3 to Bob"))
 		.pipe(takeTurn("Bob plays r3", "g3"))
@@ -122,14 +115,13 @@ class SelfFinesses extends munit.FunSuite:
 	}
 
 	test("doesn't give a self-finesse that isn't the simplest interpretation") {
-		val game = setup(HGroup.apply, Vector(
+		val game = setup(HGroup.atLevel(2), Vector(
 			Vector("xx", "xx", "xx", "xx"),
 			Vector("g1", "p3", "r3", "g3"),
 			Vector("p3", "g5", "p4", "g2"),
 			Vector("b1", "b2", "p1", "g4")
 		),
-			starting = Donald,
-			init = _.copy(level = 2)
+			starting = Donald
 		)
 		.pipe(takeTurn("Donald clues 2 to Cathy"))
 		.pipe(takeTurn("Alice clues 3 to Bob"))
@@ -139,14 +131,12 @@ class SelfFinesses extends munit.FunSuite:
 	}
 
 	test("maintains a self-finesse even as inferences are reduced") {
-		val game = setup(HGroup.apply, Vector(
+		val game = setup(HGroup.atLevel(2), Vector(
 			Vector("xx", "xx", "xx", "xx"),
 			Vector("y1", "b4", "b1", "g1"),
 			Vector("r1", "r3", "r1", "b4"),
 			Vector("y1", "r4", "p3", "g1")
-		),
-			init = _.copy(level = 2)
-		)
+		))
 		.pipe(takeTurn("Alice clues 1 to Bob"))
 		.pipe(takeTurn("Bob plays y1", "p4"))
 		.pipe(takeTurn("Cathy clues 3 to Alice (slot 2)"))
@@ -164,7 +154,7 @@ class SelfFinesses extends munit.FunSuite:
 	}
 
 	// test("prefers the simplest connection even when needing to self-finesse") {
-	// 	val game = setup(HGroup.apply, Vector(
+	// 	val game = setup(HGroup.atLevel(2), Vector(
 	// 		Vector("xx", "xx", "xx", "xx"),
 	// 		Vector("b1", "r3", "y3", "g4"),
 	// 		Vector("p3", "g5", "p4", "g3"),
@@ -181,17 +171,17 @@ class SelfFinesses extends munit.FunSuite:
 	// }
 
 	test("understands an asymmetric self-finesse") {
-		val game = setup(HGroup.apply, Vector(
+		val game = setup(HGroup.atLevel(2), Vector(
 			Vector("xx", "xx", "xx", "xx"),
 			Vector("r3", "r5", "y3", "g4"),
 			Vector("r4", "b5", "p4", "g3"),
-			Vector("p1", "b4", "g1", "b2")
+			Vector("p3", "b4", "g3", "b3")
 		),
-			starting = Cathy,
+			starting = Donald,
 			playStacks = Some(Vector(2, 0, 0, 4, 0)),
-			init = _.copy(level = 2)
+			clueTokens = 7,
+			init = _.copy(inEarlyGame = false)
 		)
-		.pipe(takeTurn("Cathy clues 5 to Bob"))
 		.pipe(takeTurn("Donald clues 5 to Bob"))
 
 		// Donald, Bob and Alice can see b5, so we all know this is an r5 finesse.
@@ -200,17 +190,17 @@ class SelfFinesses extends munit.FunSuite:
 	}
 
 	test("plays even if it could be an asymmetric finesse") {
-		val game = setup(HGroup.apply, Vector(
+		val game = setup(HGroup.atLevel(2), Vector(
 			Vector("xx", "xx", "xx", "xx"),
 			Vector("r3", "r5", "y3", "g4"),
 			Vector("r4", "y5", "p4", "g3"),		// Cathy has y5 instead of b5
-			Vector("p1", "b4", "g1", "b2")
+			Vector("p3", "b4", "g3", "b3")
 		),
-			starting = Cathy,
+			starting = Donald,
 			playStacks = Some(Vector(2, 0, 0, 4, 0)),
-			init = _.copy(level = 2)
+			clueTokens = 7,
+			init = _.copy(inEarlyGame = false)
 		)
-		.pipe(takeTurn("Cathy clues 5 to Bob"))
 		.pipe(takeTurn("Donald clues 5 to Bob"))
 
 		// We must play into this, since we can't assume we have b5.
@@ -218,15 +208,14 @@ class SelfFinesses extends munit.FunSuite:
 	}
 
 	test("prefers to self-finesse over assuming asymmetric information") {
-		val game = setup(HGroup.apply, Vector(
+		val game = setup(HGroup.atLevel(2), Vector(
 			Vector("xx", "xx", "xx", "xx", "xx"),
 			Vector("g4", "r1", "y2", "r2", "b4"),
 			Vector("r3", "g3", "b2", "b3", "m4")
 		),
 			playStacks = Some(Vector(0, 0, 2, 0, 3)),
 			discarded = Vector("r3", "m4"),
-			variant = "Rainbow (5 Suits)",
-			init = _.copy(level = 2)
+			variant = "Rainbow (5 Suits)"
 		)
 		.pipe(takeTurn("Alice clues red to Cathy"))			// r1, r3, m4
 		.pipe(takeTurn("Bob clues 5 to Alice (slot 5)"))
@@ -238,7 +227,7 @@ class SelfFinesses extends munit.FunSuite:
 	}
 
 	test("realizes a self-finesse after other possibilities are stomped") {
-		val game = setup(HGroup.apply, Vector(
+		val game = setup(HGroup.atLevel(2), Vector(
 			Vector("xx", "xx", "xx", "xx"),
 			Vector("y4", "r5", "y3", "g4"),
 			Vector("r2", "g4", "p1", "g1"),
@@ -248,10 +237,9 @@ class SelfFinesses extends munit.FunSuite:
 			playStacks = Some(Vector(1, 1, 0, 0, 0)),
 			init =
 				preClue[HGroup](Cathy, 3, Vector(TestClue(ClueKind.Rank, 1, Bob))) andThen
-				preClue[HGroup](Cathy, 4, Vector(TestClue(ClueKind.Rank, 1, Bob))) andThen
-				(g => g.copy(level = 2))
+				preClue[HGroup](Cathy, 4, Vector(TestClue(ClueKind.Rank, 1, Bob)))
 		)
-		.pipe(takeTurn("Donald clues 4 to Alice (slot 3)"))		// could be r,g,p
+		.pipe(takeTurn("Donald clues 4 to Alice (slot 3)"))
 		.pipe(takeTurn("Alice discards y3 (slot 4)"))
 		.pipe(takeTurn("Bob clues red to Donald"))				// finessing r2, proving !r
 
@@ -260,14 +248,12 @@ class SelfFinesses extends munit.FunSuite:
 	}
 
 	test("understands a very delayed finesse") {
-		val game = setup(HGroup.apply, Vector(
+		val game = setup(HGroup.atLevel(2), Vector(
 			Vector("xx", "xx", "xx", "xx"),
 			Vector("p4", "y4", "g1", "r4"),
 			Vector("b1", "g1", "y2", "y2"),
 			Vector("b3", "y1", "p1", "p3")
-		),
-			init = _.copy(level = 2)
-		)
+		))
 		.pipe(takeTurn("Alice clues 1 to Cathy"))
 		.pipe(takeTurn("Bob clues 3 to Alice (slot 4)"))
 		.pipe(takeTurn("Cathy plays g1", "y5"))
@@ -285,14 +271,13 @@ class SelfFinesses extends munit.FunSuite:
 	}
 
 	test("understands a fake self-finesse") {
-		val game = setup(HGroup.apply, Vector(
+		val game = setup(HGroup.atLevel(2), Vector(
 			Vector("xx", "xx", "xx", "xx", "xx"),
 			Vector("y2", "y5", "b4", "y3", "r1"),
 			Vector("r4", "g5", "p4", "g3", "b5")
 		),
 			starting = Cathy,
-			playStacks = Some(Vector(0, 1, 1, 0, 0)),
-			init = _.copy(level = 2)
+			playStacks = Some(Vector(0, 1, 1, 0, 0))
 		)
 		.pipe(takeTurn("Cathy clues 1 to Bob"))
 		.pipe(takeTurn("Alice clues 3 to Bob"))

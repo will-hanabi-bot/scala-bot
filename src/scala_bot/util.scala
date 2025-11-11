@@ -20,16 +20,23 @@ def visibleFind(
 	infer: Boolean = false,
 	symmetric: Boolean = false,
 	assume: Boolean = false,
+	excludeOrder: Int = -1,
 	cond: (playerIndex: Int, order: Int) => Boolean = (_, _) => true
 ) =
 	state.hands.zipWithIndex.flatMap { (hand, playerIndex) =>
 		hand.filter { order =>
+			order != excludeOrder &&
 			player.thoughts(order).matches(
 				id,
 				infer,
 				symmetric = symmetric || playerIndex == player.playerIndex,
 				assume = assume
-			) && cond(playerIndex, order)
+			) &&
+			!player.links.exists { l =>
+				val orders = l.getOrders
+				orders.contains(excludeOrder) && orders.contains(order)
+			} &&
+			cond(playerIndex, order)
 		}
 	}
 

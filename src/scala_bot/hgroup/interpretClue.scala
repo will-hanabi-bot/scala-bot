@@ -47,10 +47,6 @@ def interpClue(ctx: ClueContext): HGroup =
 					inferred = t.inferred.retain(i => i.rank == clue.value && !state.isPlayable(i))
 				))
 		}
-		.withMeta(focus) {
-			// Focus doesn't matter for a fix clue
-			_.copy(focused = prev.meta(focus).focused)
-		}
 		.copy(lastMove = Some(ClueInterp.Fix))
 
 	val stall = stallingSituation(ctx)
@@ -59,7 +55,7 @@ def interpClue(ctx: ClueContext): HGroup =
 		val (interp, thinksStall) = stall.get
 
 		if (thinksStall.size > 0 && thinksStall.size < state.numPlayers)
-			Log.warn(s"asymmetric move!")
+			Log.warn(s"asymmetric! only ${thinksStall.map(state.names)} think stall")
 			// return game.copy(lastMove = Some(ClueInterp.Mistake))
 
 		else if (thinksStall.size == state.numPlayers)
@@ -89,6 +85,7 @@ def interpClue(ctx: ClueContext): HGroup =
 				infoLock = Some(t.possible.intersect(distributionIds.get)),
 				reset = false
 			)}
+			.withMeta(focus)(_.copy(focused = true))
 			.copy(lastMove = Some(ClueInterp.Distribution))
 
 	if (game.level >= Level.BasicCM && !state.inEndgame)
@@ -146,7 +143,8 @@ def interpClue(ctx: ClueContext): HGroup =
 
 	val savePoss = if (!chop) List() else (for
 		inf <- common.thoughts(focus).inferred if
-			visibleFind(state, common, inf, infer = true, cond = (_, order) => order != focus).isEmpty && {
+			!state.isBasicTrash(inf) &&
+			visibleFind(state, common, inf, infer = true, excludeOrder = focus).isEmpty && {
 			if (clue.kind == ClueKind.Colour)
 				colourSave(prev, action, inf, focus)
 			else
@@ -164,7 +162,8 @@ def interpClue(ctx: ClueContext): HGroup =
 			(action.clue.kind == ClueKind.Colour || savePoss.nonEmpty || positional)
 
 		common.thoughts(focus).inferred.filter { inf =>
-			visibleFind(state, common, inf, infer = true, cond = (_, order) => order != focus).isEmpty &&
+			!state.isBasicTrash(inf) &&
+			visibleFind(state, common, inf, infer = true, excludeOrder = focus).isEmpty &&
 			!savePoss.exists(_.id == inf)
 		}
 		.flatMap {
@@ -179,7 +178,8 @@ def interpClue(ctx: ClueContext): HGroup =
 		occamsRazor(possible, target)
 	}
 
-	val noSelf = giver == state.ourPlayerIndex ||
+	val noSelf = !game.allowFindOwn ||
+		giver == state.ourPlayerIndex ||
 		simplest.exists(fp => state.deck(focus).matches(fp.id))
 
 	if (noSelf)
@@ -199,7 +199,8 @@ def interpClue(ctx: ClueContext): HGroup =
 			}
 
 			common.thoughts(focus).inferred.filter { inf =>
-				visibleFind(state, common, inf, infer = true, cond = (_, order) => order != focus).isEmpty &&
+				!state.isBasicTrash(inf) &&
+				visibleFind(state, common, inf, infer = true, excludeOrder = focus).isEmpty &&
 				!(savePoss.exists(_.id == inf) || simplest.exists(_.id == inf))
 			}
 			.flatMap {

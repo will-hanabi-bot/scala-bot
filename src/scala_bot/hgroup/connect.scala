@@ -21,7 +21,8 @@ case class ConnectOpts(
 	noLayer: Boolean = false,
 )
 
-def findKnownConn(game: HGroup, giver: Int, id: Identity, ignore: Set[Int]) =
+def findKnownConn(ctx: ClueContext, giver: Int, id: Identity, ignore: Set[Int]) =
+	val game = ctx.game
 	val state = game.state
 
 	def validKnown(order: Int) =
@@ -38,12 +39,16 @@ def findKnownConn(game: HGroup, giver: Int, id: Identity, ignore: Set[Int]) =
 			case _ => false
 		}
 
-	def validPlayable(order: Int) =
+	def validPlayable(playerIndex: Int, order: Int) =
 		!ignore.contains(order) &&
-		game.state.deck(order).matches(id, assume = true) &&
 		game.common.thoughts(order).inferred.contains(id) &&
 		!game.xmeta(order).maybeFinessed &&
-		game.common.orderPlayable(game, order, excludeTrash = true)
+		game.common.orderPlayable(game, order, excludeTrash = true) &&
+		!{	// Don't connect on our unknown playables for an id matching the focus:
+			// giver would be bad touching
+			playerIndex == state.ourPlayerIndex &&
+			state.deck(ctx.focusResult.focus).id().contains(id)
+		}
 
 	// Globally known
 	val knownConns = for
@@ -65,9 +70,10 @@ def findKnownConn(game: HGroup, giver: Int, id: Identity, ignore: Set[Int]) =
 	// Visible and going to be played (excludes giver)
 	val playableConns = for
 		playerIndex <- (0 until state.numPlayers).view if playerIndex != giver
-		order <- state.hands(playerIndex) if validPlayable(order)
+		playables = state.hands(playerIndex).filter(validPlayable(playerIndex, _))
+		order <- playables if game.state.deck(order).matches(id, assume = true)
 	yield
-		PlayableConn(playerIndex, order, id)
+		PlayableConn(playerIndex, order, id, linked = playables.toList)
 
 	knownConns.headOption
 	.orElse(linkedConns.headOption)
@@ -110,10 +116,9 @@ def findUnknownConnecting(ctx: ClueContext, reacting: Int, id: Identity, connect
 
 	val prompt = prev.common.findPrompt(prev, reacting, id, connected, ignore)
 	val finesse = prev.findFinesse(reacting, connected, ignore)
-	val promptConn = prompt.flatMap(tryPrompt)
 
-	if (promptConn.isDefined)
-		return promptConn
+	if (prompt.isDefined)
+		return tryPrompt(prompt.get)
 
 	// Try prompting a wrongly-ranked pink card
 	val tryPinkPrompt = state.includesVariant(PINKISH) &&
@@ -132,6 +137,13 @@ def findUnknownConnecting(ctx: ClueContext, reacting: Int, id: Identity, connect
 
 	if (cluedDupe)
 		Log.warn(s"disallowed finesse, ${state.logId(id)} already clued")
+		return None
+
+	// We'll remove an information channel if we finesse a maybe-finessed card
+	val disallowFinesse = giver == state.ourPlayerIndex &&
+		finesse.exists(prev.xmeta(_).maybeFinessed)
+
+	if (disallowFinesse)
 		return None
 
 	finesse.flatMap(state.deck(_).id()) match {
@@ -170,7 +182,7 @@ def findUnknownConnecting(ctx: ClueContext, reacting: Int, id: Identity, connect
 
 			if (finesseId == id || opts.findOwn.exists(i => i != state.ourPlayerIndex && game.players(i).thoughts(finesse.get).possible.contains(id)))
 				// At level 1, only forward finesses are allowed.
-				if (level == 1 && !inBetween(state.numPlayers, reacting, giver, target))
+				if (level == 1 && finesseId == id && !inBetween(state.numPlayers, reacting, giver, target))
 					Log.warn(s"found non-forward finesse ${state.logId(id)} in ${state.names(reacting)}'s hand at lv 1!")
 					None
 				else
@@ -242,7 +254,7 @@ def findConnecting(ctx: ClueContext, id: Identity, connCtx: ConnectContext, opts
 		Log.info(s"all ${state.logId(id)} in trash!")
 		return None
 
-	val known = findKnownConn(game, giver, id, connCtx.ignore ++ connCtx.connected)
+	val known = findKnownConn(ctx, giver, id, connCtx.ignore ++ connCtx.connected)
 
 	if (known.isDefined)
 		return Some(known.toList)
@@ -376,7 +388,7 @@ def connect(ctx: ClueContext, id: Identity, looksDirect: Boolean, thinksStall: S
 
 	@annotation.tailrec
 	def loop(hypo: HGroup, nextRank: Int, connections: List[Connection]): Option[List[Connection]] =
-		if (nextRank == rank)
+		if (nextRank >= rank)
 			Some(connections)
 		else
 			val nextId = Identity(suitIndex, nextRank)
