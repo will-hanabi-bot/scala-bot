@@ -23,31 +23,46 @@ def interpClue(ctx: ClueContext): HGroup =
 	val ClueAction(giver, target, list, clue) = action
 
 	val FocusResult(focus, chop, positional) = ctx.focusResult
-	val (cluedResets, duplicateReveals) = checkFix(prev, game, action)
+	checkFix(prev, game, action) match {
+		case FixResult.Normal(cluedResets, duplicateReveals) =>
+			Log.info(s"fix clue! not inferring anything else")
 
-	if (cluedResets.nonEmpty || duplicateReveals.nonEmpty)
-		Log.info(s"fix clue! not inferring anything else")
+			lazy val oldOrdered1s = prev.order1s(list.filter(prev.unknown1), noFilter = true)
+			val pinkFix1s = state.includesVariant(PINKISH) &&
+				clue.kind == ClueKind.Rank && clue.value != 1 &&
+				oldOrdered1s.nonEmpty
 
-		lazy val oldOrdered1s = prev.order1s(list.filter(prev.unknown1), noFilter = true)
-		val pinkFix1s = state.includesVariant(PINKISH) &&
-			clue.kind == ClueKind.Rank && clue.value != 1 &&
-			oldOrdered1s.nonEmpty
+			return game.when (_ => pinkFix1s) { g =>
+				val fixedOrder = oldOrdered1s.head
 
-		return game.when (_ => pinkFix1s) { g =>
-			val fixedOrder = oldOrdered1s.head
+				if (chop && (clue.value == 2 || clue.value == 5))
+					Log.info(s"pink fix!")
+					g.withThought(fixedOrder)(t => t.copy(
+						inferred = t.possible.difference(state.playableSet)
+					))
+				else
+					Log.info(s"pink fix promise!")
+					g.withThought(fixedOrder)(t => t.copy(
+						inferred = t.inferred.retain(i => i.rank == clue.value && !state.isPlayable(i))
+					))
+			}
+			.copy(lastMove = Some(ClueInterp.Fix))
 
-			if (chop && (clue.value == 2 || clue.value == 5))
-				Log.info(s"pink fix!")
-				g.withThought(fixedOrder)(t => t.copy(
-					inferred = t.possible.retain(!state.isPlayable(_))
-				))
-			else
-				Log.info(s"pink fix promise!")
-				g.withThought(fixedOrder)(t => t.copy(
-					inferred = t.inferred.retain(i => i.rank == clue.value && !state.isPlayable(i))
-				))
-		}
-		.copy(lastMove = Some(ClueInterp.Fix))
+		case FixResult.NoNewInfo(fixes) =>
+			Log.info("no info fix clue! not inferring anything else")
+
+			val fixTarget = Option.when (clue == BaseClue(ClueKind.Rank, 1)) {
+				prev.order1s(list.filter(prev.unknown1), noFilter = true).headOption
+			}
+			.flatten.getOrElse(focus)
+
+			return game
+				.withThought(fixTarget)(t => t.copy(inferred = t.possible.intersect(state.trashSet)))
+				.withMeta(fixTarget)(_.copy(trash = true))
+				.copy(lastMove = Some(ClueInterp.Fix))
+
+		case _ => ()
+	}
 
 	val stall = stallingSituation(ctx)
 
@@ -98,7 +113,7 @@ def interpClue(ctx: ClueContext): HGroup =
 					acc
 				else
 					acc.withThought(order) { t =>
-						val newInferred = t.possible.retain(state.isBasicTrash)
+						val newInferred = t.possible.intersect(state.trashSet)
 						t.copy(
 							inferred = newInferred,
 							infoLock = Some(newInferred)
@@ -186,7 +201,7 @@ def interpClue(ctx: ClueContext): HGroup =
 		Log.info(s"simplest focus possibilities [${simplest.map(fp => state.logId(fp.id)).mkString(",")}]")
 		resolveClue(ctx, simplest)
 	else
-		Log.info(s"finding own!")
+		Log.highlight(Console.GREEN, s"finding own!")
 
 		val ownFps = {
 			val looksDirect = common.thoughts(focus).id(symmetric = true).isEmpty && {

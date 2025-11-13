@@ -2,66 +2,74 @@ package scala_bot.hgroup
 
 import scala_bot.basics._
 import scala_bot.logger.{Log, Logger, LogLevel}
+import scala_bot.utils.visibleFind
 
 def getResult(game: HGroup, hypo: HGroup, action: ClueAction): Double =
 	val (common, state, meta) = (game.common, game.state, game.meta)
 	val ClueAction(giver, target, list, clue) = action
 
+	val newPlayables = state.hands.flatten.filter(o =>
+		meta(o).status != CardStatus.Finessed && hypo.meta(o).status == CardStatus.Finessed)
+
+	val badPlay = newPlayables.find(o =>
+		!(hypo.me.hypoPlays.contains(o) || (state.inEndgame && state.deck(o).id().exists(state.isPlayable))))
+
+	if (badPlay.isDefined)
+		Log.warn(s"clue ${clue.fmt(state, target)} results in ${state.logId(badPlay.get)} ${badPlay.get} looking playable! ${hypo.me.hypoPlays}")
+		return -100
+
+	val badTrash = state.hands.flatten.find { o =>
+		!meta(o).trash && hypo.meta(o).trash &&
+		state.deck(o).id().exists(visibleFind(game.state, game.players(giver), _, excludeOrder = o).isEmpty)
+	}
+
+	if (badTrash.isDefined)
+		Log.warn(s"clue ${clue.fmt(state, target)} results in ${state.logId(badTrash.get)} ${badTrash.get} looking trash!")
+		return -100
+
 	val (newTouched, fill, elim) = elimResult(game, hypo, hypo.state.hands(target), list)
-	val (badTouch, trash, _) = badTouchResult(game, hypo, giver, target)
+	val (badTouch, trash, _) = badTouchResult(game, hypo, action)
 	val (_, playables) = playablesResult(game, hypo)
 
 	val revealedTrash = hypo.common.thinksTrash(hypo, target).count(o =>
 		hypo.state.deck(o).clued && !common.thinksTrash(game, target).contains(o))
 
-	val newPlayables = state.hands.flatten.filter(o =>
-		meta(o).status != CardStatus.CalledToPlay && hypo.meta(o).status == CardStatus.CalledToPlay)
+	hypo.lastMove match {
+		// case Some(ClueInterp.Play) if playables.isEmpty && !state.inEndgame =>
+		// 	Log.warn(s"clue ${clue.fmt(state, target)} looks like play but gets no playables!")
+		// 	-100
+		case _ =>
+			// Previously-unclued playables whose copies are already touched
+			val dupedPlayables = hypo.me.hypoPlays.count { p =>
+				!state.deck(p).clued &&
+				state.hands.flatten.exists(o =>
+					o != p && game.isTouched(o) && state.deck(o).matches(state.deck(p)))
+			}
 
-	val badPlayable = newPlayables.find(o =>
-		!(hypo.me.hypoPlays.contains(o) || (state.inEndgame && state.deck(o).id().exists(state.isPlayable))))
+			val goodTouch: Double =
+				if (badTouch.length > 0)
+					-badTouch.length
+				else
+					3 * List(0.0, 0.125, 0.25, 0.35, 0.45, 0.55)(newTouched.length)
 
-	badPlayable match {
-		case Some(badPlay) =>
-			Log.warn(s"clue ${clue.fmt(state, target)} results in ${state.logId(badPlay)} ${badPlay} looking playable! ${hypo.me.hypoPlays}")
-			-100
-		case None =>
-				hypo.lastMove match {
-					// case Some(ClueInterp.Play) if playables.isEmpty && !state.inEndgame =>
-					// 	Log.warn(s"clue ${clue.fmt(state, target)} looks like play but gets no playables!")
-					// 	-100
-					case _ =>
-						// Previously-unclued playables whose copies are already touched
-						val dupedPlayables = hypo.me.hypoPlays.count { p =>
-							!state.deck(p).clued &&
-							state.hands.flatten.exists(o =>
-								o != p && game.isTouched(o) && state.deck(o).matches(state.deck(p)))
-						}
+			val untouchedPlays = playables.count(!hypo.state.deck(_).clued)
 
-						val goodTouch: Double =
-							if (badTouch.length > 0)
-								-badTouch.length
-							else
-								3 * List(0.0, 0.125, 0.25, 0.35, 0.45, 0.55)(newTouched.length)
+			val playablesS = playables.map(state.logId(_)).mkString(", ")
+			Log.info(s"good touch: $goodTouch, playables: $playablesS, duped: $dupedPlayables, trash: ${trash.length}, fill: ${fill.length}, elim: ${elim.length}, bad touch: $badTouch, ${hypo.lastMove}")
 
-						val untouchedPlays = playables.count(!hypo.state.deck(_).clued)
+			val value = goodTouch +
+				(playables.length - 2.0 * dupedPlayables) +
+				0.2 * untouchedPlays +
+				(if (state.inEndgame) 0.01 else 0.1) * revealedTrash +
+				(if (state.inEndgame) 0.2 else 0.1) * fill.length +
+				(if (state.inEndgame) 0.1 else 0.05) * elim.length +
+				0.1 * badTouch.length
 
-						val playablesS = playables.map(state.logId(_)).mkString(", ")
-						Log.info(s"good touch: $goodTouch, playables: $playablesS, duped: $dupedPlayables, trash: ${trash.length}, fill: ${fill.length}, elim: ${elim.length}, bad touch: $badTouch, ${hypo.lastMove}")
-
-						val value = goodTouch +
-							(playables.length - 2.0 * dupedPlayables) +
-							0.2 * untouchedPlays +
-							(if (state.inEndgame) 0.01 else 0.1) * revealedTrash +
-							(if (state.inEndgame) 0.2 else 0.1) * fill.length +
-							(if (state.inEndgame) 0.1 else 0.05) * elim.length +
-							0.1 * badTouch.length
-
-						hypo.lastMove match {
-							case Some(ClueInterp.Mistake) => value - 10
-							case Some(ClueInterp.Fix) | Some(ClueInterp.Reactive) => value + 1
-							case _ => value
-						}
-				}
+			hypo.lastMove match {
+				case Some(ClueInterp.Mistake) => value - 10
+				case Some(ClueInterp.Fix) | Some(ClueInterp.Reactive) => value + 1
+				case _ => value
+			}
 	}
 
 def advanceGame(game: HGroup, action: Action) =
@@ -200,7 +208,7 @@ def advance(orig: HGroup, game: HGroup, offset: Int): Double =
 				advance(orig, advanceGame(game, action), offset + 1)
 		}
 
-def evalAction(game: HGroup, action: Action): Double =
+def evalAction(game: HGroup, action: Action): (HGroup, Double) =
 	Log.highlight(Console.GREEN, s"===== Predicting value for ${action.fmt(game.state)} =====")
 	val state = game.state
 	val hypoGame = advanceGame(game, action)
@@ -239,13 +247,13 @@ def evalAction(game: HGroup, action: Action): Double =
 
 	if (value == -100)
 		Log.info("mistake! -100")
-		-100
+		(hypoGame, -100)
 	else
 		Log.info(f"starting value $value%.2f")
 
 		val best = value + advance(game, hypoGame, 1)
 		Log.info(f"${action.fmt(state)}%s: $best%.2f (${hypoGame.lastMove}%s)")
-		best
+		(hypoGame, best)
 
 def evalState(state: State): Double =
 	// The first 2 * (# suits) pts are worth 2.

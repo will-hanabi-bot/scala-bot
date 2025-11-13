@@ -116,7 +116,6 @@ object RefSieve:
 		def interpretClue(prev: RefSieve, game: RefSieve, action: ClueAction): RefSieve =
 			val ClueAction(giver, target, list, clue) = action
 			val newlyTouched = list.filter(!prev.state.deck(_).clued)
-			val (clueResets, duplicateReveals) = checkFix(prev, game, action)
 
 			// val resetOrder = clueResets.find(o => {
 			// 	val thought = game.common.thoughts(o)
@@ -131,7 +130,10 @@ object RefSieve:
 			// 	return game.rewind()
 			// }
 
-			val fix = clueResets.nonEmpty || duplicateReveals.nonEmpty
+			val fix = checkFix(prev, game, action) match {
+				case FixResult.Normal(_, _) => true
+				case _ => false
+			}
 			val trashPush = !fix && newlyTouched.forall(game.common.orderKt(game, _))
 
 			val intent = determineFocus(prev, game, action, push = false)
@@ -290,7 +292,7 @@ object RefSieve:
 
 			val (newCommon, newMeta) = state.hands(currentPlayerIndex).foldLeft((game.common, game.meta)) { case ((c, m), order) =>
 				if (m(order).status == CardStatus.CalledToPlay)
-					val newInferred = c.thoughts(order).inferred.retain(state.isPlayable)
+					val newInferred = c.thoughts(order).inferred.intersect(state.playableSet)
 
 					if (newInferred.isEmpty)
 						val newCommon = c.withThought(order)(_.resetInferences())

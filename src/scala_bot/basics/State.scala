@@ -29,6 +29,12 @@ case class State(
 	actionList: Vector[List[Action]] = Vector(),
 	currentPlayerIndex: Int = 0
 ):
+	val playableSet = IdentitySet.create(isPlayable, variant.suits.length * 5)
+
+	val criticalSet = IdentitySet.create(isCritical, variant.suits.length * 5)
+
+	val trashSet = IdentitySet.create(isBasicTrash, variant.suits.length * 5)
+
 	def withDiscard(id: Identity, order: Int) =
 		val Identity(suitIndex, rank) = id
 		val newStack = order +: discardStacks(suitIndex)(rank - 1)

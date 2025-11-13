@@ -126,20 +126,21 @@ case class Player(
 		val state = game.state
 		val thought = thoughts(order)
 
-		def isPlayable(i: Identity) =
-			state.isPlayable(i) || (excludeTrash && state.isBasicTrash(i))
+		inline def possPlayable(poss: IdentitySet) =
+			val p = if (excludeTrash) poss.difference(state.trashSet) else poss
+			p.intersect(state.playableSet) == p
 
 		game.meta(order).status match {
 			case CardStatus.CalledToPlay =>
-				thought.possible.exists(isPlayable) &&
-				thought.infoLock.forall(_.exists(isPlayable))
+				thought.possible.intersect(state.playableSet).nempty &&
+				thought.infoLock.forall(_.intersect(state.playableSet).nempty)
 
 			case CardStatus.Sarcastic | CardStatus.GentlemansDiscard =>
-				thought.inferred.forall(isPlayable)
+				possPlayable(thought.inferred)
 
 			case _ =>
-				thought.possible.forall(isPlayable) ||
-				thought.infoLock.exists(_.forall(isPlayable))
+				possPlayable(thought.possible) ||
+				thought.infoLock.exists(possPlayable)
 		}
 
 	def orderPlayable(game: Game, order: Int, excludeTrash: Boolean = false) =
@@ -157,7 +158,10 @@ case class Player(
 				game.meta(order).status != CardStatus.CalledToDiscard
 
 			val poss = if (infer) thoughts(order).possibilities else thoughts(order).possible
-			poss.forall(i => state.isPlayable(i) || (excludeTrash && state.isBasicTrash(i)))
+			val p = if (excludeTrash) poss.difference(state.trashSet) else poss
+
+			p.intersect(state.playableSet) == p
+			// poss.forall(i => state.isPlayable(i) || (excludeTrash && state.isBasicTrash(i)))
 
 	def obviousPlayables(game: Game, playerIndex: Int) =
 		game.state.hands(playerIndex).filter(orderKp(game, _))
@@ -264,7 +268,7 @@ case class Player(
 	def lockedDiscard(state: State, playerIndex: Int) =
 		val critPercents = state.hands(playerIndex).map { o =>
 			val poss = thoughts(o).possibilities
-			val percent = poss.retain(state.isCritical).length / poss.length
+			val percent = poss.intersect(state.criticalSet).length / poss.length
 			(o, percent)
 		}.sortBy(_._2)
 
@@ -296,21 +300,42 @@ case class Player(
 			hypo: G,
 			unknownPlays: Set[Int],
 			played: Set[Int],
-			viable: Set[Int]
+			viable: Vector[Int]
 		)
 
+		inline def hasPlayableLink(order: Int, played: Set[Int]): Boolean =
+			var i = 0
+			while (i < playLinks.length) {
+				val l = playLinks(i)
+				if (l.target == order) {
+					var j = 0
+					var allPlayed = true
+					while (j < l.orders.length && allPlayed) {
+						allPlayed = played.contains(l.orders(j))
+						j += 1
+					}
+					if (allPlayed)
+						i = 999
+				}
+				i += 1
+			}
+			i == 1000
+
 		def processRound(struct: HypoStruct): HypoStruct =
-			struct._4.foldLeft(struct) { (acc, order) =>
+			struct._4.foldLeft(struct.copy(viable = Vector())) { (acc, order) =>
 				val HypoStruct(hypo, unknownPlays, played, viable) = acc
 				val thought = thoughts(order)
 
 				val playable = hypo.state.hasConsistentInfs(thought) && {
 					(if (game.goodTouch) orderPlayable(hypo, order) else orderKp(hypo, order)) ||
-					playLinks.exists(l => l.target == order && l.orders.forall(played.contains))
+					hasPlayableLink(order, played)
+					// playLinks.exists(l => l.target == order && l.orders.forall(played.contains))
 				}
 
 				// Should this be symmetric? Checking whether a playable or not should be, but another player can know what id it is
-				if (!playable) acc else thought.id(infer = true, symmetric = true) match {
+				if (!playable)
+					acc.copy(viable = viable :+ order)
+				else thought.id(infer = true, symmetric = true) match {
 					case None =>
 						val fulfilledLinks = links.filter { l =>
 							val orders = l.getOrders
@@ -329,26 +354,23 @@ case class Player(
 						acc.copy(
 							hypo = newHypo,
 							unknownPlays = unknownPlays + order,
-							played = played + order,
-							viable = viable - order
+							played = played + order
 						)
 					case Some(id) =>
 						if (hypo.state.isPlayable(id))
 							acc.copy(
 								hypo = hypo.withState(_.withPlay(id)),
 								unknownPlays,
-								played = played + order,
-								viable = viable - order
+								played = played + order
 							)
 						else
 							Log.warn(s"tried to add ${hypo.state.logId(id)} ($order) onto hypo stacks, but they were at ${hypo.state.playStacks} $played ($name)")
-							acc.copy(viable = viable - order)
+							acc
 				}
 			}
 
 		val viable = game.state.hands.flatten
 			.filter(game.state.deck(_).id().forall(!game.state.isBasicTrash(_)))
-			.toSet
 		val initialS = HypoStruct(game, Set(), Set(), viable)
 		val HypoStruct(hypo, unknownPlays, played, _) = Iterator.iterate(initialS)(processRound)
 			.sliding(2)

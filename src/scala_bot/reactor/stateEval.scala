@@ -8,7 +8,7 @@ def getResult(game: Reactor, hypo: Reactor, action: ClueAction): Double =
 	val ClueAction(giver, target, list, clue) = action
 
 	val (newTouched, fill, elim) = elimResult(game, hypo, hypo.state.hands(target), list)
-	val (badTouch, trash, _) = badTouchResult(game, hypo, giver, target)
+	val (badTouch, trash, _) = badTouchResult(game, hypo, action)
 	val (_, playables) = playablesResult(game, hypo)
 
 	val revealedTrash = hypo.common.thinksTrash(hypo, target).count(o =>
@@ -101,7 +101,10 @@ def advance(orig: Reactor, game: Reactor, offset: Int): Double =
 
 	lazy val bobClue = !state.hands(playerIndex).exists(meta(_).urgent) &&
 		offset == 1 &&
-		bobChop.flatMap(state.deck(_).id()).exists(id => state.isCritical(id) || state.isPlayable(id))
+		bobChop.flatMap(state.deck(_).id()).exists { id =>
+			state.isCritical(id) ||
+			(state.isPlayable(id) && !game.me.isSieved(game, id, bobChop.get))
+		}
 
 	if (playerIndex == state.ourPlayerIndex || state.endgameTurns.contains(0))
 		evalGame(orig, game)
@@ -175,7 +178,7 @@ def advance(orig: Reactor, game: Reactor, offset: Int): Double =
 						0.8
 
 					Log.info(s"${state.names(playerIndex)} discarding ${state.logId(id)} but might clue $clueProb")
-					clueProb * advance(orig, clueGame, offset + 1) + (1.0 - clueProb) * advance(orig, dcGame, offset + 1)
+					clueProb * (advance(orig, clueGame, offset + 1) + 1.0) + (1.0 - clueProb) * advance(orig, dcGame, offset + 1)
 				else
 					Log.info(s"${state.names(playerIndex)} discarding ${state.logId(id)}")
 					advance(orig, dcGame, offset + 1)
@@ -300,10 +303,12 @@ def evalGame(orig: Reactor, game: Reactor): Double =
 	val bdrVal = state.variant.allIds.map { id =>
 		val discarded = state.discardStacks(id.suitIndex)(id.rank - 1)
 
-		lazy val duplicated = state.hands.flatten.exists { o =>
+		lazy val duplicate = state.hands.flatten.find { o =>
 			state.deck(o).matches(id) ||
 			game.me.thoughts(o).matches(id, infer = true) && game.meta(o).focused
-		} ||
+		}
+
+		lazy val duplicated = duplicate.isDefined ||
 			// Trust others to discard stuff duplicated in our hand
 			discarded.forall(game.meta(_).by.exists(_ != state.ourPlayerIndex) &&
 				orig.state.ourHand.exists(game.me.thoughts(_).possible.contains(id)))
@@ -311,7 +316,9 @@ def evalGame(orig: Reactor, game: Reactor): Double =
 		if (state.isBasicTrash(id) || id.rank == 5 || discarded.isEmpty)
 			0
 		else if (duplicated)
-			-0.1
+			val sameHandDuplicate = duplicate.exists(d => orig.state.hands(state.holderOf(d)).count(state.deck(_).matches(id)) > 1)
+
+			if (sameHandDuplicate) 0 else -0.5
 		else
 			id.rank match {
 				case 1 => -math.pow(discarded.length, 2)

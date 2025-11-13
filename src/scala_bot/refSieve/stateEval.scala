@@ -8,7 +8,7 @@ def getResult(game: RefSieve, hypo: RefSieve, action: ClueAction): Double =
 	val ClueAction(giver, target, list, clue) = action
 
 	val (newTouched, fill, elim) = elimResult(game, hypo, hypo.state.hands(target), list)
-	val (badTouch, trash, _) = badTouchResult(game, hypo, giver, target)
+	val (badTouch, trash, _) = badTouchResult(game, hypo, action)
 	val (_, playables) = playablesResult(game, hypo)
 
 	val revealedTrash = hypo.common.thinksTrash(hypo, target).count(o =>

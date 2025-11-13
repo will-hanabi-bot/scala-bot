@@ -63,7 +63,7 @@ extension(ids: IdentitySet)
 	inline def difference(other: Iterable[Identity]): IdentitySet =
 		ids & ~IdentitySet.from(other)
 
-	def retain(cond: Identity => Boolean): IdentitySet =
+	inline def retain(cond: Identity => Boolean): IdentitySet =
 		var bits = ids
 		var res = ids
 
@@ -73,7 +73,7 @@ extension(ids: IdentitySet)
 
 			val id = Identity.fromOrd(tz)
 			if (!cond(id))
-				res &= ~IdentitySet.single(id)
+				res &= ~(1L << tz)
 		}
 		res
 
@@ -90,6 +90,19 @@ object IdentitySet:
 
 	inline def from(ids: Iterable[Identity]) =
 		ids.foldLeft(0L) { (acc, id) => acc | IdentitySet.single(id) }
+
+	inline def create(inline cond: Identity => Boolean, maxIds: Int): IdentitySet =
+		var i = 0
+		var res = 0L
+
+		while (i < maxIds) {
+			val id = Identity.fromOrd(i)
+			if (cond(id))
+				res |= (1L << i)
+
+			i = i + 1
+		}
+		res
 
 	def unapplySeq(ids: IdentitySet): Option[Seq[Identity]] =
 		Some(ids.iterator.toSeq)

@@ -21,7 +21,7 @@ case class ConnectOpts(
 	noLayer: Boolean = false,
 )
 
-def findKnownConn(ctx: ClueContext, giver: Int, id: Identity, ignore: Set[Int]) =
+def findKnownConn(ctx: ClueContext, giver: Int, id: Identity, ignore: Set[Int], findOwn: Boolean) =
 	val game = ctx.game
 	val state = game.state
 
@@ -65,13 +65,13 @@ def findKnownConn(ctx: ClueContext, giver: Int, id: Identity, ignore: Set[Int]) 
 	yield
 		PlayableConn(playerIndex, order, id, linked = link.getOrders)
 
-	// println(s"finding known ${state.logId(id)} $ignore ${game.common.linkedOrders(state)}")
+	// Log.info(s"finding known ${state.logId(id)} $ignore ${game.common.linkedOrders(state)} $findOwn")
 
 	// Visible and going to be played (excludes giver)
 	val playableConns = for
-		playerIndex <- (0 until state.numPlayers).view if playerIndex != giver
+		playerIndex <- (0 until state.numPlayers) if playerIndex != giver
 		playables = state.hands(playerIndex).filter(validPlayable(playerIndex, _))
-		order <- playables if game.state.deck(order).matches(id, assume = true)
+		order <- playables if game.state.deck(order).matches(id, assume = findOwn) && game.isTouched(order)
 	yield
 		PlayableConn(playerIndex, order, id, linked = playables.toList)
 
@@ -248,13 +248,13 @@ def findConnecting(ctx: ClueContext, id: Identity, connCtx: ConnectContext, opts
 	val state = game.state
 	val ClueAction(giver, target, _, _) = action
 
-	// Log.info(s"find connecting ${state.logId(id)}")
+	// Log.highlight(Console.YELLOW, s"find connecting ${state.logId(id)}")
 
 	if (state.baseCount(id.toOrd) == state.cardCount(id.toOrd))
 		Log.info(s"all ${state.logId(id)} in trash!")
 		return None
 
-	val known = findKnownConn(ctx, giver, id, connCtx.ignore ++ connCtx.connected)
+	val known = findKnownConn(ctx, giver, id, connCtx.ignore ++ connCtx.connected, opts.findOwn.isDefined)
 
 	if (known.isDefined)
 		return Some(known.toList)
@@ -384,7 +384,7 @@ def connect(ctx: ClueContext, id: Identity, looksDirect: Boolean, thinksStall: S
 	val Identity(suitIndex, rank) = id
 	var attemptedBluff = false
 
-	// Log.info(s"trying to connect ${state.logId(id)} $looksDirect")
+	// Log.info(s"trying to connect ${state.logId(id)}${if (looksDirect) " (looks direct)" else ""} $findOwn")
 
 	@annotation.tailrec
 	def loop(hypo: HGroup, nextRank: Int, connections: List[Connection]): Option[List[Connection]] =
@@ -413,7 +413,9 @@ def connect(ctx: ClueContext, id: Identity, looksDirect: Boolean, thinksStall: S
 
 			val conn = findConnecting(newCtx, nextId, connCtx, opts)
 				.orElse(findOwn.flatMap { i =>
-					findSingleConn(newCtx, i, nextId, connCtx, opts.copy(findOwn = findOwn))
+					findKnownConn(newCtx, ctx.action.giver, nextId, connCtx.ignore ++ connCtx.connected, findOwn = true).map(List(_)).orElse {
+						findSingleConn(newCtx, i, nextId, connCtx, opts.copy(findOwn = findOwn))
+					}
 				})
 
 			conn match {

@@ -46,7 +46,7 @@ def elimDcDc(state: State, common: Player, meta: Vector[ConvData], reacter: Int,
 					(c, m)
 				case _ =>
 					val newCommon = c.withThought(receiveOrder)(t => t.copy(
-						inferred = t.inferred.retain(!state.isBasicTrash(_))
+						inferred = t.inferred.difference(state.trashSet)
 					))
 					Log.info(s"eliminated trash from slot ${i + 1} $receiveOrder - ${newCommon.strInfs(state, receiveOrder)}")
 					(newCommon, newMeta)
@@ -71,7 +71,7 @@ def elimPlayDc(state: State, common: Player, meta: Vector[ConvData], reacter: In
 			state.hands(reacter).lift(reactSlot - 1) match {
 				case Some(reactOrder) if newCommon.thoughts(reactOrder).possible.exists(state.isPlayable) =>
 					val newCommon = c.withThought(receiveOrder)(t => t.copy(
-						inferred = t.inferred.retain(!state.isBasicTrash(_))
+						inferred = t.inferred.difference(state.trashSet)
 					))
 					Log.info(s"eliminated trash from slot ${i + 1} $receiveOrder - ${newCommon.strInfs(state, receiveOrder)}")
 					(newCommon, newMeta)
@@ -96,7 +96,7 @@ def elimDcPlay(state: State, common: Player, meta: Vector[ConvData], reacter: In
 			state.hands(reacter).lift(reactSlot - 1) match {
 				case Some(reactOrder) if !common.thoughts(reactOrder).possible.forall(state.isCritical)=>
 					val newCommon = c.withThought(receiveOrder)(t => t.copy(
-						inferred = t.inferred.retain(!state.isPlayable(_))
+						inferred = t.inferred.difference(state.playableSet)
 					))
 					Log.info(s"eliminated playables from slot ${i + 1} $receiveOrder - ${newCommon.strInfs(state, receiveOrder)}")
 					(newCommon, updateMeta(meta, newCommon, receiveOrder))
@@ -115,7 +115,7 @@ def elimPlayPlay(state: State, common: Player, meta: Vector[ConvData], reacter: 
 			state.hands(reacter).lift(reactSlot - 1) match {
 				case None => (c, m)
 				case Some(reactOrder) =>
-					common.thoughts(reactOrder).possible.retain(state.isPlayable) match {
+					common.thoughts(reactOrder).possible.intersect(state.playableSet) match {
 						case IdentitySet() => (c, m)
 
 						case IdentitySet(id) =>
@@ -127,7 +127,7 @@ def elimPlayPlay(state: State, common: Player, meta: Vector[ConvData], reacter: 
 
 						case IdentitySet(_ @ _*) =>
 							val newCommon = c.withThought(receiveOrder)(t => t.copy(
-								inferred = t.inferred.retain(!state.isPlayable(_))
+								inferred = t.inferred.difference(state.playableSet)
 							))
 							Log.info(s"eliminated playables from slot ${i + 1} $receiveOrder - ${newCommon.strInfs(state, receiveOrder)}")
 							(newCommon, updateMeta(meta, newCommon, receiveOrder))
@@ -140,7 +140,7 @@ def targetIDiscard(prev: Reactor, game: Reactor, wc: ReactorWC, targetSlot: Int)
 	val order = wc.receiverHand(targetSlot - 1)
 	val meta = game.meta(order)
 
-	val newInferred = common.thoughts(order).inferred.retain(!prev.state.isCritical(_))
+	val newInferred = common.thoughts(order).inferred.difference(prev.state.criticalSet)
 
 	val newCommon = common.withThought(order)(t => t.copy(
 		oldInferred = Some(t.inferred),
@@ -160,8 +160,8 @@ def targetIPlay(_prev: Reactor, game: Reactor, wc: ReactorWC, targetSlot: Int) =
 
 	val newCommon = game.common.withThought(order)(t => t.copy(
 		oldInferred = Some(t.inferred),
-		inferred = t.inferred.retain(state.isPlayable),
-		infoLock = Some(t.inferred.retain(state.isPlayable))
+		inferred = t.inferred.intersect(state.playableSet),
+		infoLock = Some(t.inferred.intersect(state.playableSet))
 	))
 
 	val shifted =

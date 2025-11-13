@@ -142,7 +142,7 @@ case class ConvData(
 		focused = false,
 		urgent = false,
 		trash = false,
-		status = if (status == CardStatus.ZeroClueChop) status else CardStatus.None,
+		status = if (status == CardStatus.ZeroClueChop || status == CardStatus.ChopMoved) status else CardStatus.None,
 		by = None
 	)
 

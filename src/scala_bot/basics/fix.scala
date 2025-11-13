@@ -1,9 +1,15 @@
 package scala_bot.basics
 
-def checkFix(prev: Game, game: Game, action: ClueAction) =
-	val list = action.list
+enum FixResult:
+	case Normal(cluedResets: List[Int], duplicateReveals: List[Int])
+	case NoNewInfo(fixes: List[Int])
+	case None
 
-	list.foldLeft((List[Int](), List[Int]())) { case ((cluedResets, duplicateReveals), order) =>
+def checkFix(prev: Game, game: Game, action: ClueAction): FixResult =
+	val list = action.list
+	val prevPlayables = prev.common.thinksPlayables(prev, action.target)
+
+	val (cluedResets, duplicateReveals) = list.foldRight((List[Int](), List[Int]())) { case (order, (cluedResets, duplicateReveals)) =>
 		lazy val duplicated = prev.state.deck(order).clued && list.exists { o =>
 			o != order &&
 			prev.state.deck(o).clued &&
@@ -11,13 +17,27 @@ def checkFix(prev: Game, game: Game, action: ClueAction) =
 			!prev.common.thoughts(order).matches(prev.common.thoughts(o), infer = true)
 		}
 
-		if (!prev.common.thoughts(order).reset && game.common.thoughts(order).reset)
+		if (!prev.common.thoughts(order).reset && !prev.common.orderKt(prev, order) && game.common.thoughts(order).reset)
 			(order +: cluedResets, duplicateReveals)
 		else if (duplicated)
 			(cluedResets, order +: duplicateReveals)
 		else
 			(cluedResets, duplicateReveals)
 	}
+
+	if (cluedResets.nonEmpty || duplicateReveals.nonEmpty)
+		return FixResult.Normal(cluedResets, duplicateReveals)
+
+	val noNewInfoFixes = list.filter { o =>
+		prevPlayables.contains(o) &&
+		list.forall(prev.state.deck(_).clued) &&
+		prev.common.thoughts(o).possible == game.common.thoughts(o).possible
+	}
+
+	if (noNewInfoFixes.nonEmpty)
+		FixResult.NoNewInfo(noNewInfoFixes.toList)
+	else
+		FixResult.None
 
 def connectableSimple[G <: Game](game: G, player: Player, start: Int, target: Int, id: Option[Identity] = None)(using ops: GameOps[G]): List[Int] =
 	val state = game.state

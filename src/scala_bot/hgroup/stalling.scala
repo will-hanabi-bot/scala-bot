@@ -103,8 +103,8 @@ def isStall(ctx: ClueContext, severity: Int): Option[StallInterp] =
 
 /** Returns the set of player indices that see an alternative clue. */
 def alternativeClue(prev: HGroup, game: HGroup, giver: Int, maxStall: Int, origClue: Clue) =
-	def satisfied(hypo: HGroup, target: Int) =
-		val (badTouch, _, _) = badTouchResult(game, hypo, giver, target)
+	def satisfied(hypo: HGroup, action: ClueAction) =
+		val (badTouch, _, _) = badTouchResult(game, hypo, action)
 		val (_, playables) = playablesResult(game, hypo)
 
 		hypo.lastMove.get match {
@@ -131,7 +131,7 @@ def alternativeClue(prev: HGroup, game: HGroup, giver: Int, maxStall: Int, origC
 		list = state.clueTouched(state.hands(target), clue)
 		action = ClueAction(giver, target, list, clue.toBase)
 		hypo = prev.copy(allowFindOwn = false, noRecurse = true)
-			.simulateClue(action) if satisfied(hypo, target)
+			.simulateClue(action) if satisfied(hypo, action)
 	yield
 		Log.info(s"found alt clue ${clue.fmt(state)} ${hypo.lastMove.get}")
 		val newWCs = hypo.waiting.filter { wc =>

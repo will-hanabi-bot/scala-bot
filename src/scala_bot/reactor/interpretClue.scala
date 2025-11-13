@@ -41,7 +41,6 @@ private def tryStable(prev: Reactor, game: Reactor, action: ClueAction, stall: B
 	Log.info(s"interpreting stable clue!")
 	val state = game.state
 	val ClueAction(giver, target, list, clue) = action
-	val (cluedResets, duplicateReveals) = checkFix(prev, game, action)
 	val newlyTouched = list.filter(!prev.state.deck(_).clued)
 
 	var newCommon = game.common
@@ -57,7 +56,7 @@ private def tryStable(prev: Reactor, game: Reactor, action: ClueAction, stall: B
 		)
 
 		if (trashPush)
-			newCommon = newCommon.withThought(focus)(t => t.copy(inferred = t.inferred.retain(state.isBasicTrash)))
+			newCommon = newCommon.withThought(focus)(t => t.copy(inferred = t.inferred.intersect(state.trashSet)))
 			newMeta = newMeta.updated(focus, newMeta(focus).copy(trash = true))
 
 		else if (playableRank)
@@ -104,62 +103,83 @@ private def tryStable(prev: Reactor, game: Reactor, action: ClueAction, stall: B
 			)
 		})
 
-	if (cluedResets.nonEmpty || duplicateReveals.nonEmpty)
-		Log.info("fix clue!")
-		(Some(ClueInterp.Fix), newGame)
-	else
-		val common = newGame.common
-		val prevPlayables = prev.common.obviousPlayables(prev, target)
-			.concat(connectableSimple(prev, prev.players(giver), state.nextPlayerIndex(giver), target)).distinct
-		val playables = common.obviousPlayables(newGame, target)
-			.concat(connectableSimple(newGame, newGame.players(giver), state.nextPlayerIndex(giver), target)).distinct
+	checkFix(prev, game, action) match {
+		case FixResult.Normal(_, _) =>
+			Log.info("fix clue!")
+			(Some(ClueInterp.Fix), newGame)
 
-		Log.info(s"playables $playables, prev_playables $prevPlayables")
+		case _ =>
+			val common = newGame.common
+			val prevPlayables = prev.common.obviousPlayables(prev, target)
+				.concat(connectableSimple(prev, prev.players(giver), state.nextPlayerIndex(giver), target)).distinct
+			val playables = common.obviousPlayables(newGame, target)
+				.concat(connectableSimple(newGame, newGame.players(giver), state.nextPlayerIndex(giver), target)).distinct
 
-		lazy val reveal = playables.find { o =>
-			list.contains(o) &&
-			!prevPlayables.contains(o) &&
-			(clue.kind == ClueKind.Rank || prev.state.deck(o).clued)
-		}
+			Log.info(s"playables $playables, prev_playables $prevPlayables")
 
-		if (newlyTouched.isEmpty)
-			val safeActions = playables.concat(common.thinksTrash(newGame, target))
-			val oldSafeActions = prevPlayables.concat(prev.common.thinksTrash(prev, target))
+			lazy val reveal = playables.find { o =>
+				list.contains(o) &&
+				!prevPlayables.contains(o) &&
+				(clue.kind == ClueKind.Rank || prev.state.deck(o).clued)
+			}
 
-			if (safeActions.exists(!oldSafeActions.contains(_)))
-				Log.info(s"revealed a safe action! ${safeActions.find(!oldSafeActions.contains(_)).get}")
+			if (newlyTouched.isEmpty)
+				val safeActions = playables.concat(common.thinksTrash(newGame, target))
+				val oldSafeActions = prevPlayables.concat(prev.common.thinksTrash(prev, target))
+
+				// Try connecting with an unknown playable
+				lazy val connectable = {
+					val nextIndex = state.nextPlayerIndex(giver)
+					state.deck(list.max).id() match {
+						case Some(focusId) if nextIndex != target && state.playableAway(focusId) == 1 =>
+							prev.common.obviousPlayables(prev, state.nextPlayerIndex(giver)).find {
+								common.thoughts(_).inferred.contains(focusId.prev.get)
+							}
+						case _ => None
+					}
+				}
+
+				if (safeActions.exists(!oldSafeActions.contains(_)))
+					Log.info(s"revealed a safe action! ${safeActions.find(!oldSafeActions.contains(_)).get}")
+					(Some(ClueInterp.Reveal), newGame)
+				else if (stall)
+					Log.info("stalling with fill-in/hard burn!")
+					(Some(ClueInterp.Stall), newGame)
+				else if (connectable.isDefined)
+					Log.info(s"connecting through unknown playable (${connectable.get})!")
+					val connectedGame = newGame.withThought(connectable.get) { t =>
+						 t.copy(inferred = IdentitySet.single(state.deck(list.max).id().get.prev.get))
+					}
+					(Some(ClueInterp.Reveal), connectedGame)
+				else
+					Log.warn("looked like fill-in/hard burn outside of a stalling situation!")
+					(None, newGame)
+
+			else if (reveal.isDefined)
+				Log.info(s"revealed a safe action! ${reveal.get} $prevPlayables")
 				(Some(ClueInterp.Reveal), newGame)
-			else if (stall)
-				Log.info("stalling with fill-in/hard burn!")
-				(Some(ClueInterp.Stall), newGame)
-			else
-				Log.warn("looked like fill-in/hard burn outside of a stalling situation!")
-				(None, newGame)
 
-		else if (reveal.isDefined)
-			Log.info(s"revealed a safe action! ${reveal.get} $prevPlayables")
-			(Some(ClueInterp.Reveal), newGame)
+			else if (common.orderKt(game, newlyTouched.max))
+				// Brownish TCM if there is at least 1 useful unplayable brown and clue didn't touch chop
+				if (state.includesVariant(BROWNISH) && clue.kind == ClueKind.Rank &&
+					state.variant.suits.zipWithIndex.exists { case (suit, suitIndex) =>
+						BROWNISH.matches(suit) && state.playStacks(suitIndex) + 1 < state.maxRanks(suitIndex) &&
+						!newlyTouched.contains(state.hands(target)(0))
+					})
+					Log.info("brown direct discard!")
+					(Some(ClueInterp.Reveal), newGame)
+				else
+					Log.info("trash push!")
+					refPlay(prev, newGame, action)
 
-		else if (common.orderKt(game, newlyTouched.max))
-			// Brownish TCM if there is at least 1 useful unplayable brown and clue didn't touch chop
-			if (state.includesVariant(BROWNISH) && clue.kind == ClueKind.Rank &&
-				state.variant.suits.zipWithIndex.exists { case (suit, suitIndex) =>
-					BROWNISH.matches(suit) && state.playStacks(suitIndex) + 1 < state.maxRanks(suitIndex) &&
-					!newlyTouched.contains(state.hands(target)(0))
-				})
-				Log.info("brown direct discard!")
-				(Some(ClueInterp.Reveal), newGame)
-			else
-				Log.info("trash push!")
+			else if (clue.kind == ClueKind.Colour)
+				Log.info("colour clue!")
 				refPlay(prev, newGame, action)
 
-		else if (clue.kind == ClueKind.Colour)
-			Log.info("colour clue!")
-			refPlay(prev, newGame, action)
-
-		else
-			Log.info(s"rank clue!")
-			refDiscard(prev, newGame, action, stall)
+			else
+				Log.info(s"rank clue!")
+				refDiscard(prev, newGame, action, stall)
+	}
 
 /**
 * Returns a non-bad touching ref play clue or a ref dc clue on trash to the clue target, if it exists.

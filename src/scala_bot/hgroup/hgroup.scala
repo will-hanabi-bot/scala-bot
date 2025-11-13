@@ -327,6 +327,7 @@ object HGroup:
 				common = game.base._4,
 				base = game.base,
 
+				level = game.level,
 				deckIds = if (keepDeck) game.deckIds else Vector(),
 				lastActions = Vector.fill(game.state.numPlayers)(None),
 				xmeta = Vector.fill(game.base._2.length)(XConvData())
@@ -342,7 +343,15 @@ object HGroup:
 		def interpretDiscard(prev: HGroup, game: HGroup, action: DiscardAction): HGroup =
 			refreshWCs(prev, game, action)
 				.pipe { g =>
-					g.copy(lastActions = g.lastActions.updated(action.playerIndex, Some(action)))
+					val DiscardAction(playerIndex, order, _, _, failed) = action
+					val endEarlyGame = g.inEarlyGame &&
+						!failed &&
+						!g.state.deck(order).clued &&
+						g.meta(order).status == CardStatus.None
+
+					g.when(_ => endEarlyGame)
+						(_.copy(inEarlyGame = false))
+					.copy(lastActions = g.lastActions.updated(playerIndex, Some(action)))
 				}
 
 		def interpretPlay(prev: HGroup, game: HGroup, action: PlayAction): HGroup =
@@ -379,13 +388,33 @@ object HGroup:
 					val action = performToAction(state, perform, state.ourPlayerIndex)
 					(perform, action)
 
+			val clueEvals = allClues.view.map((_, action) => (action, evalAction(game, action)))
+
+			val earlyGameClue = game.inEarlyGame &&
+				clueEvals.exists { case (action, (hypo, _)) => hypo.lastMove match {
+					case Some(ClueInterp.Save) =>
+						true
+					case Some(ClueInterp.Stall) =>
+						hypo.stallInterp == Some(StallInterp.Stall5) &&
+						!game.stalled5
+					case Some(ClueInterp.Play) =>
+						val (badTouch, _, _) = badTouchResult(game, hypo, action.asInstanceOf[ClueAction])
+						badTouch.isEmpty
+
+					case _ => false
+				}}
+
+			if (earlyGameClue)
+				Log.highlight(Console.YELLOW,"must give clue in early game!")
+
 			val allPlays = playableOrders.map { o =>
 				val action = PlayAction(state.ourPlayerIndex, o, me.thoughts(o).id(infer = true))
 				(PerformAction.Play(o), action)
 			}
 
 			val cantDiscard = state.clueTokens == 8 ||
-				(state.pace == 0 && (allClues.nonEmpty || allPlays.nonEmpty))
+				(state.pace == 0 && (allClues.nonEmpty || allPlays.nonEmpty)) ||
+				earlyGameClue
 			Log.info(s"can discard: ${!cantDiscard} ${state.clueTokens}")
 
 			val allDiscards = if (cantDiscard) List() else
@@ -411,7 +440,7 @@ object HGroup:
 				else
 					return PerformAction.Discard(me.lockedDiscard(state, state.ourPlayerIndex))
 
-			allActions.maxBy((_, action) => evalAction(game, action))._1
+			allActions.maxBy((_, action) => evalAction(game, action)._2)._1
 
 		def updateTurn(game: HGroup, action: TurnAction) =
 			game

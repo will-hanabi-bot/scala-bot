@@ -230,7 +230,7 @@ extension (p: Player) {
 				game.isTouched(order)
 		}
 
-		val trashIds = IdentitySet.from(game.state.variant.allIds).retain(game.state.isBasicTrash(_))
+		val trashIds = game.state.trashSet
 
 		val (newThoughts, resets) = elimCandidates.foldLeft((p.thoughts, List[Int]())) {
 			case ((thoughts, resets), order) => {
@@ -380,14 +380,12 @@ extension (p: Player) {
 		(sarcastics, newPlayer.findLinks(game, goodTouch))
 
 	def refreshPlayLinks(game: Game) =
-		val heldOrders = game.state.hands.flatten.toSet
-
 		p.playLinks.foldRight(p.copy(playLinks = Nil)) { case (PlayLink(orders, prereqs, target), acc) =>
-			val remOrders = orders.filter(heldOrders.contains)
+			val remOrders = orders.filter(o => game.state.hands.exists(h => h.contains(o)))
 			if (remOrders.isEmpty)
 				// The target must be playable now.
 				acc.withThought(target) { t =>
-					t.copy(inferred = t.inferred.retain(game.state.isPlayable))
+					t.copy(inferred = t.inferred.intersect(game.state.playableSet))
 				}
 			else
 				acc.copy(playLinks = PlayLink(remOrders, prereqs, target) +: acc.playLinks)

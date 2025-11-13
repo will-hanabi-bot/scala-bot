@@ -23,8 +23,9 @@ def elimResult(prev: Game, game: Game, hand: IndexedSeq[Int], list: Seq[Int]) =
 			(newTouched, fill, elim)
 	}
 
-def badTouchResult(prev: Game, game: Game, giver: Int, target: Int) =
+def badTouchResult(prev: Game, game: Game, action: ClueAction) =
 	val state = game.state
+	val ClueAction(giver, target, _, _) = action
 
 	val dupeScores = prev.players.zipWithIndex.map { (player, i) =>
 		if (i == target) 99 else

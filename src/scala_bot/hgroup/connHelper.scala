@@ -233,7 +233,7 @@ def resolveClue(ctx: ClueContext, fps: List[FocusPossibility]) =
 				case _: FinesseConn => false
 			})
 		Log.highlight(Console.CYAN, s"final infs [${newInferred.fmt(state)}] $focus")
-		t.copy(inferred = newInferred)
+		t.copy(inferred = newInferred, infoLock = Some(newInferred))
 	}
 	.pipe(assignConns(_, action, fps, focus))
 	.pipe {

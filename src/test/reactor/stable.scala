@@ -7,7 +7,7 @@ import scala.util.chaining.scalaUtilChainingOps
 import scala_bot.logger.{Logger, LogLevel}
 
 class Stable extends munit.FunSuite:
-	// override def beforeAll() = Logger.setLevel(LogLevel.Off)
+	override def beforeAll() = Logger.setLevel(LogLevel.Off)
 
 	test("it understands a ref play") {
 		val game = setup(Reactor.apply, Vector(
@@ -130,4 +130,21 @@ class Stable extends munit.FunSuite:
 		// Bob's slot 1 should be known trash.
 		assert(game.common.thinksTrash(game, Player.Bob.ordinal).contains(game.state.hands(Player.Bob.ordinal)(0)))
 		hasInfs(game, None, Bob, 1, Vector("r1"))
+	}
+
+	test("it interprets a reveal through an unknown card") {
+		val game = setup(Reactor.apply, Vector(
+			Vector("xx", "xx", "xx", "xx", "xx"),
+			Vector("r2", "y2", "g2", "b2", "b4"),
+			Vector("r4", "y4", "g4", "b4", "p4"),
+		),
+			init = preClue(Bob, 5, Vector(TestClue(ClueKind.Rank, 4, Alice)))
+		)
+		.pipe(takeTurn("Alice clues 2 to Bob"))					// locked
+		.pipe(takeTurn("Bob clues purple to Alice (slot 5)"))	// ref play on slot 4
+		.pipe(takeTurn("Cathy clues green to Bob"))
+
+		// We should play slot 4 as g1, instead of trying to play slot 3 to sacrifice b4.
+		assertEquals(game.meta(game.state.hands(Player.Alice.ordinal)(2)).status, CardStatus.None)
+		hasInfs(game, None, Alice, 4, Vector("g1"))
 	}

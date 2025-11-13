@@ -172,8 +172,12 @@ object Reactor:
 									None
 							}.find(_.isDefined).flatten
 
-							val (cluedResets, duplicateReveals) = checkFix(prev, g, action)
-							val allowableFix = target == state.nextPlayerIndex(giver) && (cluedResets.nonEmpty || duplicateReveals.nonEmpty)
+							val fixed = checkFix(prev, g, action) match {
+								case FixResult.Normal(cluedResets, duplicateReveals) =>
+									cluedResets ++ duplicateReveals
+								case _ => Nil
+							}
+							val allowableFix = target == state.nextPlayerIndex(giver) && fixed.nonEmpty
 
 							reacter match {
 								case None => (Option.when(allowableFix)(ClueInterp.Fix), g)
@@ -185,7 +189,7 @@ object Reactor:
 									val prevPlayables = prev.players(target).obviousPlayables(prev, target)
 
 									// Urgent fix on previous playable
-									if (allowableFix && cluedResets.concat(duplicateReveals).exists(prevPlayables.contains))
+									if (allowableFix && fixed.exists(prevPlayables.contains))
 										(Some(ClueInterp.Fix), g)
 									else
 										interpretReactive(prev, g, action, reacter, inverted = false)
@@ -290,7 +294,7 @@ object Reactor:
 
 				val (newCommon, newMeta) = state.hands(currentPlayerIndex).foldLeft((game.common, game.meta)) { case ((c, m), order) =>
 					if (m(order).status == CardStatus.CalledToPlay)
-						val newInferred = c.thoughts(order).inferred.retain(state.isPlayable)
+						val newInferred = c.thoughts(order).inferred.intersect(state.playableSet)
 
 						if (newInferred.isEmpty)
 							val newCommon = c.withThought(order)(_.resetInferences())
