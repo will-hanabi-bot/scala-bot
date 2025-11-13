@@ -11,7 +11,7 @@ extension(ids: IdentitySet)
 	inline def contains(id: Identity): Boolean =
 		(ids & IdentitySet.single(id)) != 0
 
-	inline def foreachFast(f: Identity => Unit): Unit = {
+	inline def foreachFast(inline f: Identity => Unit): Unit = {
 		var remaining = ids
 		while (remaining != 0L) {
 			val bit = java.lang.Long.numberOfTrailingZeros(remaining)

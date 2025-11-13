@@ -30,9 +30,7 @@ case class State(
 	currentPlayerIndex: Int = 0
 ):
 	val playableSet = IdentitySet.create(isPlayable, variant.suits.length * 5)
-
 	val criticalSet = IdentitySet.create(isCritical, variant.suits.length * 5)
-
 	val trashSet = IdentitySet.create(isBasicTrash, variant.suits.length * 5)
 
 	def withDiscard(id: Identity, order: Int) =
