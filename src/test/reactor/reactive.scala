@@ -2,7 +2,6 @@ package tests.reactor.reactive
 
 import scala_bot.reactor.Reactor
 import scala_bot.basics._
-import scala_bot.basics.given_Conversion_IdentitySet_Iterable
 import scala_bot.test.{Colour, hasInfs, Player, preClue, setup, takeTurn, TestClue}, Player._
 import scala_bot.logger.{Logger, LogLevel}
 import scala.util.chaining.scalaUtilChainingOps

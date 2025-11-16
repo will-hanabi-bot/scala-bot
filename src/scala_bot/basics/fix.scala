@@ -97,7 +97,7 @@ def distributionClue(prev: Game, game: Game, action: ClueAction, focus: Int): Op
 				None
 
 	val useful = loop(poss, IdentitySet.empty)
-	useful.filter(_.nempty)
+	useful.filter(_.nonEmpty)
 
 def rainbowMismatch(game: Game, action: ClueAction, id: Identity, prompt: Int, focus: Int) =
 	val state = game.state

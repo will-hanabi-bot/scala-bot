@@ -42,7 +42,7 @@ case class GameUpdates(
 
 def genPlayers(state: State) =
 	val numPlayers = state.numPlayers
-	val allPossible = IdentitySet.from(state.variant.allIds)
+	val allPossible = state.allIds
 	val hypoStacks = Vector.fill(state.variant.suits.length)(0)
 
 	val players = (0 until numPlayers).map(i => Player(i, state.names(i), allPossible, hypoStacks)).toVector
@@ -88,10 +88,9 @@ trait GameOps[G <: Game]:
 
 extension[G <: Game](game: G)
 	def withThought(order: Int)(f: Thought => Thought)(using ops: GameOps[G]) =
-		val common = game.common
 		ops.copyWith(game, GameUpdates(
-			common = Some(common.copy(
-				thoughts = common.thoughts.updated(order, f(common.thoughts(order)))))))
+			common = Some(game.common.withThought(order)(f))
+		))
 
 	def withMeta(order: Int)(f: ConvData => ConvData)(using ops: GameOps[G]) =
 		val meta = game.meta

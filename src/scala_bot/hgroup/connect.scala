@@ -1,7 +1,6 @@
 package scala_bot.hgroup
 
 import scala_bot.basics._
-import scala_bot.basics.given_Conversion_IdentitySet_Iterable
 import scala_bot.logger.Log
 import scala_bot.utils.inBetween
 import scala_bot.utils.playersUntil
@@ -149,7 +148,7 @@ def findUnknownConnecting(ctx: ClueContext, reacting: Int, id: Identity, connect
 	finesse.flatMap(state.deck(_).id()) match {
 		case None if opts.findOwn.isDefined && finesse.isDefined =>
 			val thought = game.players(opts.findOwn.get).thoughts(finesse.get)
-			val bluffableIds = thought.inferred.retain { i =>
+			val bluffableIds = thought.inferred.filter { i =>
 				validBluff(prev, action, i, id, reacting, connected)
 			}
 			val possiblyBluff = !opts.assumeTruth &&

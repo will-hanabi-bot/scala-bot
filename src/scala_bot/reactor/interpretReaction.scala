@@ -1,7 +1,6 @@
 package scala_bot.reactor
 
 import scala_bot.basics._
-import scala_bot.basics.given_Conversion_IdentitySet_Iterable
 import scala_bot.logger.Log
 
 def calcSlot(focusSlot: Int, slot: Int) =
@@ -120,7 +119,7 @@ def elimPlayPlay(state: State, common: Player, meta: Vector[ConvData], reacter: 
 
 						case IdentitySet(id) =>
 							val newCommon = c.withThought(receiveOrder)(t => t.copy(
-								inferred = t.inferred.retain(i => !state.isPlayable(i) || i == id)
+								inferred = t.inferred.filter(i => !state.isPlayable(i) || i == id)
 							))
 							Log.info(s"eliminated playables except ${state.logId(id)} from slot ${i + 1} $receiveOrder - ${newCommon.strInfs(state, receiveOrder)}")
 							(newCommon, updateMeta(meta, newCommon, receiveOrder))

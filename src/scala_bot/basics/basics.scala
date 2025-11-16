@@ -1,7 +1,6 @@
 package scala_bot.basics
 
 import scala.util.chaining.scalaUtilChainingOps
-
 import scala_bot.utils._
 
 extension[G <: Game](game: G)
@@ -113,10 +112,12 @@ extension[G <: Game](game: G)
 						if (i != playerIndex) rank else -1,
 						order,
 						player.allPossible
-					)
+					),
+					dirty = player.dirty + order
 				))),
 				common = Some(g.common.copy(
-					thoughts = g.common.thoughts :+ Thought(-1, -1, order, g.common.allPossible)
+					thoughts = g.common.thoughts :+ Thought(-1, -1, order, g.common.allPossible),
+					dirty = g.common.dirty + order
 				)),
 				meta = Some(g.meta :+ ConvData(order))
 			))
@@ -171,7 +172,7 @@ extension[G <: Game](game: G)
 		val newPlayers = game.players.map { p =>
 			p.copy(
 				thoughts = p.thoughts.zipWithIndex.map {
-					case (t, order) =>
+					case (t, order) if newCommon.dirty.contains(order) =>
 						val thought = newCommon.thoughts(order)
 						t.copy(
 							possible = thought.possible,
@@ -179,15 +180,18 @@ extension[G <: Game](game: G)
 							infoLock = thought.infoLock,
 							reset = thought.reset
 					)
+					case (t, _) => t
 				},
 				links = newCommon.links,
-				playLinks = newCommon.playLinks
+				playLinks = newCommon.playLinks,
+				dirty = newCommon.dirty
 			).cardElim(state)._2
 			.when(_ => goodTouch)
 				(_.goodTouchElim(game)._2)
 			.refreshLinks(game, goodTouch)._2
 			.refreshPlayLinks(game)
 			.updateHypoStacks(game)
+			.copy(dirty = Set.empty)
 		}
 
 		for (order <- resets) {
@@ -201,7 +205,7 @@ extension[G <: Game](game: G)
 		}
 
 		ops.copyWith(game, GameUpdates(
-			common = Some(newCommon),
+			common = Some(newCommon.copy(dirty = Set.empty)),
 			meta = Some(newMeta),
 			players = Some(newPlayers)
 		))

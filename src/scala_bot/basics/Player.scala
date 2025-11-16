@@ -40,15 +40,21 @@ case class Player(
 	playLinks: List[PlayLink] = Nil,
 	unknownPlays: Set[Int] = Set(),
 	hypoPlays: Set[Int] = Set(),
+
+	dirty: Set[Int] = Set(),
+	certainMap: Map[Identity, List[MatchEntry]] = Map()
 ):
 	def withThought(order: Int)(f: Thought => Thought) =
-		copy(thoughts = thoughts.updated(order, f(thoughts(order))))
+		copy(
+			thoughts = thoughts.updated(order, f(thoughts(order))),
+			dirty = dirty + order
+		)
 
 	def strInfs(state: State, order: Int) =
-		thoughts(order).inferred.toSeq.sortBy(_.toOrd).map(state.logId).mkString(",")
+		thoughts(order).inferred.toList.sortBy(_.toOrd).map(state.logId).mkString(",")
 
 	def strPoss(state: State, order: Int) =
-		thoughts(order).possible.toSeq.sortBy(_.toOrd).map(state.logId).mkString(",")
+		thoughts(order).possible.toList.sortBy(_.toOrd).map(state.logId).mkString(",")
 
 	def refer(game: Game, hand: Vector[Int], order: Int, left: Boolean = false) =
 		val offset = if (left) -1 else 1
@@ -132,8 +138,8 @@ case class Player(
 
 		game.meta(order).status match {
 			case CardStatus.CalledToPlay =>
-				thought.possible.intersect(state.playableSet).nempty &&
-				thought.infoLock.forall(_.intersect(state.playableSet).nempty)
+				thought.possible.intersect(state.playableSet).nonEmpty &&
+				thought.infoLock.forall(_.intersect(state.playableSet).nonEmpty)
 
 			case CardStatus.Sarcastic | CardStatus.GentlemansDiscard =>
 				possPlayable(thought.inferred)
@@ -237,7 +243,7 @@ case class Player(
 			state.deck(order).clued &&
 			thought.possible.contains(id) &&			// must be a possibility
 			thought.infoLock.forall(_.contains(id)) &&
-			(thought.inferred.length != 1 || thought.inferred.head.matches(id)) &&	// not info-locked on a different id
+			(thought.inferred.length != 1 || thought.inferred.contains(id)) &&	// not info-locked on a different id
 			card.clues.exists(state.variant.idTouched(id, _)) &&	// at least one clue matches
 			pinkMatch
 		}
@@ -254,7 +260,7 @@ case class Player(
 			state.deck(order).clued &&
 			thought.possible.contains(id) &&			// must be a possibility
 			thought.infoLock.forall(_.contains(id)) &&
-			(thought.inferred.length != 1 || thought.inferred.head.matches(id))	// not info-locked on a different id
+			(thought.inferred.length != 1 || thought.inferred.contains(id))	// not info-locked on a different id
 		}
 
 	/**
@@ -304,6 +310,33 @@ case class Player(
 		var viable = game.state.hands.flatten
 			.filter(game.state.deck(_).id().forall(!game.state.isBasicTrash(_)))
 
+		def play(order: Int) =
+			thoughts(order).id(infer = true, symmetric = true) match {
+				case None =>
+					var i = 0
+					while (i < links.length) {
+						val orders = links(i).getOrders
+						if (orders.contains(order) && orders.forall(o => o == order || played.contains(o)))
+							hypo = links(i).promise.fold(hypo) { id =>
+								if (!hypo.state.isPlayable(id))
+									Log.warn(s"tried to add linked ${hypo.state.logId(id)} ($order) onto hypo stacks, but they were at ${hypo.state.playStacks} $played ($name)")
+									hypo
+								else
+									hypo.withState(_.withPlay(id))
+							}
+						i += 1
+					}
+					unknownPlays = unknownPlays + order
+					played = played + order
+
+				case Some(id) =>
+					if (hypo.state.isPlayable(id))
+						hypo = hypo.withState(_.withPlay(id))
+						played = played + order
+					else
+						Log.warn(s"tried to add ${hypo.state.logId(id)} ($order) onto hypo stacks, but they were at ${hypo.state.playStacks} $played ($name)")
+			}
+
 		while (changed) {
 			changed = false
 			var newViable = Vector.empty[Int]
@@ -313,44 +346,24 @@ case class Player(
 				val order = viable(i)
 				val thought = thoughts(order)
 
-				val playable = hypo.state.hasConsistentInfs(thought) && {
-					(if (game.goodTouch) orderPlayable(hypo, order) else orderKp(hypo, order)) ||
-					playLinks.exists(l => l.target == order && l.orders.forall(played.contains))
-				}
+				val playable = hypo.state.hasConsistentInfs(thought) &&
+					(if (game.goodTouch) orderPlayable(hypo, order) else orderKp(hypo, order))
 
 				// Should this be symmetric? Checking whether a playable or not should be, but another player can know what id it is
-				if (!playable)
+				if (playable)
+					play(order)
+					changed = true
+				else
 					newViable = newViable :+ order
-				else thought.id(infer = true, symmetric = true) match {
-					case None =>
-						val fulfilledLinks = links.filter { l =>
-							val orders = l.getOrders
-							orders.contains(order) && orders.forall(o => o == order || played.contains(o))
-						}
-						hypo = fulfilledLinks.foldLeft(hypo) { (h, link) =>
-							link.promise.fold(h) { id =>
-								if (!h.state.isPlayable(id))
-									Log.warn(s"tried to add linked ${h.state.logId(id)} ($order) onto hypo stacks, but they were at ${h.state.playStacks} $played ($name)")
-									h
-								else
-									h.withState(_.withPlay(id))
-							}
-						}
-						unknownPlays = unknownPlays + order
-						played = played + order
-						changed = true
 
-					case Some(id) =>
-						if (hypo.state.isPlayable(id))
-							hypo = hypo.withState(_.withPlay(id))
-							played = played + order
-						else
-							Log.warn(s"tried to add ${hypo.state.logId(id)} ($order) onto hypo stacks, but they were at ${hypo.state.playStacks} $played ($name)")
-
-						changed = true
-				}
 				i += 1
 			}
+
+			for (link <- playLinks)
+				if (link.orders.forall(played.contains) && newViable.contains(link.target))
+					play(link.target)
+					newViable = newViable.filterNot(_ == link.target)
+
 			viable = newViable
 		}
 

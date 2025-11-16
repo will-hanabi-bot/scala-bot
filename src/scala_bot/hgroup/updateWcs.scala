@@ -1,7 +1,6 @@
 package scala_bot.hgroup
 
 import scala_bot.basics._
-import scala_bot.basics.given_Conversion_IdentitySet_Iterable
 import scala_bot.logger.Log
 
 import scala.util.chaining.scalaUtilChainingOps
@@ -48,7 +47,7 @@ def unplayableAlt(game: HGroup, action: Action, wc: WaitingConnection) =
 	}
 
 private def revert(g: HGroup, order: Int, ids: List[Identity]) =
-	// println(s"reverting, removing ${ids.map(g.state.logId)} from $order")
+	// Log.info(s"reverting, removing ${ids.map(g.state.logId)} from $order")
 	val newInferred = g.common.thoughts(order).inferred.difference(ids)
 
 	if (newInferred.isEmpty)

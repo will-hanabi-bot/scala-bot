@@ -1,7 +1,6 @@
 package scala_bot.reactor
 
 import scala_bot.basics._
-import scala_bot.basics.given_Conversion_IdentitySet_Iterable
 import scala_bot.endgame.EndgameSolver
 import scala_bot.logger._
 import scala_bot.utils._

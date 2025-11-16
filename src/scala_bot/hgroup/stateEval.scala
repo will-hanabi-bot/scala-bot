@@ -115,7 +115,10 @@ def advance(orig: HGroup, game: HGroup, offset: Int): Double =
 	val bobChop = Option.when(state.numPlayers > 2)(game.chop(bob)).flatten
 
 	lazy val trash = player.thinksTrash(game, playerIndex)
-	lazy val allPlayables = player.thinksPlayables(game, playerIndex)
+	val allPlayables = player.thinksPlayables(game, playerIndex)
+
+	if (playerIndex == 3)
+		Log.info(s"playables for ${player.name}: $allPlayables")
 
 	if (playerIndex == state.ourPlayerIndex || state.endgameTurns.contains(0))
 		evalGame(orig, game)

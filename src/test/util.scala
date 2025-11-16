@@ -47,8 +47,18 @@ def setup[G <: Game](
 							.flatMap((stack, suitIndex) => (1 to stack).map(Identity(suitIndex, _)))
 							.foldLeft(g.state.baseCount)((acc, id) => acc.updated(id.toOrd, acc(id.toOrd) + 1))
 					)),
-					players = Some(g.players.map(_.copy(hypoStacks = stacks))),
-					common = Some(g.common.copy(hypoStacks = stacks))
+					players = Some(g.players.map { p => p.copy(
+						hypoStacks = stacks,
+						certainMap = stacks.zipWithIndex
+							.flatMap((stack, suitIndex) => (1 to stack).map(Identity(suitIndex, _)))
+							.foldLeft(p.certainMap)((acc, id) => acc.updated(id, MatchEntry(-1, -1) +: acc.getOrElse(id, Nil)))
+					)}),
+					common = Some(g.common.copy(
+						hypoStacks = stacks,
+						certainMap = stacks.zipWithIndex
+							.flatMap((stack, suitIndex) => (1 to stack).map(Identity(suitIndex, _)))
+							.foldLeft(g.common.certainMap)((acc, id) => acc.updated(id, MatchEntry(-1, -1) +: acc.getOrElse(id, Nil)))
+					))
 				))
 			}
 		}
@@ -72,7 +82,16 @@ def setup[G <: Game](
 		.pipe { g =>
 			discarded.foldLeft(g) { case (game, short) =>
 				val id = game.state.expandShort(short)
-				game.withState(_.withDiscard(id, 99))
+				game.withState(_.withDiscard(id, 99)).pipe { g =>
+					ops.copyWith(g, GameUpdates(
+						common = Some(g.common.copy(
+							certainMap = g.common.certainMap.updated(id, MatchEntry(-1, -1) +: g.common.certainMap.getOrElse(id, Nil)))
+						),
+						players = Some(g.players.map { p =>
+							p.copy(certainMap = p.certainMap.updated(id, MatchEntry(-1, -1) +: p.certainMap.getOrElse(id, Nil)))
+						})
+					))
+				}
 			}
 		}
 		.tap { g =>
@@ -83,14 +102,17 @@ def setup[G <: Game](
 					throw new IllegalArgumentException(s"Found $count copies of ${g.state.logId(id)}!")
 			}
 		}
-		.pipe { g =>
-			g.withState(s => s.copy(
+		.pipe { _.withState(s =>
+			s.copy(
 				cardsLeft = s.cardsLeft - s.score - discarded.length,
 				currentPlayerIndex = starting.ordinal,
 				clueTokens = clueTokens,
-				strikes = strikes
-			))
-		}
+				strikes = strikes,
+				playableSet = s.allIds.filter(i => s.isPlayable(i) && !s.isBasicTrash(i)),
+				criticalSet = s.allIds.filter(s.isCritical),
+				trashSet = s.allIds.filter(s.isBasicTrash)
+			)
+		)}
 		.pipe(init)
 		.pipe(_.elim(goodTouch = true))
 		.pipe { g =>

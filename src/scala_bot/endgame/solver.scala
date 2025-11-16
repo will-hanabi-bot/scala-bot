@@ -157,7 +157,7 @@ case class EndgameSolver[G <: Game](
 			(// if (!state.isBasicTrash(id))
 				// !thought.possible.contains(id)
 			// else
-				// thought.possibilities.nempty && !thought.possibilities.exists(state.isBasicTrash) &&
+				// thought.possibilities.nonEmpty && !thought.possibilities.exists(state.isBasicTrash) &&
 				// We cannot assign a trash id if it is linked and all other orders are already trash
 				(linkedOrders.contains(order) && game.me.links.exists { l =>
 					val orders = l.getOrders

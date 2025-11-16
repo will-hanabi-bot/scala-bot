@@ -1,7 +1,6 @@
 package scala_bot.refSieve
 
 import scala_bot.basics._, RefSieve as RS
-import scala_bot.basics.given_Conversion_IdentitySet_Iterable
 import scala_bot.logger.Log
 
 import scala.annotation.tailrec

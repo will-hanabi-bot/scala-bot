@@ -90,7 +90,7 @@ case class Thought(
 ) extends Identifiable:
 	def id(infer: Boolean = false, symmetric: Boolean = false) =
 		if (possible.length == 1) {
-			Some(possible.iterator.next)
+			Some(possible.head)
 		}
 		else if (!symmetric && suitIndex != -1) {
 			Some(Identity(suitIndex, rank))
@@ -107,7 +107,7 @@ case class Thought(
 			return this
 		}
 
-		val newInfoLock = if (infoLock.exists(_.nempty)) infoLock else None
+		val newInfoLock = if (infoLock.exists(_.nonEmpty)) infoLock else None
 		this.copy(
 			reset = true,
 			inferred = newInfoLock match {

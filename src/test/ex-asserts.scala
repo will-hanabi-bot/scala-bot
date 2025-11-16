@@ -21,4 +21,4 @@ def hasPoss(game: Game, playerIndex: Option[Player], target: Player, slot: Int, 
 	val thought = player.thoughts(order)
 
 	val idset = IdentitySet.from(poss.map(game.state.expandShort))
-	assert(thought.possible == idset, s"Differing possibilities (order $order). Expected ${poss.mkString(",")}, got ${player.strInfs(game.state, order)}")
+	assert(thought.possible == idset, s"Differing possibilities (order $order). Expected ${poss.mkString(",")}, got ${player.strPoss(game.state, order)}")

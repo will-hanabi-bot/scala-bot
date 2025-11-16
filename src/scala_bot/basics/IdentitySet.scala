@@ -1,17 +1,21 @@
 package scala_bot.basics
 
-type IdentitySet = Long
+opaque type IdentitySet = Long
 
 extension(ids: IdentitySet)
 	inline def value: Long = ids
 	inline def length: Int = java.lang.Long.bitCount(ids)
 	inline def isEmpty: Boolean = length == 0
-	inline def nempty: Boolean = length > 0
+	inline def nonEmpty: Boolean = length > 0
+
+	inline def head: Identity =
+		val bit = java.lang.Long.numberOfTrailingZeros(ids)
+		Identity.fromOrd(bit)
 
 	inline def contains(id: Identity): Boolean =
 		(ids & IdentitySet.single(id)) != 0
 
-	inline def foreachFast(inline f: Identity => Unit): Unit = {
+	inline def foreachFast(inline f: Identity => Unit): Unit =
 		var remaining = ids
 		while (remaining != 0L) {
 			val bit = java.lang.Long.numberOfTrailingZeros(remaining)
@@ -19,25 +23,96 @@ extension(ids: IdentitySet)
 
 			remaining &= (remaining - 1)
 		}
-	}
 
-	def iterator: Iterator[Identity] = new Iterator[Identity]:
-		private var remaining = ids
-
-		def hasNext: Boolean = remaining != 0
-
-		def next(): Identity =
-			if (!hasNext)
-				throw new NoSuchElementException("IdentitySet is empty!")
-
-			val tz = java.lang.Long.numberOfTrailingZeros(remaining)
-			val res = Identity.fromOrd(tz)
+	def foreach(f: Identity => Unit): Unit =
+		var remaining = ids
+		while (remaining != 0L) {
+			val bit = java.lang.Long.numberOfTrailingZeros(remaining)
+			f(Identity.fromOrd(bit))
 
 			remaining &= (remaining - 1)
-			res
+		}
 
-	def toIterable: Iterable[Identity] = new Iterable[Identity]:
-		def iterator: Iterator[Identity] = ids.iterator
+	inline def forall(inline f: Identity => Boolean) =
+		var remaining = ids
+		var res = true
+		while (remaining != 0L && res) {
+			val bit = java.lang.Long.numberOfTrailingZeros(remaining)
+			res &= f(Identity.fromOrd(bit))
+
+			remaining &= (remaining - 1)
+		}
+		res
+
+	inline def exists(inline f: Identity => Boolean) =
+		var remaining = ids
+		var res = false
+		while (remaining != 0L && !res) {
+			val bit = java.lang.Long.numberOfTrailingZeros(remaining)
+			res |= f(Identity.fromOrd(bit))
+
+			remaining &= (remaining - 1)
+		}
+		res
+
+	def toList =
+		var remaining = ids
+		var res = List.empty[Identity]
+		while (remaining != 0L) {
+			val bit = java.lang.Long.numberOfTrailingZeros(remaining)
+			res = Identity.fromOrd(bit) +: res
+
+			remaining &= (remaining - 1)
+		}
+		res
+
+	def map[A](f: Identity => A) =
+		var remaining = ids
+		var res = Seq.empty[A]
+		while (remaining != 0L) {
+			val bit = java.lang.Long.numberOfTrailingZeros(remaining)
+			res = f(Identity.fromOrd(bit)) +: res
+
+			remaining &= (remaining - 1)
+		}
+		res
+
+	inline def filter(inline cond: Identity => Boolean): IdentitySet =
+		var bits = ids
+		var res = ids
+
+		while (bits != 0) {
+			val tz = java.lang.Long.numberOfTrailingZeros(bits)
+			bits &= bits - 1
+
+			val id = Identity.fromOrd(tz)
+			if (!cond(id))
+				res &= ~(1L << tz)
+		}
+		res
+
+	def flatMap[A](f: Identity => Iterable[A]) =
+		var remaining = ids
+		var res = Seq.empty[A]
+		while (remaining != 0L) {
+			val bit = java.lang.Long.numberOfTrailingZeros(remaining)
+			res = f(Identity.fromOrd(bit)) ++: res
+
+			remaining &= (remaining - 1)
+		}
+		res
+
+	def withFilter(p: Identity => Boolean) =
+		var remaining = ids
+		var res = Seq.empty[Identity]
+		while (remaining != 0L) {
+			val bit = java.lang.Long.numberOfTrailingZeros(remaining)
+			if (p(Identity.fromOrd(bit)))
+				res = Identity.fromOrd(bit) +: res
+
+			remaining &= (remaining - 1)
+		}
+		res
 
 	inline def intersect(other: IdentitySet): IdentitySet =
 		ids & other
@@ -63,24 +138,17 @@ extension(ids: IdentitySet)
 	inline def difference(other: Iterable[Identity]): IdentitySet =
 		ids & ~IdentitySet.from(other)
 
-	inline def retain(cond: Identity => Boolean): IdentitySet =
-		var bits = ids
-		var res = ids
-
-		while (bits != 0) {
-			val tz = java.lang.Long.numberOfTrailingZeros(bits)
-			bits &= bits - 1
-
-			val id = Identity.fromOrd(tz)
-			if (!cond(id))
-				res &= ~(1L << tz)
-		}
-		res
-
 	def fmt(state: State) =
-		ids.map(state.logId).mkString(",")
+		val str = StringBuilder()
+		var remaining = ids
+		while (remaining != 0L) {
+			val bit = java.lang.Long.numberOfTrailingZeros(remaining)
+			str ++= state.logId(Identity.fromOrd(bit)) + ","
 
-given Conversion[IdentitySet, Iterable[Identity]] = _.toIterable
+			remaining &= (remaining - 1)
+		}
+
+		str.dropRight(1).toString()
 
 object IdentitySet:
 	inline def empty: IdentitySet = 0L
@@ -88,7 +156,7 @@ object IdentitySet:
 	inline def single(id: Identity): IdentitySet =
 		1L << id.toOrd
 
-	inline def from(ids: Iterable[Identity]) =
+	inline def from(ids: Iterable[Identity]): IdentitySet =
 		ids.foldLeft(0L) { (acc, id) => acc | IdentitySet.single(id) }
 
 	inline def create(inline cond: Identity => Boolean, maxIds: Int): IdentitySet =
@@ -105,4 +173,4 @@ object IdentitySet:
 		res
 
 	def unapplySeq(ids: IdentitySet): Option[Seq[Identity]] =
-		Some(ids.iterator.toSeq)
+		Some(ids.toList)

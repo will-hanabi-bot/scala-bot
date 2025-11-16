@@ -1,7 +1,6 @@
 package scala_bot.hgroup
 
 import scala_bot.basics._
-import scala_bot.basics.given_Conversion_IdentitySet_Iterable
 import scala_bot.logger.Log
 
 /**
@@ -16,7 +15,7 @@ def interpretTcm(ctx: ClueContext): Option[Vector[Int]] =
 	val thought = ctx.common.thoughts(focus)
 
 	lazy val promisedIds = if (clue.kind == ClueKind.Rank)
-		thought.possible.retain(_.rank == clue.value)
+		thought.possible.filter(_.rank == clue.value)
 	else
 		thought.possible
 
@@ -80,7 +79,7 @@ def performCM(game: HGroup, cmOrders: Seq[Int]) =
 		val (common, meta) = acc
 
 		(common.withThought(order) { t =>
-			t.copy(inferred = t.inferred.retain(!common.isTrash(game, _, order)))
+			t.copy(inferred = t.inferred.filter(!common.isTrash(game, _, order)))
 		},
 			meta.updated(order, meta(order).copy(status = CardStatus.ChopMoved))
 		)

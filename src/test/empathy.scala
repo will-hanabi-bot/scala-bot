@@ -1,7 +1,7 @@
 package tests.empathy
 
 import scala_bot.reactor.Reactor
-import scala_bot.basics.ClueKind
+import scala_bot.basics._
 import scala_bot.test.{Colour, hasPoss, Player, preClue, setup, takeTurn, TestClue}
 import scala_bot.logger.{Logger, LogLevel}
 import scala.util.chaining.scalaUtilChainingOps

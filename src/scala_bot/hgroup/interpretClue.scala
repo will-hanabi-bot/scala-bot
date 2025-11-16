@@ -1,7 +1,6 @@
 package scala_bot.hgroup
 
 import scala_bot.basics._
-import scala_bot.basics.given_Conversion_IdentitySet_Iterable
 import scala_bot.utils._
 import scala_bot.logger.Log
 
@@ -43,7 +42,7 @@ def interpClue(ctx: ClueContext): HGroup =
 				else
 					Log.info(s"pink fix promise!")
 					g.withThought(fixedOrder)(t => t.copy(
-						inferred = t.inferred.retain(i => i.rank == clue.value && !state.isPlayable(i))
+						inferred = t.inferred.filter(i => i.rank == clue.value && !state.isPlayable(i))
 					))
 			}
 			.copy(lastMove = Some(ClueInterp.Fix))
@@ -82,7 +81,7 @@ def interpClue(ctx: ClueContext): HGroup =
 				}
 				// Pink promise on stalls
 				.when(g => g.state.includesVariant(PINKISH) && clue.kind == ClueKind.Rank) {
-					_.withThought(focus)(t => t.copy(inferred = t.inferred.retain(_.rank == clue.value)))
+					_.withThought(focus)(t => t.copy(inferred = t.inferred.filter(_.rank == clue.value)))
 				}
 				.copy(
 					lastMove = Some(ClueInterp.Stall),
@@ -142,7 +141,7 @@ def interpClue(ctx: ClueContext): HGroup =
 		Log.info(s"pink trash fix!")
 		return game
 			.withThought(focus) { t =>
-				val newInferred = t.possible.retain(common.isTrash(game, _, focus))
+				val newInferred = t.possible.filter(common.isTrash(game, _, focus))
 				t.copy(
 					inferred = newInferred,
 					infoLock = Some(newInferred)

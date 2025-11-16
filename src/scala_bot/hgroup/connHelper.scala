@@ -1,7 +1,6 @@
 package scala_bot.hgroup
 
 import scala_bot.basics._
-import scala_bot.basics.given_Conversion_IdentitySet_Iterable
 import scala_bot.utils._
 import scala_bot.logger.Log
 
@@ -226,7 +225,7 @@ def resolveClue(ctx: ClueContext, fps: List[FocusPossibility]) =
 	game.withThought(focus) { t =>
 		val newInferred = t.inferred.intersect(IdentitySet.from(allFps.map(_.id)))
 			// If a non-finesse connection exists, the focus can't be a copy of it
-			.retain(i => !fps.filterNot(_.symmetric).flatMap(_.connections).exists {
+			.filter(i => !fps.filterNot(_.symmetric).flatMap(_.connections).exists {
 				case c: KnownConn => c.id == i
 				case c: PlayableConn => c.id == i
 				case c: PromptConn => c.id == i

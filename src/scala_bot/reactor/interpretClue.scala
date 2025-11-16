@@ -2,7 +2,6 @@ package scala_bot.reactor
 
 import scala_bot.basics._
 import scala_bot.logger.Log
-import scala_bot.basics.given_Conversion_IdentitySet_Iterable
 import scala_bot.utils.playersUntil
 
 private def reactiveFocus(state: State, receiver: Int, action: ClueAction) =
@@ -72,7 +71,7 @@ private def tryStable(prev: Reactor, game: Reactor, action: ClueAction, stall: B
 			if (unneccessaryFocus)
 				Log.info("unnecessary focus!")
 			else
-				val newInferred = newCommon.thoughts(focus).inferred.retain(i => state.isPlayable(i) && i.rank == clue.value)
+				val newInferred = newCommon.thoughts(focus).inferred.filter(i => state.isPlayable(i) && i.rank == clue.value)
 				newCommon = newCommon.withThought(focus)(t => t.copy(
 					inferred = newInferred,
 					infoLock = Some(newInferred)
@@ -338,7 +337,7 @@ def targetPlay(game: Reactor, action: ClueAction, target: Int, urgent: Boolean =
 	val holder = state.holderOf(target)
 	val possibleConns = delayedPlays(game, action.giver, holder)
 
-	val newInferred = game.common.thoughts(target).inferred.retain(i => state.isPlayable(i) || possibleConns.exists(_._2 == i))
+	val newInferred = game.common.thoughts(target).inferred.filter(i => state.isPlayable(i) || possibleConns.exists(_._2 == i))
 	var (newCommon, newMeta) = (game.common, game.meta)
 
 	state.deck(target).id().foreach { id =>
@@ -391,7 +390,7 @@ def targetDiscard(game: Reactor, action: ClueAction, target: Int, urgent: Boolea
 
 	val newGame = game.copy(
 		common = game.common.withThought(target)(t => t.copy(
-			inferred = t.inferred.retain(!state.isCritical(_))
+			inferred = t.inferred.filter(!state.isCritical(_))
 		)),
 		meta = game.meta.updated(target, meta.copy(
 			status = CardStatus.CalledToDiscard,
@@ -421,7 +420,7 @@ def refDiscard(prev: Reactor, game: Reactor, action: ClueAction, stall: Boolean)
 				Log.info("locked!")
 
 				if (clue.kind == ClueKind.Rank && state.includesVariant(PINKISH))
-					newCommon = newCommon.withThought(lockOrder)(t => t.copy(inferred = t.inferred.retain(_.rank == clue.value)))
+					newCommon = newCommon.withThought(lockOrder)(t => t.copy(inferred = t.inferred.filter(_.rank == clue.value)))
 					newMeta = newMeta.updated(lockOrder, newMeta(lockOrder).copy(focused = true))
 
 				for (order <- hand if !state.deck(order).clued) { // && game.meta(order).status == CardStatus.None) {

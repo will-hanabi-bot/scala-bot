@@ -18,6 +18,9 @@ case class State(
 
 	variant: Variant,
 	allIds: IdentitySet,
+	playableSet: IdentitySet,
+	criticalSet: IdentitySet,
+	trashSet: IdentitySet,
 	cardCount: Vector[Int],
 
 	numPlayers: Int,
@@ -29,30 +32,46 @@ case class State(
 	actionList: Vector[List[Action]] = Vector(),
 	currentPlayerIndex: Int = 0
 ):
-	val playableSet = IdentitySet.create(isPlayable, variant.suits.length * 5)
-	val criticalSet = IdentitySet.create(isCritical, variant.suits.length * 5)
-	val trashSet = IdentitySet.create(isBasicTrash, variant.suits.length * 5)
-
 	def withDiscard(id: Identity, order: Int) =
 		val Identity(suitIndex, rank) = id
-		val newStack = order +: discardStacks(suitIndex)(rank - 1)
 		val newStacks = discardStacks.updated(suitIndex,
-			discardStacks(suitIndex).updated(rank - 1, newStack))
+			discardStacks(suitIndex).updated(rank - 1, order +: discardStacks(suitIndex)(rank - 1)))
+
+		val newBase = baseCount.updated(id.toOrd, baseCount(id.toOrd) + 1)
+
+		val (newMax, newCritical, newTrash, newPlayable) =
+			if (criticalSet.contains(id))
+				(maxRanks.updated(suitIndex, math.min(maxRanks(suitIndex), rank - 1)),
+				criticalSet.difference(id),
+				trashSet.union(id),
+				playableSet.difference(id))
+			else
+				val critical = cardCount(id.toOrd) - newBase(id.toOrd) == 1 && !isBasicTrash(id)
+				(maxRanks,
+				if (critical) criticalSet.union(id) else criticalSet,
+				trashSet,
+				playableSet)
 
 		copy(
 			discardStacks = newStacks,
-			baseCount = baseCount.updated(id.toOrd, baseCount(id.toOrd) + 1),
-			maxRanks =
-				if (newStack.length == cardCount(Identity(suitIndex, rank).toOrd))
-					maxRanks.updated(suitIndex, math.min(maxRanks(suitIndex), rank - 1))
-				else
-					maxRanks
+			baseCount = newBase,
+			maxRanks = newMax,
+			playableSet = newPlayable,
+			criticalSet = newCritical,
+			trashSet = newTrash
 		)
 
 	def withPlay(id: Identity) =
+		val newPlayable = id.next match {
+			case Some(next) => playableSet.difference(id).union(next)
+			case None => playableSet.difference(id)
+		}
+
 		copy(
 			playStacks = playStacks.updated(id.suitIndex, id.rank),
 			baseCount = baseCount.updated(id.toOrd, baseCount(id.toOrd) + 1),
+			playableSet = newPlayable,
+			trashSet = trashSet.union(id)
 		).when(_ => id.rank == 5)(_.regainClue)
 
 	def tryPlay(id: Identity) =
@@ -116,15 +135,25 @@ case class State(
 	def remainingMultiplicity(ids: IdentitySet) =
 		var count = 0
 		ids.foreachFast { id =>
-			count += cardCount(id.toOrd) - baseCount(id.toOrd)
+			count += cardCount(id.toOrd)
 		}
 		count
 
-	def holderOf(order: Int) =
-		val holder = hands.indexWhere(_.contains(order))
-		if (holder == -1)
-			throw new IllegalArgumentException(s"Tried to get holder of $order, hands were $hands!")
-		holder
+	def holderOf(order: Int): Int =
+		var i = 0
+		while (i < numPlayers) {
+			val hand = hands(i)
+			var j = 0
+
+			while (j < hand.length) {
+				if (hand(j) == order)
+					return i
+				j += 1
+			}
+
+			i += 1
+		}
+		throw new IllegalArgumentException(s"Tried to get holder of $order, hands were $hands!")
 
 	def inStartingHand(order: Int)=
 		order < numPlayers * HAND_SIZE(numPlayers)
@@ -194,6 +223,9 @@ object State:
 
 			variant = variant,
 			allIds = IdentitySet.from(variant.allIds),
+			playableSet = IdentitySet.from((0 until variant.suits.length).map(Identity(_, 1))),
+			criticalSet = IdentitySet.from((0 until variant.suits.length).map(Identity(_, 5))),
+			trashSet = IdentitySet.empty,
 			numPlayers = names.length,
 
 			names = names,
