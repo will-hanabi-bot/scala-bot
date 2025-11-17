@@ -51,13 +51,13 @@ def setup[G <: Game](
 						hypoStacks = stacks,
 						certainMap = stacks.zipWithIndex
 							.flatMap((stack, suitIndex) => (1 to stack).map(Identity(suitIndex, _)))
-							.foldLeft(p.certainMap)((acc, id) => acc.updated(id, MatchEntry(-1, -1) +: acc.getOrElse(id, Nil)))
+							.foldLeft(p.certainMap)((acc, id) => acc.updated(id.toOrd, MatchEntry(61, -1) +: acc.getOrElse(id.toOrd, Nil)))
 					)}),
 					common = Some(g.common.copy(
 						hypoStacks = stacks,
 						certainMap = stacks.zipWithIndex
 							.flatMap((stack, suitIndex) => (1 to stack).map(Identity(suitIndex, _)))
-							.foldLeft(g.common.certainMap)((acc, id) => acc.updated(id, MatchEntry(-1, -1) +: acc.getOrElse(id, Nil)))
+							.foldLeft(g.common.certainMap)((acc, id) => acc.updated(id.toOrd, MatchEntry(61, -1) +: acc.getOrElse(id.toOrd, Nil)))
 					))
 				))
 			}
@@ -85,10 +85,10 @@ def setup[G <: Game](
 				game.withState(_.withDiscard(id, 99)).pipe { g =>
 					ops.copyWith(g, GameUpdates(
 						common = Some(g.common.copy(
-							certainMap = g.common.certainMap.updated(id, MatchEntry(-1, -1) +: g.common.certainMap.getOrElse(id, Nil)))
+							certainMap = g.common.certainMap.updated(id.toOrd, MatchEntry(61, -1) +: g.common.certainMap.getOrElse(id.toOrd, Nil)))
 						),
 						players = Some(g.players.map { p =>
-							p.copy(certainMap = p.certainMap.updated(id, MatchEntry(-1, -1) +: p.certainMap.getOrElse(id, Nil)))
+							p.copy(certainMap = p.certainMap.updated(id.toOrd, MatchEntry(61, -1) +: p.certainMap.getOrElse(id.toOrd, Nil)))
 						})
 					))
 				}

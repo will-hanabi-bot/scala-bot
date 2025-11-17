@@ -111,7 +111,7 @@ def advance(orig: Reactor, game: Reactor, offset: Int): Double =
 
 	else if (urgentDc.isEmpty && allPlayables.nonEmpty)
 		val playables = allPlayables.find(meta(_).urgent) match {
-			case Some(order) => List(order)
+			case Some(order) => Seq(order)
 			case None => allPlayables.filter { o =>
 				// Only consider playing the leftmost of similarly-possible cards
 				!allPlayables.exists(p => p > o && common.thoughts(p).possible == common.thoughts(o).possible)

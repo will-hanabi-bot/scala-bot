@@ -382,7 +382,7 @@ object Reactor:
 				potentialForcedPlay
 			Log.info(s"can discard: ${!cantDiscard} ${state.clueTokens}")
 
-			val allDiscards = if (cantDiscard) List() else
+			val allDiscards: Seq[(PerformAction, Action)] = if (cantDiscard) Nil else
 				discardOrders.map { o =>
 					val action = DiscardAction(state.ourPlayerIndex, o, me.thoughts(o).id(infer = true))
 					(PerformAction.Discard(o), action)

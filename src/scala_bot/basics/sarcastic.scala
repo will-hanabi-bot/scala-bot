@@ -42,7 +42,7 @@ def interpretUsefulDc[G <: Game](game: G, action: DiscardAction)(using ops: Game
 				Log.info(s"sarcastic to ${state.names(holder)}'s $orders")
 				val newGame = ops.copyWith(game, GameUpdates(
 					common = Some(common.copy(
-						links = Link.Sarcastic(orders.toList, id) +: common.links
+						links = Link.Sarcastic(orders, id) +: common.links
 					)))
 				)
 				(DiscardInterp.Sarcastic, newGame)
@@ -74,7 +74,7 @@ def interpretUsefulDc[G <: Game](game: G, action: DiscardAction)(using ops: Game
 			Log.info(s"sarcastic to our $orders")
 			val newGame = ops.copyWith(game, GameUpdates(
 				common = Some(common.copy(
-					links = Link.Sarcastic(orders.toList, id) +: common.links
+					links = Link.Sarcastic(orders, id) +: common.links
 				))
 			))
 			(DiscardInterp.Sarcastic, newGame)

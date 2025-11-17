@@ -18,12 +18,12 @@ private def reactiveContext(prev: Reactor, game: Reactor, action: ClueAction, re
 	val afterOthers = playersUntil(state.numPlayers, state.nextPlayerIndex(giver), reacter)
 		.foldLeft(prev.state) { (s, i) =>
 			val hypoPrev = prev.copy(state = s)
-			val playables = {
+			val playable = {
 				val ps = prev.common.obviousPlayables(hypoPrev, i)
-				ps.find(prev.meta(_).urgent).map(Vector(_)).getOrElse(ps)
+				ps.find(prev.meta(_).urgent).orElse(ps.headOption)
 			}
 
-			playables.headOption.flatMap(state.deck(_).id()) match {
+			playable.flatMap(state.deck(_).id()) match {
 				case Some(id) => s.tryPlay(id)
 				case None => s
 			}

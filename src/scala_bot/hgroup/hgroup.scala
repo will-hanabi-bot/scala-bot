@@ -72,7 +72,7 @@ case class HGroup(
 
 	allowFindOwn: Boolean = true
 ) extends Game:
-	override def filterPlayables(player: Player, _playerIndex: Int, orders: Vector[Int]): Vector[Int] =
+	override def filterPlayables(player: Player, _playerIndex: Int, orders: Seq[Int]) =
 		orders.filter(o => player.orderKp(this, o) || !xmeta(o).maybeFinessed)
 
 	def withXMeta(order: Int)(f: XConvData => XConvData) =
@@ -416,7 +416,7 @@ object HGroup:
 				earlyGameClue
 			Log.info(s"can discard: ${!cantDiscard} ${state.clueTokens}")
 
-			val allDiscards = if (cantDiscard) List() else
+			val allDiscards = if (cantDiscard) Nil else
 				discardOrders.map { o =>
 					val action = DiscardAction(state.ourPlayerIndex, o, me.thoughts(o).id(infer = true))
 					(PerformAction.Discard(o), action)

@@ -8,6 +8,9 @@ extension(ids: IdentitySet)
 	inline def isEmpty: Boolean = length == 0
 	inline def nonEmpty: Boolean = length > 0
 
+	inline def ==(other: IdentitySet): Boolean =
+		value == other.value
+
 	inline def head: Identity =
 		val bit = java.lang.Long.numberOfTrailingZeros(ids)
 		Identity.fromOrd(bit)

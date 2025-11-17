@@ -70,7 +70,7 @@ trait Game:
 
 	def goodTouch: Boolean
 
-	def filterPlayables(_player: Player, _playerIndex: Int, orders: Vector[Int]): Vector[Int] =
+	def filterPlayables(_player: Player, _playerIndex: Int, orders: Seq[Int]) =
 		orders
 
 trait GameOps[G <: Game]:

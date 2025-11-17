@@ -62,7 +62,7 @@ def findKnownConn(ctx: ClueContext, giver: Int, id: Identity, ignore: Set[Int], 
 		order <- state.hands(playerIndex)
 		link <- game.common.links if validLink(link, order)
 	yield
-		PlayableConn(playerIndex, order, id, linked = link.getOrders)
+		PlayableConn(playerIndex, order, id, linked = link.getOrders.toList)
 
 	// Log.info(s"finding known ${state.logId(id)} $ignore ${game.common.linkedOrders(state)} $findOwn")
 

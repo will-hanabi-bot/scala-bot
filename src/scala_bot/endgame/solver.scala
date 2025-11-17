@@ -163,7 +163,7 @@ case class EndgameSolver[G <: Game](
 					val orders = l.getOrders
 					orders.contains(order) && orders.forall { o =>
 						o == order ||
-						(0 until ids.length).exists(i => o == unknownOwn(i) && state.isBasicTrash(ids(i)))
+						ids.zipWithIndex.exists((id, i) => o == unknownOwn(i) && state.isBasicTrash(id))
 					}
 				}))
 

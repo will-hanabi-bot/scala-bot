@@ -7,7 +7,7 @@ import scala_bot.logger.Log
   * Checks whether a Trash Chop Move was performed.
   * Returns the orders of any chop moved cards.
  */
-def interpretTcm(ctx: ClueContext): Option[Vector[Int]] =
+def interpretTcm(ctx: ClueContext): Option[Seq[Int]] =
 	val ClueContext(prev, game, action) = ctx
 	val state = ctx.state
 	val ClueAction(_, target, list, clue) = action

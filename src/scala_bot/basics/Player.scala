@@ -1,14 +1,16 @@
 package scala_bot.basics
 
 import scala_bot.logger.Log
+
+import scala.collection.immutable.BitSet
 import scala.util.chaining.scalaUtilChainingOps
 
 enum Link:
-	case Promised(orders: List[Int], id: Identity, target: Int)
-	case Sarcastic(orders: List[Int], id: Identity)
-	case Unpromised(orders: List[Int], ids: List[Identity])
+	case Promised(orders: Seq[Int], id: Identity, target: Int)
+	case Sarcastic(orders: Seq[Int], id: Identity)
+	case Unpromised(orders: Seq[Int], ids: List[Identity])
 
-	def getOrders: List[Int] = this match {
+	def getOrders: Seq[Int] = this match {
 		case Promised(orders, _, _) => orders
 		case Sarcastic(orders, _) => orders
 		case Unpromised(orders, _) => orders
@@ -38,11 +40,11 @@ case class Player(
 
 	links: List[Link] = Nil,
 	playLinks: List[PlayLink] = Nil,
-	unknownPlays: Set[Int] = Set(),
-	hypoPlays: Set[Int] = Set(),
+	unknownPlays: BitSet = BitSet.empty,
+	hypoPlays: BitSet = BitSet.empty,
 
 	dirty: Set[Int] = Set(),
-	certainMap: Map[Identity, List[MatchEntry]] = Map()
+	certainMap: Map[Int, List[MatchEntry]] = Map()
 ):
 	def withThought(order: Int)(f: Thought => Thought) =
 		copy(
@@ -301,14 +303,29 @@ case class Player(
 		}
 
 	def updateHypoStacks[G <: Game](game: G)(using ops: GameOps[G]): Player =
-		var changed = true
-
+		val state = game.state
 		var hypo = game
-		var unknownPlays = Set.empty[Int]
-		var played = Set.empty[Int]
+		var unknownPlays = BitSet.empty
+		var played = BitSet.empty
 
-		var viable = game.state.hands.flatten
-			.filter(game.state.deck(_).id().forall(!game.state.isBasicTrash(_)))
+		var viable = {
+			var v = List.empty[Int]
+			var i = state.numPlayers - 1
+			while (i >= 0) {
+				val hand = state.hands(i)
+				var j = hand.length - 1
+				while (j >= 0) {
+					val order = hand(j)
+					val id = state.deck(order).id()
+
+					if (id.isEmpty || !state.isBasicTrash(id.get))
+						v = order +: v
+					j -= 1
+				}
+				i -= 1
+			}
+			v
+		}
 
 		def play(order: Int) =
 			thoughts(order).id(infer = true, symmetric = true) match {
@@ -319,7 +336,7 @@ case class Player(
 						if (orders.contains(order) && orders.forall(o => o == order || played.contains(o)))
 							hypo = links(i).promise.fold(hypo) { id =>
 								if (!hypo.state.isPlayable(id))
-									Log.warn(s"tried to add linked ${hypo.state.logId(id)} ($order) onto hypo stacks, but they were at ${hypo.state.playStacks} $played ($name)")
+									Log.warn(s"tried to add linked ${state.logId(id)} ($order) onto hypo stacks, but they were at ${hypo.state.playStacks} $played ($name)")
 									hypo
 								else
 									hypo.withState(_.withPlay(id))
@@ -334,12 +351,14 @@ case class Player(
 						hypo = hypo.withState(_.withPlay(id))
 						played = played + order
 					else
-						Log.warn(s"tried to add ${hypo.state.logId(id)} ($order) onto hypo stacks, but they were at ${hypo.state.playStacks} $played ($name)")
+						Log.warn(s"tried to add ${state.logId(id)} ($order) onto hypo stacks, but they were at ${hypo.state.playStacks} $played ($name)")
 			}
+
+		var changed = true
 
 		while (changed) {
 			changed = false
-			var newViable = Vector.empty[Int]
+			var newViable = List.empty[Int]
 			var i = 0
 
 			while (i < viable.length) {
@@ -354,16 +373,26 @@ case class Player(
 					play(order)
 					changed = true
 				else
-					newViable = newViable :+ order
+					newViable = order +: newViable
 
 				i += 1
 			}
 
-			for (link <- playLinks)
-				if (link.orders.forall(played.contains) && newViable.contains(link.target))
+			var k = 0
+			while (k < playLinks.length) {
+				val link = playLinks(k)
+				var allPlayed = true
+				var m = 0
+				while (m < link.orders.length && allPlayed)
+					allPlayed = played.contains(link.orders(m))
+					m += 1
+
+				if (allPlayed && newViable.contains(link.target))
 					play(link.target)
 					newViable = newViable.filterNot(_ == link.target)
 
+				k += 1
+			}
 			viable = newViable
 		}
 

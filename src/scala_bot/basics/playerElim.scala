@@ -1,26 +1,20 @@
 package scala_bot.basics
 
-import scala.collection.mutable
+import scala.collection.immutable.BitSet
 import scala_bot.utils._
 import scala_bot.logger.Log
 
-class MatchEntry(
-	var order: Int,
-	var unknownTo: Int
-)
+case class MatchEntry(order: Int, unknownTo: Int)
 
-class IdEntry(
-	var order: Int,
-	var playerIndex: Int
-)
+case class IdEntry(order: Int, playerIndex: Int)
 
 extension (p: Player) {
 	def cardElim(state: State) =
 		var certainMap = p.certainMap
 
-		var crossElimCandidates = mutable.Buffer[IdEntry]()
-		val resets = mutable.Buffer[Int]()
-		val thoughts = p.thoughts.toArray
+		var crossElimCandidates = List.empty[IdEntry]
+		var resets = List.empty[Int]
+		var thoughts = p.thoughts
 
 		var allPossible = p.allPossible
 		var allInferred = p.allInferred
@@ -36,25 +30,25 @@ extension (p: Player) {
 
 			if (id.isDefined)
 				val unknownTo = if (thought.id(symmetric = true).isEmpty) state.holderOf(order) else -1
-				val certains = certainMap.getOrElse(id.get, Nil)
+				val certains = certainMap.getOrElse(id.get.toOrd, Nil)
 				val index = certains.indexWhere(_.order == order)
 
 				certainMap =
 					if (index != -1)
 						if (thought.possible.length == 1 && certains(index).unknownTo != -1)
-							certainMap.updated(id.get, certains.updated(index, MatchEntry(order, -1)))
+							certainMap.updated(id.get.toOrd, certains.updated(index, MatchEntry(order, -1)))
 						else
 							certainMap
 					else
-						certainMap.updated(id.get, MatchEntry(order, unknownTo) +: certains)
+						certainMap.updated(id.get.toOrd, MatchEntry(order, unknownTo) +: certains)
 				// dirtyIds = dirtyIds.union(id.get)
 			d += 1
 		}
 
-		def updateMap(id: Identity, exclude: mutable.BitSet): (Boolean, IdentitySet) =
+		def updateMap(id: Identity, exclude: BitSet): (Boolean, IdentitySet) =
 			var changed = false
 			var recursiveIds = IdentitySet.empty
-			val crossElimRemovals = mutable.BitSet.empty
+			var crossElimRemovals = BitSet.empty
 
 			var playerIndex = 0
 			while (playerIndex < state.hands.length) {
@@ -67,7 +61,7 @@ extension (p: Player) {
 						val thought = thoughts(order)
 						val noElim =
 							!thought.possible.contains(id) ||
-							certainMap.getOrElse(id, Nil).exists(e => e.order == order || e.unknownTo == playerIndex)
+							certainMap.getOrElse(id.toOrd, Nil).exists(e => e.order == order || e.unknownTo == playerIndex)
 
 						if (!noElim)
 							changed = true
@@ -75,31 +69,33 @@ extension (p: Player) {
 							val newPossible = thought.possible.difference(id)
 							val reset = newInferred.isEmpty && !thought.reset
 
-							thoughts(order) = if (reset)
-								thought.resetInferences()
-							else if (thought.infoLock.isDefined)
-								thought.copy(
-									inferred = newInferred,
-									possible = newPossible,
-									infoLock = Some(thought.infoLock.get.difference(id))
-								)
-							else
-								thought.copy(
-									inferred = newInferred,
-									possible = newPossible
-								)
+							thoughts = thoughts.updated(order,
+								if (reset)
+									thought.resetInferences()
+								else if (thought.infoLock.isDefined)
+									thought.copy(
+										inferred = newInferred,
+										possible = newPossible,
+										infoLock = Some(thought.infoLock.get.difference(id))
+									)
+								else
+									thought.copy(
+										inferred = newInferred,
+										possible = newPossible
+									)
+							)
 
 							dirty = dirty + order
 
 							if (reset)
-								resets += order
+								resets = order +: resets
 
 							// Card can be further eliminated
 							if (newPossible.length == 1)
 								val recursiveId = newPossible.head
-								val certains = certainMap.getOrElse(recursiveId, Nil)
+								val certains = certainMap.getOrElse(recursiveId.toOrd, Nil)
 
-								certainMap = certainMap.updated(recursiveId,
+								certainMap = certainMap.updated(recursiveId.toOrd,
 									if (certains.isEmpty)
 										 List(MatchEntry(order, -1))
 									else
@@ -129,10 +125,10 @@ extension (p: Player) {
 			var eliminated = IdentitySet.empty
 
 			ids.foreachFast { id =>
-				val knownCount = certainMap.getOrElse(id, Nil).size
+				val knownCount = certainMap.getOrElse(id.toOrd, Nil).size
 
 				if (knownCount == state.cardCount(id.toOrd)) {
-					val (innerChanged, innerRecursiveIds) = updateMap(id, mutable.BitSet.empty)
+					val (innerChanged, innerRecursiveIds) = updateMap(id, BitSet.empty)
 
 					eliminated = eliminated.union(id)
 					changed ||= innerChanged
@@ -159,10 +155,10 @@ extension (p: Player) {
 
 			for ((id, group) <- groups) {
 				id.foreach { id =>
-					val certains = certainMap.getOrElse(id, Nil).filter(c => !group.exists(_.order == c.order)).length
+					val certains = certainMap.getOrElse(id.toOrd, Nil).filter(c => !group.exists(_.order == c.order)).length
 
 					if (group.size == state.remainingMultiplicity(IdentitySet.single(id)) - certains) {
-						val (innerChanged, _) = updateMap(id, mutable.BitSet.fromSpecific(group.map(_.playerIndex)))
+						val (innerChanged, _) = updateMap(id, BitSet.fromSpecific(group.map(_.playerIndex)))
 						changed ||= innerChanged
 					}
 				}
@@ -170,64 +166,62 @@ extension (p: Player) {
 
 			// Now elim all the cards outside of this entry
 			for (id <- ids) {
-				val (innerChanged, _) = updateMap(id, mutable.BitSet.fromSpecific(entries.map(_.playerIndex)))
+				val (innerChanged, _) = updateMap(id, BitSet.fromSpecific(entries.map(_.playerIndex)))
 				changed ||= innerChanged
 			}
 
 			basicElim(ids) || changed
 
-		def crossElim(contained: Set[IdEntry], accIds: IdentitySet, certains: Set[Int], nextIndex: Int): Boolean =
-			lazy val multiplicity = state.remainingMultiplicity(accIds)
-			lazy val impossibleMultiplicity = multiplicity - certains.size >
-				contained.size + (crossElimCandidates.length - nextIndex)
+		def crossElim(candidates: List[IdEntry]): Boolean =
+			def loop(remaining: List[IdEntry], contained: Set[IdEntry] = Set.empty, accIds: IdentitySet = IdentitySet.empty, certains: BitSet = BitSet.empty): Boolean =
+				val multiplicity = state.remainingMultiplicity(accIds)
+				val impossibleMultiplicity = multiplicity - certains.size > contained.size + remaining.length
 
-			if (crossElimCandidates.length <= 1 || impossibleMultiplicity)
-				return false
+				if (impossibleMultiplicity)
+					return false
 
-			// Impossible to reach multiplicity
-			if (multiplicity - certains.size > contained.size + (crossElimCandidates.length - nextIndex))
-				return false
+				if (contained.size > 1 && multiplicity - certains.size == contained.size)
+					val innerChanged = performCrossElim(contained, accIds)
+					if (innerChanged)
+						return true
 
-			if (contained.size >= 2 && multiplicity - certains.size == contained.size)
-				val innerChanged = performCrossElim(contained, accIds)
-				if (innerChanged)
+				if (remaining.isEmpty)
+					return false
+
+				// Check all remaining subsets that contain the next item
+				val item = remaining.head
+				val order = item.order
+				val newAccIds = accIds.union(thoughts(order).possible)
+
+				val nextContained = contained + item
+				val nextCertains = {
+					val delta = thoughts(order).possible.difference(accIds)
+
+					val allCertains = if (delta.isEmpty)
+						certains
+					else
+						var mCertains = certains
+						delta.foreachFast { id =>
+							val newCertains = certainMap.getOrElse(id.toOrd, Nil)
+							var i = 0
+							while (i < newCertains.length) {
+								mCertains = mCertains + newCertains(i).order
+								i += 1
+							}
+						}
+						mCertains
+
+					allCertains.filter(o => !nextContained.exists(_.order == o))
+				}
+
+				val included = loop(remaining.tail, nextContained, newAccIds, nextCertains)
+				if (included)
 					return true
 
-			if (nextIndex >= crossElimCandidates.length)
-				return false
+				// Check all remaining subsets that skip the next item
+				loop(remaining.tail, contained, accIds, certains)
 
-			// Check all remaining subsets that contain the next item
-			val item = crossElimCandidates(nextIndex)
-			val order = item.order
-			val newAccIds = accIds.union(thoughts(order).possible)
-
-			val nextContained = contained + item
-			val nextCertains = {
-				val delta = thoughts(order).possible.difference(accIds)
-
-				val allCertains = if (delta.isEmpty)
-					certains
-				else
-					var mCertains = certains
-					delta.foreachFast { id =>
-						val newCertains = certainMap.getOrElse(id, Nil)
-						var i = 0
-						while (i < newCertains.length) {
-							mCertains = mCertains + newCertains(i).order
-							i += 1
-						}
-					}
-					mCertains
-
-				allCertains.filter(o => !nextContained.exists(_.order == o))
-			}
-
-			val included = crossElim(nextContained, newAccIds, nextCertains, nextIndex + 1)
-			if (included)
-				return true
-
-			// Check all remaining subsets that skip the next item
-			crossElim(contained, accIds, certains, nextIndex + 1)
+			loop(candidates)
 
 		val _ = basicElim(state.allIds)
 
@@ -244,17 +238,32 @@ extension (p: Player) {
 					state.remainingMultiplicity(possible) <= 8
 
 				if (canCrossElim)
-					crossElimCandidates += IdEntry(order, playerIndex)
+					crossElimCandidates = IdEntry(order, playerIndex) +: crossElimCandidates
 
 				i += 1
 			}
 			playerIndex += 1
 		}
 
-		while (crossElim(Set(), IdentitySet.empty, Set(), 0)) {}
+		val candidates = crossElimCandidates.filter { entry =>
+			val thought = thoughts(entry.order)
+			var certains = BitSet.empty
+			thought.possible.foreachFast { id =>
+				val newCertains = certainMap.getOrElse(id.toOrd, Nil)
+				var i = 0
+				while (i < newCertains.length) {
+					certains = certains + newCertains(i).order
+					i += 1
+				}
+			}
+
+			state.remainingMultiplicity(thought.possible) - certains.size <= crossElimCandidates.length
+		}
+
+		while (candidates.length > 1 && crossElim(candidates)) {}
 
 		val newPlayer = p.copy(
-			thoughts = thoughts.toVector,
+			thoughts = thoughts,
 			allPossible = allPossible,
 			allInferred = allInferred,
 			dirty = dirty,
@@ -277,7 +286,7 @@ extension (p: Player) {
 			game.isTouched(order)
 
 		var dirty = p.dirty
-		val resets = mutable.Buffer.empty[Int]
+		var resets = List.empty[Int]
 		var newThoughts = p.thoughts
 
 		var i = 0
@@ -301,13 +310,13 @@ extension (p: Player) {
 					newThoughts = newThoughts.updated(order, newThought)
 
 					if (reset)
-						resets += order
+						resets = order +: resets
 				j += 1
 			}
 			i += 1
 		}
 
-		(resets.toList, p.copy(thoughts = newThoughts, dirty = dirty))
+		(resets, p.copy(thoughts = newThoughts, dirty = dirty))
 
 	def elimLink(game: Game, matches: Seq[Int], focus: Int, id: Identity, goodTouch: Boolean): Player =
 		Log.info(s"eliminating ${game.state.logId(id)} link from focus (${p.name})! $matches --> $focus")

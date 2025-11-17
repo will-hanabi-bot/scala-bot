@@ -23,7 +23,8 @@ class Empathy extends munit.FunSuite:
 			Vector("xx", "xx", "xx", "xx", "xx"),
 			Vector("r1", "r1", "r1", "r2", "r2")
 		),
-		starting = Player.Bob)
+			starting = Player.Bob
+		)
 		.pipe(takeTurn("Bob clues red to Alice (slot 5)"))
 
 		hasPoss(game, Some(Player.Alice), Player.Alice, 5, Vector("r3", "r4", "r5"))
@@ -36,9 +37,10 @@ class Empathy extends munit.FunSuite:
 			Vector("g3", "p1", "b3", "b5"),
 			Vector("r3", "b2", "r1", "y5")
 		),
-		starting = Player.Donald,
-		playStacks = Some(Vector(5, 0, 0, 0, 0, 0)),
-		variant = "6 Suits")
+			starting = Player.Donald,
+			playStacks = Some(Vector(5, 0, 0, 0, 0, 0)),
+			variant = "6 Suits"
+		)
 		.pipe(takeTurn("Donald clues green to Alice (slot 1)"))
 		.pipe(takeTurn("Alice clues 5 to Bob"))
 		.pipe(takeTurn("Bob clues 5 to Cathy"))
@@ -58,21 +60,21 @@ class Empathy extends munit.FunSuite:
 			Vector("g2", "b1", "r4", "r5", "y3"),
 			Vector("y5", "p1", "b3", "b5", "g3")
 		),
-		starting = Player.Alice,
-		playStacks = Some(Vector(3, 0, 0, 0, 0)),
-		discarded = Vector("r1", "r1", "r2", "r3"),
-		init = (game) => {
-			// Alice's slot 5 is clued red.
-			game.pipe(preClue(Player.Alice, 5, Seq(TestClue(ClueKind.Colour, Colour.Red.ordinal, giver = Player.Cathy))))
-				// Bob's slots 3 and 4 are clued red.
-				.pipe(preClue(Player.Bob, 3, Seq(TestClue(ClueKind.Colour, Colour.Red.ordinal, giver = Player.Cathy))))
-				.pipe(preClue(Player.Bob, 4, Seq(TestClue(ClueKind.Colour, Colour.Red.ordinal, giver = Player.Cathy))))
-		})
+			starting = Player.Alice,
+			playStacks = Some(Vector(3, 0, 0, 0, 0)),
+			discarded = Vector("r1", "r1", "r2", "r3"),
+			init = (game) =>
+				// Alice's slot 5 is clued red.
+				game.pipe(preClue(Player.Alice, 5, Seq(TestClue(ClueKind.Colour, Colour.Red.ordinal, giver = Player.Cathy))))
+					// Bob's slots 3 and 4 are clued red.
+					.pipe(preClue(Player.Bob, 3, Seq(TestClue(ClueKind.Colour, Colour.Red.ordinal, giver = Player.Cathy))))
+					.pipe(preClue(Player.Bob, 4, Seq(TestClue(ClueKind.Colour, Colour.Red.ordinal, giver = Player.Cathy))))
+		)
 
 		// Everyone knows that Alice's card is known r4.
-		hasPoss(game, None, Player.Alice, 5, Vector("r4"));
+		hasPoss(game, None, Player.Alice, 5, Vector("r4"))
 
 		// Bob's cards could be r4 or r5.
-		hasPoss(game, None, Player.Bob, 3, Vector("r4", "r5"));
-		hasPoss(game, None, Player.Bob, 4, Vector("r4", "r5"));
+		hasPoss(game, None, Player.Bob, 3, Vector("r4", "r5"))
+		hasPoss(game, None, Player.Bob, 4, Vector("r4", "r5"))
 	}
