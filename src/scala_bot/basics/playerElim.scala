@@ -6,13 +6,11 @@ import scala_bot.logger.Log
 
 case class MatchEntry(order: Int, unknownTo: Int)
 
-case class IdEntry(order: Int, playerIndex: Int)
-
 extension (p: Player) {
 	def cardElim(state: State) =
 		var certainMap = p.certainMap
 
-		var crossElimCandidates = List.empty[IdEntry]
+		var crossElimCandidates = List.empty[Int]
 		var resets = List.empty[Int]
 		var thoughts = p.thoughts
 
@@ -30,7 +28,7 @@ extension (p: Player) {
 
 			if (id.isDefined)
 				val unknownTo = if (thought.id(symmetric = true).isEmpty) state.holderOf(order) else -1
-				val certains = certainMap.getOrElse(id.get.toOrd, Nil)
+				val certains = certainMap(id.get.toOrd)
 				val index = certains.indexWhere(_.order == order)
 
 				certainMap =
@@ -61,7 +59,7 @@ extension (p: Player) {
 						val thought = thoughts(order)
 						val noElim =
 							!thought.possible.contains(id) ||
-							certainMap.getOrElse(id.toOrd, Nil).exists(e => e.order == order || e.unknownTo == playerIndex)
+							certainMap(id.toOrd).exists(e => e.order == order || e.unknownTo == playerIndex)
 
 						if (!noElim)
 							changed = true
@@ -93,7 +91,7 @@ extension (p: Player) {
 							// Card can be further eliminated
 							if (newPossible.length == 1)
 								val recursiveId = newPossible.head
-								val certains = certainMap.getOrElse(recursiveId.toOrd, Nil)
+								val certains = certainMap(recursiveId.toOrd)
 
 								certainMap = certainMap.updated(recursiveId.toOrd,
 									if (certains.isEmpty)
@@ -112,7 +110,7 @@ extension (p: Player) {
 				playerIndex += 1
 			}
 
-			crossElimCandidates = crossElimCandidates.filterNot(c => crossElimRemovals.contains(c.order))
+			crossElimCandidates = crossElimCandidates.filterNot(crossElimRemovals.contains)
 			(changed, recursiveIds)
 
 		/**
@@ -125,7 +123,7 @@ extension (p: Player) {
 			var eliminated = IdentitySet.empty
 
 			ids.foreachFast { id =>
-				val knownCount = certainMap.getOrElse(id.toOrd, Nil).size
+				val knownCount = certainMap(id.toOrd).length
 
 				if (knownCount == state.cardCount(id.toOrd)) {
 					val (innerChanged, innerRecursiveIds) = updateMap(id, BitSet.empty)
@@ -149,16 +147,16 @@ extension (p: Player) {
 		 * Naked pairs - If Alice has 3 cards with [r4,g5], then everyone knows that both r4 and g5 cannot be elsewhere (will be eliminated in basic_elim).
 		 * Returns true if at least one card was modified.
 		 */
-		def performCrossElim(entries: Set[IdEntry], ids: IdentitySet) =
+		def performCrossElim(entries: BitSet, ids: IdentitySet) =
 			var changed = false
-			val groups = entries.groupBy(e => state.deck(e.order).id())
+			val groups = entries.groupBy(state.deck(_).id())
 
 			for ((id, group) <- groups) {
 				id.foreach { id =>
-					val certains = certainMap.getOrElse(id.toOrd, Nil).filter(c => !group.exists(_.order == c.order)).length
+					val certains = certainMap(id.toOrd).filter(c => !group.contains(c.order)).length
 
-					if (group.size == state.remainingMultiplicity(IdentitySet.single(id)) - certains) {
-						val (innerChanged, _) = updateMap(id, BitSet.fromSpecific(group.map(_.playerIndex)))
+					if (group.size == state.cardCount(id.toOrd) - certains) {
+						val (innerChanged, _) = updateMap(id, BitSet.fromSpecific(group.map(state.holderOf)))
 						changed ||= innerChanged
 					}
 				}
@@ -166,15 +164,15 @@ extension (p: Player) {
 
 			// Now elim all the cards outside of this entry
 			for (id <- ids) {
-				val (innerChanged, _) = updateMap(id, BitSet.fromSpecific(entries.map(_.playerIndex)))
+				val (innerChanged, _) = updateMap(id, BitSet.fromSpecific(entries.map(state.holderOf)))
 				changed ||= innerChanged
 			}
 
 			basicElim(ids) || changed
 
-		def crossElim(candidates: List[IdEntry]): Boolean =
-			def loop(remaining: List[IdEntry], contained: Set[IdEntry] = Set.empty, accIds: IdentitySet = IdentitySet.empty, certains: BitSet = BitSet.empty): Boolean =
-				val multiplicity = state.remainingMultiplicity(accIds)
+		def crossElim(candidates: List[Int]): Boolean =
+			def loop(remaining: List[Int], contained: BitSet = BitSet.empty, accIds: IdentitySet = IdentitySet.empty, certains: BitSet = BitSet.empty): Boolean =
+				val multiplicity = state.multiplicity(accIds)
 				val impossibleMultiplicity = multiplicity - certains.size > contained.size + remaining.length
 
 				if (impossibleMultiplicity)
@@ -189,11 +187,10 @@ extension (p: Player) {
 					return false
 
 				// Check all remaining subsets that contain the next item
-				val item = remaining.head
-				val order = item.order
+				val order = remaining.head
 				val newAccIds = accIds.union(thoughts(order).possible)
 
-				val nextContained = contained + item
+				val nextContained = contained + order
 				val nextCertains = {
 					val delta = thoughts(order).possible.difference(accIds)
 
@@ -202,7 +199,7 @@ extension (p: Player) {
 					else
 						var mCertains = certains
 						delta.foreachFast { id =>
-							val newCertains = certainMap.getOrElse(id.toOrd, Nil)
+							val newCertains = certainMap(id.toOrd)
 							var i = 0
 							while (i < newCertains.length) {
 								mCertains = mCertains + newCertains(i).order
@@ -211,7 +208,7 @@ extension (p: Player) {
 						}
 						mCertains
 
-					allCertains.filter(o => !nextContained.exists(_.order == o))
+					allCertains -- nextContained
 				}
 
 				val included = loop(remaining.tail, nextContained, newAccIds, nextCertains)
@@ -235,21 +232,21 @@ extension (p: Player) {
 
 				val canCrossElim = possible.length > 1 &&
 					possible.difference(state.trashSet).nonEmpty &&
-					state.remainingMultiplicity(possible) <= 8
+					state.multiplicity(possible) <= 8
 
 				if (canCrossElim)
-					crossElimCandidates = IdEntry(order, playerIndex) +: crossElimCandidates
+					crossElimCandidates = order +: crossElimCandidates
 
 				i += 1
 			}
 			playerIndex += 1
 		}
 
-		val candidates = crossElimCandidates.filter { entry =>
-			val thought = thoughts(entry.order)
+		val candidates = crossElimCandidates.filter { order =>
+			val thought = thoughts(order)
 			var certains = BitSet.empty
 			thought.possible.foreachFast { id =>
-				val newCertains = certainMap.getOrElse(id.toOrd, Nil)
+				val newCertains = certainMap(id.toOrd)
 				var i = 0
 				while (i < newCertains.length) {
 					certains = certains + newCertains(i).order
@@ -257,7 +254,7 @@ extension (p: Player) {
 				}
 			}
 
-			state.remainingMultiplicity(thought.possible) - certains.size <= crossElimCandidates.length
+			state.multiplicity(thought.possible) - certains.size <= crossElimCandidates.length
 		}
 
 		while (candidates.length > 1 && crossElim(candidates)) {}
@@ -358,28 +355,29 @@ extension (p: Player) {
 		while (i < state.numPlayers) {
 			val hand = state.hands(i)
 
-			val infMap = hand.foldLeft(Map.empty[IdentitySet, List[Int]]) { (map, o) =>
-				if (!linkable(o))
-					map
-				else
+			var infMap = Map.empty[IdentitySet, List[Int]]
+			var j = 0
+			while (j < hand.length) {
+				val o = hand(j)
+				if (linkable(o))
 					val infs = newPlayer.thoughts(o).inferred
-					map.updated(infs, o +: map.getOrElse(infs, Nil))
+					infMap = infMap.updated(infs, o +: infMap.getOrElse(infs, Nil))
+				j += 1
 			}
 
-			newPlayer = infMap.foldLeft(newPlayer) { case (newPlayer, (inferred, orders)) =>
-				if (orders.length == 1)
-					newPlayer
-				else
+			val keys = infMap.keysIterator
+			while (keys.nonEmpty) {
+				val inferred = keys.next()
+				val orders = infMap(inferred)
+				if (orders.length > 1)
 					val focused = orders.filter(game.meta(_).focused)
 					if (focused.length == 1 && inferred.length == 1)
-						newPlayer.elimLink(game, orders, focused.head, inferred.head, goodTouch)
+						newPlayer = newPlayer.elimLink(game, orders, focused.head, inferred.head, goodTouch)
 
 					else if (orders.length > inferred.length)
 						// We have enough inferred cards to elim elsewhere
 						Log.info(s"adding link $orders infs ${inferred.fmt(state)} (${p.name})")
-						newPlayer.copy(links = Link.Unpromised(orders, inferred.toList) +: newPlayer.links)
-					else
-						newPlayer
+						newPlayer = newPlayer.copy(links = Link.Unpromised(orders, inferred.toList) +: newPlayer.links)
 			}
 			i += 1
 		}

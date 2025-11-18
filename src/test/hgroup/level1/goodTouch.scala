@@ -8,7 +8,7 @@ import scala_bot.logger.{Logger,LogLevel}
 import scala.util.chaining.scalaUtilChainingOps
 
 class GoodTouch extends munit.FunSuite:
-	// override def beforeAll() = Logger.setLevel(LogLevel.Off)
+	override def beforeAll() = Logger.setLevel(LogLevel.Off)
 
 	test("eliminates from focus (direct play)".only) {
 		val game = setup(HGroup.atLevel(1), Vector(

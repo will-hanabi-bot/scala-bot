@@ -122,10 +122,10 @@ class Prompts extends munit.FunSuite:
 
 	test("doesnt play into a satisfied prompt") {
 		val game = setup(RefSieve.apply, Vector(
-			Vector("xx", "xx", "xx", "xx", "xx"),
-			Vector("r1", "y4", "b4", "p4", "g4"),
-			Vector("r2", "y4", "g4", "r4", "p4"),
-			Vector("g5", "b4", "r3", "y3", "g3")
+			Vector("xx", "xx", "xx", "xx"),
+			Vector("r1", "y4", "b4", "p4"),
+			Vector("r2", "y4", "g4", "r4"),
+			Vector("g5", "b4", "r3", "y3")
 		),
 			starting = Donald,
 			clueTokens = 7,

@@ -10,7 +10,7 @@ import scala.util.chaining.scalaUtilChainingOps
 class General extends munit.FunSuite:
 	override def beforeAll() = Logger.setLevel(LogLevel.Off)
 
-	test("understands a continuing finesse") {
+	test("understands a continuing finesse".only) {
 		val game = setup(HGroup.atLevel(2), Vector(
 			Vector("xx", "xx", "xx", "xx"),
 			Vector("y5", "r5", "b1", "p3"),

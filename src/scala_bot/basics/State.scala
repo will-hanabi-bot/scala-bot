@@ -132,7 +132,7 @@ case class State(
 	def includesVariant(regex: Regex) =
 		variant.suits.exists(regex.matches)
 
-	def remainingMultiplicity(ids: IdentitySet) =
+	def multiplicity(ids: IdentitySet) =
 		var count = 0
 		ids.foreachFast { id =>
 			count += cardCount(id.toOrd)

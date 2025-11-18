@@ -43,8 +43,8 @@ case class Player(
 	unknownPlays: BitSet = BitSet.empty,
 	hypoPlays: BitSet = BitSet.empty,
 
-	dirty: Set[Int] = Set(),
-	certainMap: Map[Int, List[MatchEntry]] = Map()
+	dirty: BitSet = BitSet.empty,
+	certainMap: Vector[List[MatchEntry]]
 ):
 	def withThought(order: Int)(f: Thought => Thought) =
 		copy(
@@ -153,12 +153,10 @@ case class Player(
 
 	def orderPlayable(game: Game, order: Int, excludeTrash: Boolean = false) =
 		val state = game.state
-		lazy val unsafeLink = links.exists(link =>
-			link.getOrders.contains(order) && link.getOrders.max != order)
 
 		if (orderKp(game, order, excludeTrash))
 			true
-		else if (game.meta(order).trash || unsafeLink)
+		else if (game.meta(order).trash || links.exists(l => l.getOrders.contains(order) && l.getOrders.max != order))
 			false
 		else
 			val infer =
@@ -308,23 +306,23 @@ case class Player(
 		var unknownPlays = BitSet.empty
 		var played = BitSet.empty
 
-		var viable = {
-			var v = List.empty[Int]
-			var i = state.numPlayers - 1
-			while (i >= 0) {
-				val hand = state.hands(i)
-				var j = hand.length - 1
-				while (j >= 0) {
-					val order = hand(j)
-					val id = state.deck(order).id()
+		var endIndex = 0
+		val viableOrders: Array[Int] = Array.ofDim(state.numPlayers * HAND_SIZE(state.numPlayers))
 
-					if (id.isEmpty || !state.isBasicTrash(id.get))
-						v = order +: v
-					j -= 1
-				}
-				i -= 1
+		var i = 0
+		while (i < state.numPlayers) {
+			val hand = state.hands(i)
+			var j = 0
+			while (j < hand.length) {
+				val order = hand(j)
+				val id = state.deck(order).id()
+
+				if (id.isEmpty || !state.isBasicTrash(id.get))
+					viableOrders(endIndex) = order
+					endIndex += 1
+				j += 1
 			}
-			v
+			i += 1
 		}
 
 		def play(order: Int) =
@@ -358,42 +356,45 @@ case class Player(
 
 		while (changed) {
 			changed = false
-			var newViable = List.empty[Int]
+			var viableIndex = 0
 			var i = 0
-
-			while (i < viable.length) {
-				val order = viable(i)
+			while (i < endIndex) {
+				val order = viableOrders(i)
 				val thought = thoughts(order)
 
 				val playable = hypo.state.hasConsistentInfs(thought) &&
 					(if (game.goodTouch) orderPlayable(hypo, order) else orderKp(hypo, order))
 
 				// Should this be symmetric? Checking whether a playable or not should be, but another player can know what id it is
-				if (playable)
+				if (playable && !played.contains(order))
 					play(order)
 					changed = true
 				else
-					newViable = order +: newViable
-
+					viableOrders(viableIndex) = order
+					viableIndex += 1
 				i += 1
 			}
+			endIndex = viableIndex
 
 			var k = 0
 			while (k < playLinks.length) {
 				val link = playLinks(k)
+
 				var allPlayed = true
 				var m = 0
 				while (m < link.orders.length && allPlayed)
 					allPlayed = played.contains(link.orders(m))
 					m += 1
 
-				if (allPlayed && newViable.contains(link.target))
-					play(link.target)
-					newViable = newViable.filterNot(_ == link.target)
+				if (allPlayed && !played.contains(link.target))
+					val order = link.target
+					val id = state.deck(order).id()
+
+					if (id.isEmpty || !state.isBasicTrash(id.get))
+						play(link.target)
 
 				k += 1
 			}
-			viable = newViable
 		}
 
 		this.copy(
@@ -415,5 +416,6 @@ object Player:
 			allPossible = allPossible,
 			hypoStacks = hypoStacks,
 			isCommon = playerIndex == -1,
-			allInferred = allPossible
+			allInferred = allPossible,
+			certainMap = Vector.fill(allPossible.length)(Nil)
 		)

@@ -1,5 +1,6 @@
 package scala_bot.basics
 
+import scala.collection.immutable.BitSet
 import scala.util.chaining.scalaUtilChainingOps
 import scala_bot.utils._
 
@@ -191,7 +192,7 @@ extension[G <: Game](game: G)
 			.refreshLinks(game, goodTouch)._2
 			.refreshPlayLinks(game)
 			.updateHypoStacks(game)
-			.copy(dirty = Set.empty)
+			.copy(dirty = BitSet.empty)
 		}
 
 		for (order <- resets) {
@@ -205,7 +206,7 @@ extension[G <: Game](game: G)
 		}
 
 		ops.copyWith(game, GameUpdates(
-			common = Some(newCommon.copy(dirty = Set.empty)),
+			common = Some(newCommon.copy(dirty = BitSet.empty)),
 			meta = Some(newMeta),
 			players = Some(newPlayers)
 		))

@@ -51,18 +51,21 @@ def setup[G <: Game](
 						hypoStacks = stacks,
 						certainMap = stacks.zipWithIndex
 							.flatMap((stack, suitIndex) => (1 to stack).map(Identity(suitIndex, _)))
-							.foldLeft(p.certainMap)((acc, id) => acc.updated(id.toOrd, MatchEntry(61, -1) +: acc.getOrElse(id.toOrd, Nil)))
+							.foldLeft(p.certainMap)((acc, id) => acc.updated(id.toOrd, MatchEntry(61, -1) +: acc(id.toOrd)))
 					)}),
 					common = Some(g.common.copy(
 						hypoStacks = stacks,
 						certainMap = stacks.zipWithIndex
 							.flatMap((stack, suitIndex) => (1 to stack).map(Identity(suitIndex, _)))
-							.foldLeft(g.common.certainMap)((acc, id) => acc.updated(id.toOrd, MatchEntry(61, -1) +: acc.getOrElse(id.toOrd, Nil)))
+							.foldLeft(g.common.certainMap)((acc, id) => acc.updated(id.toOrd, MatchEntry(61, -1) +: acc(id.toOrd)))
 					))
 				))
 			}
 		}
 		.pipe { g =>
+			if (hands.exists(_.length > HAND_SIZE(hands.length)))
+				throw new IllegalArgumentException(s"Hand size should be ${HAND_SIZE(hands.length)} for a ${hands.length}-player game!")
+
 			// Draw all the hands
 			val drawActions =
 				var orderCounter = -1
@@ -85,10 +88,10 @@ def setup[G <: Game](
 				game.withState(_.withDiscard(id, 99)).pipe { g =>
 					ops.copyWith(g, GameUpdates(
 						common = Some(g.common.copy(
-							certainMap = g.common.certainMap.updated(id.toOrd, MatchEntry(61, -1) +: g.common.certainMap.getOrElse(id.toOrd, Nil)))
+							certainMap = g.common.certainMap.updated(id.toOrd, MatchEntry(61, -1) +: g.common.certainMap(id.toOrd)))
 						),
 						players = Some(g.players.map { p =>
-							p.copy(certainMap = p.certainMap.updated(id.toOrd, MatchEntry(61, -1) +: p.certainMap.getOrElse(id.toOrd, Nil)))
+							p.copy(certainMap = p.certainMap.updated(id.toOrd, MatchEntry(61, -1) +: p.certainMap(id.toOrd)))
 						})
 					))
 				}
