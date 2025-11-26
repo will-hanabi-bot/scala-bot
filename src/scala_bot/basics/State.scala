@@ -2,6 +2,7 @@ package scala_bot.basics
 
 import scala_bot.utils._
 import scala.util.matching.Regex
+import scala.util.hashing.MurmurHash3
 
 case class State(
 	turnCount: Int = 0,
@@ -32,6 +33,10 @@ case class State(
 	actionList: Vector[List[Action]] = Vector(),
 	currentPlayerIndex: Int = 0
 ):
+	def hash =
+		val deckInts = deck.map(_.id().fold(0)(_.toOrd))
+		MurmurHash3.productHash((hands, deckInts, clueTokens, endgameTurns))
+
 	def withDiscard(id: Identity, order: Int) =
 		val Identity(suitIndex, rank) = id
 		val newStacks = discardStacks.updated(suitIndex,

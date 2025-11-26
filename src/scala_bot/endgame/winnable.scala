@@ -95,14 +95,14 @@ extension[G <: Game] (solver: EndgameSolver[G])
 		winnable
 
 	def winnableIf(state: State, playerTurn: Int, perform: PerformAction, remaining: RemainingMap, deadline: Instant, depth: Int): SimpleResult =
-		val hash = s"${state.hashCode()},$playerTurn,$perform,${remaining.toList.sortBy(_._1.toOrd)}"
+		// val hash = s"${state.hashCode()},$playerTurn,$perform,${remaining.toList.sortBy(_._1.toOrd)}"
 
 		// Log.highlight(Console.GREEN, s"${indent(depth)}checking if $perform is winning ${state.turnCount} ${solver.simplerCache.size}")
 
-		if (solver.ifCache.contains(hash))
-			solver.ifCache(hash)
+		// if (solver.ifCache.contains(hash))
+		// 	solver.ifCache(hash)
 
-		else if (Instant.now.isAfter(deadline))
+		if (Instant.now.isAfter(deadline))
 			SimpleResult.Unwinnable
 
 		else if (state.cardsLeft == 0 || perform.isClue)
@@ -113,7 +113,7 @@ extension[G <: Game] (solver: EndgameSolver[G])
 			// println(s"${indent(depth)}winnable? $winnable")
 
 			val res = if (winnable) SimpleResult.AlwaysWinnable else SimpleResult.Unwinnable
-			solver.ifCache = solver.ifCache.updated(hash, res)
+			// solver.ifCache = solver.ifCache.updated(hash, res)
 			res
 
 		else
@@ -134,7 +134,7 @@ extension[G <: Game] (solver: EndgameSolver[G])
 					SimpleResult.Unwinnable
 				else
 					SimpleResult.WinnableWithDraws(winnableDraws.toList)
-			solver.ifCache = solver.ifCache.updated(hash, res)
+			// solver.ifCache = solver.ifCache.updated(hash, res)
 			res
 
 def advanceState(state: State, perform: PerformAction, playerIndex: Int, draw: Option[Card]) =

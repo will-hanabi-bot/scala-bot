@@ -82,7 +82,7 @@ def findUnknownConnecting(ctx: ClueContext, reacting: Int, id: Identity, connect
 	val ClueContext(prev, game, action) = ctx
 	val (state, level) = (game.state, game.level)
 	val ClueAction(giver, target, _, _) = action
-	val FocusResult(focus, _, _) = game.determineFocus(prev, action)
+	val FocusResult(focus, _, _) = game.determineFocus(prev, game, action)
 
 	// println(s"finding unknown connecting for ${state.logId(id)} (${state.names(reacting)}), $connected, own? ${opts.findOwn}")
 

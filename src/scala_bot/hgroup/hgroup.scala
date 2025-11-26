@@ -117,7 +117,7 @@ case class HGroup(
 	def unknown1(order: Int) =
 		val clues = state.deck(order).clues
 
-		clues.nonEmpty && clues.forall(_.eq(ClueKind.Rank, 1))
+		clues.nonEmpty && clues.forall(_.isEq(BaseClue(ClueKind.Rank, 1)))
 
 	def order1s(orders: Seq[Int], noFilter: Boolean = false) =
 		val unknown1s = if (noFilter) orders else
@@ -126,10 +126,12 @@ case class HGroup(
 			}
 
 		unknown1s.sortBy { o =>
-			if (state.inStartingHand(o) && meta(o).status != CardStatus.ChopMoved)
-				o
-			else if (cluedOnChop.contains(o))
+			if (cluedOnChop.contains(o))
 				-100 - o
+			else if (meta(o).status == CardStatus.ChopMoved)
+				100 - o
+			else if (state.inStartingHand(o))
+				o
 			else
 				-o
 		}
@@ -195,7 +197,7 @@ case class HGroup(
 			})
 		}
 
-	def determineFocus(prev: HGroup, action: ClueAction): FocusResult =
+	def determineFocus(prev: HGroup, game: HGroup, action: ClueAction): FocusResult =
 		val ClueAction(giver, target, list, clue) = action
 		val hand = state.hands(target)
 		val chop = prev.chop(target)
@@ -212,7 +214,7 @@ case class HGroup(
 			state.variant.colourableSuits(clue.value).contains("Brown") &&
 			reclue
 
-		lazy val ordered1s = order1s(list.filter(unknown1), noFilter = true)
+		lazy val ordered1s = game.order1s(list.filter(game.unknown1), noFilter = true)
 
 		lazy val muddySuitIndex = state.variant.suits.indexWhere(MUDDY.matches)
 		lazy val muddyCards = list.filter(this.knownAs(_, MUDDY))
@@ -223,7 +225,7 @@ case class HGroup(
 			// Mud clues should only work if the leftmost card is muddy.
 			common.thoughts(list.max).possible.exists(_.suitIndex == muddySuitIndex)
 
-		lazy val pinkStall5 = clue.eq(BaseClue(ClueKind.Rank, 5)) &&
+		lazy val pinkStall5 = clue.isEq(BaseClue(ClueKind.Rank, 5)) &&
 			state.includesVariant(PINKISH) &&
 			stallSeverity(prev, prev.common, giver) > 0
 
@@ -236,7 +238,7 @@ case class HGroup(
 		else if (brownTempo)
 			FocusResult(list.min, positional = true)
 
-		else if (clue.eq(BaseClue(ClueKind.Rank, 1)) && ordered1s.nonEmpty)
+		else if (clue.isEq(BaseClue(ClueKind.Rank, 1)) && ordered1s.nonEmpty)
 			FocusResult(ordered1s.head)
 
 		else if (mudClue)
@@ -340,9 +342,38 @@ object HGroup:
 				}
 
 		def interpretDiscard(prev: HGroup, game: HGroup, action: DiscardAction): HGroup =
+			val DiscardAction(playerIndex, order, suitIndex, rank, failed) = action
+			val id = Identity(suitIndex, rank)
+
 			refreshWCs(prev, game, action)
 				.pipe { g =>
-					val DiscardAction(playerIndex, order, _, _, failed) = action
+					interpretUsefulDc(g, action, rightmost = false) match {
+						case DiscardResult.None =>
+							g.copy(lastMove = Some(DiscardInterp.None))
+
+						case DiscardResult.Mistake =>
+							g.copy(lastMove = Some(DiscardInterp.Mistake))
+
+						case DiscardResult.GentlemansDiscard(target) =>
+							g.copy(
+								common = g.common.withThought(target)(_.copy(
+									inferred = IdentitySet.single(id)
+								)),
+								meta = g.meta.updated(target, g.meta(target).copy(
+									status = CardStatus.GentlemansDiscard
+								)),
+								lastMove = Some(DiscardInterp.GentlemansDiscard)
+							)
+						case DiscardResult.Sarcastic(orders) =>
+							g.copy(
+								common = g.common.copy(
+									links = Link.Sarcastic(orders, id) +: g.common.links
+								),
+								lastMove = Some(DiscardInterp.Sarcastic)
+							)
+					}
+				}
+				.pipe { g =>
 					val endEarlyGame = g.inEarlyGame &&
 						!failed &&
 						!g.state.deck(order).clued &&
@@ -352,6 +383,7 @@ object HGroup:
 						(_.copy(inEarlyGame = false))
 					.copy(lastActions = g.lastActions.updated(playerIndex, Some(action)))
 				}
+				.elim(goodTouch = true)
 
 		def interpretPlay(prev: HGroup, game: HGroup, action: PlayAction): HGroup =
 			refreshWCs(prev, game, action)
@@ -444,7 +476,7 @@ object HGroup:
 		def updateTurn(game: HGroup, action: TurnAction) =
 			game
 
-		def findAllClues(game: HGroup, giver: Int): List[PerformAction] =
+		def findAllClues(game: HGroup, giver: Int) =
 			val state = game.state
 
 			val level = Logger.level
@@ -458,15 +490,20 @@ object HGroup:
 
 			val allClues =
 				(for
-					target <- (0 until state.numPlayers).view if target != giver
+					target <- (0 until state.numPlayers) if target != giver
 					clue   <- state.allValidClues(target) if validClue(clue, target)
 				yield
-					clueToPerform(clue)).toList
+					clue)
+				.sortBy { clue =>
+					val list = state.clueTouched(state.hands(clue.target), clue)
+					list.count(o => state.isBasicTrash(state.deck(o).id().get))
+				}
+				.map(clueToPerform)
 
 			Logger.setLevel(level)
 			allClues
 
-		def findAllDiscards(game: HGroup, playerIndex: Int): List[PerformAction] =
+		def findAllDiscards(game: HGroup, playerIndex: Int) =
 			val trash = game.common.thinksTrash(game, playerIndex)
 			val target = trash.headOption
 				.orElse(game.chop(playerIndex))

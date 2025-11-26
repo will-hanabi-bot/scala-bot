@@ -227,7 +227,7 @@ case class Player(
 				else
 					val clues = card.clues
 					val misranked =
-						clues.forall(_.eq(clues.head)) &&
+						clues.forall(_.isEq(clues.head)) &&
 						clues.head.kind == ClueKind.Rank &&
 						clues.head.value != id.rank
 

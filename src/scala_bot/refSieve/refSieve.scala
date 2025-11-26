@@ -215,8 +215,31 @@ object RefSieve:
 			val id = Identity(suitIndex, rank)
 
 			if (!failed && prev.state.deck(order).clued && suitIndex != -1 && rank != -1 && !state.isBasicTrash(id))
-				val (interp, dcGame) = interpretUsefulDc(game, action)
-				dcGame.copy(lastMove = Some(interp))
+				interpretUsefulDc(game, action) match {
+					case DiscardResult.None =>
+						game.copy(lastMove = Some(DiscardInterp.None))
+
+					case DiscardResult.Mistake =>
+						game.copy(lastMove = Some(DiscardInterp.Mistake))
+
+					case DiscardResult.GentlemansDiscard(target) =>
+						game.copy(
+							common = game.common.withThought(target)(_.copy(
+								inferred = IdentitySet.single(id)
+							)),
+							meta = game.meta.updated(target, game.meta(target).copy(
+								status = CardStatus.GentlemansDiscard
+							)),
+							lastMove = Some(DiscardInterp.GentlemansDiscard)
+						)
+					case DiscardResult.Sarcastic(orders) =>
+						game.copy(
+							common = game.common.copy(
+								links = Link.Sarcastic(orders, id) +: game.common.links
+							),
+							lastMove = Some(DiscardInterp.Sarcastic)
+						)
+				}
 			else
 				game
 
@@ -311,7 +334,7 @@ object RefSieve:
 			game.copy(common = newCommon, meta = newMeta)
 				.elim(goodTouch = true)
 
-		def findAllClues(game: RefSieve, giver: Int): List[PerformAction] =
+		def findAllClues(game: RefSieve, giver: Int) =
 			val state = game.state
 
 			val level = Logger.level
@@ -325,10 +348,10 @@ object RefSieve:
 
 			val allClues =
 				(for
-					target <- (0 until state.numPlayers).view if target != giver
+					target <- (0 until state.numPlayers) if target != giver
 					clue   <- state.allValidClues(target) if validClue(clue, target)
 				yield
-					clueToPerform(clue)).toList
+					clueToPerform(clue))
 
 			Logger.setLevel(level)
 			allClues

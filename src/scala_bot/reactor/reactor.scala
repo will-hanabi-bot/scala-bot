@@ -232,36 +232,58 @@ object Reactor:
 			val DiscardAction(playerIndex, order, suitIndex, rank, failed) = action
 			val id = Identity(suitIndex, rank)
 
-			val afterMissed = checkMissed(game, playerIndex, order)
+			checkMissed(game, playerIndex, order)
+				.when(_ => failed) { g =>
+					Log.warn("bombed! clearing all information")
 
-			if (failed)
-				Log.warn("bombed! clearing all information")
-
-				val initial = (afterMissed.common, afterMissed.meta)
-				val (clearedC, clearedM) = state.hands.flatten.foldLeft(initial) { case ((c, m), order) =>
-					val newC = c.withThought(order)(t => t.copy(
-						inferred = t.possible,
-						oldInferred = None,
-						infoLock = None,
-					))
-					val newM = m.updated(order, m(order).cleared)
-					(newC, newM)
+					val initial = (g.common, g.meta)
+					val (clearedC, clearedM) = state.hands.flatten.foldLeft(initial) { case ((c, m), order) =>
+						val newC = c.withThought(order)(t => t.copy(
+							inferred = t.possible,
+							oldInferred = None,
+							infoLock = None,
+						))
+						val newM = m.updated(order, m(order).cleared)
+						(newC, newM)
+					}
+					g.copy(
+						waiting = None,
+						common = clearedC,
+						meta = clearedM
+					)
 				}
-				game.copy(
-					waiting = None,
-					common = clearedC,
-					meta = clearedM
-				)
-			else
-				(afterMissed.waiting match {
+				.pipe { g => g.waiting match {
 					case Some(wc) =>
-						reactDiscard(prev, afterMissed, playerIndex, order, wc)
+						reactDiscard(prev, g, playerIndex, order, wc)
+
 					case None if !failed && prev.state.deck(order).clued && suitIndex != -1 && rank != -1 && !state.isBasicTrash(id) =>
-						val (interp, dcGame) = interpretUsefulDc(afterMissed, action)
-						dcGame.copy(lastMove = Some(interp))
-					case None =>
-						afterMissed
-				})
+						interpretUsefulDc(g, action) match {
+							case DiscardResult.None =>
+								g.copy(lastMove = Some(DiscardInterp.None))
+
+							case DiscardResult.Mistake =>
+								g.copy(lastMove = Some(DiscardInterp.Mistake))
+
+							case DiscardResult.GentlemansDiscard(target) =>
+								g.copy(
+									common = g.common.withThought(target)(_.copy(
+										inferred = IdentitySet.single(id)
+									)),
+									meta = g.meta.updated(target, g.meta(target).copy(
+										status = CardStatus.GentlemansDiscard
+									)),
+									lastMove = Some(DiscardInterp.GentlemansDiscard)
+								)
+							case DiscardResult.Sarcastic(orders) =>
+								g.copy(
+									common = g.common.copy(
+										links = Link.Sarcastic(orders, id) +: g.common.links
+									),
+									lastMove = Some(DiscardInterp.Sarcastic)
+								)
+						}
+					case None => g
+				}}
 				.pipe(_.elim(goodTouch = false))
 				.when(_ => prev.state.canClue)(resetZcs)
 
@@ -407,7 +429,7 @@ object Reactor:
 
 			allActions.maxBy((_, action) => evalAction(game, action))._1
 
-		def findAllClues(game: Reactor, giver: Int): List[PerformAction] =
+		def findAllClues(game: Reactor, giver: Int) =
 			val state = game.state
 
 			val level = Logger.level
@@ -427,10 +449,10 @@ object Reactor:
 
 			val allClues =
 				(for
-					target <- (0 until state.numPlayers).view if target != giver
+					target <- (0 until state.numPlayers) if target != giver
 					clue   <- state.allValidClues(target) if validClue(clue, target)
 				yield
-					clueToPerform(clue)).toList
+					clueToPerform(clue))
 
 			Logger.setLevel(level)
 			allClues

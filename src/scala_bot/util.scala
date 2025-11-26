@@ -40,21 +40,21 @@ def visibleFind(
 		}
 	}
 
-def clueToPerform(clue: Clue) =
+def clueToPerform(clue: Clue): PerformAction.Colour | PerformAction.Rank =
 	val Clue(kind, value, target) = clue
 	kind match {
 		case ClueKind.Colour => PerformAction.Colour(target, value)
 		case ClueKind.Rank => PerformAction.Rank(target, value)
 	}
 
-def performToAction(state: State, action: PerformAction, playerIndex: Int, deck: Option[IndexedSeq[Identity]] = None) =
+def performToAction(state: State, perform: PerformAction, playerIndex: Int, deck: Option[IndexedSeq[Identity]] = None) =
 	val deckId = (order: Int) =>
 		state.deck(order).id().orElse(deck.flatMap(d => d(order).id()))
 
 	val clueTouched = (orders: Seq[Int], clue: BaseClue) =>
 		orders.filter(deckId(_).map(state.variant.cardTouched(_, clue)).getOrElse(false))
 
-	action match {
+	perform match {
 		case PerformAction.Play(target) =>
 			deckId(target) match {
 				case Some(id) =>
@@ -85,6 +85,10 @@ def performToAction(state: State, action: PerformAction, playerIndex: Int, deck:
 		case PerformAction.Terminate(target, value) =>
 			GameOverAction(value, target)
 	}
+
+def clueToAction(state: State, clue: Clue, giver: Int): ClueAction =
+	val list = state.clueTouched(state.hands(clue.target), clue)
+	ClueAction(giver, clue.target, list, clue.toBase)
 
 /** Returns all player indices between the start (inclusive) and end (exclusive) in play order. */
 def playersUntil(numPlayers: Int, start: Int, `end`: Int) =

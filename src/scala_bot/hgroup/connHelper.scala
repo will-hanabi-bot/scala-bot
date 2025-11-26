@@ -178,7 +178,7 @@ def resolveClue(ctx: ClueContext, fps: List[FocusPossibility]) =
 	val ClueContext(prev, game, action) = ctx
 	val state = game.state
 	val ClueAction(giver, target, _, _) = action
-	val focus = ctx.focusResult.focus
+	val FocusResult(focus, chop, _) = ctx.focusResult
 
 	val interp = if (state.deck(focus).id().exists(id => !fps.exists(_.id == id)))
 		Log.error(s"resolving clue but focus ${state.logId(focus)} doesn't match [${fps.map(fp => state.logId(fp.id)).mkString(",")}]!")
@@ -278,7 +278,8 @@ def resolveClue(ctx: ClueContext, fps: List[FocusPossibility]) =
 					symmetric = fp.symmetric
 				)
 			},
-			lastMove = Some(interp)
+			lastMove = Some(interp),
+			cluedOnChop = if (chop) g.cluedOnChop + focus else g.cluedOnChop
 		)
 	}
 	.when(_ => undoScream) { g =>

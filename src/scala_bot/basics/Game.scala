@@ -83,8 +83,8 @@ trait GameOps[G <: Game]:
 	def takeAction(game: G): PerformAction
 	def updateTurn(game: G, action: TurnAction): G
 
-	def findAllClues(game: G, giver: Int): List[PerformAction]
-	def findAllDiscards(game: G, playerIndex: Int): List[PerformAction]
+	def findAllClues(game: G, giver: Int): Seq[PerformAction]
+	def findAllDiscards(game: G, playerIndex: Int): Seq[PerformAction]
 
 extension[G <: Game](game: G)
 	def withThought(order: Int)(f: Thought => Thought)(using ops: GameOps[G]) =

@@ -121,4 +121,4 @@ def rainbowMismatch(game: Game, action: ClueAction, id: Identity, prompt: Int, f
 	!game.knownAs(prompt, RAINBOWISH) &&
 	rainbowFocus &&
 	// There was free choice to clue a matching colour, but didn't
-	matchingClues.nonEmpty && !matchingClues.exists(_.eq(clue))
+	matchingClues.nonEmpty && !matchingClues.exists(_.isEq(clue))

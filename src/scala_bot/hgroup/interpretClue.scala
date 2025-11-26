@@ -14,7 +14,7 @@ case class ClueContext(
 	inline def common = game.common
 	inline def state = game.state
 
-	lazy val focusResult = game.determineFocus(prev, action)
+	lazy val focusResult = game.determineFocus(prev, game, action)
 
 def interpClue(ctx: ClueContext): HGroup =
 	val ClueContext(prev, game, action) = ctx
@@ -103,6 +103,31 @@ def interpClue(ctx: ClueContext): HGroup =
 			.copy(lastMove = Some(ClueInterp.Distribution))
 
 	if (game.level >= Level.BasicCM && !state.inEndgame)
+		def badCM(chopMoved: Seq[Int]) =
+			game.chop(target).exists { oldChop =>
+				state.deck(oldChop).id().exists { chopId =>
+					state.isBasicTrash(chopId) ||
+					chopMoved.exists(o => o != oldChop && state.deck(o).id().exists(_.matches(chopId))) ||
+					// Could be directly clued
+					state.allValidClues(target).exists { clue =>
+						val directList = state.clueTouched(state.hands(target), clue)
+
+						// Clue must touch all non-trash CM'd cards
+						chopMoved.forall { o =>
+							state.deck(o).id().exists(state.isBasicTrash) ||
+							directList.contains(o)
+						} &&
+						// Must have no bad touch
+						!directList.exists { o =>
+							!prev.state.deck(o).clued &&
+							state.deck(o).id().exists(state.isBasicTrash)
+						} &&
+						// Clue must be valid
+						prev.simulateClue(clueToAction(prev.state, clue, giver)).lastMove != Some(ClueInterp.Mistake)
+					}
+				}
+			}
+
 		val tcm = interpretTcm(ctx)
 
 		if (tcm.isDefined)
@@ -121,13 +146,17 @@ def interpClue(ctx: ClueContext): HGroup =
 					.withMeta(order)(_.copy(trash = true))
 			}
 			.pipe(performCM(_, tcm.get))
-			.copy(lastMove = Some(ClueInterp.Discard))
+			.copy(lastMove = Some(
+				if (badCM(tcm.get)) ClueInterp.Mistake else ClueInterp.Discard
+			))
 
 		val cm5 = interpret5cm(ctx)
 
 		if (cm5.isDefined)
 			return performCM(game, cm5.get)
-				.copy(lastMove = Some(ClueInterp.Discard))
+				.copy(lastMove = Some(
+					if (badCM(tcm.get)) ClueInterp.Mistake else ClueInterp.Discard
+				))
 
 	val pinkTrashFix = state.includesVariant(PINKISH) &&
 		!positional && clue.kind == ClueKind.Rank &&

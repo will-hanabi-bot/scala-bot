@@ -16,12 +16,15 @@ trait ClueLike:
 		}
 		s"($clueValue to ${state.names(target)})"
 
-	def eq(other: ClueLike): Boolean =
+	def isEq(other: ClueLike): Boolean =
 		kind == other.kind && value == other.value
 
 case class BaseClue(kind: ClueKind, value: Int) extends ClueLike:
 	def hash: Int =
 		(if (kind == ClueKind.Colour) 0 else 10) + value
+
+	def toClue(target: Int) =
+		Clue(kind, value, target)
 
 object BaseClue:
 	def fromJSON(json: ujson.Value) =

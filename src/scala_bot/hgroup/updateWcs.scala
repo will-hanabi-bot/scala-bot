@@ -16,7 +16,7 @@ enum UpdateResult:
 def stompedWc(prev: HGroup, game: HGroup, action: Action, wc: WaitingConnection) =
 	action match {
 		case action @ ClueAction(giver, target, list, clue) =>
-			val focus = game.determineFocus(prev, action).focus
+			val focus = game.determineFocus(prev, game, action).focus
 
 			wc.connections.exists { conn =>
 				!(conn.hidden && conn.reacting == giver) &&		// Allow a hidden player to stomp, since they don't know

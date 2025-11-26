@@ -244,7 +244,7 @@ def parseAction(state: State, action: String) =
 				PlayAction(playerIndex, order, suitIndex, rank)
 
 		case discardPattern(playerS, action, short, slotS) =>
-			if (state.clueTokens == 8)
+			if (state.clueTokens == 8 && action != "bombs")
 				throw new IllegalArgumentException(s"Tried to discard with 8 clue tokens")
 
 			val playerIndex = parsePlayer(playerS)
@@ -322,7 +322,7 @@ def preClue[G <: Game](playerIndex: Player, slot: Int, clues: Seq[TestClue])(gam
 	))
 
 /**
-* Pre-clues the slot with obth colour and rank (only works for simple variants).
+* Pre-clues the slot with both colour and rank (only works for simple variants).
 */
 def fullyKnown[G <: Game](playerIndex: Player, slot: Int, short: String)(game: G)(using ops: GameOps[G]) =
 	val state = game.state

@@ -115,7 +115,8 @@ case class EndgameSolver[G <: Game](
 			if (winningPlay.isDefined)
 				return Right(PerformAction.Play(winningPlay.get), Frac.one)
 
-		val deadline = Instant.now().plusSeconds(1)
+		val start = Instant.now()
+		val deadline = Instant.now().plusSeconds(2)
 		val (remainingIds, ownIds) = findRemainingIds(game)
 
 		if (remainingIds.count((id, v) => !state.isBasicTrash(id) && v.all) > 2)
@@ -144,6 +145,7 @@ case class EndgameSolver[G <: Game](
 				case Right((actions, winrate)) =>
 					Logger.setLevel(level)
 					Log.highlight(Console.MAGENTA, s"winnable! actions ${actions.map(_.fmt(assumedGame)).mkString(",")}")
+					Log.info(s"solved in ${start.until(Instant.now()).toMillis()}ms")
 					return Right((actions.head, winrate))
 			}
 
@@ -270,6 +272,7 @@ case class EndgameSolver[G <: Game](
 		else
 			val (bestAction, (winrate, _)) = bestPerforms.maxBy { case (_, (winrate, index)) => winrate * 1000 - index }
 			Log.info(s"endgame winnable! ${bestAction.fmt(game)} (winrate $winrate)")
+			Log.info(s"solved in ${start.until(Instant.now()).toMillis()}ms")
 			Right((bestAction, winrate))
 
 	def winnable(game: G, playerTurn: Int, remaining: RemainingMap, deadline: Instant, depth: Int = 0)(using ops: GameOps[G]): WinnableResult =
@@ -294,7 +297,7 @@ case class EndgameSolver[G <: Game](
 				rank <- state.playStacks(suitIndex) + 1 to state.maxRanks(suitIndex)
 			yield
 				Identity(suitIndex, rank))
-			.forall(id => state.hands.flatten.exists(game.common.thoughts(_).matches(id)))
+		.forall(id => state.hands.flatten.exists(game.common.thoughts(_).matches(id, infer = true)))
 
 		if (viableClueless)
 			val cluelessState = state.hands.flatten.foldLeft(state) { (acc, order) =>
@@ -306,6 +309,7 @@ case class EndgameSolver[G <: Game](
 
 			val cluelessWin = this.cluelessWinnable(cluelessState, playerTurn, deadline, depth)
 			if (cluelessWin.isDefined)
+				Log.info(s"${indent(depth)}clueless winnable!")
 				return Right((List(cluelessWin.get), Frac.one))
 
 		val bottomDecked = remaining.nonEmpty && remaining.keys.forall(id => state.isCritical(id) && id.rank != 5)
@@ -460,7 +464,7 @@ case class EndgameSolver[G <: Game](
 								if (newWinrate > Frac.one)
 									throw new IllegalStateException(s"Winrate exceeds 100% $prob $newWinrate | ${arrs.map(_.prob).mkString(",")}")
 
-								Log.highlight(colour, s"${indent(depth)}} ${performs.map(_.fmtObj(game, nextPlayerIndex)).mkString(", ")} prob $prob winrate $newWinrate")
+								Log.highlight(colour, s"${indent(depth)}} ${performs.map(_.fmtObj(game, nextPlayerIndex)).mkString(", ")} prob $prob winrate $wr")
 								calcWinrate(arrs.tail, newWinrate, remProb)
 						}
 

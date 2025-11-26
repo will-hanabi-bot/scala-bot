@@ -1,4 +1,5 @@
 //> using scala 3.7.2
+//> using jvm 25
 //> using options -Wall -Wconf:msg=toString:s -feature -language:implicitConversions
 //> using dep com.softwaremill.sttp.client4::core:4.0.13
 //> using dep com.softwaremill.sttp.client4::cats:4.0.13
