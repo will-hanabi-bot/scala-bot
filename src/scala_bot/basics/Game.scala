@@ -16,7 +16,7 @@ enum ClueInterp extends Interp:
 	case Mistake, Reactive, Play, Save, Discard, Lock, Reveal, Fix, Stall, Distribution
 
 enum PlayInterp extends Interp:
-	case None
+	case None, Mistake, OrderCM
 
 enum DiscardInterp extends Interp:
 	case None, Mistake, Sarcastic, GentlemansDiscard

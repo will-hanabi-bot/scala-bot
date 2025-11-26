@@ -288,6 +288,7 @@ case class EndgameSolver[G <: Game](
 		val trivialWin = triviallyWinnable(game, playerTurn)
 
 		if (trivialWin.isRight)
+			Log.info(s"${indent(depth)}trivially winnable!")
 			simpleCache = simpleCache.updated(hash, trivialWin)
 			return trivialWin
 
@@ -297,7 +298,10 @@ case class EndgameSolver[G <: Game](
 				rank <- state.playStacks(suitIndex) + 1 to state.maxRanks(suitIndex)
 			yield
 				Identity(suitIndex, rank))
-		.forall(id => state.hands.flatten.exists(game.common.thoughts(_).matches(id, infer = true)))
+		.forall { id =>
+			val order = state.hands.flatten.find(game.common.thoughts(_).matches(id, infer = true))
+			order.exists(state.deck(_).id().forall(_.matches(id)))
+		}
 
 		if (viableClueless)
 			val cluelessState = state.hands.flatten.foldLeft(state) { (acc, order) =>

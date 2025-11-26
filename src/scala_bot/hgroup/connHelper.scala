@@ -284,7 +284,7 @@ def resolveClue(ctx: ClueContext, fps: List[FocusPossibility]) =
 	}
 	.when(_ => undoScream) { g =>
 		// Must be leftmost chop moved
-		state.hands(giver).find(game.meta(_).status == CardStatus.ChopMoved).fold(g) { oldChop =>
+		state.hands(giver).find(game.meta(_).cm).fold(g) { oldChop =>
 			g.withMeta(oldChop)(_.copy(status = CardStatus.None))
 		}
 	}

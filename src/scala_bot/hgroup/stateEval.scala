@@ -117,9 +117,6 @@ def advance(orig: HGroup, game: HGroup, offset: Int): Double =
 	lazy val trash = player.thinksTrash(game, playerIndex)
 	val allPlayables = player.thinksPlayables(game, playerIndex)
 
-	if (playerIndex == 3)
-		Log.info(s"playables for ${player.name}: $allPlayables")
-
 	if (playerIndex == state.ourPlayerIndex || state.endgameTurns.contains(0))
 		evalGame(orig, game)
 
@@ -285,7 +282,7 @@ def evalState(state: State): Double =
 def evalGame(orig: HGroup, game: HGroup): Double =
 	val state = game.state
 
-	if (state.score == state.maxScore)
+	if (state.score == state.maxScore && state.score == orig.state.maxScore)
 		return 100
 
 	val stateVal = evalState(state)
@@ -345,4 +342,4 @@ def evalGame(orig: HGroup, game: HGroup): Double =
 	}
 
 	Log.info(s"state: $stateVal, future: $futureVal, bdr: $bdrVal locked: $lockedPenalty${if (endgamePenalty != 0) s" endgame penalty: ${endgamePenalty}" else ""}")
-	stateVal + futureVal + bdrVal + endgamePenalty
+	stateVal + futureVal + bdrVal + lockedPenalty + endgamePenalty

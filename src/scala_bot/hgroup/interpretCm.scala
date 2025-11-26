@@ -29,7 +29,7 @@ def interpretTcm(ctx: ClueContext): Option[Seq[Int]] =
 	val oldestTrash = list.filter(!prev.state.deck(_).clued).min
 
 	val cmOrders = state.hands(target).filter{ o =>
-		o < oldestTrash && !state.deck(o).clued && game.meta(o).status != CardStatus.ChopMoved
+		o < oldestTrash && !state.deck(o).clued && !game.meta(o).cm
 	}
 
 	if (cmOrders.isEmpty)
@@ -73,6 +73,39 @@ def interpret5cm(ctx: ClueContext): Option[Vector[Int]] =
 			Log.info(s"5cm, saving ${state.logId(chop.get)} ${chop.get}")
 			Some(Vector(chop.get))
 	}
+
+def interpretOcm(prev: HGroup, action: PlayAction | DiscardAction) =
+	val state = prev.state
+	val (playerIndex, order) = action match {
+		case PlayAction(p, o, _, _) => (p, o)
+		case DiscardAction(p, o, _, _, _) => (p, o)
+	}
+
+	val ordered1s = prev.order1s(state.hands(playerIndex))
+	val offset = ordered1s.indexOf(order)
+	val target = (playerIndex + offset) % state.numPlayers
+
+	if (offset == -1)
+		None
+
+	else if (offset == 0)
+		Log.info("played unknown 1 in correct order, no ocm")
+		None
+
+	else if (target == playerIndex)
+		Log.error("double order chop move???")
+		None
+
+	else
+		prev.chop(target) match {
+			case None =>
+				Log.warn(s"attempted to interpret ocm on ${state.names(target)}, but they had no chop!")
+				None
+			case Some(chop) =>
+				Log.highlight(Console.CYAN, s"ocm on ${state.names(target)}, distance $offset")
+				Some(List(chop))
+		}
+
 
 def performCM(game: HGroup, cmOrders: Seq[Int]) =
 	val (newCommon, newMeta) = cmOrders.foldLeft((game.common, game.meta)) { (acc, order) =>

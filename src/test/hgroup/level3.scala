@@ -1,7 +1,7 @@
 package tests.hgroup.level3
 
 import scala_bot.basics._
-import scala_bot.test.{Colour, fullyKnown, hasInfs, Player, setup, takeTurn}, Player._
+import scala_bot.test.{fullyKnown, hasInfs, Player, setup, takeTurn}, Player._
 import scala_bot.hgroup.HGroup
 import scala_bot.logger.{Logger, LogLevel}
 
@@ -115,7 +115,7 @@ class Playing1s extends munit.FunSuite:
 	}
 
 class Sarcastic extends munit.FunSuite:
-	// override def beforeAll() = Logger.setLevel(LogLevel.Off)
+	override def beforeAll() = Logger.setLevel(LogLevel.Off)
 
 	test("understands a sarcastic discard") {
 		val game = setup(HGroup.atLevel(3), Vector(

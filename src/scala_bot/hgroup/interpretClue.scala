@@ -155,7 +155,7 @@ def interpClue(ctx: ClueContext): HGroup =
 		if (cm5.isDefined)
 			return performCM(game, cm5.get)
 				.copy(lastMove = Some(
-					if (badCM(tcm.get)) ClueInterp.Mistake else ClueInterp.Discard
+					if (badCM(cm5.get)) ClueInterp.Mistake else ClueInterp.Discard
 				))
 
 	val pinkTrashFix = state.includesVariant(PINKISH) &&

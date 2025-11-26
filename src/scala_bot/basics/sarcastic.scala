@@ -8,15 +8,15 @@ enum DiscardResult:
 	case Sarcastic(orders: Vector[Int])
 	case GentlemansDiscard(order: Int)
 
-def validSarcastic(game: Game, id: Identity)(order: Int) =
+def validSarcastic(game: Game, id: Identity, batonAnywhere: Boolean = true)(order: Int) =
 	val thought = game.common.thoughts(order)
 
-	game.isTouched(order) &&
+	(batonAnywhere || game.isTouched(order)) &&
 	thought.possible.contains(id) &&
 	!thought.id(infer = true, symmetric = true).exists(_.rank < id.rank) &&		// Do not sarcastic on connecting cards
 	thought.infoLock.forall(_.contains(id))
 
-def interpretUsefulDc(game: Game, action: DiscardAction, rightmost: Boolean = true): DiscardResult =
+def interpretUsefulDc(game: Game, action: DiscardAction, rightmost: Boolean = true, batonAnywhere: Boolean = true): DiscardResult =
 	val (common, state) = (game.common, game.state)
 	val DiscardAction(playerIndex, order, suitIndex, rank, _) = action
 	val id = Identity(suitIndex, rank)
@@ -45,7 +45,7 @@ def interpretUsefulDc(game: Game, action: DiscardAction, rightmost: Boolean = tr
 					Log.info(s"gd to ${state.names(holder)}'s $target")
 					DiscardResult.GentlemansDiscard(target)
 			else
-				val orders = state.hands(holder).filter(validSarcastic(game, id))
+				val orders = state.hands(holder).filter(validSarcastic(game, id, batonAnywhere))
 				Log.info(s"sarcastic to ${state.names(holder)}'s $orders")
 				DiscardResult.Sarcastic(orders)
 
@@ -67,7 +67,7 @@ def interpretUsefulDc(game: Game, action: DiscardAction, rightmost: Boolean = tr
 			}
 
 		case None =>
-			val orders = state.ourHand.filter(validSarcastic(game, id))
+			val orders = state.ourHand.filter(validSarcastic(game, id, batonAnywhere))
 			Log.info(s"sarcastic to our $orders")
 			DiscardResult.Sarcastic(orders)
 	}

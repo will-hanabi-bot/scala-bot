@@ -3,6 +3,7 @@ package scala_bot.basics
 import scala.collection.immutable.BitSet
 import scala.util.chaining.scalaUtilChainingOps
 import scala_bot.utils._
+import scala_bot.logger.Log
 
 extension[G <: Game](game: G)
 	def onClue(action: ClueAction)(using ops: GameOps[G]): G =
@@ -151,14 +152,19 @@ extension[G <: Game](game: G)
 		var newMeta = game.meta
 
 		for (order <- state.hands.flatten) {
-			val thought = game.common.thoughts(order)
-			if (thought.inferred.isEmpty && !thought.reset) {
+			var thought = game.common.thoughts(order)
+			if (thought.inferred.isEmpty && !thought.reset)
 				newThoughts = newThoughts.updated(order, thought.resetInferences())
 				newMeta = newMeta.updated(order, newMeta(order).copy(
 					status = CardStatus.None,
 					by = None
 				))
-			}
+
+			thought = newThoughts(order)
+
+			if (thought.infoLock.exists(_.isEmpty))
+				Log.warn(s"lost info lock on $order!")
+				newThoughts = newThoughts.updated(order, thought.copy(infoLock = None))
 		}
 
 		var (resets, newCommon) = game.common.copy(thoughts = newThoughts).cardElim(state)

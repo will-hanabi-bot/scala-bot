@@ -66,7 +66,7 @@ def isStall(ctx: ClueContext, severity: Int): Option[StallInterp] =
 
 	val stall5 = clue.isEq(BaseClue(ClueKind.Rank, 5)) &&
 		focusNew &&
-		prev.meta(focus).status != CardStatus.ChopMoved &&
+		!prev.meta(focus).cm &&
 		!chop
 
 	if (stall5)

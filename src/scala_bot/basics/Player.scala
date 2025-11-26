@@ -93,7 +93,12 @@ case class Player(
 		}
 
 	def isDuped(game: Game, id: Identity, order: Int) =
-		game.state.hands(game.state.holderOf(order)).exists { o =>
+		val candidates = if (game.goodTouch)
+			game.state.hands.flatten
+		else
+			game.state.hands(game.state.holderOf(order))
+
+		candidates.exists { o =>
 			o != order &&
 			thoughts(o).matches(id, infer = true) &&
 			// Not sharing a link

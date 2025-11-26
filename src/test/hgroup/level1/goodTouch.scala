@@ -1,6 +1,5 @@
 package tests.hgroup.level1
 
-import scala_bot.basics._
 import scala_bot.test.{hasInfs, Player, setup, takeTurn}, Player._
 import scala_bot.hgroup.HGroup
 import scala_bot.logger.{Logger,LogLevel}

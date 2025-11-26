@@ -78,6 +78,9 @@ case class HGroup(
 	def withXMeta(order: Int)(f: XConvData => XConvData) =
 		copy(xmeta = xmeta.updated(order, f(xmeta(order))))
 
+	def isCM(order: Int) =
+		meta(order).cm && !state.deck(order).clued
+
 	def chop(playerIndex: Int) =
 		state.hands(playerIndex).findLast { o =>
 			!state.deck(o).clued && meta(o).status == CardStatus.None
@@ -128,7 +131,7 @@ case class HGroup(
 		unknown1s.sortBy { o =>
 			if (cluedOnChop.contains(o))
 				-100 - o
-			else if (meta(o).status == CardStatus.ChopMoved)
+			else if (meta(o).cm)
 				100 - o
 			else if (state.inStartingHand(o))
 				o
@@ -142,7 +145,7 @@ case class HGroup(
 			val thought = this.me.thoughts(o)
 
 			val inFinesse = this.isBlindPlaying(o)	// TODO: play link?
-			lazy val unknownCM = meta(o).status == CardStatus.ChopMoved &&
+			lazy val unknownCM = isCM(o) &&
 				!state.deck(o).clued &&
 				thought.possible.exists(!state.isPlayable(_))
 
@@ -253,7 +256,7 @@ case class HGroup(
 			val sortedList = list.sortBy(o => -o)
 			val focus =
 				sortedList.find(o => !prev.state.deck(o).clued && prev.meta(o).status == CardStatus.None)
-				.orElse(sortedList.find(o => prev.meta(o).status == CardStatus.ChopMoved))
+				.orElse(sortedList.find(prev.isCM))
 				.orElse(sortedList.headOption)
 
 			focus match {
@@ -346,8 +349,23 @@ object HGroup:
 			val id = Identity(suitIndex, rank)
 
 			refreshWCs(prev, game, action)
-				.pipe { g =>
-					interpretUsefulDc(g, action, rightmost = false) match {
+				.when(_ => failed && rank == 1) { g =>
+					interpretOcm(prev, action) match {
+						case None =>
+							g.copy(lastMove = Some(PlayInterp.None))
+						case Some(orders) =>
+							val chop = orders.min
+							val mistake = game.state.deck(chop).id().exists(game.state.isBasicTrash)
+
+							if (mistake)
+								Log.warn("ocm on trash!")
+
+							performCM(g, orders).copy(lastMove =
+								if (mistake) Some(PlayInterp.Mistake) else Some(PlayInterp.OrderCM))
+					}
+				}
+				.when(_ => suitIndex != -1 && rank != -1 && !prev.state.isBasicTrash(id)) { g =>
+					interpretUsefulDc(g, action, rightmost = false, batonAnywhere = false) match {
 						case DiscardResult.None =>
 							g.copy(lastMove = Some(DiscardInterp.None))
 
@@ -386,7 +404,23 @@ object HGroup:
 				.elim(goodTouch = true)
 
 		def interpretPlay(prev: HGroup, game: HGroup, action: PlayAction): HGroup =
+			val PlayAction(playerIndex, order, suitIndex, rank) = action
 			refreshWCs(prev, game, action)
+				.when(_.level >= Level.BasicCM && rank == 1) { g =>
+					interpretOcm(prev, action) match {
+						case None =>
+							g.copy(lastMove = Some(PlayInterp.None))
+						case Some(orders) =>
+							val chop = orders.min
+							val mistake = game.state.deck(chop).id().exists(game.state.isBasicTrash)
+
+							if (mistake)
+								Log.warn("ocm on trash!")
+
+							performCM(g, orders).copy(lastMove =
+								if (mistake) Some(PlayInterp.Mistake) else Some(PlayInterp.OrderCM))
+					}
+				}
 				.pipe { g =>
 					g.copy(lastActions = g.lastActions.updated(action.playerIndex, Some(action)))
 				}
@@ -496,7 +530,8 @@ object HGroup:
 					clue)
 				.sortBy { clue =>
 					val list = state.clueTouched(state.hands(clue.target), clue)
-					list.count(o => state.isBasicTrash(state.deck(o).id().get))
+					// Prefer not cluing trash and not previously clued cards
+					list.count(o => state.isBasicTrash(state.deck(o).id().get)) * 10 + list.count(state.deck(_).clued)
 				}
 				.map(clueToPerform)
 
