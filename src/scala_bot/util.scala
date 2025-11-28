@@ -13,6 +13,72 @@ extension [A](a: A) {
 		if (!condition) f(a) else a
 	}
 
+extension [A](seq: IndexedSeq[A])
+	inline def fastMap[B](inline f: A => B): IndexedSeq[B] =
+		var res = IndexedSeq.empty[B]
+		var i = 0
+
+		while (i < seq.length) {
+			res = res :+ f(seq(i))
+			i += 1
+		}
+		res
+
+	inline def fastFilter(inline f: A => Boolean): IndexedSeq[A] =
+		var res = IndexedSeq.empty[A]
+		var i = 0
+
+		while (i < seq.length) {
+			if (f(seq(i)))
+				res = res :+ seq(i)
+			i += 1
+		}
+		res
+
+	inline def fastCount(inline f: A => Boolean): Int =
+		var res = 0
+		var i = 0
+
+		while (i < seq.length) {
+			if (f(seq(i)))
+				res += 1
+			i += 1
+		}
+		res
+
+	inline def fastForall(inline f: A => Boolean): Boolean =
+		var i = 0
+		var satisfied = true
+
+		while (i < seq.length && satisfied) {
+			if (!f(seq(i)))
+				satisfied = false
+			i += 1
+		}
+		satisfied
+
+	inline def fastExists(inline f: A => Boolean): Boolean =
+		var i = 0
+		var exists = false
+
+		while (i < seq.length && !exists) {
+			if (f(seq(i)))
+				exists = true
+			i += 1
+		}
+		exists
+
+extension [A](seq: IndexedSeq[Int])
+	inline def fastSum: Int =
+		var i = 0
+		var sum = 0
+
+		while (i < seq.length) {
+			sum += seq(i)
+			i += 1
+		}
+		sum
+
 def visibleFind(
 	state: State,
 	player: Player,

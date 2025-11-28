@@ -426,7 +426,7 @@ case class EndgameSolver[G <: Game](
 
 			val sortedActions = successRate.lift(depth) match {
 				case None => actions
-				case Some(sr) => actions.sortBy(a => sr.lift(a._1).map((frac, _) => -frac).getOrElse(Frac.zero))
+				case Some(sr) => actions.sortBy(a => sr.lift(a._1).map((frac, _) => -frac).getOrElse(-Frac.one))
 			}
 
 			val initial = (List[PerformAction](), Frac.zero)

@@ -33,8 +33,14 @@ case class State(
 	actionList: Vector[List[Action]] = Vector(),
 	currentPlayerIndex: Int = 0
 ):
-	def hash =
-		val deckInts = deck.map(_.id().fold(0)(_.toOrd))
+	lazy val hash =
+		val deckInts = Array.ofDim[Int](deck.length)
+		var i = 0
+		while (i < deck.length) {
+			val id = deck(i).id()
+			deckInts(i) = if (id.isDefined) id.get.toOrd else 0
+			i += 1
+		}
 		MurmurHash3.productHash((hands, deckInts, clueTokens, endgameTurns))
 
 	def withDiscard(id: Identity, order: Int) =
@@ -88,20 +94,20 @@ case class State(
 	def ended =
 		strikes == 3 || score == maxScore || endgameTurns.contains(0)
 
-	def score = playStacks.sum
-	def maxScore = maxRanks.sum
-	def remScore = maxScore - score
+	inline def score = playStacks.fastSum
+	inline def maxScore = maxRanks.fastSum
+	inline def remScore = maxScore - score
 
-	def pace = score + cardsLeft + numPlayers - maxScore
-	def inEndgame = pace < numPlayers || score >= maxScore - 5
+	inline def pace = score + cardsLeft + numPlayers - maxScore
+	inline def inEndgame = pace < numPlayers || score >= maxScore - 5
 
-	def lastPlayerIndex(playerIndex: Int) =
+	inline def lastPlayerIndex(playerIndex: Int) =
 		(playerIndex + numPlayers - 1) % numPlayers
 
-	def nextPlayerIndex(playerIndex: Int) =
+	inline def nextPlayerIndex(playerIndex: Int) =
 		(playerIndex + 1) % numPlayers
 
-	def isBasicTrash(id: Identity) =
+	inline def isBasicTrash(id: Identity) =
 		id.rank <= playStacks(id.suitIndex) || id.rank > maxRanks(id.suitIndex)
 
 	def playableAway(id: Identity) =
@@ -155,7 +161,6 @@ case class State(
 					return i
 				j += 1
 			}
-
 			i += 1
 		}
 		throw new IllegalArgumentException(s"Tried to get holder of $order, hands were $hands!")

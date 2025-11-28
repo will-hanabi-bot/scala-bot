@@ -56,11 +56,7 @@ object Reactor:
 			inProgress = inProgress
 		)
 
-	def apply(
-		tableID: Int,
-		state: State,
-		inProgress: Boolean
-	) =
+	def apply(tableID: Int, state: State, inProgress: Boolean) =
 		init(tableID, state, inProgress, genPlayers(state))
 
 	private def checkMissed(game: Reactor, playerIndex: Int, actionOrder: Int) =
@@ -361,10 +357,17 @@ object Reactor:
 
 			val discardOrders = me.discardable(game, state.ourPlayerIndex)
 			val playableOrders = {
-				val p = me.thinksPlayables(game, state.ourPlayerIndex)
-				val knownP = p.filter(me.orderKp(game, _))
+				val knownP = me.obviousPlayables(game, state.ourPlayerIndex)
 
-				if (knownP.nonEmpty) knownP else p
+				if (knownP.nonEmpty)
+					// Don't play if there is a focused card that looks exactly like this one (no OCM in reactor)
+					knownP.filter { order =>
+						!state.hands(state.ourPlayerIndex).exists { o =>
+							o != order && me.thoughts(o).possible == me.thoughts(order).possible && game.meta(o).focused
+						}
+					}
+				else
+					me.thinksPlayables(game, state.ourPlayerIndex)
 			}
 
 			Log.info(s"playables $playableOrders")
@@ -452,7 +455,13 @@ object Reactor:
 					target <- (0 until state.numPlayers) if target != giver
 					clue   <- state.allValidClues(target) if validClue(clue, target)
 				yield
-					clueToPerform(clue))
+					clue)
+				.sortBy { clue =>
+					val list = state.clueTouched(state.hands(clue.target), clue)
+					// Prefer not cluing trash and not previously clued cards
+					list.count(o => state.isBasicTrash(state.deck(o).id().get)) * 10 + list.count(state.deck(_).clued)
+				}
+				.map(clueToPerform)
 
 			Logger.setLevel(level)
 			allClues

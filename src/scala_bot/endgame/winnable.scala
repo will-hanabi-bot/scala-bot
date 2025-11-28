@@ -8,7 +8,7 @@ import java.time.Instant
 
 extension[G <: Game] (solver: EndgameSolver[G])
 	def cluelessWinnable(state: State, playerTurn: Int, deadline: Instant, depth: Int): Option[PerformAction] =
-		lazy val hash = state.hashCode()
+		val hash = state.hash
 
 		lazy val winnablePlay = state.hands(playerTurn).view.collect {
 			case order if state.deck(order).id().exists(state.isPlayable) =>
@@ -57,7 +57,7 @@ extension[G <: Game] (solver: EndgameSolver[G])
 		if (state.score == state.maxScore)
 			return true
 
-		val hash = state.hashCode()
+		val hash = state.hash
 
 		if (solver.simplerCache.contains(hash))
 			return solver.simplerCache(hash)

@@ -101,6 +101,7 @@ def advance(orig: Reactor, game: Reactor, offset: Int): Double =
 
 	lazy val bobClue = !state.hands(playerIndex).exists(meta(_).urgent) &&
 		offset == 1 &&
+		!common.obviousLoaded(game, bob) &&
 		bobChop.flatMap(state.deck(_).id()).exists { id =>
 			state.isCritical(id) ||
 			(state.isPlayable(id) && !game.me.isSieved(game, id, bobChop.get))

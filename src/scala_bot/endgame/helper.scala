@@ -2,24 +2,41 @@ package scala_bot.endgame
 
 import scala_bot.basics._
 import scala_bot.fraction.Frac
+import scala_bot.utils._
 // import scala_bot.logger.Log
 import scala_bot.utils.playersUntil
 
-def findMustPlays(state: State, hand: Vector[Int]): Iterable[Identity] =
-	val idGroups = hand.groupMap(state.deck(_).id())(identity(_))
+def findMustPlays(state: State, hand: Vector[Int]) =
+	val ids = hand.fastMap(state.deck(_).id())
+	var ret = List.empty[Identity]
 
-	for {
-		(id, group) <- idGroups
-		i <- id if !state.isBasicTrash(i) && state.cardCount(i.toOrd) - state.baseCount(i.toOrd) == group.length
+	var i = 0
+	while (i < hand.length) {
+		if (ids(i).isDefined)
+			val id = ids(i).get
+
+			if (!state.isBasicTrash(id))
+				var j = i + 1
+				var matches = 1
+
+				while (j < hand.length) {
+					if (ids(j).isDefined && ids(j).get.toOrd == id.toOrd)
+						matches += 1
+					j += 1
+				}
+
+				if (matches == state.cardCount(id.toOrd) - state.baseCount(id.toOrd))
+					ret = id +: ret
+		i += 1
 	}
-	yield i
+	ret
 
 def unwinnableState(state: State, playerTurn: Int, depth: Int = 0): Boolean =
 	if (state.ended || state.pace < 0)
 		return true
 
-	val voidPlayers = (0 until state.numPlayers).filter {
-		state.hands(_).forall(state.deck(_).id().forall(state.isBasicTrash))
+	val voidPlayers = (0 until state.numPlayers).fastFilter {
+		state.hands(_).fastForall(state.deck(_).id().forall(state.isBasicTrash))
 	}
 
 	// println(s"${indent(depth)}void players: $voidPlayers, endgame_turns: ${state.endgameTurns}, current turn: ${state.names(playerTurn)}")
@@ -28,12 +45,12 @@ def unwinnableState(state: State, playerTurn: Int, depth: Int = 0): Boolean =
 	val mustStartEndgame = mustPlays.zipWithIndex.filter(_._1.size > 1).map(_._2)
 
 	val impossibleEndgame = state.endgameTurns.exists { endgameTurns =>
-		val possiblePlayers = (0 until endgameTurns).count { i =>
+		val possiblePlayers = (0 until endgameTurns).fastCount { i =>
 			!voidPlayers.contains((playerTurn + i) % state.numPlayers)
 		}
 
-		lazy val doublePlay = (0 until endgameTurns)
-			.map(i => (playerTurn + i) % state.numPlayers)
+		val doublePlay = (0 until endgameTurns)
+			.fastMap(i => (playerTurn + i) % state.numPlayers)
 			.find(mustPlays(_).size > 1)
 
 		if (possiblePlayers + state.score < state.maxScore)
@@ -112,10 +129,22 @@ def genArrs(game: Game, remaining: RemainingMap, clueOnly: Boolean, _depth: Int 
 			List(GameArr(Frac.one, remaining.rem(id), Some(id)))
 
 		else
-			val drawnArrs = remaining.map { case (id, RemainingEntry(missing, _)) =>
-				val newProb = Frac(missing, state.cardsLeft)
-				val newRemaining = remaining.rem(id)
-				GameArr(newProb, newRemaining, Some(id))
+			val drawnArrs = {
+				val (usefulArrs, trashArr) = remaining.foldLeft((List.empty[GameArr], GameArr(Frac.zero, remaining, None))) {
+					case ((acc, trashArr), (id, RemainingEntry(missing, _))) if state.isBasicTrash(id) =>
+						val newProb = Frac(missing, state.cardsLeft)
+						val newRemaining = remaining.rem(id)
+						(acc, trashArr.copy(prob = trashArr.prob + newProb, remaining = newRemaining, drew = Some(id)))
+
+					case ((acc, trashArr), (id, RemainingEntry(missing, _))) =>
+						val newProb = Frac(missing, state.cardsLeft)
+						val newRemaining = remaining.rem(id)
+						(GameArr(newProb, newRemaining, Some(id)) +: acc, trashArr)
+				}
+				if (trashArr.prob > Frac.zero)
+					usefulArrs :+ trashArr
+				else
+					usefulArrs
 			}.toList
 
 			if (drawnArrs.isEmpty) List(undrawn) else drawnArrs
