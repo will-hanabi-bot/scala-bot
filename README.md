@@ -4,6 +4,10 @@ A deterministic Scala bot that plays on the [hanab.live](https://hanab.live/) in
 
 It can play with [Reactor 1.0](https://hanabi.wiki/en/conventions/reactor) (3p only), [Referential Sieve](https://hackmd.io/Ui6LXAK3TdC7AKSDcN20PQ?view), or [H-Group](https://hanabi.github.io/) (up to level 2) conventions. Just like my other bots, it does not do any "learning" during the game.
 
+A demo game using Reactor 1.0 conventions with the Critical Fours variant:
+
+https://github.com/user-attachments/assets/665e7d78-7c8b-4f07-b4c3-9116ec2ec8ab
+
 ## Bot features
 
 - Supports all the basic variants (Black, Rainbow, White, Prism, Pink, Brown + blends).
