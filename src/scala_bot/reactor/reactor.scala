@@ -37,7 +37,8 @@ case class Reactor(
 	rewindDepth: Int = 0,
 	inProgress: Boolean = false,
 
-	goodTouch: Boolean = false
+	goodTouch: Boolean = false,
+	zcsTurn: Option[Int] = None
 ) extends Game
 
 object Reactor:
@@ -74,23 +75,17 @@ object Reactor:
 		}
 
 	private def resetZcs(game: Reactor) =
-		game.copy(
-			meta = game.state.hands.foldLeft(game.meta) { (m, hand) =>
-				hand.find(m(_).status == CardStatus.ZeroClueChop).fold(m) { zcs =>
-					Log.info(s"resetting zcs on $zcs")
-					m.updated(zcs, m(zcs).copy(status = CardStatus.None))
-				}
-			}
-		)
+		game.copy(zcsTurn = None)
 
 	def chop(game: Reactor, playerIndex: Int) =
-		game.state.hands(playerIndex).find { order =>
-			val status = game.meta(order).status
-			status == CardStatus.ZeroClueChop || status == CardStatus.CalledToDiscard
+		game.state.hands(playerIndex).find {
+			game.meta(_).status == CardStatus.CalledToDiscard
 		}
 		.orElse {
 			game.state.hands(playerIndex).find { order =>
-				!game.state.deck(order).clued && game.meta(order).status == CardStatus.None
+				game.zcsTurn.forall(_ >= game.state.deck(order).drawnIndex) &&
+				!game.state.deck(order).clued &&
+				game.meta(order).status == CardStatus.None
 			}
 		}
 
@@ -209,18 +204,10 @@ object Reactor:
 					Log.warn(s"lost play signal on ${signalledPlays.filterNot(playsAfterElim.contains)} after elim!")
 					g.copy(lastMove = Some(ClueInterp.Mistake))
 				}
-				.when(_ => prev.state.canClue)(resetZcs)
-				.when(!_.state.canClue) { g =>
-					val zcsMeta = (0 until state.numPlayers).foldLeft(g.meta) { case (meta, i) =>
-						chop(g, i) match {
-							case Some(chop) if meta(chop).status == CardStatus.None =>
-								Log.info(s"writing zcs on $chop")
-								meta.updated(chop, meta(chop).copy(status = CardStatus.ZeroClueChop))
-							case _ => meta
-						}
-					}
-					g.copy(meta = zcsMeta)
-				}
+				.when(_ => prev.state.canClue)
+					(resetZcs)
+				.when(!_.state.canClue)
+					(_.copy(zcsTurn = Some(state.turnCount)))
 				.copy(nextInterp = None)
 
 		def interpretDiscard(prev: Reactor, game: Reactor, action: DiscardAction): Reactor =

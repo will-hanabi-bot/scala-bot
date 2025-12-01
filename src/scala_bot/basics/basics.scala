@@ -57,7 +57,7 @@ extension[G <: Game](game: G)
 			)
 			.cond(_ => failed)
 				(_.copy(strikes = s.strikes + 1))
-				(_.copy(clueTokens = s.clueTokens + 1))
+				(_.regainClue)
 		}
 		.when(_ => suitIndex != -1 && rank != -1) { g =>
 			g.withState(_.withDiscard(id, order))

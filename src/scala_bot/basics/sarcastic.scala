@@ -8,19 +8,18 @@ enum DiscardResult:
 	case Sarcastic(orders: Vector[Int])
 	case GentlemansDiscard(order: Int)
 
-def validSarcastic(game: Game, id: Identity, batonAnywhere: Boolean = true)(order: Int) =
+def validTransfer(game: Game, id: Identity)(order: Int) =
 	val thought = game.common.thoughts(order)
 
-	(batonAnywhere || game.isTouched(order)) &&
 	thought.possible.contains(id) &&
 	!thought.id(infer = true, symmetric = true).exists(_.rank < id.rank) &&		// Do not sarcastic on connecting cards
 	thought.infoLock.forall(_.contains(id))
 
-def interpretUsefulDc(game: Game, action: DiscardAction, rightmost: Boolean = true, batonAnywhere: Boolean = true): DiscardResult =
+def interpretUsefulDc(game: Game, action: DiscardAction): DiscardResult =
 	val (common, state) = (game.common, game.state)
 	val DiscardAction(playerIndex, order, suitIndex, rank, _) = action
 	val id = Identity(suitIndex, rank)
-	val gd = game.common.hypoPlays.contains(order)
+	val gd = state.isPlayable(id)
 
 	Log.info("interpreting useful dc!")
 
@@ -35,17 +34,16 @@ def interpretUsefulDc(game: Game, action: DiscardAction, rightmost: Boolean = tr
 					Log.warn(s"discarded useful ${state.logId(id)} but dupe was in their own hand!")
 				DiscardResult.None
 			else if (gd)
-				val hand = if (rightmost) state.hands(holder).reverse else state.hands(holder)
-				val target = hand.find(common.thoughts(_).possible.contains(id)).get
+				val target = state.hands(holder).findLast(common.thoughts(_).possible.contains(id)).get
 
 				if (target != dupe)
-					Log.warn(s"transfer to $dupe was not to ${if (rightmost) "rightmost" else "leftmost"} $target!")
+					Log.warn(s"transfer to $dupe was not to rightmost $target!")
 					DiscardResult.Mistake
 				else
 					Log.info(s"gd to ${state.names(holder)}'s $target")
 					DiscardResult.GentlemansDiscard(target)
 			else
-				val orders = state.hands(holder).filter(validSarcastic(game, id, batonAnywhere))
+				val orders = state.hands(holder).filter(validTransfer(game, id))
 				Log.info(s"sarcastic to ${state.names(holder)}'s $orders")
 				DiscardResult.Sarcastic(orders)
 
@@ -55,8 +53,7 @@ def interpretUsefulDc(game: Game, action: DiscardAction, rightmost: Boolean = tr
 
 		case None if gd =>
 			// Since we can't find it, we must be the target
-			val hand = if (rightmost) state.ourHand.reverse else state.ourHand
-			hand.find(game.me.thoughts(_).possible.contains(id)) match {
+			state.ourHand.findLast(game.me.thoughts(_).possible.contains(id)) match {
 				case Some(target) =>
 					Log.info(s"gd to our $target")
 					DiscardResult.GentlemansDiscard(target)
@@ -67,7 +64,7 @@ def interpretUsefulDc(game: Game, action: DiscardAction, rightmost: Boolean = tr
 			}
 
 		case None =>
-			val orders = state.ourHand.filter(validSarcastic(game, id, batonAnywhere))
+			val orders = state.ourHand.filter(validTransfer(game, id))
 			Log.info(s"sarcastic to our $orders")
 			DiscardResult.Sarcastic(orders)
 	}

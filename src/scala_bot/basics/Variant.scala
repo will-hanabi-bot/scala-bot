@@ -14,14 +14,40 @@ val PRISM = "Prism".r
 val MUDDY = "Muddy|Cocoa".r
 val NO_COLOUR = "White|Gray|Light|Null|Rainbow|Omni|Prism".r
 
-case class JSONVariant(id: Int, name: String, suits: IndexedSeq[String]) derives ReadWriter
-
 case class Variant(
 	id: Int,
 	name: String,
 	suits: IndexedSeq[String],
-	shortForms: IndexedSeq[Char],
+	criticalRank: Option[Int] = None,
+	clueStarved: Boolean = false,
+	specialRank: Option[Int] = None,
+	rainbowS: Boolean = false,
+	whiteS: Boolean = false,
+	pinkS: Boolean = false,
+	brownS: Boolean = false,
+	deceptiveS: Boolean = false,
+	shorts: Option[Vector[Char]] = None
 ):
+	lazy val shortForms: Vector[Char] =
+		shorts.getOrElse(suits.reverse.foldRight(Vector()){ (suit, acc) =>
+			val short: Char = suit match {
+				case "Black" => 'k'
+				case "Pink" => 'i'
+				case "Brown" => 'n'
+				case _ => {
+					val colour = Variant.colours.find(_.name == suit).getOrElse(throw new IllegalArgumentException(s"Colour '$suit' not found!"))
+					val abbreviation = colour.abbreviation.getOrElse(suit.charAt(0).toLower)
+					if (!acc.contains(abbreviation)) {
+						abbreviation
+					} else {
+						suit.toLowerCase.find(c => !acc.contains(c))
+							.getOrElse(throw new IllegalArgumentException(s"No unused character found for suit '$suit' in $suits!"))
+					}
+				}
+			}
+			short +: acc
+		}.reverse)
+
 	val colourableSuits = suits.filterNot(NO_COLOUR.matches)
 
 	def allIds =
@@ -32,7 +58,7 @@ case class Variant(
 
 	def cardCount(id: Identity): Int =
 		val Identity(suitIndex, rank) = id
-		if (DARK.matches(suits(suitIndex)))
+		if (DARK.matches(suits(suitIndex)) || criticalRank.contains(rank))
 			1
 		else
 			Vector(3, 2, 2, 2, 1)(rank - 1)
@@ -43,62 +69,71 @@ case class Variant(
 
 		if (clue.kind == ClueKind.Colour)
 			if (WHITISH.matches(suit))
-				false
-			else if (RAINBOWISH.matches(suit))
-				true
-			else if (PRISM.matches(suit))
-				((rank - 1) % colourableSuits.length) == clue.value
-			else
-				suits(suitIndex) == colourableSuits(clue.value)
+				return false
+
+			if (RAINBOWISH.matches(suit))
+				return true
+
+			if (specialRank.contains(rank))
+				return rainbowS || !whiteS
+
+			if (PRISM.matches(suit))
+				return ((rank - 1) % colourableSuits.length) == clue.value
+
+			suits(suitIndex) == colourableSuits(clue.value)
 		else
 			if (BROWNISH.matches(suit))
-				false
-			else if (PINKISH.matches(suit))
-				true
-			else
-				rank == clue.value
+				return false
+
+			if (specialRank.contains(rank))
+				if (pinkS)
+					return rank != clue.value
+
+				if (brownS)
+					return false
+
+				if (deceptiveS)
+					return (suitIndex % 4) + (if (rank == 1) 2 else 1) == clue.value
+
+			if (PINKISH.matches(suit))
+				return true
+
+			rank == clue.value
 
 	def cardTouched(card: Identifiable, clue: ClueLike) =
 		card.id().exists(idTouched(_, clue))
 
-case class Suit(
-	name: String,
-	abbreviation: Option[Char]
-)
+case class Suit(name: String, abbreviation: Option[Char])
 
 object Variant:
-	private var variants: Map[String, JSONVariant] = Map()
+	private var variants: Map[String, Variant] = Map()
 	private var colours: Vector[Suit] = Vector()
 
 	def init(): Unit =
-		val variantsJSON = read[Vector[JSONVariant]](requests.get(VARIANTS_URL).text())
+		val variantsJSON = read[ujson.Value](requests.get(VARIANTS_URL).text()).arr
 		val coloursJSON = read[ujson.Value](requests.get(COLOURS_URL).text()).arr
 
-		colours = coloursJSON.map { suitJson =>
-			Suit(suitJson("name").str, suitJson.objOpt.flatMap(_.get("abbreviation").strOpt.map(_.charAt(0).toLower)))
+		colours = coloursJSON.map { suitJson => Suit(
+			suitJson("name").str,
+			suitJson.objOpt.flatMap(_.get("abbreviation").strOpt.map(_.charAt(0).toLower)))
 		}.toVector
-		variants = variantsJSON.map(v => v.name -> v).toMap
+		variants = variantsJSON.map(Variant.fromJSON).map(v => v.name -> v).toMap
+
+	def fromJSON(json: ujson.Value) =
+		val obj = json.obj
+		Variant(
+			json("id").num.toInt,
+			json("name").str,
+			json("suits").arr.map(_.str).toIndexedSeq,
+			obj.get("criticalRank").map(_.num.toInt),
+			obj.get("clueStarved").map(_.bool).getOrElse(false),
+			obj.get("specialRank").map(_.num.toInt),
+			rainbowS = obj.get("specialRankAllClueColors").map(_.bool).getOrElse(false),
+			whiteS = obj.get("specialRankNoClueColors").map(_.bool).getOrElse(false),
+			pinkS = obj.get("specialRankAllClueRanks").map(_.bool).getOrElse(false),
+			brownS = obj.get("specialRankNoClueRanks").map(_.bool).getOrElse(false),
+			obj.get("specialRankDeceptive").map(_.bool).getOrElse(false)
+		)
 
 	def getVariant(name: String) =
-		val variant = variants.get(name).getOrElse(throw new IllegalArgumentException(s"Variant '$name' not found!"))
-
-		val shortForms: Vector[Char] = variant.suits.reverse.foldRight(Vector()){ (suit, acc) =>
-			val short: Char = suit match {
-				case "Black" => 'k'
-				case "Pink" => 'i'
-				case "Brown" => 'n'
-				case _ => {
-					val colour = colours.find(_.name == suit).getOrElse(throw new IllegalArgumentException(s"Colour '$suit' not found!"))
-					val abbreviation = colour.abbreviation.getOrElse(suit.charAt(0).toLower)
-					if (!acc.contains(abbreviation)) {
-						abbreviation
-					} else {
-						suit.toLowerCase.find(c => !acc.contains(c))
-							.getOrElse(throw new IllegalArgumentException(s"No unused character found for suit '$suit' in ${variant.suits}!"))
-					}
-				}
-			}
-			short +: acc
-		}.reverse
-
-		Variant(variant.id, variant.name, variant.suits, shortForms)
+		variants.get(name).getOrElse(throw new IllegalArgumentException(s"Variant '$name' not found! Were variants initialized?"))

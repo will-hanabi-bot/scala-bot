@@ -25,58 +25,47 @@ def getResult(game: Reactor, hypo: Reactor, action: ClueAction): Double =
 			Log.warn(s"clue ${clue.fmt(state, target)} results in ${state.logId(badPlay)} ${badPlay} looking playable! ${hypo.me.hypoPlays}")
 			-100
 		case None =>
-			val badZcs = Option.when(hypo.state.clueTokens == 0) {
-				state.hands.flatten.find(o =>
-					hypo.meta(o).status == CardStatus.ZeroClueChop && state.deck(o).id().exists(state.isCritical))
-			}.flatten
-
-			badZcs match {
-				case Some(badZcs) =>
-					Log.warn(s"clue ${clue.fmt(state, target)} results in bad zcs ${state.logId(badZcs)} $badZcs!")
+			hypo.lastMove match {
+				case Some(ClueInterp.Play) if playables.isEmpty && !state.inEndgame =>
+					Log.warn(s"clue ${clue.fmt(state, target)} looks like ref play but gets no playables!")
 					-100
-				case None =>
+				case Some(ClueInterp.Reveal) if playables.isEmpty && trash.nonEmpty && trash.forall(state.deck(_).clued) =>
+					Log.warn(s"clue ${clue.fmt(state, target)} only reveals new trash but isn't a trash push!")
+					-100
+				case Some(i) if i != ClueInterp.Reactive && badTouch.nonEmpty && newTouched.forall(badTouch.contains) && playables.isEmpty =>
+					Log.warn(s"clue ${clue.fmt(state, target)} only bad touches and gets no playables! ${common.hypoPlays}")
+					-100
+				case _ =>
+					// Previously-unclued playables whose copies are already touched
+					val dupedPlayables = hypo.me.hypoPlays.count { p =>
+						!state.deck(p).clued &&
+						state.hands.flatten.exists(o =>
+							o != p && game.isTouched(o) && state.deck(o).matches(state.deck(p)))
+					}
+
+					val goodTouch: Double =
+						if (badTouch.length > newTouched.length)
+							-badTouch.length
+						else
+							List(0.0, 0.125, 0.25, 0.35, 0.45, 0.55)(newTouched.length - badTouch.length)
+
+					val untouchedPlays = playables.count(!hypo.state.deck(_).clued)
+
+					val playablesS = playables.map(state.logId(_)).mkString(", ")
+					Log.info(s"good touch: $goodTouch, playables: $playablesS, duped: $dupedPlayables, trash: ${trash.length}, fill: ${fill.length}, elim: ${elim.length}, bad touch: $badTouch, ${hypo.lastMove}")
+
+					val value = goodTouch +
+						(playables.length - 2.0 * dupedPlayables) +
+						0.2 * untouchedPlays +
+						(if (state.inEndgame) 0.01 else 0.1) * revealedTrash +
+						(if (state.inEndgame) 0.2 else 0.1) * fill.length +
+						(if (state.inEndgame) 0.1 else 0.05) * elim.length +
+						0.1 * badTouch.length
+
 					hypo.lastMove match {
-						case Some(ClueInterp.Play) if playables.isEmpty && !state.inEndgame =>
-							Log.warn(s"clue ${clue.fmt(state, target)} looks like ref play but gets no playables!")
-							-100
-						case Some(ClueInterp.Reveal) if playables.isEmpty && trash.nonEmpty && trash.forall(state.deck(_).clued) =>
-							Log.warn(s"clue ${clue.fmt(state, target)} only reveals new trash but isn't a trash push!")
-							-100
-						case Some(i) if i != ClueInterp.Reactive && badTouch.nonEmpty && newTouched.forall(badTouch.contains) && playables.isEmpty =>
-							Log.warn(s"clue ${clue.fmt(state, target)} only bad touches and gets no playables! ${common.hypoPlays}")
-							-100
-						case _ =>
-							// Previously-unclued playables whose copies are already touched
-							val dupedPlayables = hypo.me.hypoPlays.count { p =>
-								!state.deck(p).clued &&
-								state.hands.flatten.exists(o =>
-									o != p && game.isTouched(o) && state.deck(o).matches(state.deck(p)))
-							}
-
-							val goodTouch: Double =
-								if (badTouch.length > newTouched.length)
-									-badTouch.length
-								else
-									List(0.0, 0.125, 0.25, 0.35, 0.45, 0.55)(newTouched.length - badTouch.length)
-
-							val untouchedPlays = playables.count(!hypo.state.deck(_).clued)
-
-							val playablesS = playables.map(state.logId(_)).mkString(", ")
-							Log.info(s"good touch: $goodTouch, playables: $playablesS, duped: $dupedPlayables, trash: ${trash.length}, fill: ${fill.length}, elim: ${elim.length}, bad touch: $badTouch, ${hypo.lastMove}")
-
-							val value = goodTouch +
-								(playables.length - 2.0 * dupedPlayables) +
-								0.2 * untouchedPlays +
-								(if (state.inEndgame) 0.01 else 0.1) * revealedTrash +
-								(if (state.inEndgame) 0.2 else 0.1) * fill.length +
-								(if (state.inEndgame) 0.1 else 0.05) * elim.length +
-								0.1 * badTouch.length
-
-							hypo.lastMove match {
-								case Some(ClueInterp.Mistake) => value - 10
-								case Some(ClueInterp.Fix) | Some(ClueInterp.Reactive) => value + 1
-								case _ => value
-							}
+						case Some(ClueInterp.Mistake) => value - 10
+						case Some(ClueInterp.Fix) | Some(ClueInterp.Reactive) => value + 1
+						case _ => value
 					}
 			}
 	}
@@ -95,7 +84,7 @@ def advance(orig: Reactor, game: Reactor, offset: Int): Double =
 	val bob = state.nextPlayerIndex(playerIndex)
 	val bobChop = Option.when(state.numPlayers > 2)(Reactor.chop(game, bob)).flatten
 
-	lazy val trash = player.thinksTrash(game, playerIndex)
+	val trash = player.thinksTrash(game, playerIndex)
 	lazy val urgentDc = trash.find(meta(_).urgent)
 	lazy val allPlayables = player.obviousPlayables(game, playerIndex)
 
@@ -160,7 +149,9 @@ def advance(orig: Reactor, game: Reactor, offset: Int): Double =
 	else
 		urgentDc.orElse(trash.headOption) match {
 			case None =>
-				val chop = Reactor.chop(game, playerIndex).getOrElse(throw new Exception(s"Player ${state.names(playerIndex)} not locked but no chop! ${state.hands(playerIndex).map(state.deck(_))}"))
+				val chop = Reactor.chop(game, playerIndex)
+					.orElse(game.zcsTurn.map(_ => game.players(playerIndex).lockedDiscard(game.state, playerIndex))) 	// In ZCS, a player may have no valid discard while not being "locked".
+					.getOrElse(throw new Exception(s"Player ${state.names(playerIndex)} not locked but no chop! ${state.hands(playerIndex).map(state.deck(_))}"))
 				val id = state.deck(chop).id().get
 				val action = DiscardAction(playerIndex, chop, id.suitIndex, id.rank)
 				val dcGame = advanceGame(game, action)

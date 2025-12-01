@@ -328,7 +328,7 @@ extension[G <: Game](game: G)
 			.pipe(ops.copyWith(_, GameUpdates(catchup = Some(game.catchup))))
 			.when(g => !g.catchup && g.state.currentPlayerIndex == g.state.ourPlayerIndex) { g =>
 				val perform = g.takeAction
-				Log.highlight(Console.BLUE, s"Suggested action: ${perform.fmt(g)}")
+				Log.highlight(Console.BLUE, s"Suggested action: ${perform.fmt(g, accordingTo = Some(g.me))}")
 				g
 			}
 			.withState(_.copy(actionList = actions))

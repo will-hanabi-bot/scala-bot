@@ -163,19 +163,7 @@ def targetIPlay(_prev: Reactor, game: Reactor, wc: ReactorWC, targetSlot: Int) =
 		infoLock = Some(t.inferred.intersect(state.playableSet))
 	))
 
-	val shifted =
-		if (game.meta(order).status == CardStatus.ZeroClueChop)
-			state.hands(wc.receiver).find(o => o < order && !state.deck(o).clued && game.meta(o).status == CardStatus.None) match {
-				case None =>
-					Log.warn("unable to shift zcs forward!")
-					game.meta
-				case Some(newZCS) =>
-					game.meta.updated(newZCS, game.meta(newZCS).copy(status = CardStatus.ZeroClueChop))
-			}
-		else
-			game.meta
-
-	val newMeta = shifted.updated(order, game.meta(order).copy(
+	val newMeta = game.meta.updated(order, game.meta(order).copy(
 		status = CardStatus.CalledToPlay,
 		by = Some(wc.giver),
 		focused = true

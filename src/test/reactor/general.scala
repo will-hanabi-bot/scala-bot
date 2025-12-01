@@ -235,18 +235,18 @@ class General extends munit.FunSuite:
 		)
 		// Taking the team down to 0 clues - Bob writes ZCS on y4, Cathy writes ZCS on p4.
 		.pipe(takeTurn("Alice clues 5 to Cathy"))
-		.tap { game =>
-			assertEquals(game.meta(game.state.hands(Bob.ordinal)(0)).status, CardStatus.ZeroClueChop)
-		}
 		.pipe(takeTurn("Bob plays g1", "b1"))
-		.tap { game =>
-			assertEquals(game.meta(game.state.hands(Cathy.ordinal)(1)).status, CardStatus.ZeroClueChop)
-		}
 		.pipe(takeTurn("Cathy plays r1", "y3"))
 		.pipe(takeTurn("Alice discards p4 (slot 1)"))
+		.tap { g =>
+			// Bob's chop should be slot 2.
+			assertEquals(Reactor.chop(g, Bob.ordinal), Some(g.state.hands(Bob.ordinal)(1)))
+		}
+		.pipe(takeTurn("Bob discards y4", "r3"))
 
-		// Bob's chop should be slot 2.
-		assertEquals(Reactor.chop(game, Bob.ordinal), Some(game.state.hands(Bob.ordinal)(1)))
+		assertEquals(game.zcsTurn, None)
+		// Cathy's chop should be slot 1.
+		assertEquals(Reactor.chop(game, Cathy.ordinal), Some(game.state.hands(Cathy.ordinal)(0)))
 	}
 
 	test("it interprets a gd") {

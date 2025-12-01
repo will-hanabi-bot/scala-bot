@@ -242,17 +242,18 @@ enum PerformAction:
 		case _ => false
 	}
 
-	def fmt(game: Game) =
+	def fmt(game: Game, accordingTo: Option[Player] = None) =
 		val state = game.state
+		val player = accordingTo.getOrElse(game.common)
 
 		this match {
 			case PerformAction.Play(target) =>
 				val slot = state.ourHand.indexOf(target) + 1
-				s"Play slot $slot, inferences ${game.common.strInfs(state, target)}"
+				s"Play slot $slot, inferences ${player.strInfs(state, target)}"
 
 			case PerformAction.Discard(target) =>
 				val slot = state.ourHand.indexOf(target) + 1
-				s"Discard slot $slot, inferences ${game.common.strInfs(state, target)}"
+				s"Discard slot $slot, inferences ${player.strInfs(state, target)}"
 
 			case PerformAction.Colour(target, value) =>
 				Clue(ClueKind.Colour, value, target).fmt(state)

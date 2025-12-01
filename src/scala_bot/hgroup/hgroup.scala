@@ -365,7 +365,7 @@ object HGroup:
 					}
 				}
 				.when(_ => suitIndex != -1 && rank != -1 && !prev.state.isBasicTrash(id)) { g =>
-					interpretUsefulDc(g, action, rightmost = false, batonAnywhere = false) match {
+					interpretUsefulDcH(game, action) match {
 						case DiscardResult.None =>
 							g.copy(lastMove = Some(DiscardInterp.None))
 

@@ -46,7 +46,6 @@ enum CardStatus:
 		Finessed,
 		Sarcastic,
 		GentlemansDiscard,
-		ZeroClueChop,
 		FMaybeBluffed,
 		MaybeBluffed,
 		Bluffed
@@ -60,7 +59,6 @@ enum CardStatus:
 			case CardStatus.Finessed => "finessed"
 			case CardStatus.Sarcastic => "sarcastic"
 			case CardStatus.GentlemansDiscard => "gentleman's discard"
-			case CardStatus.ZeroClueChop => "zero clue chop"
 			case CardStatus.FMaybeBluffed => "finessed, maybe bluffed"
 			case CardStatus.MaybeBluffed => "maybe bluffed"
 			case CardStatus.Bluffed => "bluffed"
@@ -142,7 +140,7 @@ case class ConvData(
 		focused = false,
 		urgent = false,
 		trash = false,
-		status = if (status == CardStatus.ZeroClueChop || status == CardStatus.ChopMoved) status else CardStatus.None,
+		status = if (status == CardStatus.ChopMoved) status else CardStatus.None,
 		by = None
 	)
 

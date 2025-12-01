@@ -2,7 +2,7 @@
 
 A deterministic Scala bot that plays on the [hanab.live](https://hanab.live/) interface. Basic structure and ideas were taken from [Zamiell's example bot](https://github.com/Zamiell/hanabi-live-bot) (Python). Fork of my [more-developed bot](https://github.com/will-hanabi-bot/hanabi-bot) (JavaScript), successor of the [Rust rewrite](https://github.com/will-hanabi-bot/rust-bot).
 
-It can play with [Reactor 1.0](https://hanabi.wiki/en/conventions/reactor) (3p only), [Referential Sieve](https://hackmd.io/Ui6LXAK3TdC7AKSDcN20PQ?view), or [H-Group](https://hanabi.github.io/) (up to level 2) conventions. Just like my other bots, it does not do any "learning" during the game.
+It can play with [Reactor 1.0](https://hanabi.wiki/en/conventions/reactor) (3p only), [Referential Sieve](https://hackmd.io/Ui6LXAK3TdC7AKSDcN20PQ?view), or [H-Group](https://hanabi.github.io/) (up to level 4) conventions. Just like my other bots, it does not do any "learning" during the game.
 
 A demo game using Reactor 1.0 conventions with the Critical Fours variant:
 

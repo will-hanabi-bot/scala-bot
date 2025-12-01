@@ -12,7 +12,7 @@ import scala_bot.logger._
 import scala_bot.refSieve.RefSieve
 import scala_bot.hgroup.HGroup
 
-val BOT_VERSION = "v0.4.2 (scala-bot)"
+val BOT_VERSION = "v0.4.3 (scala-bot)"
 
 case class ChatMessage(
 	msg: String,
@@ -137,7 +137,7 @@ class BotClient(queue: Queue[IO, String], gameRef: Ref[IO, Option[Game]]):
 
 						if (player != null)
 							val output = List(
-								s"viewing from common",
+								s"viewing from ${player.name}",
 								s"===================="
 							).concat {
 								hand.flatMap { order =>
@@ -380,7 +380,7 @@ class BotClient(queue: Queue[IO, String], gameRef: Ref[IO, Option[Game]]):
 							case r: RefSieve => r.takeAction
 							case h: HGroup => h.takeAction
 						}
-						Log.highlight(Console.BLUE, s"Suggested action: ${suggestedAction.fmt(newGame)}")
+						Log.highlight(Console.BLUE, s"Suggested action: ${suggestedAction.fmt(newGame, accordingTo = Some(newGame.me))}")
 						val arg = suggestedAction.json(tableID.get)
 
 						IO.whenA(newGame.inProgress) {

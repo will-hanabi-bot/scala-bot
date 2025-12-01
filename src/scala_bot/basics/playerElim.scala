@@ -69,7 +69,7 @@ extension (p: Player) {
 
 							thoughts = thoughts.updated(order,
 								if (reset)
-									thought.resetInferences()
+									thought.copy(possible = newPossible).resetInferences()
 								else if (thought.infoLock.isDefined)
 									thought.copy(
 										inferred = newInferred,
@@ -138,7 +138,7 @@ extension (p: Player) {
 				changed = basicElim(recursiveIds) || changed
 
 			allPossible = allPossible.difference(eliminated)
-			allInferred = allPossible.difference(eliminated)
+			allInferred = allInferred.difference(eliminated)
 			changed
 
 		/**

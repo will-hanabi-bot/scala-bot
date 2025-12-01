@@ -25,15 +25,17 @@ case class RefSieve(
 
 	goodTouch: Boolean = true,
 	waiting: List[WaitingConnection] = Nil,
+	zcsTurn: Option[Int] = None
 ) extends Game:
 	def chop(playerIndex: Int) =
-		state.hands(playerIndex).find { order =>
-			val status = meta(order).status
-			status == CardStatus.ZeroClueChop || status == CardStatus.CalledToDiscard
+		state.hands(playerIndex).find {
+			meta(_).status == CardStatus.CalledToDiscard
 		}
 		.orElse {
 			state.hands(playerIndex).find { order =>
-				!state.deck(order).clued && meta(order).status == CardStatus.None
+				zcsTurn.forall(_ >= state.deck(order).drawnIndex) &&
+				!state.deck(order).clued &&
+				meta(order).status == CardStatus.None
 			}
 		}
 

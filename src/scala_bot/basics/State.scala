@@ -7,6 +7,7 @@ import scala.util.hashing.MurmurHash3
 case class State(
 	turnCount: Int = 0,
 	clueTokens: Int = 8,
+	halfClueToken: Boolean = false,
 	strikes: Int = 0,
 	endgameTurns: Option[Int] = None,
 	nextCardOrder: Int = 0,
@@ -22,7 +23,7 @@ case class State(
 	playableSet: IdentitySet,
 	criticalSet: IdentitySet,
 	trashSet: IdentitySet,
-	cardCount: Vector[Int],
+	cardCount: Array[Int],
 
 	numPlayers: Int,
 	names: Vector[String],
@@ -41,7 +42,7 @@ case class State(
 			deckInts(i) = if (id.isDefined) id.get.toOrd else 0
 			i += 1
 		}
-		MurmurHash3.productHash((hands, deckInts, clueTokens, endgameTurns))
+		MurmurHash3.productHash((hands, deckInts, clueTokens, halfClueToken, endgameTurns))
 
 	def withDiscard(id: Identity, order: Int) =
 		val Identity(suitIndex, rank) = id
@@ -89,7 +90,13 @@ case class State(
 		if (isPlayable(id)) withPlay(id) else this
 
 	def regainClue =
-		copy(clueTokens = 8.min(clueTokens + 1))
+		if (variant.clueStarved)
+			if (halfClueToken)
+				copy(clueTokens = clueTokens + 1, halfClueToken = false)
+			else
+				copy(halfClueToken = clueTokens < 8)
+		else
+			copy(clueTokens = 8.min(clueTokens + 1))
 
 	def ended =
 		strikes == 3 || score == maxScore || endgameTurns.contains(0)
@@ -220,11 +227,35 @@ object State:
 		ourPlayerIndex: Int,
 		variant: Variant
 	): State =
+		var cardsLeft = 0
+		val cardCount = Array.ofDim[Int](variant.suits.length * 5)
+		var playableSet = IdentitySet.empty
+		var criticalSet = IdentitySet.empty
+
+		var suitIndex = 0
+		while (suitIndex < variant.suits.length) {
+			var rank = 1
+			while (rank <= 5) {
+				val id = Identity(suitIndex, rank)
+				val count = variant.cardCount(id)
+
+				cardsLeft += count
+				cardCount(id.toOrd) = count
+
+				if (rank == 1)
+					playableSet = playableSet.union(id)
+
+				if (count == 1)
+					criticalSet = criticalSet.union(id)
+
+				rank += 1
+			}
+			suitIndex += 1
+		}
+
 		State(
-			cardsLeft = (0 until variant.suits.length).foldLeft(0)((acc, suitIndex) =>
-				acc + (1 to 5).map(rank => variant.cardCount(Identity(suitIndex, rank))).sum),
-			cardCount = (0 until variant.suits.length).flatMap(suitIndex =>
-				(1 to 5).map(rank => variant.cardCount(Identity(suitIndex, rank)))).toVector,
+			cardsLeft = cardsLeft,
+			cardCount = cardCount,
 
 			playStacks = Vector.fill(variant.suits.length)(0),
 			discardStacks = Vector.fill(variant.suits.length)(Vector.fill(5)(Vector())),
@@ -233,8 +264,8 @@ object State:
 
 			variant = variant,
 			allIds = IdentitySet.from(variant.allIds),
-			playableSet = IdentitySet.from((0 until variant.suits.length).map(Identity(_, 1))),
-			criticalSet = IdentitySet.from((0 until variant.suits.length).map(Identity(_, 5))),
+			playableSet = playableSet,
+			criticalSet = criticalSet,
 			trashSet = IdentitySet.empty,
 			numPlayers = names.length,
 
