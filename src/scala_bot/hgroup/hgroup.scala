@@ -67,7 +67,8 @@ case class HGroup(
 	dda: Option[Identity] = None,
 	inEarlyGame: Boolean = true,
 	stallInterp: Option[StallInterp] = None,
-	lastActions: Vector[Option[Action]] = Vector(),
+	lastActions: Vector[Option[Action]],
+	importantAction: Vector[Boolean],
 	xmeta: Vector[XConvData] = Vector(),
 
 	allowFindOwn: Boolean = true
@@ -264,7 +265,37 @@ case class HGroup(
 				case None => throw new Error("No focus found!")
 			}
 
-	def importantAction(playerIndex: Int): Boolean = ???
+	def earlyGameClue(giver: Int): Option[Clue] =
+		if (!inEarlyGame || !state.canClue || level < Level.IntermediateFinesses)
+			return None
+
+		val allClues =
+			for
+				target <- (0 until state.numPlayers).view if target != giver
+				clue <- state.allValidClues(target)
+			yield
+				clue
+
+		allClues.find { clue =>
+			val action = clueToAction(state, clue, giver)
+			val hypo = this.simulateClue(action)
+
+			hypo.lastMove.matches {
+				case Some(ClueInterp.Save) =>
+					true
+
+				case Some(ClueInterp.Stall) =>
+					hypo.stallInterp == Some(StallInterp.Stall5) &&
+					!stalled5
+
+				case Some(ClueInterp.Play) =>
+					val (badTouch, _, _) = badTouchResult(this, hypo, action)
+					badTouch.isEmpty
+			}
+		}
+
+	def resetImportant(playerIndex: Int) =
+		copy(importantAction = importantAction.updated(playerIndex, false))
 
 object HGroup:
 	private def init(
@@ -282,6 +313,7 @@ object HGroup:
 		base = (state, Vector(), t.players, t.common),
 		inProgress = inProgress,
 		lastActions = Vector.fill(state.numPlayers)(None),
+		importantAction = Vector.fill(state.numPlayers)(false),
 		level = level
 	)
 
@@ -319,6 +351,7 @@ object HGroup:
 				inEarlyGame = game.inEarlyGame,
 				stallInterp = game.stallInterp,
 				lastActions = game.lastActions,
+				importantAction = game.importantAction,
 				xmeta = game.xmeta.padTo(meta.length, XConvData())
 			)
 
@@ -334,11 +367,13 @@ object HGroup:
 				level = game.level,
 				deckIds = if (keepDeck) game.deckIds else Vector(),
 				lastActions = Vector.fill(game.state.numPlayers)(None),
+				importantAction = Vector.fill(game.state.numPlayers)(false),
 				xmeta = Vector.fill(game.base._2.length)(XConvData())
 			)
 
 		def interpretClue(prev: HGroup, game: HGroup, action: ClueAction): HGroup =
 			refreshWCs(prev, game, action)
+				.pipe(_.resetImportant(action.playerIndex))
 				.pipe(g => interpClue(ClueContext(prev, g, action)))
 				.pipe { g =>
 					g.copy(lastActions = g.lastActions.updated(action.playerIndex, Some(action)))
@@ -349,6 +384,7 @@ object HGroup:
 			val id = Identity(suitIndex, rank)
 
 			refreshWCs(prev, game, action)
+				.pipe(_.resetImportant(action.playerIndex))
 				.when(_ => failed && rank == 1) { g =>
 					interpretOcm(prev, action) match {
 						case None =>
@@ -364,7 +400,7 @@ object HGroup:
 								if (mistake) Some(PlayInterp.Mistake) else Some(PlayInterp.OrderCM))
 					}
 				}
-				.when(_ => suitIndex != -1 && rank != -1 && !prev.state.isBasicTrash(id)) { g =>
+				.when(_ => suitIndex != -1 && rank != -1 && !prev.state.isBasicTrash(id) && !prev.chop(playerIndex).contains(order)) { g =>
 					interpretUsefulDcH(game, action) match {
 						case DiscardResult.None =>
 							g.copy(lastMove = Some(DiscardInterp.None))
@@ -406,6 +442,7 @@ object HGroup:
 		def interpretPlay(prev: HGroup, game: HGroup, action: PlayAction): HGroup =
 			val PlayAction(playerIndex, order, suitIndex, rank) = action
 			refreshWCs(prev, game, action)
+				.pipe(_.resetImportant(action.playerIndex))
 				.when(_.level >= Level.BasicCM && rank == 1) { g =>
 					interpretOcm(prev, action) match {
 						case None =>
@@ -453,23 +490,9 @@ object HGroup:
 					val action = performToAction(state, perform, state.ourPlayerIndex)
 					(perform, action)
 
-			val clueEvals = allClues.view.map((_, action) => (action, evalAction(game, action)))
+			val mustClue = game.earlyGameClue(state.ourPlayerIndex).isDefined
 
-			val earlyGameClue = game.inEarlyGame &&
-				clueEvals.exists { case (action, (hypo, _)) => hypo.lastMove match {
-					case Some(ClueInterp.Save) =>
-						true
-					case Some(ClueInterp.Stall) =>
-						hypo.stallInterp == Some(StallInterp.Stall5) &&
-						!game.stalled5
-					case Some(ClueInterp.Play) =>
-						val (badTouch, _, _) = badTouchResult(game, hypo, action.asInstanceOf[ClueAction])
-						badTouch.isEmpty
-
-					case _ => false
-				}}
-
-			if (earlyGameClue)
+			if (mustClue)
 				Log.highlight(Console.YELLOW,"must give clue in early game!")
 
 			val allPlays = playableOrders.map { o =>
@@ -479,7 +502,7 @@ object HGroup:
 
 			val cantDiscard = state.clueTokens == 8 ||
 				(state.pace == 0 && (allClues.nonEmpty || allPlays.nonEmpty)) ||
-				earlyGameClue
+				mustClue
 			Log.info(s"can discard: ${!cantDiscard} ${state.clueTokens}")
 
 			val allDiscards = if (cantDiscard) Nil else

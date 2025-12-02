@@ -2,7 +2,7 @@ package scala_bot.utils
 
 import scala_bot.basics._
 
-extension [A](a: A) {
+extension [A](a: A)
 	def cond(condition: A => Boolean)(ifTrue: A => A)(ifFalse: A => A): A =
 		if (condition(a)) ifTrue(a) else ifFalse(a)
 
@@ -11,7 +11,13 @@ extension [A](a: A) {
 
 	def unless(condition: Boolean)(f: A => A): A =
 		if (!condition) f(a) else a
-	}
+
+	def matches(cond: PartialFunction[A, Boolean]): Boolean =
+		cond.applyOrElse(a, _ => false)
+
+extension [A](a: Iterable[A])
+	def existsM(cond: PartialFunction[A, Boolean]): Boolean =
+		a.exists(_.matches(cond))
 
 extension [A](seq: IndexedSeq[A])
 	inline def fastMap[B](inline f: A => B): IndexedSeq[B] =

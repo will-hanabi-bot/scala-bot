@@ -1,6 +1,7 @@
 package scala_bot.hgroup
 
 import scala_bot.basics._
+import scala_bot.utils._
 import scala_bot.logger.Log
 import scala_bot.utils.inBetween
 import scala_bot.utils.playersUntil
@@ -32,10 +33,9 @@ def findKnownConn(ctx: ClueContext, giver: Int, id: Identity, ignore: Set[Int], 
 		!game.common.linkedOrders(state).contains(order)
 
 	def validLink(link: Link, order: Int) =
-		link match {
+		link.matches {
 			case Link.Promised(orders, i, _) => i == id && orders.contains(order)
 			case Link.Sarcastic(orders, i) => i == id && orders.contains(order)
-			case _ => false
 		}
 
 	def validPlayable(playerIndex: Int, order: Int) =
@@ -395,15 +395,11 @@ def connect(ctx: ClueContext, id: Identity, looksDirect: Boolean, thinksStall: S
 			val direct = looksDirect && {
 					(action.clue.kind == ClueKind.Colour &&
 						game.common.thoughts(focus).possible.contains(nextId)) ||
-					!connections.exists {
+					!connections.existsM {
 						case f: FinesseConn => f.reacting != action.target && !f.hidden
-						case _ => false
 					}
 				}
-			val bluffed = connections.exists {
-				case f: FinesseConn => f.bluff
-				case _ => false
-			}
+			val bluffed = connections.existsM { case f: FinesseConn => f.bluff }
 			attemptedBluff ||= bluffed
 
 			val opts = ConnectOpts(assumeTruth = assumeTruth, bluff = bluffed)

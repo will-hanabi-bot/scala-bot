@@ -1,6 +1,7 @@
 package scala_bot.hgroup
 
 import scala_bot.basics._
+import scala_bot.utils._
 import scala_bot.logger.Log
 
 val STALL_INDICES = Map(
@@ -106,11 +107,13 @@ def alternativeClue(prev: HGroup, game: HGroup, giver: Int, maxStall: Int, origC
 		val (badTouch, _, _) = badTouchResult(game, hypo, action)
 		val (_, playables) = playablesResult(game, hypo)
 
-		hypo.lastMove.get match {
+		hypo.lastMove.get.matches {
 			case ClueInterp.Play =>
 				playables.exists(!game.state.deck(_).clued) && badTouch.isEmpty
+
 			case ClueInterp.Save =>
 				true
+
 			case ClueInterp.Stall =>
 				val interp = hypo.stallInterp.get
 				interp match {
@@ -119,7 +122,6 @@ def alternativeClue(prev: HGroup, game: HGroup, giver: Int, maxStall: Int, origC
 
 					case i => STALL_INDICES(i) < maxStall
 				}
-			case _ => false
 		}
 
 	val state = game.state

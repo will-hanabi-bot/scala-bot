@@ -1,6 +1,7 @@
 package scala_bot.refSieve
 
 import scala_bot.basics._
+import scala_bot.utils._
 import scala_bot.logger.{Log, Logger, LogLevel}
 
 def getResult(game: RefSieve, hypo: RefSieve, action: ClueAction): Double =
@@ -208,10 +209,9 @@ def evalAction(game: RefSieve, action: Action): Double =
 	val state = game.state
 	val hypoGame = advanceGame(game, action)
 
-	val mistake = hypoGame.lastMove match {
+	val mistake = hypoGame.lastMove.matches {
 		case Some(ClueInterp.Mistake) if action.isInstanceOf[ClueAction] => true
 		case Some(DiscardInterp.Mistake) if action.isInstanceOf[DiscardAction] => true
-		case _ => false
 	}
 
 	val value = action match {

@@ -1,5 +1,7 @@
 package scala_bot.basics
 
+import scala_bot.utils._
+
 sealed trait Connection:
 	def reacting: Int
 	def order: Int
@@ -8,14 +10,10 @@ sealed trait Connection:
 	def kind: String
 	def hidden: Boolean
 
-	def isBluff = this match {
-		case f: FinesseConn => f.bluff
-		case _ => false
-	}
+	def isBluff = this.matches { case f: FinesseConn => f.bluff }
 
-	def isPossiblyBluff = this match {
-		case f: FinesseConn => f.bluff
-		case _ => false
+	def isPossiblyBluff = this.matches {
+		case f: FinesseConn => f.bluff || f.possiblyBluff
 	}
 
 case class KnownConn(
@@ -80,10 +78,7 @@ case class FocusPossibility(
 	illegal: Boolean = false
 ):
 	def isBluff =
-		connections.headOption.exists({
-			case f: FinesseConn => f.bluff
-			case _ => false
-		})
+		connections.headOption.existsM { case f: FinesseConn => f.bluff }
 
 case class WaitingConnection(
 	connections: List[Connection],

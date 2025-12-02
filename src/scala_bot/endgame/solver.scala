@@ -324,9 +324,8 @@ case class EndgameSolver[G <: Game](
 			return UNWINNABLE
 
 		if (state.score + 1 == state.maxScore)
-			val winningPlay = performs.find { (p, _) => p match {
+			val winningPlay = performs.find { (p, _) => p.matches {
 				case PerformAction.Play(target) => state.isPlayable(state.deck(target).id().get)
-				case _ => false
 			}}
 
 			if (winningPlay.isDefined)

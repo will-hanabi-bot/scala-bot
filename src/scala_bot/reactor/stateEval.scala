@@ -1,6 +1,7 @@
 package scala_bot.reactor
 
 import scala_bot.basics._
+import scala_bot.utils._
 import scala_bot.logger.Log
 
 def getResult(game: Reactor, hypo: Reactor, action: ClueAction): Double =
@@ -189,10 +190,9 @@ def evalAction(game: Reactor, action: Action): Double =
 	val state = game.state
 	val hypoGame = advanceGame(game, action)
 
-	val mistake = hypoGame.lastMove match {
+	val mistake = hypoGame.lastMove.matches {
 		case Some(ClueInterp.Mistake) if action.isInstanceOf[ClueAction] => true
 		case Some(DiscardInterp.Mistake) if action.isInstanceOf[DiscardAction] => true
-		case _ => false
 	}
 
 	val value = action match {

@@ -30,10 +30,7 @@ def assignConns(game: HGroup, action: ClueAction, fps: List[FocusPossibility], f
 					(modified, acc)
 				else
 					// Log.info(s"assigning connection ${state.logConn(conn)}")
-					val isBluff = conn match {
-						case f: FinesseConn => f.bluff
-						case _ => false
-					}
+					val isBluff = conn.matches { case f: FinesseConn => f.bluff }
 
 					val playableIds = for
 						(stack, i) <- acc.common.hypoStacks.zipWithIndex
@@ -47,11 +44,7 @@ def assignConns(game: HGroup, action: ClueAction, fps: List[FocusPossibility], f
 					yield
 						id
 
-					val isUnknownPlayable = conn match {
-						case c: PlayableConn => c.linked.length > 1
-						case _ => false
-					}
-
+					val isUnknownPlayable = conn.matches { case c: PlayableConn => c.linked.length > 1 }
 					val thought = acc.common.thoughts(conn.order)
 
 					val newInferred = {
@@ -150,10 +143,9 @@ def assignConns(game: HGroup, action: ClueAction, fps: List[FocusPossibility], f
 							}
 						case c: PlayableConn if isUnknownPlayable =>
 							val target = fp.connections.lift(connI + 1).map(_.order).getOrElse(focus)
-							val existingLink = g.common.links.exists {
+							val existingLink = g.common.links.existsM {
 								case Link.Promised(orders, id, target) =>
 									id == c.id && orders.toSet == c.linked.toSet
-								case _ => false
 							}
 
 							if (existingLink)
@@ -173,6 +165,40 @@ def assignConns(game: HGroup, action: ClueAction, fps: List[FocusPossibility], f
 					(modified + conn.order, newGame)
 			}
 		}._2
+
+def importantFinesse(state: State, action: ClueAction, fps: List[FocusPossibility]) =
+	val ClueAction(giver, target, _, _) = action
+
+	fps.exists { fp =>
+		val conns = fp.connections
+
+		@annotation.tailrec
+		def loop(playerIndex: Int): Boolean =
+			// Looped around
+			if (playerIndex == giver)
+				false
+
+			// Clue must be given before the first finessed player, otherwise position may change.
+			else if (conns.existsM { case f: FinesseConn => f.reacting == playerIndex })
+				true
+
+			// Target can't clue themselves, unknown conns can't clue
+			else if (playerIndex == target || conns.exists(c => c.reacting == playerIndex && !c.matches { case _: KnownConn => true }))
+				loop(state.nextPlayerIndex(playerIndex))
+
+			else
+				false	// This player could give the finesse
+
+		loop(state.nextPlayerIndex(giver))
+	}
+
+def urgentSave(ctx: ClueContext): Boolean =
+	val ClueContext(prev, game, action) = ctx
+
+	if (game.earlyGameClue(action.target).isDefined)
+		return false
+
+	ctx.focusResult.chop && game.state.nextPlayerIndex(action.giver) == action.target
 
 def resolveClue(ctx: ClueContext, fps: List[FocusPossibility]) =
 	val ClueContext(prev, game, action) = ctx
@@ -238,7 +264,7 @@ def resolveClue(ctx: ClueContext, fps: List[FocusPossibility]) =
 	.pipe {
 		allFps.foldLeft(_) { (a, fp) =>
 			fp.connections.zipWithIndex.foldLeft(a) { case (acc, (conn, i)) => conn match {
-				case PlayableConn(reacting, order, id, linked, layered) =>
+				case PlayableConn(reacting, order, id, linked, layered) if linked.length > 1 =>
 					val playLinks = acc.common.playLinks
 					val target = fp.connections.lift(i + 1).map(_.order).getOrElse(focus)
 					val existingIndex = playLinks.indexWhere { l =>
@@ -263,7 +289,9 @@ def resolveClue(ctx: ClueContext, fps: List[FocusPossibility]) =
 	}
 	.pipe { g =>
 		def requiresWc(fp: FocusPossibility) = fp.connections.exists { c =>
-			c.isInstanceOf[PromptConn] || c.isInstanceOf[FinesseConn]
+			c.isInstanceOf[PlayableConn] ||
+			c.isInstanceOf[PromptConn] ||
+			c.isInstanceOf[FinesseConn]
 		}
 
 		g.copy(
@@ -287,5 +315,8 @@ def resolveClue(ctx: ClueContext, fps: List[FocusPossibility]) =
 		state.hands(giver).find(game.meta(_).cm).fold(g) { oldChop =>
 			g.withMeta(oldChop)(_.copy(status = CardStatus.None))
 		}
+	}
+	.when(g => importantFinesse(g.state, action, fps) || urgentSave(ctx)) { g =>
+		g.copy(importantAction = g.importantAction.updated(giver, true))
 	}
 	.withMeta(focus)(_.copy(focused = true))

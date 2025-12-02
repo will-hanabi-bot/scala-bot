@@ -6,11 +6,7 @@ import scala_bot.logger.Log
 
 import scala.util.chaining.scalaUtilChainingOps
 
-case class ClueContext(
-	prev: HGroup,
-	game: HGroup,
-	action: ClueAction
-):
+case class ClueContext(prev: HGroup, game: HGroup, action: ClueAction):
 	inline def common = game.common
 	inline def state = game.state
 
