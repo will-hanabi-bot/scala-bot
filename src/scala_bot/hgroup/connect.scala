@@ -82,9 +82,9 @@ def findUnknownConnecting(ctx: ClueContext, reacting: Int, id: Identity, connect
 	val ClueContext(prev, game, action) = ctx
 	val (state, level) = (game.state, game.level)
 	val ClueAction(giver, target, _, _) = action
-	val FocusResult(focus, _, _) = game.determineFocus(prev, game, action)
+	val FocusResult(focus, _, _) = game.determineFocus(prev, action)
 
-	// println(s"finding unknown connecting for ${state.logId(id)} (${state.names(reacting)}), $connected, own? ${opts.findOwn}")
+	// Log.info(s"finding unknown connecting for ${state.logId(id)} (${state.names(reacting)}), $connected, own? ${opts.findOwn}")
 
 	if (opts.bluff)
 		val clued = prev.common.findClued(prev, reacting, id, ignore ++ connected)
@@ -236,7 +236,8 @@ def findSingleConn(ctx: ClueContext, reacting: Int, id: Identity, connCtx: Conne
 				val hypo = state.deck(conn.order).id()
 					.fold(game)(id => game.withState(_.withPlay(id)).elim(goodTouch = true))
 
-				findSingleConn(ctx.copy(game = hypo), reacting, id, connCtx, opts, conn +: connections)
+				val newConnCtx = connCtx.copy(connected = conn.order +: connCtx.connected)
+				findSingleConn(ctx.copy(game = hypo), reacting, id, newConnCtx, opts, conn +: connections)
 
 			case Some(conn) =>
 				Some((conn +: connections).reverse)
@@ -408,7 +409,21 @@ def connect(ctx: ClueContext, id: Identity, looksDirect: Boolean, thinksStall: S
 
 			val conn = findConnecting(newCtx, nextId, connCtx, opts)
 				.orElse(findOwn.flatMap { i =>
-					findKnownConn(newCtx, ctx.action.giver, nextId, connCtx.ignore ++ connCtx.connected, findOwn = true).map(List(_)).orElse {
+					val known = findKnownConn(newCtx, ctx.action.giver, nextId, connCtx.ignore ++ connCtx.connected, findOwn = true)
+
+					// See if we need to correct based on future information
+					val actualKnown = known match {
+						case Some(c @ PlayableConn(reacting, order, id, linked, layered)) =>
+							if (linked.forall(!game.future(_).contains(id)))
+								Log.highlight(Console.CYAN, "playable conn is known to not match in the future, finding again")
+								val unknown = findSingleConn(newCtx, i, nextId, connCtx.copy(connected = order +: connCtx.connected), opts.copy(findOwn = findOwn))
+								unknown.map(c.copy(id = game.future(order).intersect(game.state.playableSet).head) +: _)
+							else
+								Some(List(c))
+						case k => k.map(List(_))
+					}
+
+					actualKnown.orElse {
 						findSingleConn(newCtx, i, nextId, connCtx, opts.copy(findOwn = findOwn))
 					}
 				})

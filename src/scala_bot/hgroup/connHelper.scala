@@ -6,7 +6,7 @@ import scala_bot.logger.Log
 
 import scala.util.chaining.scalaUtilChainingOps
 
-def assignConns(game: HGroup, action: ClueAction, fps: List[FocusPossibility], focus: Int) =
+def assignConns(game: HGroup, action: ClueAction, fps: List[FocusPossibility], focus: Int, ambiguousOwn: List[FocusPossibility] = Nil) =
 	val state = game.state
 	val ClueAction(giver, target, _, clue) = action
 
@@ -101,7 +101,7 @@ def assignConns(game: HGroup, action: ClueAction, fps: List[FocusPossibility], f
 							giver != state.ourPlayerIndex &&
 							conn.reacting != state.ourPlayerIndex && {
 								// Finesse that could be ambiguous
-								(conn.isInstanceOf[FinesseConn] && fps.length > 1) ||
+								(conn.isInstanceOf[FinesseConn] && (fps.length > 1 || ambiguousOwn.length > 1)) ||
 								// Could be hidden? (TODO: Investigate why this is here.)
 								(conn.isInstanceOf[PromptConn] && g.me.thoughts(focus).possible.exists { i =>
 									i.suitIndex != conn.ids.head.suitIndex
@@ -200,7 +200,7 @@ def urgentSave(ctx: ClueContext): Boolean =
 
 	ctx.focusResult.chop && game.state.nextPlayerIndex(action.giver) == action.target
 
-def resolveClue(ctx: ClueContext, fps: List[FocusPossibility]) =
+def resolveClue(ctx: ClueContext, fps: List[FocusPossibility], ambiguousOwn: List[FocusPossibility] = Nil) =
 	val ClueContext(prev, game, action) = ctx
 	val state = game.state
 	val ClueAction(giver, target, _, _) = action
@@ -260,7 +260,7 @@ def resolveClue(ctx: ClueContext, fps: List[FocusPossibility]) =
 		Log.highlight(Console.CYAN, s"final infs [${newInferred.fmt(state)}] $focus")
 		t.copy(inferred = newInferred, infoLock = Some(newInferred))
 	}
-	.pipe(assignConns(_, action, fps, focus))
+	.pipe(assignConns(_, action, fps, focus, ambiguousOwn))
 	.pipe {
 		allFps.foldLeft(_) { (a, fp) =>
 			fp.connections.zipWithIndex.foldLeft(a) { case (acc, (conn, i)) => conn match {
@@ -304,6 +304,16 @@ def resolveClue(ctx: ClueContext, fps: List[FocusPossibility]) =
 					focus,
 					fp.id,
 					symmetric = fp.symmetric
+				)
+			} ++ ambiguousOwn.map { fp =>
+				WaitingConnection(
+					fp.connections,
+					giver,
+					target,
+					state.turnCount,
+					focus,
+					fp.id,
+					ambiguousSelf = true
 				)
 			},
 			lastMove = Some(interp),

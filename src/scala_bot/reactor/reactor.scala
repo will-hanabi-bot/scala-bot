@@ -28,6 +28,7 @@ case class Reactor(
 
 	meta: Vector[ConvData] = Vector(),
 	deckIds: Vector[Option[Identity]] = Vector(),
+	future: Vector[IdentitySet] = Vector(),
 	catchup: Boolean = false,
 	notes: Map[Int, Note] = Map(),
 	lastMove: Option[Interp] = None,

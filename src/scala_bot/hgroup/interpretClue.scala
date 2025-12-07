@@ -10,7 +10,7 @@ case class ClueContext(prev: HGroup, game: HGroup, action: ClueAction):
 	inline def common = game.common
 	inline def state = game.state
 
-	lazy val focusResult = game.determineFocus(prev, game, action)
+	lazy val focusResult = game.determineFocus(prev, action)
 
 def interpClue(ctx: ClueContext): HGroup =
 	val ClueContext(prev, game, action) = ctx
@@ -248,4 +248,4 @@ def interpClue(ctx: ClueContext): HGroup =
 		}.toList
 
 		val simplestOwn = occamsRazor(simplest ++ ownFps, state.ourPlayerIndex, game.me.thoughts(focus).id())
-		resolveClue(ctx, simplestOwn)
+		resolveClue(ctx, simplestOwn, ownFps.filterNot(simplestOwn.contains))

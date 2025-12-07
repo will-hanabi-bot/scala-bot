@@ -8,7 +8,7 @@ import scala_bot.logger.{Logger, LogLevel}
 import scala.util.chaining.scalaUtilChainingOps
 
 class General extends munit.FunSuite:
-	override def beforeAll() = Logger.setLevel(LogLevel.Off)
+	// override def beforeAll() = Logger.setLevel(LogLevel.Off)
 
 	test("understands a continuing finesse") {
 		val game = setup(HGroup.atLevel(2), Vector(
@@ -227,10 +227,16 @@ class General extends munit.FunSuite:
 		}
 		.pipe(takeTurn("Alice clues 5 to Cathy"))
 		.pipe(takeTurn("Bob clues purple to Cathy"))
+		.tap { g =>
+			// Alice's slot 2 can be any 3 (not prompted to be p3).
+			hasInfs(g, None, Alice, 5, Vector("p3"))
+			hasInfs(g, None, Alice, 2, Vector("r3", "y3", "g3", "b3", "p3"))
+		}
+		.pipe(takeTurn("Cathy discards y1", "p1"))
+		.pipe(takeTurn("Alice plays r3 (slot 5)"))
 
-		// Alice's slot 2 can be any 3 (not prompted to be p3).
-		hasInfs(game, None, Alice, 5, Vector("p3"))
-		hasInfs(game, None, Alice, 2, Vector("r3", "y3", "g3", "b3", "p3"))
+		// p3 must be in slot 3 (previously slot 2).
+		hasInfs(game, None, Alice, 3, Vector("p3"))
 	}
 
 	test("doesn't consider already-finessed possibilities") {

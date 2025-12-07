@@ -90,6 +90,7 @@ case class WaitingConnection(
 	ambiguousPassback: Boolean = false,
 	selfPassback: Boolean = false,
 	symmetric: Boolean = false,
+	ambiguousSelf: Boolean = false,
 	rewinded: Boolean = false
 ):
 	/** Returns the index of the next connection that still exists. */

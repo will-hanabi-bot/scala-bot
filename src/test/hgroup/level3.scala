@@ -76,8 +76,7 @@ class Playing1s extends munit.FunSuite:
 			game.state.clueTouched(game.state.hands(Cathy.ordinal), clue),
 			clue
 		)
-		val hypo = game.simulateAction(action)
-		val focusResult = game.determineFocus(game, hypo, action)
+		val focusResult = game.determineFocus(game, action)
 
 		// The focus of the clue is Cathy's slot 4.
 		assertEquals(focusResult.focus, game.state.hands(Cathy.ordinal)(3))

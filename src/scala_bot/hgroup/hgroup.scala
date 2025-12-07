@@ -49,6 +49,7 @@ case class HGroup(
 
 	meta: Vector[ConvData] = Vector(),
 	deckIds: Vector[Option[Identity]] = Vector(),
+	future: Vector[IdentitySet],
 	catchup: Boolean = false,
 	notes: Map[Int, Note] = Map(),
 	lastMove: Option[Interp] = None,
@@ -201,7 +202,7 @@ case class HGroup(
 			})
 		}
 
-	def determineFocus(prev: HGroup, game: HGroup, action: ClueAction): FocusResult =
+	def determineFocus(prev: HGroup, action: ClueAction): FocusResult =
 		val ClueAction(giver, target, list, clue) = action
 		val hand = state.hands(target)
 		val chop = prev.chop(target)
@@ -217,8 +218,6 @@ case class HGroup(
 		lazy val brownTempo = clue.kind == ClueKind.Colour &&
 			state.variant.colourableSuits(clue.value).contains("Brown") &&
 			reclue
-
-		lazy val ordered1s = game.order1s(list.filter(game.unknown1), noFilter = true)
 
 		lazy val muddySuitIndex = state.variant.suits.indexWhere(MUDDY.matches)
 		lazy val muddyCards = list.filter(this.knownAs(_, MUDDY))
@@ -242,8 +241,17 @@ case class HGroup(
 		else if (brownTempo)
 			FocusResult(list.min, positional = true)
 
-		else if (clue.isEq(BaseClue(ClueKind.Rank, 1)) && ordered1s.nonEmpty)
-			FocusResult(ordered1s.head)
+		else if (clue.isEq(BaseClue(ClueKind.Rank, 1)))
+			// Custom implementation of ordered1s: chop is already covered above
+			val focus = list.minBy { o =>
+				if (meta(o).cm)
+					100 - o
+				else if (state.inStartingHand(o))
+					o
+				else
+					-o
+			}
+			FocusResult(focus)
 
 		else if (mudClue)
 			val coloursAvailable = state.variant.colourableSuits.length
@@ -266,31 +274,34 @@ case class HGroup(
 			}
 
 	def earlyGameClue(giver: Int): Option[Clue] =
-		if (!inEarlyGame || !state.canClue || level < Level.IntermediateFinesses)
+		if (noRecurse || !inEarlyGame || !state.canClue || level < Level.IntermediateFinesses)
 			return None
 
-		val allClues =
-			for
-				target <- (0 until state.numPlayers).view if target != giver
-				clue <- state.allValidClues(target)
-			yield
-				clue
+		val allClues = for
+			target <- (0 until state.numPlayers).view if target != giver
+			clue <- state.allValidClues(target)
+		yield
+			clue
 
 		allClues.find { clue =>
 			val action = clueToAction(state, clue, giver)
-			val hypo = this.simulateClue(action)
+			val focusCard = state.deck(determineFocus(this, action).focus)
 
-			hypo.lastMove.matches {
-				case Some(ClueInterp.Save) =>
-					true
+			!focusCard.clued && focusCard.id().exists(!state.isBasicTrash(_)) && {
+				val hypo = this.simulateClue(action, noRecurse = true)
 
-				case Some(ClueInterp.Stall) =>
-					hypo.stallInterp == Some(StallInterp.Stall5) &&
-					!stalled5
+				hypo.lastMove.matches {
+					case Some(ClueInterp.Save) =>
+						true
 
-				case Some(ClueInterp.Play) =>
-					val (badTouch, _, _) = badTouchResult(this, hypo, action)
-					badTouch.isEmpty
+					case Some(ClueInterp.Stall) =>
+						hypo.stallInterp == Some(StallInterp.Stall5) &&
+						!stalled5
+
+					case Some(ClueInterp.Play) =>
+						val (badTouch, _, _) = badTouchResult(this, hypo, action)
+						badTouch.isEmpty
+				}
 			}
 		}
 
@@ -311,6 +322,7 @@ object HGroup:
 		players = t.players,
 		common = t.common,
 		base = (state, Vector(), t.players, t.common),
+		future = Vector.fill(state.cardsLeft)(state.allIds),
 		inProgress = inProgress,
 		lastActions = Vector.fill(state.numPlayers)(None),
 		importantAction = Vector.fill(state.numPlayers)(false),
@@ -341,17 +353,6 @@ object HGroup:
 				rewindDepth = updates.rewindDepth.getOrElse(game.rewindDepth),
 				inProgress = updates.inProgress.getOrElse(game.inProgress),
 
-				goodTouch = game.goodTouch,
-				level = game.level,
-				waiting = game.waiting,
-				stalled5 = game.stalled5,
-				cluedOnChop = game.cluedOnChop,
-				dcStatus = game.dcStatus,
-				dda = game.dda,
-				inEarlyGame = game.inEarlyGame,
-				stallInterp = game.stallInterp,
-				lastActions = game.lastActions,
-				importantAction = game.importantAction,
 				xmeta = game.xmeta.padTo(meta.length, XConvData())
 			)
 
@@ -366,18 +367,29 @@ object HGroup:
 
 				level = game.level,
 				deckIds = if (keepDeck) game.deckIds else Vector(),
+				future = if (keepDeck) game.future else Vector.fill(game.state.deck.length)(IdentitySet.empty),
 				lastActions = Vector.fill(game.state.numPlayers)(None),
 				importantAction = Vector.fill(game.state.numPlayers)(false),
 				xmeta = Vector.fill(game.base._2.length)(XConvData())
 			)
 
 		def interpretClue(prev: HGroup, game: HGroup, action: ClueAction): HGroup =
-			refreshWCs(prev, game, action)
-				.pipe(_.resetImportant(action.playerIndex))
-				.pipe(g => interpClue(ClueContext(prev, g, action)))
-				.pipe { g =>
-					g.copy(lastActions = g.lastActions.updated(action.playerIndex, Some(action)))
+			val pre = refreshWCs(prev, game, action, beforeClueInterp = true)
+				.resetImportant(action.playerIndex)
+
+			val interpreted = interpClue(ClueContext(prev, pre, action))
+
+			val secondRefresh = refreshWCs(prev, pre.copy(lastMove = interpreted.lastMove), action)
+				.cond(_.waiting != pre.waiting) { g =>
+					Log.highlight(Console.GREEN, "----- REINTERPRETING CLUE -----")
+					val res = interpClue(ClueContext(prev, g, action))
+					Log.highlight(Console.GREEN, "----- DONE REINTERPRETING -----")
+					res
+				} {
+					_ => interpreted
 				}
+
+			secondRefresh.copy(lastActions = secondRefresh.lastActions.updated(action.playerIndex, Some(action)))
 
 		def interpretDiscard(prev: HGroup, game: HGroup, action: DiscardAction): HGroup =
 			val DiscardAction(playerIndex, order, suitIndex, rank, failed) = action
@@ -441,26 +453,42 @@ object HGroup:
 
 		def interpretPlay(prev: HGroup, game: HGroup, action: PlayAction): HGroup =
 			val PlayAction(playerIndex, order, suitIndex, rank) = action
-			refreshWCs(prev, game, action)
-				.pipe(_.resetImportant(action.playerIndex))
-				.when(_.level >= Level.BasicCM && rank == 1) { g =>
-					interpretOcm(prev, action) match {
-						case None =>
-							g.copy(lastMove = Some(PlayInterp.None))
-						case Some(orders) =>
-							val chop = orders.min
-							val mistake = game.state.deck(chop).id().exists(game.state.isBasicTrash)
+			val needsRewind =
+				playerIndex == game.state.ourPlayerIndex &&
+				prev.me.thoughts(order).possible.length > 1 &&
+				game.future(order).length > 1
 
-							if (mistake)
-								Log.warn("ocm on trash!")
+			val rewinded = Option.when(needsRewind) {
+				game.copy(
+					future = game.future.padTo(game.state.deck.length, IdentitySet.empty)
+						.updated(order, IdentitySet.single(Identity(suitIndex, rank)))
+				)
+				.replay(game.state.deck(order).drawnIndex)
+				.toOption
+			}.flatten
 
-							performCM(g, orders).copy(lastMove =
-								if (mistake) Some(PlayInterp.Mistake) else Some(PlayInterp.OrderCM))
+			rewinded.getOrElse {
+				refreshWCs(prev, game, action)
+					.resetImportant(action.playerIndex)
+					.when(_.level >= Level.BasicCM && rank == 1) { g =>
+						interpretOcm(prev, action) match {
+							case None =>
+								g.copy(lastMove = Some(PlayInterp.None))
+							case Some(orders) =>
+								val chop = orders.min
+								val mistake = game.state.deck(chop).id().exists(game.state.isBasicTrash)
+
+								if (mistake)
+									Log.warn("ocm on trash!")
+
+								performCM(g, orders).copy(lastMove =
+									if (mistake) Some(PlayInterp.Mistake) else Some(PlayInterp.OrderCM))
+						}
 					}
-				}
-				.pipe { g =>
-					g.copy(lastActions = g.lastActions.updated(action.playerIndex, Some(action)))
-				}
+					.pipe { g =>
+						g.copy(lastActions = g.lastActions.updated(action.playerIndex, Some(action)))
+					}
+			}
 
 		def takeAction(game: HGroup): PerformAction =
 			val (state, me) = (game.state, game.me)

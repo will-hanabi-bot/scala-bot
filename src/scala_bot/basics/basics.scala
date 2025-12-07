@@ -69,6 +69,9 @@ extension[G <: Game](game: G)
 	def onDraw(action: DrawAction)(using ops: GameOps[G]): G =
 		val DrawAction(playerIndex, order, suitIndex, rank) = action
 
+		if (game.state.hands(playerIndex).length == HAND_SIZE(game.state.numPlayers))
+			throw new Exception(s"${game.state.names(playerIndex)} already has a full hand!")
+
 		val id = Option.when(suitIndex != -1 && rank != -1) {
 			game.deckIds.lift(order).flatten.foreach { id =>
 				if (id != Identity(suitIndex, rank))
@@ -91,7 +94,7 @@ extension[G <: Game](game: G)
 				throw new IllegalArgumentException(s"Only have ${deckIds.length} deck ids, but drew card with order $order! ${g.state.hands}")
 		}
 		.tap { g =>
-			assert(g.state.deck.length == order, "deck length doesn't match drawn order")
+			assert(g.state.deck.length == order, s"Deck length ${g.state.deck.length} doesn't match drawn order $order!s")
 			assert(g.state.deck.length == g.state.nextCardOrder, "deck length doesn't match next order")
 			assert(g.common.thoughts.length == g.players(0).thoughts.length, "common thoughts length differs from player 0's thoughts")
 			assert(g.common.thoughts.length == g.meta.length, "common thoughts length differs from meta length")

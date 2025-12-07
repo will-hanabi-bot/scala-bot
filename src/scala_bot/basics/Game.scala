@@ -41,16 +41,14 @@ case class GameUpdates(
 )
 
 def genPlayers(state: State) =
-	val numPlayers = state.numPlayers
 	val allPossible = state.allIds
 	val hypoStacks = Vector.fill(state.variant.suits.length)(0)
 
-	val players = (0 until numPlayers).map(i => Player(i, state.names(i), allPossible, hypoStacks)).toVector
+	val players = (0 until state.numPlayers).map(i => Player(i, state.names(i), allPossible, hypoStacks)).toVector
 	val common = Player(-1, "common", allPossible, hypoStacks)
 	(players, common)
 
 trait Game:
-	type InterpType <: Interp
 	def tableID: Int
 	def state: State
 	def players: Vector[Player]
@@ -59,6 +57,7 @@ trait Game:
 	def meta: Vector[ConvData]
 
 	def deckIds: Vector[Option[Identity]]
+	def future: Vector[IdentitySet]
 	def catchup: Boolean
 	def notes: Map[Int, Note]
 	def lastMove: Option[Interp]
@@ -191,7 +190,7 @@ extension[G <: Game](game: G)
 	def takeAction(using ops: GameOps[G]) =
 		ops.takeAction(game)
 
-	def simulateClue(action: ClueAction, free: Boolean = false, log: Boolean = false)(using ops: GameOps[G]) =
+	def simulateClue(action: ClueAction, free: Boolean = false, log: Boolean = false, noRecurse: Boolean = false)(using ops: GameOps[G]) =
 		val level = Logger.level
 
 		if (!log)
@@ -199,7 +198,7 @@ extension[G <: Game](game: G)
 
 		// Log.info(s"----- SIMULATING CLUE ${action.fmt(game.state)} -----")
 
-		val hypoGame = ops.copyWith(game, GameUpdates(catchup = Some(true)))
+		val hypoGame = ops.copyWith(game, GameUpdates(catchup = Some(true), noRecurse = Some(noRecurse)))
 			.withState(s => s.copy(
 				actionList = addAction(s.actionList, action, s.turnCount),
 				clueTokens = s.clueTokens + (if (free) 1 else 0)
@@ -260,7 +259,7 @@ extension[G <: Game](game: G)
 		val level = Logger.level
 		Logger.setLevel(LogLevel.Off)
 
-		val newGame = ops.blank(game, true)
+		val newGame = ops.blank(game, keepDeck = true)
 			.pipe { g =>
 				ops.copyWith(g, GameUpdates(
 					catchup = Some(true),
@@ -298,12 +297,55 @@ extension[G <: Game](game: G)
 			))
 		)))
 
+	def replay(turn: Int)(using ops: GameOps[G]): Either[String, G] =
+		val state = game.state
+		Log.info(s"Replaying all turns")
+
+		if (game.rewindDepth > 4)
+			return Left("rewind depth went too deep")
+
+		Log.highlight(Console.GREEN, "------- STARTING REPLAY -------")
+
+		// val level = Logger.level
+		// Logger.setLevel(LogLevel.Off)
+
+		val newGame = ops.blank(game, keepDeck = true)
+			.pipe { g =>
+				ops.copyWith(g, GameUpdates(
+					catchup = Some(true),
+					rewindDepth = Some(game.rewindDepth + 1),
+				))
+			}
+			.pipe {
+				state.actionList.flatten.foldLeft(_){ (acc, action) => action match {
+					case DrawAction(playerIndex, order, _, _)
+						if acc.state.hands(playerIndex).contains(order) => acc
+					case _ =>
+						acc.handleAction(action)
+				}}
+			}
+
+		Log.highlight(Console.GREEN, s"------- REPLAY COMPLETE -------")
+
+		Right(ops.copyWith(newGame, GameUpdates(
+			catchup = Some(game.catchup),
+			notes = Some(game.notes),
+			state = Some(newGame.state.copy(
+				deck = newGame.state.deck.map { c =>
+					if (c.id().nonEmpty) c else
+						game.deckIds(c.order).fold(c) { id =>
+							c.copy(suitIndex = id.suitIndex, rank = id.rank)
+						}
+				}
+			))
+		)))
+
 	def navigate(turn: Int)(using ops: GameOps[G]) =
 		Log.highlight(Console.GREEN, s"------- NAVIGATING (turn $turn) -------")
 
 		val actions = game.state.actionList
 
-		ops.blank(game, false)
+		ops.blank(game, keepDeck = false)
 			.cond(_ => turn == 1 && game.state.ourPlayerIndex == 0)
 				(actions.flatten.takeWhile(_.isInstanceOf[DrawAction]).foldLeft(_)(_.handleAction(_)))
 				{
