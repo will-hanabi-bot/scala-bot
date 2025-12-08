@@ -36,11 +36,9 @@ case class State(
 ):
 	lazy val hash =
 		val deckInts = Array.ofDim[Int](deck.length)
-		var i = 0
-		while (i < deck.length) {
+		loop(0, _ < deck.length, _ + 1) { i =>
 			val id = deck(i).id()
 			deckInts(i) = if (id.isDefined) id.get.toOrd else 0
-			i += 1
 		}
 		MurmurHash3.productHash((hands, deckInts, clueTokens, halfClueToken, endgameTurns))
 
@@ -158,17 +156,9 @@ case class State(
 		count
 
 	def holderOf(order: Int): Int =
-		var i = 0
-		while (i < numPlayers) {
-			val hand = hands(i)
-			var j = 0
-
-			while (j < hand.length) {
-				if (hand(j) == order)
-					return i
-				j += 1
-			}
-			i += 1
+		loop(0, _ < numPlayers, _ + 1) { i =>
+			if (hands(i).fastExists(_ == order))
+				return i
 		}
 		throw new IllegalArgumentException(s"Tried to get holder of $order, hands were $hands!")
 
@@ -232,10 +222,8 @@ object State:
 		var playableSet = IdentitySet.empty
 		var criticalSet = IdentitySet.empty
 
-		var suitIndex = 0
-		while (suitIndex < variant.suits.length) {
-			var rank = 1
-			while (rank <= 5) {
+		loop(0, _ < variant.suits.length, _ + 1) { suitIndex =>
+			loop(1, _ <= 5, _ + 1) { rank =>
 				val id = Identity(suitIndex, rank)
 				val count = variant.cardCount(id)
 
@@ -247,10 +235,7 @@ object State:
 
 				if (count == 1)
 					criticalSet = criticalSet.union(id)
-
-				rank += 1
 			}
-			suitIndex += 1
 		}
 
 		State(

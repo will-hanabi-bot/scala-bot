@@ -10,24 +10,18 @@ def findMustPlays(state: State, hand: Vector[Int]) =
 	val ids = hand.fastMap(state.deck(_).id())
 	var ret = List.empty[Identity]
 
-	var i = 0
-	while (i < hand.length) {
-		if (ids(i).isDefined)
-			val id = ids(i).get
+	loop(0, _ < hand.length, _ + 1, ids(_).isDefined) { i =>
+		val id = ids(i).get
+		if (!state.isBasicTrash(id))
+			var matches = 1
 
-			if (!state.isBasicTrash(id))
-				var j = i + 1
-				var matches = 1
+			loop(i + 1, _ < hand.length, _ + 1) { j =>
+				if (ids(j).isDefined && ids(j).get.toOrd == id.toOrd)
+					matches += 1
+			}
 
-				while (j < hand.length) {
-					if (ids(j).isDefined && ids(j).get.toOrd == id.toOrd)
-						matches += 1
-					j += 1
-				}
-
-				if (matches == state.cardCount(id.toOrd) - state.baseCount(id.toOrd))
-					ret = id +: ret
-		i += 1
+			if (matches == state.cardCount(id.toOrd) - state.baseCount(id.toOrd))
+				ret = id +: ret
 	}
 	ret
 

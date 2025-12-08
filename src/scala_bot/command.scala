@@ -123,10 +123,8 @@ class BotClient(queue: Queue[IO, String], gameRef: Ref[IO, Option[Game]]):
 						Log.error(s"Player $name not found.")
 						IO.unit
 					case i =>
-						val hand = state.hands(i)
-						val player = from match {
-							case None => game.common
-							case Some(name) => state.names.indexOf(name) match {
+						val player = from.fold(game.common) { name =>
+							state.names.indexOf(name) match {
 								case -1 =>
 									println(s"Player $from not found.")
 									null
@@ -140,7 +138,7 @@ class BotClient(queue: Queue[IO, String], gameRef: Ref[IO, Option[Game]]):
 								s"viewing from ${player.name}",
 								s"===================="
 							).concat {
-								hand.flatMap { order =>
+								state.hands(i).flatMap { order =>
 									val meta = game.meta(order)
 									val flags = List(
 										Option.when(meta.focused)("focused"),

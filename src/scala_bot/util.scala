@@ -2,6 +2,19 @@ package scala_bot.utils
 
 import scala_bot.basics._
 
+inline def loop(
+	inline start: Int,
+	inline cond: Int => Boolean,
+	inline advance: Int => Int,
+	inline only: Int => Boolean = _ => true
+)(inline body: Int => Unit) =
+	var i = start
+	while (cond(i)) {
+		if (only(i))
+			body(i)
+		i = advance(i)
+	}
+
 extension [A](a: A)
 	def cond(condition: A => Boolean)(ifTrue: A => A)(ifFalse: A => A): A =
 		if (condition(a)) ifTrue(a) else ifFalse(a)
@@ -17,7 +30,44 @@ extension [A](a: A)
 
 extension [A](a: Iterable[A])
 	def existsM(cond: PartialFunction[A, Boolean]): Boolean =
-		a.exists(_.matches(cond))
+		a.fastExists(_.matches(cond))
+
+	inline def fastForeach(inline f: A => Unit): Unit =
+		val it = a.iterator
+
+		while (it.hasNext) {
+			f(it.next)
+		}
+
+	inline def fastForall(inline f: A => Boolean): Boolean =
+		val it = a.iterator
+		var satisfied = true
+
+		while (it.hasNext && satisfied) {
+			if (!f(it.next))
+				satisfied = false
+		}
+		satisfied
+
+	inline def fastCount(inline f: A => Boolean): Int =
+		val it = a.iterator
+		var res = 0
+
+		while (it.hasNext) {
+			if (f(it.next))
+				res += 1
+		}
+		res
+
+	inline def fastExists(inline f: A => Boolean): Boolean =
+		val it = a.iterator
+		var exists = false
+
+		while (it.hasNext && !exists) {
+			if (f(it.next))
+				exists = true
+		}
+		exists
 
 extension [A](seq: IndexedSeq[A])
 	inline def fastMap[B](inline f: A => B): IndexedSeq[B] =
@@ -40,39 +90,6 @@ extension [A](seq: IndexedSeq[A])
 			i += 1
 		}
 		res
-
-	inline def fastCount(inline f: A => Boolean): Int =
-		var res = 0
-		var i = 0
-
-		while (i < seq.length) {
-			if (f(seq(i)))
-				res += 1
-			i += 1
-		}
-		res
-
-	inline def fastForall(inline f: A => Boolean): Boolean =
-		var i = 0
-		var satisfied = true
-
-		while (i < seq.length && satisfied) {
-			if (!f(seq(i)))
-				satisfied = false
-			i += 1
-		}
-		satisfied
-
-	inline def fastExists(inline f: A => Boolean): Boolean =
-		var i = 0
-		var exists = false
-
-		while (i < seq.length && !exists) {
-			if (f(seq(i)))
-				exists = true
-			i += 1
-		}
-		exists
 
 extension [A](seq: IndexedSeq[Int])
 	inline def fastSum: Int =

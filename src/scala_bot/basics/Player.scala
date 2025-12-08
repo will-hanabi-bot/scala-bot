@@ -1,5 +1,6 @@
 package scala_bot.basics
 
+import scala_bot.utils._
 import scala_bot.logger.Log
 
 import scala.collection.immutable.BitSet
@@ -225,7 +226,13 @@ case class Player(
 			val card = state.deck(order)
 			val thought = thoughts(order)
 
-			lazy val pinkMatch = {
+			!connected.contains(order) &&				// not already connected
+			state.deck(order).clued &&
+			thought.possible.contains(id) &&			// must be a possibility
+			thought.infoLock.forall(_.contains(id)) &&
+			(thought.inferred.length != 1 || thought.inferred.contains(id)) &&	// not info-locked on a different id
+			card.clues.exists(state.variant.idTouched(id, _)) &&	// at least one clue matches
+			{
 				// Not trying to prompt a pink id, or forcing pink prompt
 				if (!PINKISH.matches(state.variant.suits(id.suitIndex)) || forcePink)
 					true
@@ -243,14 +250,6 @@ case class Player(
 
 					!misranked && colourMatch
 			}
-
-			!connected.contains(order) &&				// not already connected
-			state.deck(order).clued &&
-			thought.possible.contains(id) &&			// must be a possibility
-			thought.infoLock.forall(_.contains(id)) &&
-			(thought.inferred.length != 1 || thought.inferred.contains(id)) &&	// not info-locked on a different id
-			card.clues.exists(state.variant.idTouched(id, _)) &&	// at least one clue matches
-			pinkMatch
 		}
 
 		order.filter(!ignore.contains(_))
@@ -312,39 +311,31 @@ case class Player(
 		var played = BitSet.empty
 
 		var endIndex = 0
-		val viableOrders: Array[Int] = Array.ofDim(state.numPlayers * HAND_SIZE(state.numPlayers))
+		val viableOrders = Array.ofDim[Int](state.numPlayers * HAND_SIZE(state.numPlayers))
 
-		var i = 0
-		while (i < state.numPlayers) {
-			val hand = state.hands(i)
-			var j = 0
-			while (j < hand.length) {
-				val order = hand(j)
+		state.hands.fastForeach { hand =>
+			hand.fastForeach { order =>
 				val id = state.deck(order).id()
 
 				if (id.isEmpty || !state.isBasicTrash(id.get))
 					viableOrders(endIndex) = order
 					endIndex += 1
-				j += 1
 			}
-			i += 1
 		}
 
 		def play(order: Int) =
 			thoughts(order).id(infer = true, symmetric = true) match {
 				case None =>
-					var i = 0
-					while (i < links.length) {
-						val orders = links(i).getOrders
+					links.fastForeach { link =>
+						val orders = link.getOrders
 						if (orders.contains(order) && orders.forall(o => o == order || played.contains(o)))
-							hypo = links(i).promise.fold(hypo) { id =>
+							hypo = link.promise.fold(hypo) { id =>
 								if (!hypo.state.isPlayable(id))
 									Log.warn(s"tried to add linked ${state.logId(id)} ($order) onto hypo stacks, but they were at ${hypo.state.playStacks} $played ($name)")
 									hypo
 								else
 									hypo.withState(_.withPlay(id))
 							}
-						i += 1
 					}
 					unknownPlays = unknownPlays + order
 					played = played + order
@@ -362,8 +353,7 @@ case class Player(
 		while (changed) {
 			changed = false
 			var viableIndex = 0
-			var i = 0
-			while (i < endIndex) {
+			loop(0, _ < endIndex, _ + 1) { i =>
 				val order = viableOrders(i)
 				val thought = thoughts(order)
 
@@ -377,19 +367,11 @@ case class Player(
 				else
 					viableOrders(viableIndex) = order
 					viableIndex += 1
-				i += 1
 			}
 			endIndex = viableIndex
 
-			var k = 0
-			while (k < playLinks.length) {
-				val link = playLinks(k)
-
-				var allPlayed = true
-				var m = 0
-				while (m < link.orders.length && allPlayed)
-					allPlayed = played.contains(link.orders(m))
-					m += 1
+			playLinks.fastForeach { link =>
+				val allPlayed = link.orders.fastForall(played.contains)
 
 				if (allPlayed && !played.contains(link.target))
 					val order = link.target
@@ -397,8 +379,6 @@ case class Player(
 
 					if (id.isEmpty || !state.isBasicTrash(id.get))
 						play(link.target)
-
-				k += 1
 			}
 		}
 
