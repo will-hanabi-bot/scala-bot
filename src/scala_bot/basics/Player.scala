@@ -206,6 +206,7 @@ case class Player(
 		!thinksLoaded(game, playerIndex) && game.state.hands(playerIndex).forall { order =>
 			game.state.deck(order).clued ||
 			game.isBlindPlaying(order) ||
+			game.meta(order).status == CardStatus.GentlemansDiscard ||
 			game.meta(order).cm
 		}
 

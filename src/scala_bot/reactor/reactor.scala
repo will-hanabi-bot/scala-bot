@@ -105,7 +105,6 @@ object Reactor:
 				lastMove = updates.lastMove.getOrElse(game.lastMove),
 				queuedCmds = updates.queuedCmds.getOrElse(game.queuedCmds),
 				nextInterp = updates.nextInterp.getOrElse(game.nextInterp),
-				noRecurse = updates.noRecurse.getOrElse(game.noRecurse),
 				rewindDepth = updates.rewindDepth.getOrElse(game.rewindDepth),
 				inProgress = updates.inProgress.getOrElse(game.inProgress)
 			)

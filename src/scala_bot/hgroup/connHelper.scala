@@ -194,11 +194,43 @@ def importantFinesse(state: State, action: ClueAction, fps: List[FocusPossibilit
 
 def urgentSave(ctx: ClueContext): Boolean =
 	val ClueContext(prev, game, action) = ctx
+	val state = game.state
 
-	if (game.earlyGameClue(action.target).isDefined)
+	// Log.info(s"checking if ${state.names(action.giver)} performed an urgent save ${game.earlyGameClue(action.target).isDefined}")
+
+	val earlyGameClue = game.earlyGameClue(action.target)
+
+	if (earlyGameClue.isDefined)
+		// Log.info(s"${state.names(action.target)} could clue ${earlyGameClue.get.fmt(state)}, not urgent save")
 		return false
 
-	ctx.focusResult.chop && game.state.nextPlayerIndex(action.giver) == action.target
+	if (!ctx.focusResult.chop)
+		return false
+
+	@annotation.tailrec
+	def loop(hypoState: State, playerIndex: Int): Boolean =
+		if (playerIndex == action.target)
+			return true
+
+		def getFinessedOrder(playerIndex: Int, includeHidden: Boolean) =
+			state.hands(playerIndex).filter { o =>
+				game.isBlindPlaying(o) &&
+				(includeHidden || !game.meta(o).hidden) &&
+				game.copy(state = hypoState).common.orderPlayable(game, o, excludeTrash = true)
+			}
+			.minByOption(game.xmeta(_).turnFinessed.getOrElse(99))
+
+		getFinessedOrder(playerIndex, includeHidden = false) match {
+			case None => false
+			case Some(_) =>
+				val order = getFinessedOrder(playerIndex, includeHidden = true).get
+				game.common.thoughts(order).id(infer = true) match {
+					case None => loop(hypoState, state.nextPlayerIndex(playerIndex))
+					case Some(id) => loop(hypoState.withPlay(id), state.nextPlayerIndex(playerIndex))
+				}
+		}
+
+	loop(game.state, state.nextPlayerIndex(action.giver))
 
 def resolveClue(ctx: ClueContext, fps: List[FocusPossibility], ambiguousOwn: List[FocusPossibility] = Nil) =
 	val ClueContext(prev, game, action) = ctx
@@ -206,22 +238,8 @@ def resolveClue(ctx: ClueContext, fps: List[FocusPossibility], ambiguousOwn: Lis
 	val ClueAction(giver, target, _, _) = action
 	val FocusResult(focus, chop, _) = ctx.focusResult
 
-	val interp = if (state.deck(focus).id().exists(id => !fps.exists(_.id == id)))
-		Log.error(s"resolving clue but focus ${state.logId(focus)} doesn't match [${fps.map(fp => state.logId(fp.id)).mkString(",")}]!")
-		ClueInterp.Mistake
-	else if (fps.exists(_.save))
-		ClueInterp.Save
-	else
-		ClueInterp.Play
-
-	val undoScream =
-		interp == ClueInterp.Save &&
-		target == state.nextPlayerIndex(giver) &&
-		game.dcStatus == DcStatus.Scream &&
-		state.numPlayers > 2
-
 	val symmetricFps =
-		if (target == state.ourPlayerIndex || interp == ClueInterp.Save)
+		if (target == state.ourPlayerIndex || fps.exists(_.save))
 			List()
 		else
 			Log.highlight(Console.YELLOW, "finding symmetric connections!")
@@ -247,6 +265,25 @@ def resolveClue(ctx: ClueContext, fps: List[FocusPossibility], ambiguousOwn: Lis
 			occamsRazor(symmetricFps, target)
 
 	val allFps = fps ++ symmetricFps
+	val simplestFps = occamsRazor(allFps.filter(fp => game.players(target).thoughts(focus).possible.contains(fp.id)), target)
+	val fpsToWrite = if (simplestFps.forall(_.symmetric)) simplestFps else allFps
+
+	val interp = if (state.deck(focus).id().exists(id => !simplestFps.exists(_.id == id)))
+		Log.error(s"resolving clue but focus ${state.logId(focus)} doesn't match simplest fps [${simplestFps.map(fp => state.logId(fp.id)).mkString(",")}]!")
+		ClueInterp.Mistake
+	else if (simplestFps.forall(_.symmetric))
+		Log.error(s"resolving clue but all focus possibilities are symmetric!")
+		ClueInterp.Mistake
+	else if (fps.exists(_.save))
+		ClueInterp.Save
+	else
+		ClueInterp.Play
+
+	val undoScream =
+		interp == ClueInterp.Save &&
+		target == state.nextPlayerIndex(giver) &&
+		game.dcStatus == DcStatus.Scream &&
+		state.numPlayers > 2
 
 	game.withThought(focus) { t =>
 		val newInferred = t.inferred.intersect(IdentitySet.from(allFps.map(_.id)))
@@ -260,7 +297,7 @@ def resolveClue(ctx: ClueContext, fps: List[FocusPossibility], ambiguousOwn: Lis
 		Log.highlight(Console.CYAN, s"final infs [${newInferred.fmt(state)}] $focus")
 		t.copy(inferred = newInferred, infoLock = Some(newInferred))
 	}
-	.pipe(assignConns(_, action, fps, focus, ambiguousOwn))
+	.pipe(assignConns(_, action, fpsToWrite, focus, ambiguousOwn))
 	.pipe {
 		allFps.foldLeft(_) { (a, fp) =>
 			fp.connections.zipWithIndex.foldLeft(a) { case (acc, (conn, i)) => conn match {
@@ -327,6 +364,7 @@ def resolveClue(ctx: ClueContext, fps: List[FocusPossibility], ambiguousOwn: Lis
 		}
 	}
 	.when(g => importantFinesse(g.state, action, fps) || urgentSave(ctx)) { g =>
+		Log.highlight(Console.YELLOW, s"important action for ${g.state.names(giver)}!")
 		g.copy(importantAction = g.importantAction.updated(giver, true))
 	}
 	.withMeta(focus)(_.copy(focused = true))

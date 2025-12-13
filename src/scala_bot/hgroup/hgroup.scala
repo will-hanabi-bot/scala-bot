@@ -288,7 +288,7 @@ case class HGroup(
 			val focusCard = state.deck(determineFocus(this, action).focus)
 
 			!focusCard.clued && focusCard.id().exists(!state.isBasicTrash(_)) && {
-				val hypo = this.simulateClue(action, noRecurse = true)
+				val hypo = this.copy(noRecurse = true, allowFindOwn = false).simulateClue(action)
 
 				hypo.lastMove.matches {
 					case Some(ClueInterp.Save) =>
@@ -349,7 +349,6 @@ object HGroup:
 				lastMove = updates.lastMove.getOrElse(game.lastMove),
 				queuedCmds = updates.queuedCmds.getOrElse(game.queuedCmds),
 				nextInterp = updates.nextInterp.getOrElse(game.nextInterp),
-				noRecurse = updates.noRecurse.getOrElse(game.noRecurse),
 				rewindDepth = updates.rewindDepth.getOrElse(game.rewindDepth),
 				inProgress = updates.inProgress.getOrElse(game.inProgress),
 
@@ -367,7 +366,7 @@ object HGroup:
 
 				level = game.level,
 				deckIds = if (keepDeck) game.deckIds else Vector(),
-				future = if (keepDeck) game.future else Vector.fill(game.state.deck.length)(IdentitySet.empty),
+				future = if (keepDeck) game.future else Vector.fill(game.state.deck.length)(game.state.allIds),
 				lastActions = Vector.fill(game.state.numPlayers)(None),
 				importantAction = Vector.fill(game.state.numPlayers)(false),
 				xmeta = Vector.fill(game.base._2.length)(XConvData())
@@ -378,8 +377,12 @@ object HGroup:
 				.resetImportant(action.playerIndex)
 
 			val interpreted = interpClue(ClueContext(prev, pre, action))
+			val updatedPre = pre.copy(
+				lastMove = interpreted.lastMove,
+				importantAction = interpreted.importantAction
+			)
 
-			val secondRefresh = refreshWCs(prev, pre.copy(lastMove = interpreted.lastMove), action)
+			val secondRefresh = refreshWCs(prev, updatedPre, action)
 				.cond(_.waiting != pre.waiting) { g =>
 					Log.highlight(Console.GREEN, "----- REINTERPRETING CLUE -----")
 					val res = interpClue(ClueContext(prev, g, action))
@@ -460,7 +463,7 @@ object HGroup:
 
 			val rewinded = Option.when(needsRewind) {
 				game.copy(
-					future = game.future.padTo(game.state.deck.length, IdentitySet.empty)
+					future = game.future.padTo(game.state.deck.length, game.state.allIds)
 						.updated(order, IdentitySet.single(Identity(suitIndex, rank)))
 				)
 				.replay(game.state.deck(order).drawnIndex)

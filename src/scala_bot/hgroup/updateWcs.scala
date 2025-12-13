@@ -293,6 +293,7 @@ def resolveRetained(game: HGroup, action: Action, wc: WaitingConnection): Update
 
 	val olderUnplayableFinesse =
 		game.level >= Level.IntermediateFinesses &&
+		wc.currConn.isInstanceOf[FinesseConn] &&
 		state.hands(reacting).zipWithIndex.exists { (o, i) =>
 			o < connOrder &&
 			!{
@@ -300,7 +301,7 @@ def resolveRetained(game: HGroup, action: Action, wc: WaitingConnection): Update
 				state.hands(reacting).drop(i).forall(state.deck(_).clued)
 			} &&
 			game.isBlindPlaying(o) &&
-			game.xmeta(o).turnFinessed.get < game.xmeta(connOrder).turnFinessed.get &&
+			game.xmeta(o).turnFinessed.get < wc.turn &&
 			game.common.thoughts(o).inferred.exists { i =>
 				!state.isBasicTrash(i) && !state.isPlayable(i)
 			}

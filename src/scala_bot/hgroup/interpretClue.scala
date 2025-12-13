@@ -119,7 +119,7 @@ def interpClue(ctx: ClueContext): HGroup =
 							state.deck(o).id().exists(state.isBasicTrash)
 						} &&
 						// Clue must be valid
-						prev.simulateClue(clueToAction(prev.state, clue, giver)).lastMove != Some(ClueInterp.Mistake)
+						prev.copy(noRecurse = true).simulateClue(clueToAction(prev.state, clue, giver)).lastMove != Some(ClueInterp.Mistake)
 					}
 				}
 			}

@@ -95,7 +95,7 @@ def simulateGame[G <: Game](gs: Seq[G], deck: Vector[Identity])(using ops: GameO
 	val state = game.state
 	val target = state.lastPlayerIndex(state.currentPlayerIndex)
 
-	val finalActions = actions.when(_.last != PerformAction.Terminate)
+	val finalActions = actions.when(_.lastOption.exists(_ != PerformAction.Terminate))
 		(_ :+ PerformAction.Terminate(target, 0))
 
 	val result = if (state.strikes == 3)

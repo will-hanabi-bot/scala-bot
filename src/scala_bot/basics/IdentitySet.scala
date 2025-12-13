@@ -12,6 +12,8 @@ extension(ids: IdentitySet)
 		value == other.value
 
 	inline def head: Identity =
+		if (value == 0)
+			throw new NoSuchElementException("head of empty IdentitySet!")
 		val bit = java.lang.Long.numberOfTrailingZeros(ids)
 		Identity.fromOrd(bit)
 

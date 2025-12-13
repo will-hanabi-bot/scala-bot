@@ -1,14 +1,14 @@
 package tests.hgroup.level5
 
 import scala_bot.basics._
-import scala_bot.test.{hasInfs, Player, setup, takeTurn}, Player._
+import scala_bot.test.{Colour, hasInfs, Player, preClue, setup, takeTurn, TestClue}, Player._
 import scala_bot.hgroup.HGroup
 import scala_bot.logger.{Logger, LogLevel}
 
 import scala.util.chaining.scalaUtilChainingOps
 
 class General extends munit.FunSuite:
-	// override def beforeAll() = Logger.setLevel(LogLevel.Off)
+	override def beforeAll() = Logger.setLevel(LogLevel.Off)
 
 	test("understands a fake finesse") {
 		val game = setup(HGroup.atLevel(5), Vector(
@@ -300,4 +300,130 @@ class General extends munit.FunSuite:
 
 		// After Cathy stalls, Alice's slot 2 should be finessed.
 		assertEquals(game.meta(game.state.hands(Alice.ordinal)(1)).status, CardStatus.Finessed)
+	}
+
+	test("can give a finesse while finessed") {
+		val game = setup(HGroup.atLevel(5), Vector(
+			Vector("xx", "xx", "xx", "xx"),
+			Vector("r2", "g2", "g3", "p4"),
+			Vector("p1", "b2", "p3", "y4"),
+			Vector("p2", "y2", "b3", "r4")
+		),
+			starting = Donald
+		)
+		.pipe(takeTurn("Donald clues blue to Cathy"))
+		.pipe(takeTurn("Alice clues purple to Bob"))
+
+		// Alice's b1 should still be finessed.
+		assertEquals(game.meta(game.state.hands(Alice.ordinal)(0)).status, CardStatus.Finessed)
+	}
+
+	test("understands a critical save while finessed, when other potential givers are finessed") {
+		val game = setup(HGroup.atLevel(5), Vector(
+			Vector("xx", "xx", "xx", "xx"),
+			Vector("p1", "p2", "p3", "g3"),
+			Vector("p4", "y5", "b3", "p5"),
+			Vector("b4", "y2", "p4", "r4")
+		),
+			starting = Cathy
+		)
+		.pipe(takeTurn("Cathy clues purple to Donald"))		// finessing p1, p2, p3
+		.pipe(takeTurn("Donald clues blue to Cathy"))		// finesses b1, b2 in our hand
+		.pipe(takeTurn("Alice clues 5 to Cathy"))
+
+		// Alice's b1 should still be finessed.
+		assertEquals(game.meta(game.state.hands(Alice.ordinal)(0)).status, CardStatus.Finessed)
+	}
+
+	// test("understands a critical save where other players only have a play if we play") {
+	// 	val game = setup(HGroup.atLevel(5), Vector(
+	// 		Vector("xx", "xx", "xx", "xx"),
+	// 		Vector("b1", "p2", "g4", "g3"),
+	// 		Vector("y4", "y5", "p3", "b5"),
+	// 		Vector("b4", "y2", "p4", "r4")
+	// 	),
+	// 		starting = Donald,
+	// 		clueTokens = 7
+	// 	)
+	// 	.pipe(takeTurn("Donald clues purple to Cathy"))		// finessing p1 (Alice), b1 -> p2 (Bob)
+	// 	.pipe(takeTurn("Alice clues 5 to Cathy"))	// If we play, Bob will think p2 will play ito
+
+	// 	// Alice's b1 should still be finessed.
+	// 	assertEquals(game.meta(game.state.hands(Alice.ordinal)(0)).status, CardStatus.Finessed)
+	// }
+
+	test("understands a finesse on top of an in-progress connection on other") {
+		val game = setup(HGroup.atLevel(5), Vector(
+			Vector("xx", "xx", "xx", "xx"),
+			Vector("p4", "r3", "g3", "b3"),
+			Vector("p1", "r3", "p1", "y2"),
+			Vector("b2", "y3", "r4", "b5")
+		),
+			playStacks = Some(Vector(1, 1, 1, 1, 0))
+		)
+		.pipe(takeTurn("Alice clues 3 to Bob"))			// finessing b2 (Donald)
+		.pipe(takeTurn("Bob clues 5 to Donald"))
+		.pipe(takeTurn("Cathy clues 5 to Donald"))		// should finesse b4 (Alice)
+
+		// Alice's b1 should still be finessed.
+		assertEquals(game.meta(game.state.hands(Alice.ordinal)(0)).status, CardStatus.Finessed)
+		hasInfs(game, None, Alice, 1, Vector("b4"))
+	}
+
+	test("understands a finesse on top of an in-progress connection on us") {
+		val game = setup(HGroup.atLevel(5), Vector(
+			Vector("xx", "xx", "xx", "xx"),
+			Vector("p1", "r3", "p1", "y2"),
+			Vector("b2", "y3", "r4", "b5"),
+			Vector("y2", "b4", "b3", "g4")
+		),
+			starting = Donald,
+			playStacks = Some(Vector(1, 1, 1, 1, 0))
+		)
+		.pipe(takeTurn("Donald clues 3 to Alice (slots 2,3,4)"))	// finessing b2 (Donald)
+		.pipe(takeTurn("Alice clues 5 to Cathy"))
+		.pipe(takeTurn("Bob clues 5 to Cathy"))					// should finesse b4 (Donald)
+
+		// Alice's b1 should still be finessed.
+		assertEquals(game.meta(game.state.hands(Donald.ordinal)(0)).status, CardStatus.Finessed)
+		hasInfs(game, None, Donald, 2, Vector("b4"))
+	}
+
+	test("understands a layered player won't play if their promised card is unplayable") {
+		val game = setup(HGroup.atLevel(5), Vector(
+			Vector("xx", "xx", "xx", "xx"),
+			Vector("p2", "p3", "g4", "g3"),
+			Vector("y1", "p4", "b5", "r3"),
+			Vector("b4", "y5", "p5", "r4"),
+			Vector("y3", "r1", "r3", "g4")
+		),
+			starting = Emily,
+			init = _.copy(inEarlyGame = false)
+		)
+		.pipe(takeTurn("Emily clues purple to Donald"))		// finesses p1 (Alice), p2 (Bob), p3 (Bob), y1 (Cathy), p4 (Cathy)
+		.pipe(takeTurn("Alice clues 5 to Donald"))
+
+		// Alice doesn't need to save Donald's 5, since Cathy won't be able to play on her turn.
+
+		assert(!game.importantAction(Alice.ordinal))
+	}
+
+class Rainbow extends munit.FunSuite:
+	override def beforeAll() = Logger.setLevel(LogLevel.Off)
+
+	test("prompts correctly in rainbow") {
+		val game = setup(HGroup.atLevel(5), Vector(
+			Vector("xx", "xx", "xx", "xx"),
+			Vector("r2", "m3", "r1", "r3"),
+			Vector("g4", "g2", "b3", "m5"),
+			Vector("b1", "y2", "r3", "r4")
+		),
+			playStacks = Some(Vector(0, 0, 0, 2, 0)),
+			variant = "Rainbow (5 Suits)",
+			init = preClue(Bob, 2, Vector(TestClue(ClueKind.Colour, Colour.Blue.ordinal, Alice)))
+		)
+		.pipe(takeTurn("Alice clues 2 to Bob"))
+
+		// m3 will bomb as prompt into m2.
+		assertEquals(game.lastMove, Some(ClueInterp.Mistake))
 	}

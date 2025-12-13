@@ -35,7 +35,6 @@ case class GameUpdates(
 	lastMove: Option[Option[Interp]] = None,
 	queuedCmds: Option[List[(String, String)]] = None,
 	nextInterp: Option[Option[Interp]] = None,
-	noRecurse: Option[Boolean] = None,
 	rewindDepth: Option[Int] = None,
 	inProgress: Option[Boolean] = None
 )
@@ -190,7 +189,7 @@ extension[G <: Game](game: G)
 	def takeAction(using ops: GameOps[G]) =
 		ops.takeAction(game)
 
-	def simulateClue(action: ClueAction, free: Boolean = false, log: Boolean = false, noRecurse: Boolean = false)(using ops: GameOps[G]) =
+	def simulateClue(action: ClueAction, free: Boolean = false, log: Boolean = false)(using ops: GameOps[G]) =
 		val level = Logger.level
 
 		if (!log)
@@ -198,7 +197,7 @@ extension[G <: Game](game: G)
 
 		// Log.info(s"----- SIMULATING CLUE ${action.fmt(game.state)} -----")
 
-		val hypoGame = ops.copyWith(game, GameUpdates(catchup = Some(true), noRecurse = Some(noRecurse)))
+		val hypoGame = ops.copyWith(game, GameUpdates(catchup = Some(true)))
 			.withState(s => s.copy(
 				actionList = addAction(s.actionList, action, s.turnCount),
 				clueTokens = s.clueTokens + (if (free) 1 else 0)
@@ -299,7 +298,6 @@ extension[G <: Game](game: G)
 
 	def replay(turn: Int)(using ops: GameOps[G]): Either[String, G] =
 		val state = game.state
-		Log.info(s"Replaying all turns")
 
 		if (game.rewindDepth > 4)
 			return Left("rewind depth went too deep")

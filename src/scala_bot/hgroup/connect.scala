@@ -3,8 +3,10 @@ package scala_bot.hgroup
 import scala_bot.basics._
 import scala_bot.utils._
 import scala_bot.logger.Log
-import scala_bot.utils.inBetween
-import scala_bot.utils.playersUntil
+
+import scala.util.chaining.scalaUtilChainingOps
+import scala_bot.logger.Logger
+import scala_bot.logger.LogLevel
 
 case class ConnectContext(
 	looksDirect: Boolean,
@@ -70,7 +72,7 @@ def findKnownConn(ctx: ClueContext, giver: Int, id: Identity, ignore: Set[Int], 
 	val playableConns = for
 		playerIndex <- (0 until state.numPlayers) if playerIndex != giver
 		playables = state.hands(playerIndex).filter(validPlayable(playerIndex, _))
-		order <- playables if game.state.deck(order).matches(id, assume = findOwn) && game.isTouched(order)
+		order <- playables if game.state.deck(order).matches(id, assume = game.allowFindOwn && findOwn) && game.isTouched(order)
 	yield
 		PlayableConn(playerIndex, order, id, linked = playables.toList)
 
@@ -95,7 +97,7 @@ def findUnknownConnecting(ctx: ClueContext, reacting: Int, id: Identity, connect
 
 	def tryPrompt(order: Int) =
 		Option.when(!rainbowMismatch(prev, action, id, order, focus)) {
-			state.deck(order).id() match {
+			opts.findOwn.map(game.players(_).thoughts(order).id()).getOrElse(state.deck(order).id()) match {
 				case None =>
 					Option.when(opts.findOwn.exists(game.players(_).thoughts(order).possible.contains(id)))
 						(PromptConn(reacting, order, id))
@@ -437,7 +439,20 @@ def connect(ctx: ClueContext, id: Identity, looksDirect: Boolean, thinksStall: S
 					val newGame = conns.foldLeft(hypo) { (acc, conn) =>
 						acc.state.deck(conn.order).id()
 							.orElse(Option.when(conn.ids.length == 1)(conn.ids.head))
-							.fold(acc)(i => acc.withState(_.withPlay(i)).elim(goodTouch = true))
+							.fold(acc) { i =>
+								val action = PlayAction(state.holderOf(conn.order), conn.order, i.suitIndex, i.rank)
+								val level = Logger.level
+
+								Logger.setLevel(LogLevel.Error)
+
+								// Resolve wcs after playing the card
+								val res = acc.onPlay(action)
+									.pipe(refreshWCs(acc, _, action))
+									.elim(goodTouch = true)
+								Logger.setLevel(level)
+
+								res
+							}
 					}
 					loop(newGame, nextRank + 1, connections ++ conns)
 			}
@@ -454,7 +469,8 @@ def connect(ctx: ClueContext, id: Identity, looksDirect: Boolean, thinksStall: S
 			Log.warn("illegal clandestine self-finesse!")
 
 		val symmetric = !state.deck(focus).matches(id, assume = true) ||
-			!game.players(action.target).thoughts(focus).possible.contains(id)
+			!game.players(action.target).thoughts(focus).possible.contains(id) ||
+			conns.exists(c => state.deck(c.order).id().exists(!c.ids.contains(_)))
 
 		Log.info(s"found connections: ${state.logConns(conns, id)}${if (symmetric) " (symmetric)" else ""}")
 		FocusPossibility(
