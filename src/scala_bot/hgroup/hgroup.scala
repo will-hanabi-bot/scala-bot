@@ -74,8 +74,20 @@ case class HGroup(
 
 	allowFindOwn: Boolean = true
 ) extends Game:
-	override def filterPlayables(player: Player, _playerIndex: Int, orders: Seq[Int]) =
-		orders.filter(o => player.orderKp(this, o) || !xmeta(o).maybeFinessed)
+	override def filterPlayables(player: Player, playerIndex: Int, orders: Seq[Int]) =
+		orders.filter { o =>
+			player.orderKp(this, o) ||
+			!(xmeta(o).maybeFinessed ||
+				state.hands(playerIndex).exists { o2 =>
+					// An older finesse exists which could be swapped with this identity
+					xmeta(o2).turnFinessed.exists(t2 => xmeta(o).turnFinessed.exists(_ > t2)) &&
+					xmeta(o2).finesseIds.exists(ids => player.thoughts(o).id(infer = true).exists(ids.contains))
+				} ||
+				waiting.exists { wc =>
+					// This is a hidden connection that is not currently revealed
+					wc.connections.tail.exists(c => c.order == o && c.hidden)
+				})
+		}
 
 	def withXMeta(order: Int)(f: XConvData => XConvData) =
 		copy(xmeta = xmeta.updated(order, f(xmeta(order))))
@@ -114,7 +126,7 @@ case class HGroup(
 
 	def findFinesse(playerIndex: Int, connected: List[Int] = Nil, ignore: Set[Int] = Set()) =
 		val order = state.hands(playerIndex).find { o =>
-			(!this.isTouched(o) || this.xmeta(o).maybeFinessed) && !connected.contains(o)
+			(!this.isTouched(o) || this.xmeta(o).maybeFinessed || this.xmeta(o).idUncertain) && !connected.contains(o)
 		}
 
 		order.filter(!ignore.contains(_))
@@ -285,10 +297,13 @@ case class HGroup(
 
 		allClues.find { clue =>
 			val action = clueToAction(state, clue, giver)
-			val focusCard = state.deck(determineFocus(this, action).focus)
+			val focus = determineFocus(this, action).focus
+			val focusCard = state.deck(focus)
 
-			!focusCard.clued && focusCard.id().exists(!state.isBasicTrash(_)) && {
-				val hypo = this.copy(noRecurse = true, allowFindOwn = false).simulateClue(action)
+			meta(focus).status != CardStatus.Finessed &&
+			!focusCard.clued &&
+			focusCard.id().exists(!state.isBasicTrash(_)) && {
+				val hypo = this.copy(noRecurse = true, allowFindOwn = false).simulateClue(action, log = true)
 
 				hypo.lastMove.matches {
 					case Some(ClueInterp.Save) =>
@@ -304,6 +319,29 @@ case class HGroup(
 				}
 			}
 		}
+
+	def reinterpPlay(prev: HGroup, action: PlayAction | DiscardAction): Option[HGroup] =
+		if (action.matches { case a: DiscardAction => !a.failed })
+			return None
+
+		val (order, suitIndex, rank) = action match {
+			case PlayAction(playerIndex, order, suitIndex, rank) => (order, suitIndex, rank)
+			case DiscardAction(playerIndex, order, suitIndex, rank, _) => (order, suitIndex, rank)
+		}
+
+		val needsReplay =
+			action.playerIndex == state.ourPlayerIndex &&
+			prev.me.thoughts(order).possible.length > 1 &&
+			future(order).length > 1
+
+		Option.when(needsReplay) {
+			copy(
+				future = future.padTo(state.deck.length, state.allIds)
+					.updated(order, IdentitySet.single(Identity(suitIndex, rank)))
+			)
+			.replay(state.deck(order).drawnIndex)
+			.toOption
+		}.flatten
 
 	def resetImportant(playerIndex: Int) =
 		copy(importantAction = importantAction.updated(playerIndex, false))
@@ -373,104 +411,94 @@ object HGroup:
 			)
 
 		def interpretClue(prev: HGroup, game: HGroup, action: ClueAction): HGroup =
-			val pre = refreshWCs(prev, game, action, beforeClueInterp = true)
-				.resetImportant(action.playerIndex)
+			checkRevealLayer(prev, game, action).getOrElse {
+				val pre = refreshWCs(prev, game, action, beforeClueInterp = true)
+					.resetImportant(action.playerIndex)
 
-			val interpreted = interpClue(ClueContext(prev, pre, action))
-			val updatedPre = pre.copy(
-				lastMove = interpreted.lastMove,
-				importantAction = interpreted.importantAction
-			)
+				val interpreted = interpClue(ClueContext(prev, pre, action))
+				val updatedPre = pre.copy(
+					lastMove = interpreted.lastMove,
+					importantAction = interpreted.importantAction
+				)
 
-			val secondRefresh = refreshWCs(prev, updatedPre, action)
-				.cond(_.waiting != pre.waiting) { g =>
-					Log.highlight(Console.GREEN, "----- REINTERPRETING CLUE -----")
-					val res = interpClue(ClueContext(prev, g, action))
-					Log.highlight(Console.GREEN, "----- DONE REINTERPRETING -----")
-					res
-				} {
-					_ => interpreted
-				}
+				val secondRefresh = refreshWCs(prev, updatedPre, action)
+					.cond(_.waiting != pre.waiting && !game.noRecurse) { g =>
+						Log.highlight(Console.GREEN, "----- REINTERPRETING CLUE -----")
+						val res = interpClue(ClueContext(prev, g, action))
+						Log.highlight(Console.GREEN, "----- DONE REINTERPRETING -----")
+						res
+					} {
+						_ => interpreted
+					}
 
-			secondRefresh.copy(lastActions = secondRefresh.lastActions.updated(action.playerIndex, Some(action)))
+				secondRefresh.copy(lastActions = secondRefresh.lastActions.updated(action.playerIndex, Some(action)))
+			}
 
 		def interpretDiscard(prev: HGroup, game: HGroup, action: DiscardAction): HGroup =
 			val DiscardAction(playerIndex, order, suitIndex, rank, failed) = action
 			val id = Identity(suitIndex, rank)
 
-			refreshWCs(prev, game, action)
-				.pipe(_.resetImportant(action.playerIndex))
-				.when(_ => failed && rank == 1) { g =>
-					interpretOcm(prev, action) match {
-						case None =>
-							g.copy(lastMove = Some(PlayInterp.None))
-						case Some(orders) =>
-							val chop = orders.min
-							val mistake = game.state.deck(chop).id().exists(game.state.isBasicTrash)
+			game.reinterpPlay(prev, action).getOrElse(
+				refreshWCs(prev, game, action)
+					.pipe(_.resetImportant(action.playerIndex))
+					.when(_ => failed && rank == 1) { g =>
+						interpretOcm(prev, action) match {
+							case None =>
+								g.copy(lastMove = Some(PlayInterp.None))
+							case Some(orders) =>
+								val chop = orders.min
+								val mistake = game.state.deck(chop).id().exists(game.state.isBasicTrash)
 
-							if (mistake)
-								Log.warn("ocm on trash!")
+								if (mistake)
+									Log.warn("ocm on trash!")
 
-							performCM(g, orders).copy(lastMove =
-								if (mistake) Some(PlayInterp.Mistake) else Some(PlayInterp.OrderCM))
+								performCM(g, orders).copy(lastMove =
+									if (mistake) Some(PlayInterp.Mistake) else Some(PlayInterp.OrderCM))
+						}
 					}
-				}
-				.when(_ => suitIndex != -1 && rank != -1 && !prev.state.isBasicTrash(id) && !prev.chop(playerIndex).contains(order)) { g =>
-					interpretUsefulDcH(game, action) match {
-						case DiscardResult.None =>
-							g.copy(lastMove = Some(DiscardInterp.None))
+					.when(_ => suitIndex != -1 && rank != -1 && !prev.state.isBasicTrash(id) && !prev.chop(playerIndex).contains(order)) { g =>
+						interpretUsefulDcH(game, action) match {
+							case DiscardResult.None =>
+								g.copy(lastMove = Some(DiscardInterp.None))
 
-						case DiscardResult.Mistake =>
-							g.copy(lastMove = Some(DiscardInterp.Mistake))
+							case DiscardResult.Mistake =>
+								g.copy(lastMove = Some(DiscardInterp.Mistake))
 
-						case DiscardResult.GentlemansDiscard(target) =>
-							g.copy(
-								common = g.common.withThought(target)(_.copy(
-									inferred = IdentitySet.single(id)
-								)),
-								meta = g.meta.updated(target, g.meta(target).copy(
-									status = CardStatus.GentlemansDiscard
-								)),
-								lastMove = Some(DiscardInterp.GentlemansDiscard)
-							)
-						case DiscardResult.Sarcastic(orders) =>
-							g.copy(
-								common = g.common.copy(
-									links = Link.Sarcastic(orders, id) +: g.common.links
-								),
-								lastMove = Some(DiscardInterp.Sarcastic)
-							)
+							case DiscardResult.GentlemansDiscard(target) =>
+								g.copy(
+									common = g.common.withThought(target)(_.copy(
+										inferred = IdentitySet.single(id)
+									)),
+									meta = g.meta.updated(target, g.meta(target).copy(
+										status = CardStatus.GentlemansDiscard
+									)),
+									lastMove = Some(DiscardInterp.GentlemansDiscard)
+								)
+							case DiscardResult.Sarcastic(orders) =>
+								g.copy(
+									common = g.common.copy(
+										links = Link.Sarcastic(orders, id) +: g.common.links
+									),
+									lastMove = Some(DiscardInterp.Sarcastic)
+								)
+						}
 					}
-				}
-				.pipe { g =>
-					val endEarlyGame = g.inEarlyGame &&
-						!failed &&
-						!g.state.deck(order).clued &&
-						g.meta(order).status == CardStatus.None
+					.pipe { g =>
+						val endEarlyGame = g.inEarlyGame &&
+							!failed &&
+							!g.state.deck(order).clued &&
+							g.meta(order).status == CardStatus.None
 
-					g.when(_ => endEarlyGame)
-						(_.copy(inEarlyGame = false))
-					.copy(lastActions = g.lastActions.updated(playerIndex, Some(action)))
-				}
-				.elim(goodTouch = true)
+						g.when(_ => endEarlyGame)
+							(_.copy(inEarlyGame = false))
+						.copy(lastActions = g.lastActions.updated(playerIndex, Some(action)))
+					}
+					.elim(goodTouch = true))
 
 		def interpretPlay(prev: HGroup, game: HGroup, action: PlayAction): HGroup =
 			val PlayAction(playerIndex, order, suitIndex, rank) = action
-			val needsRewind =
-				playerIndex == game.state.ourPlayerIndex &&
-				prev.me.thoughts(order).possible.length > 1 &&
-				game.future(order).length > 1
 
-			val rewinded = Option.when(needsRewind) {
-				game.copy(
-					future = game.future.padTo(game.state.deck.length, game.state.allIds)
-						.updated(order, IdentitySet.single(Identity(suitIndex, rank)))
-				)
-				.replay(game.state.deck(order).drawnIndex)
-				.toOption
-			}.flatten
-
-			rewinded.getOrElse {
+			game.reinterpPlay(prev, action).getOrElse {
 				refreshWCs(prev, game, action)
 					.resetImportant(action.playerIndex)
 					.when(_.level >= Level.BasicCM && rank == 1) { g =>

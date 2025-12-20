@@ -1,7 +1,7 @@
 package tests.hgroup.level2
 
 import scala_bot.basics._
-import scala_bot.test.{hasInfs, Player, preClue, setup, takeTurn, TestClue}, Player._
+import scala_bot.test.{Colour, hasInfs, Player, preClue, setup, takeTurn, TestClue}, Player._
 import scala_bot.hgroup.HGroup
 import scala_bot.logger.{Logger, LogLevel}
 
@@ -78,17 +78,15 @@ class SelfFinesses extends munit.FunSuite:
 		hasInfs(game, None, Alice, 3, Vector("r2", "y2", "g2"))
 	}
 
-	test("doesn't give a self-finesse that look like a prompt") {
+	test("doesn't give a self-finesse that looks like a prompt") {
 		val game = setup(HGroup.atLevel(2), Vector(
 			Vector("xx", "xx", "xx", "xx", "xx"),
 			Vector("r3", "b4", "g4", "p1", "b2"),
-			Vector("y2", "b2", "r5", "y3", "r1")
+			Vector("y2", "b2", "r5", "y3", "y4")
 		),
-			starting = Bob,
-			playStacks = Some(Vector(0, 1, 0, 0, 0))
+			playStacks = Some(Vector(1, 1, 0, 0, 0)),
+			init = preClue(Cathy, 3, Vector(TestClue(ClueKind.Colour, Colour.Red.ordinal, Bob)))
 		)
-		.pipe(takeTurn("Bob clues red to Cathy"))
-		.pipe(takeTurn("Cathy plays r1", "y3"))
 		.pipe(takeTurn("Alice clues 3 to Cathy"))
 
 		// This clue is illegal, since r5 will prompt as r2.
@@ -261,7 +259,10 @@ class SelfFinesses extends munit.FunSuite:
 
 		.pipe(takeTurn("Alice clues 5 to Cathy"))			// 5 Stall
 		.pipe(takeTurn("Bob clues red to Alice (slot 3)"))
-		.pipe(takeTurn("Cathy plays b1", "g2"))
+		.tap {
+			hasInfs(_, None, Alice, 3, Vector("r1"))
+		}
+		.pipe(takeTurn("Cathy plays b1", "g4"))
 		.pipe(takeTurn("Donald clues 5 to Alice (slot 2)"))
 
 		.pipe(takeTurn("Alice plays y1 (slot 1)"))

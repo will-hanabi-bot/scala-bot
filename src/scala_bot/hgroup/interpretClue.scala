@@ -20,7 +20,7 @@ def interpClue(ctx: ClueContext): HGroup =
 	val FocusResult(focus, chop, positional) = ctx.focusResult
 	checkFix(prev, game, action) match {
 		case FixResult.Normal(cluedResets, duplicateReveals) =>
-			Log.info(s"fix clue! not inferring anything else")
+			Log.info(s"fix clue! not inferring anything else $cluedResets $duplicateReveals")
 
 			lazy val oldOrdered1s = prev.order1s(list.filter(prev.unknown1), noFilter = true)
 			val pinkFix1s = state.includesVariant(PINKISH) &&
@@ -245,6 +245,7 @@ def interpClue(ctx: ClueContext): HGroup =
 			.flatMap {
 				connect(ctx, _, looksDirect, thinksStall, findOwn = Some(state.ourPlayerIndex))
 			}
+			.filterNot(_.illegal)
 		}.toList
 
 		val simplestOwn = occamsRazor(simplest ++ ownFps, state.ourPlayerIndex, game.me.thoughts(focus).id())

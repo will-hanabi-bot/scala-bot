@@ -17,7 +17,7 @@ def checkFix(prev: Game, game: Game, action: ClueAction): FixResult =
 			!prev.common.thoughts(order).matches(prev.common.thoughts(o), infer = true)
 		}
 
-		if (!prev.common.thoughts(order).reset && !prev.common.orderKt(prev, order) && game.common.thoughts(order).reset)
+		if (prev.state.deck(order).clued && !prev.common.thoughts(order).reset && !prev.common.orderKt(prev, order) && game.common.thoughts(order).reset)
 			(order +: cluedResets, duplicateReveals)
 		else if (duplicated)
 			(cluedResets, order +: duplicateReveals)

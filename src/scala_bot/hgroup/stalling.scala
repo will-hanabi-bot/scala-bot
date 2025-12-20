@@ -109,7 +109,12 @@ def alternativeClue(prev: HGroup, game: HGroup, giver: Int, maxStall: Int, origC
 
 		hypo.lastMove.get.matches {
 			case ClueInterp.Play =>
-				playables.exists(!game.state.deck(_).clued) && badTouch.isEmpty
+				playables.exists(!game.state.deck(_).clued) &&
+				badTouch.isEmpty &&
+				// Can't expect them to clue a possible clued dupe in their hand
+				!playables.forall(game.state.deck(_).id().exists(id => game.state.hands(giver).exists { o =>
+					game.isTouched(o) && game.players(giver).thoughts(o).inferred.contains(id)
+				}))
 
 			case ClueInterp.Save =>
 				true
@@ -130,7 +135,8 @@ def alternativeClue(prev: HGroup, game: HGroup, giver: Int, maxStall: Int, origC
 		target <- (0 until state.numPlayers).view if target != giver && target != state.ourPlayerIndex
 		clue <- state.allValidClues(target) if clue != origClue
 		list = state.clueTouched(state.hands(target), clue)
-		action = ClueAction(giver, target, list, clue.toBase)
+		action = ClueAction(giver, target, list, clue.toBase) if
+			game.meta(game.determineFocus(game, action).focus).status != CardStatus.Finessed
 		hypo = prev.copy(allowFindOwn = false, noRecurse = true)
 			.simulateClue(action) if satisfied(hypo, action)
 	yield

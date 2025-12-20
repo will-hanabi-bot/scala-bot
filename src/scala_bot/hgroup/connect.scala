@@ -31,6 +31,7 @@ def findKnownConn(ctx: ClueContext, giver: Int, id: Identity, ignore: Set[Int], 
 		!ignore.contains(order) &&
 		game.state.deck(order).matches(id, assume = true) &&
 		game.common.thoughts(order).matches(id, infer = true) &&
+		!game.meta(order).hidden &&
 		!game.xmeta(order).maybeFinessed &&
 		!game.common.linkedOrders(state).contains(order)
 
@@ -43,7 +44,7 @@ def findKnownConn(ctx: ClueContext, giver: Int, id: Identity, ignore: Set[Int], 
 	def validPlayable(playerIndex: Int, order: Int) =
 		!ignore.contains(order) &&
 		game.common.thoughts(order).inferred.contains(id) &&
-		!game.xmeta(order).maybeFinessed &&
+		!(ctx.action.giver == state.ourPlayerIndex && game.xmeta(order).maybeFinessed) &&
 		game.common.orderPlayable(game, order, excludeTrash = true) &&
 		!{	// Don't connect on our unknown playables for an id matching the focus:
 			// giver would be bad touching
@@ -116,7 +117,8 @@ def findUnknownConnecting(ctx: ClueContext, reacting: Int, id: Identity, connect
 		}.flatten
 
 	val prompt = prev.common.findPrompt(prev, reacting, id, connected, ignore)
-	val finesse = prev.findFinesse(reacting, connected, ignore)
+	// Need to use 'game' to exclude newly clued cards
+	val finesse = game.findFinesse(reacting, connected, ignore)
 
 	if (prompt.isDefined)
 		return tryPrompt(prompt.get)
@@ -147,7 +149,35 @@ def findUnknownConnecting(ctx: ClueContext, reacting: Int, id: Identity, connect
 	if (disallowFinesse)
 		return None
 
+	val nextFinesse = finesse.flatMap(f => prev.findFinesse(reacting, f +: connected, ignore))
+
+	// Try to insert into an earlier finesse
+	val insertable = opts.findOwn.isDefined && nextFinesse.isDefined && finesse.exists { f =>
+		!game.common.thoughts(f).inferred.contains(id) &&
+		game.meta(f).status == CardStatus.Finessed &&
+		game.xmeta(f).finesseIds.exists(_.contains(id))
+	}
+
+	val knownLayeredIds = finesse.flatMap { f =>
+		val future = game.future(f)
+		val playableIds = future.intersect(game.state.playableSet)
+
+		Option.when(!future.contains(id) && playableIds.nonEmpty)(playableIds)
+	}
+
 	finesse.flatMap(state.deck(_).id()) match {
+		case None if finesse.exists(game.future(_).length == 1) =>
+			val actualId = game.future(finesse.get).head
+
+			Option.when(state.isPlayable(actualId))
+				(FinesseConn(reacting, finesse.get, List(actualId), hidden = actualId != id))
+
+		case None if knownLayeredIds.isDefined =>
+			Some(FinesseConn(reacting, finesse.get, knownLayeredIds.get.toList, hidden = true))
+
+		case None if insertable =>
+			Some(FinesseConn(reacting, finesse.get, ids = List(id), inserted = true))
+
 		case None if opts.findOwn.isDefined && finesse.isDefined =>
 			val thought = game.players(opts.findOwn.get).thoughts(finesse.get)
 			val bluffableIds = thought.inferred.filter { i =>
@@ -157,7 +187,7 @@ def findUnknownConnecting(ctx: ClueContext, reacting: Int, id: Identity, connect
 				bluffableIds.nonEmpty &&
 				thought.possible.contains(id)
 
-			val trueFinesse = thought.inferred.contains(id) &&
+			val trueFinesse = thought.infoLock.getOrElse(thought.possible).contains(id) &&
 				thought.matches(id, assume = true)
 
 			Option.when(trueFinesse || bluffableIds.nonEmpty) {
@@ -169,7 +199,8 @@ def findUnknownConnecting(ctx: ClueContext, reacting: Int, id: Identity, connect
 				FinesseConn(
 					reacting,
 					finesse.get,
-					ids = if (trueFinesse) List(id) else bluffableIds.toList,
+					ids = if (trueFinesse) List(thought.id(infer = true).getOrElse(id)) else bluffableIds.toList,
+					hidden = !thought.inferred.contains(id),
 					bluff = !opts.assumeTruth && !thought.possible.contains(id),
 					possiblyBluff = possiblyBluff,
 					certain = certain)
@@ -235,7 +266,7 @@ def findSingleConn(ctx: ClueContext, reacting: Int, id: Identity, connCtx: Conne
 
 			// Try again
 			case Some(conn) if conn.hidden =>
-				val hypo = state.deck(conn.order).id()
+				val hypo = state.deck(conn.order).id().orElse(Option.when(conn.ids.length == 1)(conn.ids.head))
 					.fold(game)(id => game.withState(_.withPlay(id)).elim(goodTouch = true))
 
 				val newConnCtx = connCtx.copy(connected = conn.order +: connCtx.connected)
@@ -457,8 +488,8 @@ def connect(ctx: ClueContext, id: Identity, looksDirect: Boolean, thinksStall: S
 					loop(newGame, nextRank + 1, connections ++ conns)
 			}
 
-	loop(game, state.playStacks(suitIndex) + 1, List()).map { conns =>
-		val selfClandestine = findOwn.isEmpty && conns.zipWithIndex.exists { (conn, i) =>
+	loop(game, state.playStacks(suitIndex) + 1, List()).flatMap { conns =>
+		val selfClandestine = conns.zipWithIndex.exists { (conn, i) =>
 			conn.reacting == action.target && conn.isInstanceOf[FinesseConn] && conn.hidden &&
 			conn.ids.head.next.exists(game.common.thoughts(focus).possible.contains) &&
 			// Someone else finessing will prove this is a clandestine self.
@@ -468,18 +499,27 @@ def connect(ctx: ClueContext, id: Identity, looksDirect: Boolean, thinksStall: S
 		if (selfClandestine)
 			Log.warn("illegal clandestine self-finesse!")
 
-		val symmetric = !state.deck(focus).matches(id, assume = true) ||
-			!game.players(action.target).thoughts(focus).possible.contains(id) ||
-			conns.exists(c => state.deck(c.order).id().exists(!c.ids.contains(_)))
+		val invalidInsert = conns.existsM { case f: FinesseConn =>
+			f.inserted &&
+			game.findFinesse(f.reacting, focus +: conns.map(_.order)).isEmpty
+		}
 
-		Log.info(s"found connections: ${state.logConns(conns, id)}${if (symmetric) " (symmetric)" else ""}")
-		FocusPossibility(
-			id,
-			conns,
-			ClueInterp.Play,
-			symmetric,
-			illegal = selfClandestine
-		)
+		if (invalidInsert)
+			// Log.warn("illegal insert, no space for displaced connection!")
+			None
+		else
+			val symmetric = !state.deck(focus).matches(id, assume = true) ||
+				!game.players(action.target).thoughts(focus).possible.contains(id) ||
+				conns.exists(c => state.deck(c.order).id().exists(!c.ids.contains(_)))
+
+			Log.info(s"found connections: ${state.logConns(conns, id)}${if (symmetric) " (symmetric)" else ""}${if (conns.existsM { case f: FinesseConn => f.inserted }) " (inserted)" else ""}")
+			Some(FocusPossibility(
+				id,
+				conns,
+				ClueInterp.Play,
+				symmetric,
+				illegal = selfClandestine
+			))
 	}
 	.orElse {
 		Option.when (game.level > Level.Bluffs && !assumeTruth && attemptedBluff) {

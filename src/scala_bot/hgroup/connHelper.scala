@@ -32,11 +32,11 @@ def assignConns(game: HGroup, action: ClueAction, fps: List[FocusPossibility], f
 					// Log.info(s"assigning connection ${state.logConn(conn)}")
 					val isBluff = conn.matches { case f: FinesseConn => f.bluff }
 
-					val playableIds = for
-						(stack, i) <- acc.common.hypoStacks.zipWithIndex
-						id = Identity(i, stack + 1) if !acc.common.isTrash(acc, id, conn.order)
-					yield
-						id
+					// val playableIds = for
+					// 	(stack, i) <- acc.common.hypoStacks.zipWithIndex
+					// 	id = Identity(i, stack + 1) if !acc.common.isTrash(acc, id, conn.order)
+					// yield
+					// 	id
 
 					val currPlayableIds = for
 						(stack, i) <- state.playStacks.zipWithIndex
@@ -48,8 +48,11 @@ def assignConns(game: HGroup, action: ClueAction, fps: List[FocusPossibility], f
 					val thought = acc.common.thoughts(conn.order)
 
 					val newInferred = {
-						if (conn.hidden)
-							thought.inferred.intersect(playableIds)
+						if (conn.matches { case f: FinesseConn => f.inserted })
+							thought.inferred.union(conn.ids)
+
+						else if (conn.hidden)
+							IdentitySet.from(conn.ids)
 
 						else if (isBluff)
 							thought.inferred.intersect(currPlayableIds)
@@ -57,7 +60,7 @@ def assignConns(game: HGroup, action: ClueAction, fps: List[FocusPossibility], f
 						else if (modified.contains(conn.order))
 							thought.inferred.union(conn.ids)
 
-						else if (!isUnknownPlayable)
+						else if (game.meta(conn.order).status != CardStatus.Finessed && !isUnknownPlayable)
 							IdentitySet.from(conn.ids)
 
 						else
@@ -138,8 +141,8 @@ def assignConns(game: HGroup, action: ClueAction, fps: List[FocusPossibility], f
 								status = status,
 								hidden = f.hidden
 							)}
-							.withXMeta(conn.order) {
-								_.copy(turnFinessed = Some(state.turnCount))
+							.withXMeta(conn.order) { x =>
+								x.copy(turnFinessed = x.turnFinessed.orElse(Some(state.turnCount)))
 							}
 						case c: PlayableConn if isUnknownPlayable =>
 							val target = fp.connections.lift(connI + 1).map(_.order).getOrElse(focus)

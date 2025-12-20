@@ -54,7 +54,8 @@ case class FinesseConn(
 	bluff: Boolean = false,
 	possiblyBluff: Boolean = false,
 	certain: Boolean = false,
-	ambiguousPassback: Boolean = false
+	ambiguousPassback: Boolean = false,
+	inserted: Boolean = false
 ) extends Connection:
 	def kind =
 		if (possiblyBluff) "possiblyBluff"
