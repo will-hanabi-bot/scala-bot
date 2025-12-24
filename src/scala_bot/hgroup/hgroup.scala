@@ -80,6 +80,7 @@ case class HGroup(
 			!(xmeta(o).maybeFinessed ||
 				state.hands(playerIndex).exists { o2 =>
 					// An older finesse exists which could be swapped with this identity
+					xmeta(o2).idUncertain &&
 					xmeta(o2).turnFinessed.exists(t2 => xmeta(o).turnFinessed.exists(_ > t2)) &&
 					xmeta(o2).finesseIds.exists(ids => player.thoughts(o).id(infer = true).exists(ids.contains))
 				} ||
@@ -303,7 +304,7 @@ case class HGroup(
 			meta(focus).status != CardStatus.Finessed &&
 			!focusCard.clued &&
 			focusCard.id().exists(!state.isBasicTrash(_)) && {
-				val hypo = this.copy(noRecurse = true, allowFindOwn = false).simulateClue(action, log = true)
+				val hypo = this.copy(noRecurse = true, allowFindOwn = false).simulateClue(action)
 
 				hypo.lastMove.matches {
 					case Some(ClueInterp.Save) =>
@@ -342,6 +343,21 @@ case class HGroup(
 			.replay(state.deck(order).drawnIndex)
 			.toOption
 		}.flatten
+
+	/** Removes the 'idUncertain' flag if no longer applicable. */
+	def updateUncertain =
+		val uncertain = (order: Int) =>
+			this.me.thoughts(order).possible.length > 1 &&
+			// There's an older card in our hand that allows for a swap
+			this.me.thoughts(order).inferred.exists { i => state.ourHand.exists { o =>
+				o < order && this.me.thoughts(o).possible.contains(i)
+			}}
+
+		val newlyCertains = state.ourHand.filter(o => xmeta(o).idUncertain && !uncertain(o))
+
+		newlyCertains.foldLeft(this) { (acc, o) =>
+			acc.copy(xmeta = xmeta.updated(o, xmeta(o).copy(idUncertain = false)))
+		}
 
 	def resetImportant(playerIndex: Int) =
 		copy(importantAction = importantAction.updated(playerIndex, false))
@@ -411,8 +427,10 @@ object HGroup:
 			)
 
 		def interpretClue(prev: HGroup, game: HGroup, action: ClueAction): HGroup =
-			checkRevealLayer(prev, game, action).getOrElse {
-				val pre = refreshWCs(prev, game, action, beforeClueInterp = true)
+			val updatedGame = game.updateUncertain
+
+			checkRevealLayer(prev, updatedGame, action).getOrElse {
+				val pre = refreshWCs(prev, updatedGame, action, beforeClueInterp = true)
 					.resetImportant(action.playerIndex)
 
 				val interpreted = interpClue(ClueContext(prev, pre, action))
@@ -438,8 +456,10 @@ object HGroup:
 			val DiscardAction(playerIndex, order, suitIndex, rank, failed) = action
 			val id = Identity(suitIndex, rank)
 
-			game.reinterpPlay(prev, action).getOrElse(
-				refreshWCs(prev, game, action)
+			val updatedGame = game.updateUncertain
+
+			updatedGame.reinterpPlay(prev, action).getOrElse(
+				refreshWCs(prev, updatedGame, action)
 					.pipe(_.resetImportant(action.playerIndex))
 					.when(_ => failed && rank == 1) { g =>
 						interpretOcm(prev, action) match {
@@ -457,7 +477,7 @@ object HGroup:
 						}
 					}
 					.when(_ => suitIndex != -1 && rank != -1 && !prev.state.isBasicTrash(id) && !prev.chop(playerIndex).contains(order)) { g =>
-						interpretUsefulDcH(game, action) match {
+						interpretUsefulDcH(updatedGame, action) match {
 							case DiscardResult.None =>
 								g.copy(lastMove = Some(DiscardInterp.None))
 
@@ -498,8 +518,10 @@ object HGroup:
 		def interpretPlay(prev: HGroup, game: HGroup, action: PlayAction): HGroup =
 			val PlayAction(playerIndex, order, suitIndex, rank) = action
 
-			game.reinterpPlay(prev, action).getOrElse {
-				refreshWCs(prev, game, action)
+			val updatedGame = game.updateUncertain
+
+			updatedGame.reinterpPlay(prev, action).getOrElse {
+				refreshWCs(prev, updatedGame, action)
 					.resetImportant(action.playerIndex)
 					.when(_.level >= Level.BasicCM && rank == 1) { g =>
 						interpretOcm(prev, action) match {

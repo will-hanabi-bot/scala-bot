@@ -76,7 +76,6 @@ case class FocusPossibility(
 	interp: Interp,
 	symmetric: Boolean = false,
 	save: Boolean = false,
-	illegal: Boolean = false
 ):
 	def isBluff =
 		connections.headOption.existsM { case f: FinesseConn => f.bluff }

@@ -357,7 +357,7 @@ def resolveRetained(prev: HGroup, game: HGroup, action: Action, wc: WaitingConne
 					return UpdateResult.Keep
 
 		case PlayAction(_, order, _, _) =>
-			if (wc.currConn.isInstanceOf[FinesseConn] && game.isBlindPlaying(order))
+			if (game.isBlindPlaying(order))
 				if (game.xmeta(order).turnFinessed.get < wc.turn)
 					Log.info(s"$name played into older finesse, continuing to wait")
 					return UpdateResult.Keep

@@ -160,7 +160,7 @@ def takeTurn[G <: Game](rawAction: String, drawS: String = "")(game: G)(using op
 							g.handleAction(DrawAction(state.currentPlayerIndex, state.nextCardOrder, -1, -1))
 					}
 				case _ if draw.isDefined =>
-					throw new IllegalArgumentException(s"Unexpected draw for action $action")
+					throw new IllegalArgumentException(s"Unexpected draw for action $rawAction")
 				case _ => g
 			}
 		}
@@ -203,7 +203,7 @@ def parseAction(state: State, action: String) =
 					throw new IllegalArgumentException(s"No cards touched by clue $valueS to $targetS")
 
 				ClueAction(giver, target, list, clue)
-			else if (slotsS.isEmpty)
+			else if (slotsS == null)
 				throw new IllegalArgumentException(s"Not enough arguments provided (clue to us) in $action, needs '(slot x)'")
 			else
 				val list = slotsS.split(",").map(s => state.ourHand(s.toInt - 1))

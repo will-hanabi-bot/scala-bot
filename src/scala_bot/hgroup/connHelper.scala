@@ -75,9 +75,9 @@ def assignConns(game: HGroup, action: ClueAction, fps: List[FocusPossibility], f
 						val idUncertain =
 							conn.reacting == state.ourPlayerIndex &&
 							!conn.isInstanceOf[KnownConn] &&
-							// There's some other card in our hand that allows for a swap
+							// There's an older card in our hand that allows for a swap
 							conn.ids.exists(i => state.ourHand.exists { o =>
-								o != conn.order && g.me.thoughts(o).possible.contains(i)
+								o < conn.order && g.me.thoughts(o).possible.contains(i)
 							}) &&
 							// Playable in some other suit
 							thought.possible.exists { i =>
@@ -265,10 +265,10 @@ def resolveClue(ctx: ClueContext, fps: List[FocusPossibility], ambiguousOwn: Lis
 				}
 			}.toList
 
-			occamsRazor(symmetricFps, target)
+			occamsRazor(state, symmetricFps, target)
 
 	val allFps = fps ++ symmetricFps
-	val simplestFps = occamsRazor(allFps.filter(fp => game.players(target).thoughts(focus).possible.contains(fp.id)), target)
+	val simplestFps = occamsRazor(state, allFps.filter(fp => game.players(target).thoughts(focus).possible.contains(fp.id)), target)
 	val fpsToWrite = if (simplestFps.forall(_.symmetric)) simplestFps else allFps
 
 	val interp = if (state.deck(focus).id().exists(id => !simplestFps.exists(_.id == id)))

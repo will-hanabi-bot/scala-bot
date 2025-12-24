@@ -211,10 +211,10 @@ def interpClue(ctx: ClueContext): HGroup =
 	}.toList
 
 	val simplest = {
-		val possible = (savePoss ++ focusPoss.filterNot(_.illegal))
+		val possible = (savePoss ++ focusPoss)
 			.filter(fp => game.players(target).thoughts(focus).possible.contains(fp.id))
 
-		occamsRazor(possible, target)
+		occamsRazor(state, possible, target)
 	}
 
 	val noSelf = !game.allowFindOwn ||
@@ -245,8 +245,7 @@ def interpClue(ctx: ClueContext): HGroup =
 			.flatMap {
 				connect(ctx, _, looksDirect, thinksStall, findOwn = Some(state.ourPlayerIndex))
 			}
-			.filterNot(_.illegal)
 		}.toList
 
-		val simplestOwn = occamsRazor(simplest ++ ownFps, state.ourPlayerIndex, game.me.thoughts(focus).id())
+		val simplestOwn = occamsRazor(state, simplest ++ ownFps, state.ourPlayerIndex, game.me.thoughts(focus).id())
 		resolveClue(ctx, simplestOwn, ownFps.filterNot(simplestOwn.contains))
