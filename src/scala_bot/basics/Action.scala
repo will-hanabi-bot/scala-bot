@@ -74,7 +74,7 @@ object ClueAction:
 		)
 
 def logId(state: State, suitIndex: Int, rank: Int) =
-	if (suitIndex == -1 || rank == -1)
+	if suitIndex == -1 || rank == -1 then
 		"xx"
 	else
 		state.logId(Identity(suitIndex, rank))
@@ -219,13 +219,13 @@ object Action {
 }
 
 def addAction(actionList: Vector[List[Action]], action: Action, turn: Int) =
-	if (turn < actionList.size)
-		if (actionList(turn).contains(action))
+	if turn < actionList.size then
+		if actionList(turn).contains(action) then
 			Log.error(s"Action $action already exists in turn $turn")
 			actionList
 		else
 			actionList.updated(turn, actionList(turn) :+ action)
-	else if (turn == actionList.size)
+	else if turn == actionList.size then
 		actionList :+ List(action)
 	else
 		throw new IndexOutOfBoundsException(s"Attempted to add action to turn $turn, but action list had size ${actionList.size}")

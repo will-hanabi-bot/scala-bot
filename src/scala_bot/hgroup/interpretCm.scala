@@ -14,7 +14,7 @@ def interpretTcm(ctx: ClueContext): Option[Seq[Int]] =
 	val focus = ctx.focusResult.focus
 	val thought = ctx.common.thoughts(focus)
 
-	lazy val promisedIds = if (clue.kind == ClueKind.Rank)
+	lazy val promisedIds = if clue.kind == ClueKind.Rank then
 		thought.possible.filter(_.rank == clue.value)
 	else
 		thought.possible
@@ -23,7 +23,7 @@ def interpretTcm(ctx: ClueContext): Option[Seq[Int]] =
 		!promisedIds.forall(game.common.isTrash(game, _, focus)) ||
 		thought.inferred.forall(i => state.isPlayable(i) && !game.common.isTrash(game, i, focus))
 
-	if (notTcm)
+	if notTcm then
 		return None
 
 	val oldestTrash = list.filter(!prev.state.deck(_).clued).min
@@ -32,7 +32,7 @@ def interpretTcm(ctx: ClueContext): Option[Seq[Int]] =
 		o < oldestTrash && !state.deck(o).clued && !game.meta(o).cm
 	}
 
-	if (cmOrders.isEmpty)
+	if cmOrders.isEmpty then
 		Log.highlight(Console.CYAN, s"no cards to tcm")
 		None
 	else
@@ -55,17 +55,17 @@ def interpret5cm(ctx: ClueContext): Option[Vector[Int]] =
 		game.inEarlyGame ||
 		chop.isEmpty
 
-	if (not5cm)
+	if not5cm then
 		return None
 
 	list.filter(o => o > chop.get && !prev.state.deck(o).clued).minOption.flatMap { oldest5 =>
 		val distance = prev.chopDistance(target, oldest5)
 
-		if (distance != 1)
+		if distance != 1 then
 			Log.info(s"rightmost 5 was clued $distance-away from chop, not 5cm!")
 			None
 
-		else if (game.common.orderKt(game, chop.get))
+		else if game.common.orderKt(game, chop.get) then
 			Log.info(s"saved card $chop has only trash possibilities!")
 			None
 
@@ -85,14 +85,14 @@ def interpretOcm(prev: HGroup, action: PlayAction | DiscardAction) =
 	val offset = ordered1s.indexOf(order)
 	val target = (playerIndex + offset) % state.numPlayers
 
-	if (offset == -1)
+	if offset == -1 then
 		None
 
-	else if (offset == 0)
+	else if offset == 0 then
 		Log.info("played unknown 1 in correct order, no ocm")
 		None
 
-	else if (target == playerIndex)
+	else if target == playerIndex then
 		Log.error("double order chop move???")
 		None
 

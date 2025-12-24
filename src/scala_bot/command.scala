@@ -133,7 +133,7 @@ class BotClient(queue: Queue[IO, String], gameRef: Ref[IO, Option[Game]]):
 							}
 						}
 
-						if (player != null)
+						if player != null then
 							val output = List(
 								s"viewing from ${player.name}",
 								s"===================="
@@ -171,7 +171,7 @@ class BotClient(queue: Queue[IO, String], gameRef: Ref[IO, Option[Game]]):
 						case NavArg.PrevRound => state.turnCount - state.numPlayers
 					}
 
-					if (turn < 1 || turn >= state.actionList.length)
+					if turn < 1 || turn >= state.actionList.length then
 						Log.error(s"Turn $turn does not exist.")
 						IO.unit
 					else
@@ -262,7 +262,7 @@ class BotClient(queue: Queue[IO, String], gameRef: Ref[IO, Option[Game]]):
 		}
 
 	def leaveRoom(): IO[Unit] =
-		val cmd = if (gameStarted) "tableUnattend" else "tableLeave"
+		val cmd = if gameStarted then "tableUnattend" else "tableLeave"
 		sendCmd(cmd, ujson.write(ujson.Obj("tableID" -> tableID.get))) *>
 		IO {
 			tableID = None
@@ -289,18 +289,18 @@ class BotClient(queue: Queue[IO, String], gameRef: Ref[IO, Option[Game]]):
 		val ChatMessage(msg, who, room, recipient) = data
 		val withinRoom = recipient.isEmpty && room.startsWith("table")
 
-		if (withinRoom)
-			if (msg.startsWith("/setall"))
+		if withinRoom then
+			if msg.startsWith("/setall") then
 				assignSettings(data, false)
-			else if (msg.startsWith("/leaveall"))
+			else if msg.startsWith("/leaveall") then
 				leaveRoom()
 			else
 				IO.unit
 
-		else if (recipient != info.get.username)
+		else if recipient != info.get.username then
 			return IO.unit
 
-		else if (msg.startsWith("/join"))
+		else if msg.startsWith("/join") then
 			val table = tables.values.filter(t =>
 				(t.players.contains(who) && !t.sharedReplay) ||
 				t.spectators.exists(_.name == who))
@@ -318,7 +318,7 @@ class BotClient(queue: Queue[IO, String], gameRef: Ref[IO, Option[Game]]):
 				case None => sendPM(who, "Could not join, as you are not in a room.")
 			}
 
-		else if (msg.startsWith("/rejoin"))
+		else if msg.startsWith("/rejoin") then
 			gameRef.get.flatMap {
 				case Some(_) => sendPM(who, "Could not rejoin, as the bot is already in a game.")
 				case None =>
@@ -332,10 +332,10 @@ class BotClient(queue: Queue[IO, String], gameRef: Ref[IO, Option[Game]]):
 					}
 			}
 
-		else if (msg.startsWith("/settings"))
+		else if msg.startsWith("/settings") then
 			assignSettings(data, true)
 
-		else if (msg.startsWith("/version"))
+		else if msg.startsWith("/version") then
 			sendPM(who, BOT_VERSION)
 
 		else

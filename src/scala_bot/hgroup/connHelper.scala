@@ -22,11 +22,11 @@ def assignConns(game: HGroup, action: ClueAction, fps: List[FocusPossibility], f
 
 	fps.foldLeft((Set[Int](), game)) { case ((m, a), fp) =>
 		// Don't assign symmetric/save connections
-		if (fp.symmetric || fp.save)
+		if fp.symmetric || fp.save then
 			(m, a)
 		else
 			fp.connections.zipWithIndex.foldLeft((m, a)) { case ((modified, acc), (conn, connI)) =>
-				if (conn.isInstanceOf[PlayableConn] && fp.isBluff && !mustBluffPlayables.contains(conn.order))
+				if conn.isInstanceOf[PlayableConn] && fp.isBluff && !mustBluffPlayables.contains(conn.order) then
 					(modified, acc)
 				else
 					// Log.info(s"assigning connection ${state.logConn(conn)}")
@@ -48,19 +48,19 @@ def assignConns(game: HGroup, action: ClueAction, fps: List[FocusPossibility], f
 					val thought = acc.common.thoughts(conn.order)
 
 					val newInferred = {
-						if (conn.matches { case f: FinesseConn => f.inserted })
+						if conn.matches { case f: FinesseConn => f.inserted } then
 							thought.inferred.union(conn.ids)
 
-						else if (conn.hidden)
+						else if conn.hidden then
 							IdentitySet.from(conn.ids)
 
-						else if (isBluff)
+						else if isBluff then
 							thought.inferred.intersect(currPlayableIds)
 
-						else if (modified.contains(conn.order))
+						else if modified.contains(conn.order) then
 							thought.inferred.union(conn.ids)
 
-						else if (game.meta(conn.order).status != CardStatus.Finessed && !isUnknownPlayable)
+						else if game.meta(conn.order).status != CardStatus.Finessed && !isUnknownPlayable then
 							IdentitySet.from(conn.ids)
 
 						else
@@ -85,7 +85,7 @@ def assignConns(game: HGroup, action: ClueAction, fps: List[FocusPossibility], f
 							}
 
 						val finesseIds = Option.when(idUncertain) {
-							if (isBluff)
+							if isBluff then
 								currPlayableIds
 							else
 								// Allow connecting on own blind plays
@@ -127,12 +127,12 @@ def assignConns(game: HGroup, action: ClueAction, fps: List[FocusPossibility], f
 					.pipe { g => conn match {
 						case f: FinesseConn =>
 							val status =
-								if (f.possiblyBluff)
-									if (conn.reacting == state.ourPlayerIndex)
+								if f.possiblyBluff then
+									if conn.reacting == state.ourPlayerIndex then
 										CardStatus.FMaybeBluffed
 									else
 										CardStatus.MaybeBluffed
-								else if (f.bluff)
+								else if f.bluff then
 									CardStatus.Bluffed
 								else
 									CardStatus.Finessed
@@ -151,7 +151,7 @@ def assignConns(game: HGroup, action: ClueAction, fps: List[FocusPossibility], f
 									id == c.id && orders.toSet == c.linked.toSet
 							}
 
-							if (existingLink)
+							if existingLink then
 								g
 							else
 								Log.info(s"adding promised link ${c.linked} ${conn.ids.map(state.logId).mkString(",")} $target")
@@ -178,15 +178,15 @@ def importantFinesse(state: State, action: ClueAction, fps: List[FocusPossibilit
 		@annotation.tailrec
 		def loop(playerIndex: Int): Boolean =
 			// Looped around
-			if (playerIndex == giver)
+			if playerIndex == giver then
 				false
 
 			// Clue must be given before the first finessed player, otherwise position may change.
-			else if (conns.existsM { case f: FinesseConn => f.reacting == playerIndex })
+			else if conns.existsM { case f: FinesseConn => f.reacting == playerIndex } then
 				true
 
 			// Target can't clue themselves, unknown conns can't clue
-			else if (playerIndex == target || conns.exists(c => c.reacting == playerIndex && !c.matches { case _: KnownConn => true }))
+			else if playerIndex == target || conns.exists(c => c.reacting == playerIndex && !c.matches { case _: KnownConn => true }) then
 				loop(state.nextPlayerIndex(playerIndex))
 
 			else
@@ -203,16 +203,16 @@ def urgentSave(ctx: ClueContext): Boolean =
 
 	val earlyGameClue = game.earlyGameClue(action.target)
 
-	if (earlyGameClue.isDefined)
+	if earlyGameClue.isDefined then
 		// Log.info(s"${state.names(action.target)} could clue ${earlyGameClue.get.fmt(state)}, not urgent save")
 		return false
 
-	if (!ctx.focusResult.chop)
+	if !ctx.focusResult.chop then
 		return false
 
 	@annotation.tailrec
 	def loop(hypoState: State, playerIndex: Int): Boolean =
-		if (playerIndex == action.target)
+		if playerIndex == action.target then
 			return true
 
 		def getFinessedOrder(playerIndex: Int, includeHidden: Boolean) =
@@ -242,7 +242,7 @@ def resolveClue(ctx: ClueContext, fps: List[FocusPossibility], ambiguousOwn: Lis
 	val FocusResult(focus, chop, _) = ctx.focusResult
 
 	val symmetricFps =
-		if (target == state.ourPlayerIndex || fps.exists(_.save))
+		if target == state.ourPlayerIndex || fps.exists(_.save) then
 			List()
 		else
 			Log.highlight(Console.YELLOW, "finding symmetric connections!")
@@ -269,15 +269,15 @@ def resolveClue(ctx: ClueContext, fps: List[FocusPossibility], ambiguousOwn: Lis
 
 	val allFps = fps ++ symmetricFps
 	val simplestFps = occamsRazor(state, allFps.filter(fp => game.players(target).thoughts(focus).possible.contains(fp.id)), target)
-	val fpsToWrite = if (simplestFps.forall(_.symmetric)) simplestFps else allFps
+	val fpsToWrite = if simplestFps.forall(_.symmetric) then simplestFps else allFps
 
-	val interp = if (state.deck(focus).id().exists(id => !simplestFps.exists(_.id == id)))
+	val interp = if state.deck(focus).id().exists(id => !simplestFps.exists(_.id == id)) then
 		Log.error(s"resolving clue but focus ${state.logId(focus)} doesn't match simplest fps [${simplestFps.map(fp => state.logId(fp.id)).mkString(",")}]!")
 		ClueInterp.Mistake
-	else if (simplestFps.forall(_.symmetric))
+	else if simplestFps.forall(_.symmetric) then
 		Log.error(s"resolving clue but all focus possibilities are symmetric!")
 		ClueInterp.Mistake
-	else if (fps.exists(_.save))
+	else if fps.exists(_.save) then
 		ClueInterp.Save
 	else
 		ClueInterp.Play
@@ -311,7 +311,7 @@ def resolveClue(ctx: ClueContext, fps: List[FocusPossibility], ambiguousOwn: Lis
 						l.orders == linked && l.target == target
 					}
 
-					if (existingIndex == -1)
+					if existingIndex == -1 then
 						val link = PlayLink(linked, IdentitySet.single(id), target)
 						Log.info(s"adding play link $linked -> $target")
 						acc.copy(common = acc.common.copy(playLinks = link +: playLinks))
@@ -357,7 +357,7 @@ def resolveClue(ctx: ClueContext, fps: List[FocusPossibility], ambiguousOwn: Lis
 				)
 			},
 			lastMove = Some(interp),
-			cluedOnChop = if (chop) g.cluedOnChop + focus else g.cluedOnChop
+			cluedOnChop = if chop then g.cluedOnChop + focus else g.cluedOnChop
 		)
 	}
 	.when(_ => undoScream) { g =>

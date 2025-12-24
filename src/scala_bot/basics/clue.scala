@@ -21,7 +21,7 @@ trait ClueLike:
 
 case class BaseClue(kind: ClueKind, value: Int) extends ClueLike:
 	def hash: Int =
-		(if (kind == ClueKind.Colour) 0 else 10) + value
+		(if kind == ClueKind.Colour then 0 else 10) + value
 
 	def toClue(target: Int) =
 		Clue(kind, value, target)

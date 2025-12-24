@@ -54,7 +54,7 @@ def interpretReactiveColour(prev: Reactor, game: Reactor, action: ClueAction, fo
 					prev.state.deck(o2).clued &&
 					state.deck(o).matches(state.deck(o2))
 				}
-			if (uncluedDupe) 99 else i
+			if uncluedDupe then 99 else i
 		}
 
 	// Try targeting all play targets
@@ -91,9 +91,9 @@ def interpretReactiveColour(prev: Reactor, game: Reactor, action: ClueAction, fo
 				(state.isBasicTrash(state.deck(o).id().get) ||
 					state.hands(receiver).exists(o2 => o2 != o && state.deck(o).matches(state.deck(o2)))) // duped in the same hand
 			}.sortBy { (o, _) =>
-				if (prev.state.deck(o).clued)
+				if prev.state.deck(o).clued then
 					0
-				else if (state.hands(receiver).exists(o2 => o2 < o && prev.state.deck(o2).clued && state.deck(o).matches(state.deck(o2))))
+				else if state.hands(receiver).exists(o2 => o2 < o && prev.state.deck(o2).clued && state.deck(o).matches(state.deck(o2))) then
 					-1		// Unclued dupe, with a clued dupe
 				else
 					1
@@ -110,18 +110,18 @@ def interpretReactiveColour(prev: Reactor, game: Reactor, action: ClueAction, fo
 				-game.common.playableAway(id) * 10 + (5 - id.rank)
 			}
 
-			if (unknownTrash.isEmpty)
-				if (knownTrash.isEmpty) sacrifices else knownTrash
+			if unknownTrash.isEmpty then
+				if knownTrash.isEmpty then sacrifices else knownTrash
 			else
 				unknownTrash
 		}
 
-		if (dcTargets.isEmpty)
+		if dcTargets.isEmpty then
 			Log.warn(s"reactive clue but receiver had no playable, trash or sacrifice targets!")
 			(None, game)
 		else
 			dcTargets.view.flatMap { (target, index) =>
-				if (state.nextPlayerIndex(giver) != reacter && game.meta(target).status == CardStatus.CalledToPlay)
+				if state.nextPlayerIndex(giver) != reacter && game.meta(target).status == CardStatus.CalledToPlay then
 					Log.warn("can't target previously-playable trash with a reverse reactive clue!")
 					None
 				else
@@ -170,7 +170,7 @@ def interpretReactiveRank(prev: Reactor, game: Reactor, action: ClueAction, focu
 			state.hands(receiver).exists{ o2 =>
 				o2 != o && prev.state.deck(o2).clued && state.deck(o).matches(state.deck(o2))
 			}
-		if (uncluedDupe) 99 else i
+		if uncluedDupe then 99 else i
 	}
 
 	playTargets.view.flatMap { (target, index) =>
@@ -207,25 +207,25 @@ def interpretReactiveRank(prev: Reactor, game: Reactor, action: ClueAction, focu
 			state.playableAway(state.deck(order).id().get) == 1
 		}
 
-		if (finesseTargets.isEmpty)
+		if finesseTargets.isEmpty then
 			Log.warn("reactive clue but receiver had no playable targets!")
 			(None, game)
 		else
-			(for {
+			(for
 				reactSlot <- List(1, 5, 4, 3, 2).view
 				targetSlot = calcSlot(focusSlot, reactSlot)
 				reactOrder <- state.hands(reacter).lift(reactSlot - 1)
 				(receiveOrder, _) <- finesseTargets.find((_, i) => i + 1 == targetSlot)
-			} yield {
+			yield {
 				val prevPlays = prev.common.obviousPlayables(prev, reacter)
 
 				lazy val unplayable = !game.common.thoughts(reactOrder).possible.exists(i => state.isPlayable(i) || possibleConns.exists(_._2 == i)) ||
 					!game.common.thoughts(reactOrder).possible.contains(state.deck(receiveOrder).id().get.prev.get)
 
-				if (prevPlays.contains(reactOrder))
+				if prevPlays.contains(reactOrder) then
 					Log.warn(s"attempted finesse would result in reacter naturally playing ${state.logId(reactOrder)} $reactOrder!")
 					None
-				else if (unplayable)
+				else if unplayable then
 					Log.warn(s"reaction would involve playing unplayable ${state.logId(reactOrder)} $reactOrder!")
 					None
 				else

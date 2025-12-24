@@ -9,7 +9,7 @@ def fpSimplicity(fp: FocusPossibility, playerIndex: Int): Int =
 		case _ => true
 	}.exists(_.reacting != playerIndex)
 
-	if (startsOther)
+	if startsOther then
 		0
 	else
 		val blindPlays = fp.connections.count(_.isInstanceOf[FinesseConn])
@@ -22,15 +22,15 @@ def occamsRazor(state: State, fps: List[FocusPossibility], playerIndex: Int, act
 		val simplicity = fpSimplicity(fp, playerIndex)
 		// println(s"${state.logId(fp.id)} $playerIndex simplicity: $simplicity")
 
-		if (simplicity < min && actualId.forall(_ == fp.id))
+		if simplicity < min && actualId.forall(_ == fp.id) then
 			(simplicity, List(fp))
-		else if (simplicity == min)
+		else if simplicity == min then
 			(min, fp +: acc)
 		else
 			(min, acc)
 	}._2
 
-	if (playerIndex != state.ourPlayerIndex)
+	if playerIndex != state.ourPlayerIndex then
 		// No one else will play into it if they can fulfill it themselves.
 		simplest
 	else

@@ -34,13 +34,13 @@ def stallSeverity(game: HGroup, player: Player, giver: Int, infoPlayer: Option[P
 			}
 		}
 
-	if (state.clueTokens == 8 && state.turnCount != 1)
+	if state.clueTokens == 8 && state.turnCount != 1 then
 		4
-	else if (player.thinksLocked(game, giver))
+	else if player.thinksLocked(game, giver) then
 		3
-	else if (severity2)
+	else if severity2 then
 		2
-	else if (game.inEarlyGame)
+	else if game.inEarlyGame then
 		1
 	else
 		0
@@ -62,7 +62,7 @@ def isStall(ctx: ClueContext, severity: Int): Option[StallInterp] =
 		game.common.orderKp(game, focus) || 	// Play clue
 		(focusNew && trash)
 
-	if (notStall)
+	if notStall then
 		return None
 
 	val stall5 = clue.isEq(BaseClue(ClueKind.Rank, 5)) &&
@@ -70,31 +70,31 @@ def isStall(ctx: ClueContext, severity: Int): Option[StallInterp] =
 		!prev.meta(focus).cm &&
 		!chop
 
-	if (stall5)
+	if stall5 then
 		Log.info(s"5 stall!")
 		return Some(StallInterp.Stall5)
 
 	val (_, fill, _) = elimResult(prev, game, state.hands(target), list)
 	val (_, playables) = playablesResult(prev, game)
 
-	if (severity >= 2 && reclue)
-		if (playables.nonEmpty)
+	if severity >= 2 && reclue then
+		if playables.nonEmpty then
 			Log.info(s"tempo clue stall!")
 			return Some(StallInterp.Tempo)
 
-		if (fill.nonEmpty)
+		if fill.nonEmpty then
 			Log.info(s"fill-in stall!")
 			return Some(StallInterp.FillIn)
 
-	if (severity >= 3 && chop && !game.common.thinksLocked(game, target))
+	if severity >= 3 && chop && !game.common.thinksLocked(game, target) then
 		Log.info(s"locked hand stall!")
 		return Some(StallInterp.Locked)
 
-	if (severity == 4 && prev.state.clueTokens == 8 && focusNew && !list.contains(state.hands(target).head))
+	if severity == 4 && prev.state.clueTokens == 8 && focusNew && !list.contains(state.hands(target).head) then
 		Log.info(s"8 clue stall!")
 		return Some(StallInterp.Clues8)
 
-	if (severity >= 2 && reclue && fill.isEmpty)
+	if severity >= 2 && reclue && fill.isEmpty then
 		Log.info(s"hard burn!")
 		return Some(StallInterp.Burn)
 
@@ -168,7 +168,7 @@ def stallingSituation(ctx: ClueContext): Option[(StallInterp, Set[Int])] =
 			(prev.common.thinksTrash(prev, giver).nonEmpty && prev.state.clueTokens < 8)
 
 		Option.when(!giverLoaded) {
-			if (game.noRecurse)
+			if game.noRecurse then
 				(stall, (0 to game.state.numPlayers).toSet)
 			else
 				val fullClue = Clue(clue.kind, clue.value, target)

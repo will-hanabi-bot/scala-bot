@@ -35,8 +35,8 @@ def simulateGame[G <: Game](gs: Seq[G], deck: Vector[Identity])(using ops: GameO
 						val action = DrawAction(
 							playerIndex,
 							order,
-							if (playerIndex == i) -1 else deck(order).suitIndex,
-							if (playerIndex == i) -1 else deck(order).rank,
+							if playerIndex == i then -1 else deck(order).suitIndex,
+							if playerIndex == i then -1 else deck(order).rank,
 						)
 						game.handleAction(action)
 					}
@@ -65,8 +65,8 @@ def simulateGame[G <: Game](gs: Seq[G], deck: Vector[Identity])(using ops: GameO
 								g.handleAction(DrawAction(
 									currentPlayerIndex,
 									order,
-									if (currentPlayerIndex == g.state.ourPlayerIndex) -1 else deck(order).suitIndex,
-									if (currentPlayerIndex == g.state.ourPlayerIndex) -1 else deck(order).rank,
+									if currentPlayerIndex == g.state.ourPlayerIndex then -1 else deck(order).suitIndex,
+									if currentPlayerIndex == g.state.ourPlayerIndex then -1 else deck(order).rank,
 								))
 							case _ => g
 						}
@@ -98,11 +98,11 @@ def simulateGame[G <: Game](gs: Seq[G], deck: Vector[Identity])(using ops: GameO
 	val finalActions = actions.when(_.lastOption.exists(_ != PerformAction.Terminate))
 		(_ :+ PerformAction.Terminate(target, 0))
 
-	val result = if (state.strikes == 3)
+	val result = if state.strikes == 3 then
 		GameResult.Strikeout
-	else if (state.score == state.variant.suits.length * 5)
+	else if state.score == state.variant.suits.length * 5 then
 		GameResult.Perfect
-	else if (state.maxScore < state.variant.suits.length * 5)
+	else if state.maxScore < state.variant.suits.length * 5 then
 		GameResult.DiscardedCrit
 	else
 		GameResult.OutOfPace
@@ -134,7 +134,7 @@ def selfPlay(args: String*) =
 
 	val deck = variant.allIds.flatMap(id => List.fill(variant.cardCount(id))(id))
 
-	for (i <- (seed until seed + numGames)) {
+	for i <- (seed until seed + numGames) do {
 		Random.setSeed(i)
 		val shuffledDeck = Random.shuffle(deck).toVector
 		val states = (0 until numPlayers).map(State(NAMES.take(numPlayers), _, variant))
@@ -153,7 +153,7 @@ def selfPlay(args: String*) =
 			"options" -> ujson.Obj("variant" -> variant.name)
 		).toString
 
-		if (!Files.exists(Paths.get("seeds")))
+		if !Files.exists(Paths.get("seeds")) then
 			Try(Files.createDirectory(Paths.get("seeds")))
 				.orElse(throw new Exception("failed to create seeds directory!")): Unit
 

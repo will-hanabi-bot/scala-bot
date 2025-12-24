@@ -17,15 +17,15 @@ def checkFix(prev: Game, game: Game, action: ClueAction): FixResult =
 			!prev.common.thoughts(order).matches(prev.common.thoughts(o), infer = true)
 		}
 
-		if (prev.state.deck(order).clued && !prev.common.thoughts(order).reset && !prev.common.orderKt(prev, order) && game.common.thoughts(order).reset)
+		if prev.state.deck(order).clued && !prev.common.thoughts(order).reset && !prev.common.orderKt(prev, order) && game.common.thoughts(order).reset then
 			(order +: cluedResets, duplicateReveals)
-		else if (duplicated)
+		else if duplicated then
 			(cluedResets, order +: duplicateReveals)
 		else
 			(cluedResets, duplicateReveals)
 	}
 
-	if (cluedResets.nonEmpty || duplicateReveals.nonEmpty)
+	if cluedResets.nonEmpty || duplicateReveals.nonEmpty then
 		return FixResult.Normal(cluedResets, duplicateReveals)
 
 	val noNewInfoFixes = list.filter { o =>
@@ -34,7 +34,7 @@ def checkFix(prev: Game, game: Game, action: ClueAction): FixResult =
 		prev.common.thoughts(o).possible == game.common.thoughts(o).possible
 	}
 
-	if (noNewInfoFixes.nonEmpty)
+	if noNewInfoFixes.nonEmpty then
 		FixResult.NoNewInfo(noNewInfoFixes.toList)
 	else
 		FixResult.None
@@ -42,11 +42,11 @@ def checkFix(prev: Game, game: Game, action: ClueAction): FixResult =
 def connectableSimple[G <: Game](game: G, player: Player, start: Int, target: Int, id: Option[Identity] = None)(using ops: GameOps[G]): List[Int] =
 	val state = game.state
 
-	if (id.exists(state.isPlayable))
+	if id.exists(state.isPlayable) then
 		List(99)
-	else if (start == target)
+	else if start == target then
 		player.obviousPlayables(game, target).toList
-	else if (game.state.ended)
+	else if game.state.ended then
 		List()
 	else
 		val nextPlayerIndex = state.nextPlayerIndex(start)
@@ -71,27 +71,27 @@ def distributionClue(prev: Game, game: Game, action: ClueAction, focus: Int): Op
 	val ClueAction(_, target, list, clue) = action
 	val thought = game.common.thoughts(focus)
 
-	if (list.forall(prev.state.deck(_).clued) || (!state.inEndgame && state.remScore > state.variant.suits.length))
+	if list.forall(prev.state.deck(_).clued) || (!state.inEndgame && state.remScore > state.variant.suits.length) then
 		return None
 
-	if (thought.id(infer = true).exists(state.isBasicTrash))
+	if thought.id(infer = true).exists(state.isBasicTrash) then
 		return None
 
-	val poss = if (clue.kind == ClueKind.Colour)
+	val poss = if clue.kind == ClueKind.Colour then
 		thought.possible.toList
 	else
 		thought.possible.filter(_.rank == clue.value).toList
 
 	def loop(poss: List[Identity], useful: IdentitySet): Option[IdentitySet] =
-		if (poss.isEmpty) Some(useful) else
+		if poss.isEmpty then Some(useful) else
 			val p = poss.head
 			lazy val duplicated = state.hands.zipWithIndex.exists { (hand, i) =>
 				i != target && hand.exists(o => game.isTouched(o) && game.orderMatches(o, p, infer = true))
 			}
 
-			if (state.isBasicTrash(p))
+			if state.isBasicTrash(p) then
 				loop(poss.tail, useful)
-			else if (duplicated)
+			else if duplicated then
 				loop(poss.tail, useful.union(p))
 			else
 				None
@@ -104,7 +104,7 @@ def rainbowMismatch(game: Game, action: ClueAction, id: Identity, prompt: Int, f
 	val ClueAction(_, target, list, clue) = action
 
 	lazy val rainbowFocus =
-		if (target == state.ourPlayerIndex)
+		if target == state.ourPlayerIndex then
 			game.me.thoughts(focus).possible.forall { c =>
 				RAINBOWISH.matches(state.variant.suits(c.suitIndex))
 			}

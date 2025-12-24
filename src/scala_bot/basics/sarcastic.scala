@@ -27,16 +27,16 @@ def interpretUsefulDc(game: Game, action: DiscardAction): DiscardResult =
 		case Some(dupe) =>
 			val holder = state.holderOf(dupe)
 
-			if (holder == playerIndex)
-				if (game.players(playerIndex).thoughts(dupe).matches(id, infer = true))
+			if holder == playerIndex then
+				if game.players(playerIndex).thoughts(dupe).matches(id, infer = true) then
 					Log.info("discarded dupe of own hand")
 				else
 					Log.warn(s"discarded useful ${state.logId(id)} but dupe was in their own hand!")
 				DiscardResult.None
-			else if (gd)
+			else if gd then
 				val target = state.hands(holder).findLast(common.thoughts(_).possible.contains(id)).get
 
-				if (target != dupe)
+				if target != dupe then
 					Log.warn(s"transfer to $dupe was not to rightmost $target!")
 					DiscardResult.Mistake
 				else

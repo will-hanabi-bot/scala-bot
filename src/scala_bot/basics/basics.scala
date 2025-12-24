@@ -13,7 +13,7 @@ extension[G <: Game](game: G)
 		val newPossible = IdentitySet.from(state.variant.touchPossibilities(clue))
 
 		state.hands(target).foldLeft(game) { (newGame, order) =>
-			if (list.contains(order))
+			if list.contains(order) then
 				val touchedGame = newGame.withCard(order)(c => c.copy(
 						clued = true,
 						clues = c.clues :+ CardClue(kind, value, giver, state.turnCount)
@@ -69,12 +69,12 @@ extension[G <: Game](game: G)
 	def onDraw(action: DrawAction)(using ops: GameOps[G]): G =
 		val DrawAction(playerIndex, order, suitIndex, rank) = action
 
-		if (game.state.hands(playerIndex).length == HAND_SIZE(game.state.numPlayers))
+		if game.state.hands(playerIndex).length == HAND_SIZE(game.state.numPlayers) then
 			throw new Exception(s"${game.state.names(playerIndex)} already has a full hand!")
 
 		val id = Option.when(suitIndex != -1 && rank != -1) {
 			game.deckIds.lift(order).flatten.foreach { id =>
-				if (id != Identity(suitIndex, rank))
+				if id != Identity(suitIndex, rank) then
 					throw new Exception(s"drew ${game.state.logId(Identity(suitIndex, rank))}, expected ${game.state.logId(id)} ${game.deckIds.map(game.state.logId)} ${order}")
 			}
 			Identity(suitIndex, rank)
@@ -83,10 +83,10 @@ extension[G <: Game](game: G)
 		game.pipe { g =>
 			val deckIds = g.deckIds
 
-			if (deckIds.length == order)
+			if deckIds.length == order then
 				ops.copyWith(g, GameUpdates(deckIds = Some(deckIds :+ id)))
-			else if (deckIds.length > order)
-				if (deckIds(order).isEmpty)
+			else if deckIds.length > order then
+				if deckIds(order).isEmpty then
 					ops.copyWith(g, GameUpdates(deckIds = Some(deckIds.updated(order, id))))
 				else
 					g
@@ -113,8 +113,8 @@ extension[G <: Game](game: G)
 			ops.copyWith(g, GameUpdates(
 				players = Some(g.players.zipWithIndex.map((player, i) => player.copy(
 					thoughts = player.thoughts :+ Thought(
-						if (i != playerIndex) suitIndex else -1,
-						if (i != playerIndex) rank else -1,
+						if i != playerIndex then suitIndex else -1,
+						if i != playerIndex then rank else -1,
 						order,
 						player.allPossible
 					),
@@ -154,9 +154,9 @@ extension[G <: Game](game: G)
 		var newThoughts = game.common.thoughts
 		var newMeta = game.meta
 
-		for (order <- state.hands.flatten) {
+		for order <- state.hands.flatten do {
 			var thought = game.common.thoughts(order)
-			if (thought.inferred.isEmpty && !thought.reset)
+			if thought.inferred.isEmpty && !thought.reset then
 				newThoughts = newThoughts.updated(order, thought.resetInferences())
 				newMeta = newMeta.updated(order, newMeta(order).copy(
 					status = CardStatus.None,
@@ -165,13 +165,13 @@ extension[G <: Game](game: G)
 
 			thought = newThoughts(order)
 
-			if (thought.infoLock.exists(_.isEmpty))
+			if thought.infoLock.exists(_.isEmpty) then
 				Log.warn(s"lost info lock on $order!")
 				newThoughts = newThoughts.updated(order, thought.copy(infoLock = None))
 		}
 
 		var (resets, newCommon) = game.common.copy(thoughts = newThoughts).cardElim(state)
-		if (goodTouch)
+		if goodTouch then
 			val (resets2, newCommon2) = newCommon.goodTouchElim(game)
 			resets ++= resets2
 			newCommon = newCommon2
@@ -204,13 +204,13 @@ extension[G <: Game](game: G)
 			.copy(dirty = BitSet.empty)
 		}
 
-		for (order <- resets) {
+		for order <- resets do {
 			val entry = newMeta(order)
-			if (entry.status == CardStatus.CalledToPlay)
+			if entry.status == CardStatus.CalledToPlay then
 				newMeta = newMeta.updated(order, entry.copy(status = CardStatus.None, by = None))
 		}
 
-		for (order <- sarcastics) {
+		for order <- sarcastics do {
 			newMeta = newMeta.updated(order, newMeta(order).copy(status = CardStatus.Sarcastic))
 		}
 

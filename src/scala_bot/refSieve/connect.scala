@@ -7,33 +7,33 @@ import scala.annotation.tailrec
 
 def findConnecting(prev: RS, game: RS, id: Identity, playerIndex: Int, connected: List[Int], looksDirect: Boolean, ignore: Set[Int] = Set(), findOwn: Boolean = false): Option[Connection] =
 	val state = game.state
-	val player = if (findOwn) game.players(playerIndex) else game.common
+	val player = if findOwn then game.players(playerIndex) else game.common
 	val hand = state.hands(playerIndex)
 
 	// Log.info(s"find connecting ${state.logId(id)} in ${state.names(playerIndex)}'s hand, findOwn? $findOwn")
 
 	val known = hand.find(o => !connected.contains(o) && player.thoughts(o).matches(id, infer = true))
 
-	if (known.exists(!ignore.contains(_)))
+	if known.exists(!ignore.contains(_)) then
 		return Some(KnownConn(playerIndex, known.get, id))
 
 	val playable = hand.find { o =>
 		val thought = player.thoughts(o)
 
 		!connected.contains(o) &&
-		(game.isBlindPlaying(o) || (if (findOwn) thought.inferred else thought.possible).forall(state.isPlayable)) &&
+		(game.isBlindPlaying(o) || (if findOwn then thought.inferred else thought.possible).forall(state.isPlayable)) &&
 		thought.inferred.contains(id)
 	}
 
-	if (playable.exists(p => state.deck(p).matches(id, assume = findOwn) && !ignore.contains(p)))
+	if playable.exists(p => state.deck(p).matches(id, assume = findOwn) && !ignore.contains(p)) then
 		return Some(PlayableConn(playerIndex, playable.get, id))
 
-	if (looksDirect || playable.nonEmpty)
+	if looksDirect || playable.nonEmpty then
 		return None
 
 	game.common.findPrompt(prev, playerIndex, id, connected, ignore, rightmost = true).map { prompt =>
-		if (!state.deck(prompt).matches(id, assume = findOwn))
-			if (state.deck(prompt).id().isDefined)
+		if !state.deck(prompt).matches(id, assume = findOwn) then
+			if state.deck(prompt).id().isDefined then
 				Log.warn(s"wrong prompt! ${state.logId(prompt)} looks like ${state.logId(id)}")
 			None
 		else
@@ -53,7 +53,7 @@ def connect(prev: RS, game: RS, targetOrder: Int, id: Identity, action: ClueActi
 
 	@tailrec
 	def loop(nextRank: Int, playerIndex: Int, connections: List[Connection], turnsSincePlay: Int = 1): Option[List[Connection]] =
-		if (nextRank == rank)
+		if nextRank == rank then
 			Some(connections.reverse)
 		else
 			val nextId = Identity(suitIndex, nextRank)

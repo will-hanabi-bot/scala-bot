@@ -114,7 +114,7 @@ object Reactor:
 				tableID = game.tableID,
 				state = game.base._1,
 				inProgress = game.inProgress,
-				deckIds = if (keepDeck) game.deckIds else Vector(),
+				deckIds = if keepDeck then game.deckIds else Vector(),
 				meta = game.base._2,
 				players = game.base._3,
 				common = game.base._4,
@@ -136,7 +136,7 @@ object Reactor:
 					val (interp, interpGame) = g.nextInterp match {
 						case Some(interp) =>
 							Log.info(s"forcing rewinded interp $interp!")
-							if (interp == ClueInterp.Reactive)
+							if interp == ClueInterp.Reactive then
 								val reacter = state.nextPlayerIndex(giver)
 								interpretReactive(prev, g, action, reacter, inverted = false)
 							else
@@ -154,7 +154,7 @@ object Reactor:
 								val newPlayables = g.common.obviousPlayables(g, playerIndex)
 								val playables = oldPlayables.filter(newPlayables.contains)
 
-								if (playables.isEmpty)
+								if playables.isEmpty then
 									Log.info(s"reacter is ${state.names(playerIndex)}")
 									Some(playerIndex)
 								else
@@ -179,14 +179,14 @@ object Reactor:
 									val prevPlayables = prev.players(target).obviousPlayables(prev, target)
 
 									// Urgent fix on previous playable
-									if (allowableFix && fixed.exists(prevPlayables.contains))
+									if allowableFix && fixed.exists(prevPlayables.contains) then
 										(Some(ClueInterp.Fix), g)
 									else
 										interpretReactive(prev, g, action, reacter, inverted = false)
 							}
 						}
 
-					if (interp.isEmpty)
+					if interp.isEmpty then
 						Log.warn("interpreted mistake!")
 
 					interpGame.copy(lastMove = Some(interp.getOrElse(ClueInterp.Mistake)))
@@ -287,7 +287,7 @@ object Reactor:
 			val currentPlayerIndex = action.currentPlayerIndex
 			val state = game.state
 
-			if (currentPlayerIndex == -1)
+			if currentPlayerIndex == -1 then
 				game
 			else
 				val waitedGame = game.waiting match {
@@ -297,10 +297,10 @@ object Reactor:
 				}
 
 				val (newCommon, newMeta) = state.hands(currentPlayerIndex).foldLeft((game.common, game.meta)) { case ((c, m), order) =>
-					if (m(order).status == CardStatus.CalledToPlay)
+					if m(order).status == CardStatus.CalledToPlay then
 						val newInferred = c.thoughts(order).inferred.intersect(state.playableSet)
 
-						if (newInferred.isEmpty)
+						if newInferred.isEmpty then
 							val newCommon = c.withThought(order)(_.resetInferences())
 							val newMeta = m.updated(order, m(order).copy(
 								status = CardStatus.None,
@@ -332,7 +332,7 @@ object Reactor:
 				case _ => ()
 			}
 
-			if (state.inEndgame && state.remScore <= state.variant.suits.length + 1)
+			if state.inEndgame && state.remScore <= state.variant.suits.length + 1 then
 				Log.highlight(Console.MAGENTA, "trying to solve endgame...")
 
 				EndgameSolver(monteCarlo = true).solve(game) match {
@@ -346,7 +346,7 @@ object Reactor:
 			val playableOrders = {
 				val knownP = me.obviousPlayables(game, state.ourPlayerIndex)
 
-				if (knownP.nonEmpty)
+				if knownP.nonEmpty then
 					// Don't play if there is a focused card that looks exactly like this one (no OCM in reactor)
 					knownP.filter { order =>
 						!state.hands(state.ourPlayerIndex).exists { o =>
@@ -394,7 +394,7 @@ object Reactor:
 				potentialForcedPlay
 			Log.info(s"can discard: ${!cantDiscard} ${state.clueTokens}")
 
-			val allDiscards: Seq[(PerformAction, Action)] = if (cantDiscard) Nil else
+			val allDiscards: Seq[(PerformAction, Action)] = if cantDiscard then Nil else
 				discardOrders.map { o =>
 					val action = DiscardAction(state.ourPlayerIndex, o, me.thoughts(o).id(infer = true))
 					(PerformAction.Discard(o), action)
@@ -410,8 +410,8 @@ object Reactor:
 				}
 			}
 
-			if (allActions.isEmpty)
-				if (state.clueTokens == 8)
+			if allActions.isEmpty then
+				if state.clueTokens == 8 then
 					Log.error("No actions available at 8 clues! Playing slot 1")
 					return PerformAction.Play(state.ourHand.head)
 				else
@@ -430,7 +430,7 @@ object Reactor:
 				val action = ClueAction(giver, target, list, clue.toBase)
 
 				// Do not simulate clues that touch only previously-clued trash
-				if (list.forall(o => state.deck(o).clued && state.isBasicTrash(state.deck(o).id().get)))
+				if list.forall(o => state.deck(o).clued && state.isBasicTrash(state.deck(o).id().get)) then
 					false
 				else
 					Log.highlight(Console.GREEN, s"===== Predicting value for ${clue.fmt(state)} =====")

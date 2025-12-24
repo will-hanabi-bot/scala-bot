@@ -60,11 +60,11 @@ case class Player(
 		thoughts(order).possible.toList.sortBy(_.toOrd).map(state.logId).mkString(",")
 
 	def refer(game: Game, hand: Vector[Int], order: Int, left: Boolean = false) =
-		val offset = if (left) -1 else 1
+		val offset = if left then -1 else 1
 		val index = hand.indexOf(order)
 		var targetIndex = (index + offset + hand.length) % hand.length
 
-		while (game.isTouched(hand(targetIndex)) && targetIndex != index)
+		while game.isTouched(hand(targetIndex)) && targetIndex != index do
 			targetIndex = (targetIndex + offset + hand.length) % hand.length
 
 		hand(targetIndex)
@@ -80,7 +80,7 @@ case class Player(
 
 			game.state.hands(playerIndex).exists(o =>
 				o != order && thoughts(o).matches(id, infer = true) &&
-				(if (loaded)
+				(if loaded then
 					game.meta(o).status != CardStatus.CalledToDiscard
 				else
 					chop.forall(_ != o))
@@ -94,7 +94,7 @@ case class Player(
 		}
 
 	def isDuped(game: Game, id: Identity, order: Int) =
-		val candidates = if (game.goodTouch)
+		val candidates = if game.goodTouch then
 			game.state.hands.flatten
 		else
 			game.state.hands(game.state.holderOf(order))
@@ -124,7 +124,7 @@ case class Player(
 			meta.trash ||
 			meta.status == CardStatus.CalledToDiscard)
 
-		if (thought.possible.forall(game.state.isCritical))
+		if thought.possible.forall(game.state.isCritical) then
 			false
 		else
 			conventionalTrash || thought.possibilities.forall(isTrash(game, _, order))
@@ -141,7 +141,7 @@ case class Player(
 		val thought = thoughts(order)
 
 		inline def possPlayable(poss: IdentitySet) =
-			val p = if (excludeTrash) poss.difference(state.trashSet) else poss
+			val p = if excludeTrash then poss.difference(state.trashSet) else poss
 			p.intersect(state.playableSet) == p
 
 		game.meta(order).status match {
@@ -160,17 +160,17 @@ case class Player(
 	def orderPlayable(game: Game, order: Int, excludeTrash: Boolean = false) =
 		val state = game.state
 
-		if (orderKp(game, order, excludeTrash))
+		if orderKp(game, order, excludeTrash) then
 			true
-		else if (game.meta(order).trash || links.exists(l => l.getOrders.contains(order) && l.getOrders.max != order))
+		else if game.meta(order).trash || links.exists(l => l.getOrders.contains(order) && l.getOrders.max != order) then
 			false
 		else
 			val infer =
 				(playerIndex != state.ourPlayerIndex || state.strikes != 2 || game.meta(order).focused) &&
 				game.meta(order).status != CardStatus.CalledToDiscard
 
-			val poss = if (infer) thoughts(order).possibilities else thoughts(order).possible
-			val p = if (excludeTrash) poss.difference(state.trashSet) else poss
+			val poss = if infer then thoughts(order).possibilities else thoughts(order).possible
+			val p = if excludeTrash then poss.difference(state.trashSet) else poss
 
 			p.intersect(state.playableSet) == p
 
@@ -222,7 +222,7 @@ case class Player(
 
 	def findPrompt(prev: Game, playerIndex: Int, id: Identity, connected: List[Int] = Nil, ignore: Set[Int] = Set(), forcePink: Boolean = false, rightmost: Boolean = false) =
 		val state = prev.state
-		val hand = state.hands(playerIndex).pipe(h => if (rightmost) h.reverse else identity(h))
+		val hand = state.hands(playerIndex).pipe(h => if rightmost then h.reverse else identity(h))
 		val order = hand.find { order =>
 			val card = state.deck(order)
 			val thought = thoughts(order)
@@ -235,7 +235,7 @@ case class Player(
 			card.clues.exists(state.variant.idTouched(id, _)) &&	// at least one clue matches
 			{
 				// Not trying to prompt a pink id, or forcing pink prompt
-				if (!PINKISH.matches(state.variant.suits(id.suitIndex)) || forcePink)
+				if !PINKISH.matches(state.variant.suits(id.suitIndex)) || forcePink then
 					true
 				else
 					val clues = card.clues
@@ -286,8 +286,8 @@ case class Player(
 
 		leastCrits.maxBy { (order, percent) =>
 			thoughts(order).possibilities.map { p =>
-				val critDistance = (if (percent == 1) p.rank * 5 else 0) + p.rank - hypoStacks(p.suitIndex)
-				if (critDistance < 0) 5 else critDistance
+				val critDistance = (if percent == 1 then p.rank * 5 else 0) + p.rank - hypoStacks(p.suitIndex)
+				if critDistance < 0 then 5 else critDistance
 			}.sum
 		}._1
 
@@ -298,11 +298,11 @@ case class Player(
 	def linkedOrders(state: State) =
 		links.flatMap {
 			case Link.Promised(orders, id, _) =>
-				if (orders.length > unknownIds(state, id)) orders else List()
+				if orders.length > unknownIds(state, id) then orders else List()
 			case Link.Sarcastic(orders, id) =>
-				if (orders.length > unknownIds(state, id)) orders else List()
+				if orders.length > unknownIds(state, id) then orders else List()
 			case Link.Unpromised(orders, ids) =>
-				if (orders.length > ids.map(unknownIds(state, _)).sum) orders else List()
+				if orders.length > ids.map(unknownIds(state, _)).sum then orders else List()
 		}
 
 	def updateHypoStacks[G <: Game](game: G)(using ops: GameOps[G]): Player =
@@ -318,7 +318,7 @@ case class Player(
 			hand.fastForeach { order =>
 				val id = state.deck(order).id()
 
-				if (id.isEmpty || !state.isBasicTrash(id.get))
+				if id.isEmpty || !state.isBasicTrash(id.get) then
 					viableOrders(endIndex) = order
 					endIndex += 1
 			}
@@ -329,9 +329,9 @@ case class Player(
 				case None =>
 					links.fastForeach { link =>
 						val orders = link.getOrders
-						if (orders.contains(order) && orders.forall(o => o == order || played.contains(o)))
+						if orders.contains(order) && orders.forall(o => o == order || played.contains(o)) then
 							hypo = link.promise.fold(hypo) { id =>
-								if (!hypo.state.isPlayable(id))
+								if !hypo.state.isPlayable(id) then
 									Log.warn(s"tried to add linked ${state.logId(id)} ($order) onto hypo stacks, but they were at ${hypo.state.playStacks} $played ($name)")
 									hypo
 								else
@@ -342,7 +342,7 @@ case class Player(
 					played = played + order
 
 				case Some(id) =>
-					if (hypo.state.isPlayable(id))
+					if hypo.state.isPlayable(id) then
 						hypo = hypo.withState(_.withPlay(id))
 						played = played + order
 					else
@@ -351,7 +351,7 @@ case class Player(
 
 		var changed = true
 
-		while (changed) {
+		while changed do {
 			changed = false
 			var viableIndex = 0
 			loop(0, _ < endIndex, _ + 1) { i =>
@@ -359,10 +359,10 @@ case class Player(
 				val thought = thoughts(order)
 
 				val playable = hypo.state.hasConsistentInfs(thought) &&
-					(if (game.goodTouch) orderPlayable(hypo, order) else orderKp(hypo, order))
+					(if game.goodTouch then orderPlayable(hypo, order) else orderKp(hypo, order))
 
 				// Should this be symmetric? Checking whether a playable or not should be, but another player can know what id it is
-				if (playable && !played.contains(order))
+				if playable && !played.contains(order) then
 					play(order)
 					changed = true
 				else
@@ -374,11 +374,11 @@ case class Player(
 			playLinks.fastForeach { link =>
 				val allPlayed = link.orders.fastForall(played.contains)
 
-				if (allPlayed && !played.contains(link.target))
+				if allPlayed && !played.contains(link.target) then
 					val order = link.target
 					val id = state.deck(order).id()
 
-					if (id.isEmpty || !state.isBasicTrash(id.get))
+					if id.isEmpty || !state.isBasicTrash(id.get) then
 						play(link.target)
 			}
 		}

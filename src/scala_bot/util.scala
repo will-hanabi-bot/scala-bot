@@ -9,21 +9,21 @@ inline def loop(
 	inline only: Int => Boolean = _ => true
 )(inline body: Int => Unit) =
 	var i = start
-	while (cond(i)) {
-		if (only(i))
+	while cond(i) do {
+		if only(i) then
 			body(i)
 		i = advance(i)
 	}
 
 extension [A](a: A)
 	def cond(condition: A => Boolean)(ifTrue: A => A)(ifFalse: A => A): A =
-		if (condition(a)) ifTrue(a) else ifFalse(a)
+		if condition(a) then ifTrue(a) else ifFalse(a)
 
 	def when(condition: A => Boolean)(f: A => A): A =
-		if (condition(a)) f(a) else a
+		if condition(a) then f(a) else a
 
 	def unless(condition: Boolean)(f: A => A): A =
-		if (!condition) f(a) else a
+		if !condition then f(a) else a
 
 	def matches(cond: PartialFunction[A, Boolean]): Boolean =
 		cond.applyOrElse(a, _ => false)
@@ -35,7 +35,7 @@ extension [A](a: Iterable[A])
 	inline def fastForeach(inline f: A => Unit): Unit =
 		val it = a.iterator
 
-		while (it.hasNext) {
+		while it.hasNext do {
 			f(it.next)
 		}
 
@@ -43,8 +43,8 @@ extension [A](a: Iterable[A])
 		val it = a.iterator
 		var satisfied = true
 
-		while (it.hasNext && satisfied) {
-			if (!f(it.next))
+		while it.hasNext && satisfied do {
+			if !f(it.next) then
 				satisfied = false
 		}
 		satisfied
@@ -53,8 +53,8 @@ extension [A](a: Iterable[A])
 		val it = a.iterator
 		var res = 0
 
-		while (it.hasNext) {
-			if (f(it.next))
+		while it.hasNext do {
+			if f(it.next) then
 				res += 1
 		}
 		res
@@ -63,8 +63,8 @@ extension [A](a: Iterable[A])
 		val it = a.iterator
 		var exists = false
 
-		while (it.hasNext && !exists) {
-			if (f(it.next))
+		while it.hasNext && !exists do {
+			if f(it.next) then
 				exists = true
 		}
 		exists
@@ -74,7 +74,7 @@ extension [A](seq: IndexedSeq[A])
 		var res = IndexedSeq.empty[B]
 		var i = 0
 
-		while (i < seq.length) {
+		while i < seq.length do {
 			res = res :+ f(seq(i))
 			i += 1
 		}
@@ -84,8 +84,8 @@ extension [A](seq: IndexedSeq[A])
 		var res = IndexedSeq.empty[A]
 		var i = 0
 
-		while (i < seq.length) {
-			if (f(seq(i)))
+		while i < seq.length do {
+			if f(seq(i)) then
 				res = res :+ seq(i)
 			i += 1
 		}
@@ -96,7 +96,7 @@ extension [A](seq: IndexedSeq[Int])
 		var i = 0
 		var sum = 0
 
-		while (i < seq.length) {
+		while i < seq.length do {
 			sum += seq(i)
 			i += 1
 		}
@@ -147,7 +147,7 @@ def performToAction(state: State, perform: PerformAction, playerIndex: Int, deck
 		case PerformAction.Play(target) =>
 			deckId(target) match {
 				case Some(id) =>
-					if (state.isPlayable(id))
+					if state.isPlayable(id) then
 						PlayAction(playerIndex, target, id.suitIndex, id.rank)
 					else
 						DiscardAction(playerIndex, target, id.suitIndex, id.rank, true)

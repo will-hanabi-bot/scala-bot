@@ -90,11 +90,11 @@ def findUnknownConnecting(ctx: ClueContext, reacting: Int, id: Identity, connect
 
 	// Log.info(s"finding unknown connecting for ${state.logId(id)} (${state.names(reacting)}), $connected, own? ${opts.findOwn} noLayer? ${opts.noLayer}")
 
-	if (opts.bluff)
+	if opts.bluff then
 		val clued = prev.common.findClued(prev, reacting, id, ignore ++ connected)
 		val matched = clued.find(state.deck(_).matches(id, assume = opts.findOwn.isDefined))
 
-		if (matched.isDefined)
+		if matched.isDefined then
 			return Some(PlayableConn(matched.get, reacting, id, linked = clued.toList))
 
 	def tryPrompt(order: Int) =
@@ -105,10 +105,10 @@ def findUnknownConnecting(ctx: ClueContext, reacting: Int, id: Identity, connect
 						(PromptConn(reacting, order, id))
 
 				case Some(promptId) =>
-					if (promptId == id)
+					if promptId == id then
 						Some(PromptConn(reacting, order, id))
 
-					else if (level >= Level.IntermediateFinesses && state.isPlayable(promptId))
+					else if level >= Level.IntermediateFinesses && state.isPlayable(promptId) then
 						Some(PromptConn(reacting, order, promptId, hidden = true))
 
 					else
@@ -121,25 +121,25 @@ def findUnknownConnecting(ctx: ClueContext, reacting: Int, id: Identity, connect
 	// Need to use 'game' to exclude newly clued cards
 	val finesse = game.findFinesse(reacting, connected, ignore)
 
-	if (prompt.isDefined)
+	if prompt.isDefined then
 		return tryPrompt(prompt.get)
 
 	// Try prompting a wrongly-ranked pink card
 	val tryPinkPrompt = state.includesVariant(PINKISH) &&
 		(level < Level.Bluffs || finesse.forall(game.common.thoughts(_).possible.forall(!state.isPlayable(_))))
 
-	if (tryPinkPrompt)
+	if tryPinkPrompt then
 		val pinkPrompt = prev.common.findPrompt(prev, reacting, id, connected, ignore, forcePink = true)
 		val pinkPromptConn = pinkPrompt.filter(!prompt.contains(_)).flatMap(tryPrompt)
 
-		if (pinkPromptConn.isDefined)
+		if pinkPromptConn.isDefined then
 			return pinkPromptConn
 
 	val cluedDupe = state.hands.zipWithIndex.exists { (hand, i) =>
 		i != giver && hand.exists(o => prev.state.deck(o).clued && state.deck(o).matches(id))
 	}
 
-	if (cluedDupe)
+	if cluedDupe then
 		Log.warn(s"disallowed finesse, ${state.logId(id)} already clued")
 		return None
 
@@ -147,7 +147,7 @@ def findUnknownConnecting(ctx: ClueContext, reacting: Int, id: Identity, connect
 	val disallowFinesse = giver == state.ourPlayerIndex &&
 		finesse.exists(prev.xmeta(_).maybeFinessed)
 
-	if (disallowFinesse)
+	if disallowFinesse then
 		return None
 
 	val nextFinesse = finesse.flatMap(f => prev.findFinesse(reacting, f +: connected, ignore))
@@ -200,7 +200,7 @@ def findUnknownConnecting(ctx: ClueContext, reacting: Int, id: Identity, connect
 				FinesseConn(
 					reacting,
 					finesse.get,
-					ids = if (trueFinesse) List(thought.id(infer = true).getOrElse(id)) else bluffableIds.toList,
+					ids = if trueFinesse then List(thought.id(infer = true).getOrElse(id)) else bluffableIds.toList,
 					hidden = !thought.inferred.contains(id),
 					bluff = !opts.assumeTruth && !thought.possible.contains(id),
 					possiblyBluff = possiblyBluff,
@@ -213,15 +213,15 @@ def findUnknownConnecting(ctx: ClueContext, reacting: Int, id: Identity, connect
 			val possiblyBluff = !opts.assumeTruth &&
 				validBluff(prev, action, finesseId, id, reacting, connected, symmetric = true)
 
-			if (finesseId == id || opts.findOwn.exists(i => i != state.ourPlayerIndex && game.players(i).thoughts(finesse.get).possible.contains(id)))
+			if finesseId == id || opts.findOwn.exists(i => i != state.ourPlayerIndex && game.players(i).thoughts(finesse.get).possible.contains(id)) then
 				// At level 1, only forward finesses are allowed.
-				if (level == 1 && finesseId == id && !inBetween(state.numPlayers, reacting, giver, target))
+				if level == 1 && finesseId == id && !inBetween(state.numPlayers, reacting, giver, target) then
 					Log.warn(s"found non-forward finesse ${state.logId(id)} in ${state.names(reacting)}'s hand at lv 1!")
 					None
 				else
 					Some(FinesseConn(reacting, finesse.get, List(id), bluff = false, possiblyBluff = possiblyBluff))
 
-			else if (!opts.noLayer && level >= Level.IntermediateFinesses && state.isPlayable(finesseId))
+			else if !opts.noLayer && level >= Level.IntermediateFinesses && state.isPlayable(finesseId) then
 				val bluff = validBluff(prev, action, finesseId, id, reacting, connected)
 
 				// TODO: Check in resolver that we don't give uncertain finesses or likely dupes
@@ -258,7 +258,7 @@ def findSingleConn(ctx: ClueContext, reacting: Int, id: Identity, connCtx: Conne
 		connCtx.thinksStall.contains(reacting)
 
 	// TODO: When resolving, disallow prompting/finessing a player that may need to prove sth to us
-	if (skip)
+	if skip then
 		// Log.info(s"skipping ${state.names(reacting)}, giver $giver target $target $connCtx ")
 		None
 	else
@@ -272,7 +272,7 @@ def findSingleConn(ctx: ClueContext, reacting: Int, id: Identity, connCtx: Conne
 					// Someone else finessing will prove this is a clandestine self.
 					!opts.nonTargetFinessed
 
-				if (selfClandestine)
+				if selfClandestine then
 					Log.warn("illegal clandestine self-finesse!")
 					None
 				else
@@ -293,13 +293,13 @@ def findConnecting(ctx: ClueContext, id: Identity, connCtx: ConnectContext, opts
 
 	// Log.highlight(Console.YELLOW, s"find connecting ${state.logId(id)}")
 
-	if (state.baseCount(id.toOrd) == state.cardCount(id.toOrd))
+	if state.baseCount(id.toOrd) == state.cardCount(id.toOrd) then
 		Log.info(s"all ${state.logId(id)} in trash!")
 		return None
 
 	val known = findKnownConn(ctx, giver, id, connCtx.ignore ++ connCtx.connected, opts.findOwn.isDefined)
 
-	if (known.isDefined)
+	if known.isDefined then
 		return Some(known.toList)
 
 	val connPlayerOrder = List(
@@ -346,13 +346,13 @@ def colourSave(prev: HGroup, action: ClueAction, id: Identity, focus: Int): Bool
 	val thought = prev.common.thoughts(focus)
 	val suit = state.variant.suits(suitIndex)
 
-	if (!state.variant.cardTouched(id, clue) || !thought.possible.contains(id) || state.isBasicTrash(id))
+	if !state.variant.cardTouched(id, clue) || !thought.possible.contains(id) || state.isBasicTrash(id) then
 		return false
 
-	if (rank == 5 && suit != "Black" && !BROWNISH.matches(suit))
+	if rank == 5 && suit != "Black" && !BROWNISH.matches(suit) then
 		return false
 
-	if (suit == "Black" && (rank == 2 || rank == 5))
+	if suit == "Black" && (rank == 2 || rank == 5) then
 		// Newly touched or fill-in cards
 		val fillIns = list.count { o =>
 			!state.deck(o).clued ||
@@ -365,13 +365,13 @@ def colourSave(prev: HGroup, action: ClueAction, id: Identity, focus: Int): Bool
 			!card.clued && card.id().exists(i => i.rank == rank && state.isBasicTrash(i))
 		}
 
-		if (fillIns < 2 && trash == 0)
+		if fillIns < 2 && trash == 0 then
 			return false
 
-	if (BROWNISH.matches(suit) && prev.common.thinksLoaded(prev, giver))
+	if BROWNISH.matches(suit) && prev.common.thinksLoaded(prev, giver) then
 		return false
 
-	if ("Dark Rainbow|Dark Prism".r.matches(suit))
+	if "Dark Rainbow|Dark Prism".r.matches(suit) then
 		val completed = prev.common.hypoStacks(suitIndex) == state.maxRanks(suitIndex)
 		val savedCrit = list.exists { o =>
 			val card = state.deck(o)
@@ -381,18 +381,18 @@ def colourSave(prev: HGroup, action: ClueAction, id: Identity, focus: Int): Bool
 			}
 		}
 
-		if (!completed && !savedCrit)
+		if !completed && !savedCrit then
 			return false
 
 	// If there is a dark colour, save with that, otherwise red.
-	val muddySaveColour = if (!state.includesVariant("Black|Dark Brown|Dark Pink".r)) 0 else
+	val muddySaveColour = if !state.includesVariant("Black|Dark Brown|Dark Pink".r) then 0 else
 		state.variant.suits.length - 2
 
 	// Note that critical 2,3,4 can be saved with anything.
-	if (suit.contains("Muddy") && clue.value != muddySaveColour && !(state.isCritical(id) && Set(2,3,4).contains(rank)))
+	if suit.contains("Muddy") && clue.value != muddySaveColour && !(state.isCritical(id) && Set(2,3,4).contains(rank)) then
 		return false
 
-	if (suit.contains("Cocoa") && clue.value != muddySaveColour)
+	if suit.contains("Cocoa") && clue.value != muddySaveColour then
 		return false
 
 	state.isCritical(id) || (BROWNISH.matches(suit) && rank == 2)
@@ -403,19 +403,19 @@ def rankSave(prev: HGroup, action: ClueAction, id: Identity, focus: Int): Boolea
 	val Identity(suitIndex, rank) = id
 	val thought = prev.common.thoughts(focus)
 
-	if (!thought.possible.contains(id) || state.isBasicTrash(id))
+	if !thought.possible.contains(id) || state.isBasicTrash(id) then
 		return false
 
 	// Don't consider save on k3,k4 (or dark i3,i4) with rank
 	// TODO: Florrat Save
-	if ("Black|Dark Pink".r.matches(state.variant.suits(suitIndex)) && (rank == 3 || rank == 4))
+	if "Black|Dark Pink".r.matches(state.variant.suits(suitIndex)) && (rank == 3 || rank == 4) then
 		return false
 
 	val loaded34 = prev.common.thinksLoaded(prev, giver) &&
 		(state.includesVariant(WHITISH) || state.includesVariant("Dark Rainbow|Dark Prism".r)) &&
 		(rank == 3 || rank == 4)
 
-	if (loaded34)
+	if loaded34 then
 		return false
 
 	state.isCritical(id) || rank == 2
@@ -431,7 +431,7 @@ def connect(ctx: ClueContext, id: Identity, looksDirect: Boolean, thinksStall: S
 
 	@annotation.tailrec
 	def loop(hypo: HGroup, nextRank: Int, connections: List[Connection]): Option[List[Connection]] =
-		if (nextRank >= rank)
+		if nextRank >= rank then
 			return Some(connections)
 
 		val nextId = Identity(suitIndex, nextRank)
@@ -458,7 +458,7 @@ def connect(ctx: ClueContext, id: Identity, looksDirect: Boolean, thinksStall: S
 				// See if we need to correct based on future information
 				val actualKnown = known match {
 					case Some(c @ PlayableConn(reacting, order, id, linked, layered)) =>
-						if (linked.forall(!game.future(_).contains(id)))
+						if linked.forall(!game.future(_).contains(id)) then
 							Log.highlight(Console.CYAN, "playable conn is known to not match in the future, finding again")
 							val unknown = findSingleConn(newCtx, i, nextId, connCtx.copy(connected = order +: connCtx.connected), opts.copy(findOwn = findOwn))
 							unknown.map(c.copy(id = game.future(order).intersect(game.state.playableSet).head) +: _)
@@ -505,7 +505,7 @@ def connect(ctx: ClueContext, id: Identity, looksDirect: Boolean, thinksStall: S
 			game.findFinesse(f.reacting, focus +: conns.map(_.order)).isEmpty
 		}
 
-		if (invalidInsert)
+		if invalidInsert then
 			// Log.warn("illegal insert, no space for displaced connection!")
 			None
 		else
@@ -513,7 +513,7 @@ def connect(ctx: ClueContext, id: Identity, looksDirect: Boolean, thinksStall: S
 				!game.players(action.target).thoughts(focus).possible.contains(id) ||
 				conns.exists(c => state.deck(c.order).id().exists(!c.ids.contains(_)))
 
-			Log.info(s"found connections: ${state.logConns(conns, id)}${if (symmetric) " (symmetric)" else ""}${if (conns.existsM { case f: FinesseConn => f.inserted }) " (inserted)" else ""}")
+			Log.info(s"found connections: ${state.logConns(conns, id)}${if symmetric then " (symmetric)" else ""}${if conns.existsM { case f: FinesseConn => f.inserted } then " (inserted)" else ""}")
 			Some(FocusPossibility(id, conns, ClueInterp.Play, symmetric))
 	}
 	.orElse {

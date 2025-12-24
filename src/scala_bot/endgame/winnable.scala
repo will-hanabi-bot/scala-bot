@@ -37,16 +37,16 @@ extension[G <: Game] (solver: EndgameSolver[G])
 			Option.when(winnable)(action)
 		}
 
-		if (state.score == state.maxScore)
+		if state.score == state.maxScore then
 			Some(PerformAction.Play(99))
 
-		else if (solver.cluelessCache.contains(hash))
+		else if solver.cluelessCache.contains(hash) then
 			solver.cluelessCache(hash)
 
-		else if (Instant.now().isAfter(deadline))
+		else if Instant.now().isAfter(deadline) then
 			None
 
-		else if (unwinnableState(state, playerTurn, depth))
+		else if unwinnableState(state, playerTurn, depth) then
 			solver.cluelessCache = solver.cluelessCache.updated(hash, None)
 			None
 
@@ -54,15 +54,15 @@ extension[G <: Game] (solver: EndgameSolver[G])
 			winnablePlay.orElse(winnableStall).orElse(winnableDc)
 
 	def winnableSimpler(state: State, playerTurn: Int, remaining: RemainingMap, deadline: Instant, depth: Int): Boolean =
-		if (state.score == state.maxScore)
+		if state.score == state.maxScore then
 			return true
 
 		val hash = state.hash
 
-		if (solver.simplerCache.contains(hash))
+		if solver.simplerCache.contains(hash) then
 			return solver.simplerCache(hash)
 
-		if (unwinnableState(state, playerTurn, depth))
+		if unwinnableState(state, playerTurn, depth) then
 			solver.simplerCache = solver.simplerCache.updated(hash, false)
 			return false
 
@@ -102,17 +102,17 @@ extension[G <: Game] (solver: EndgameSolver[G])
 		// if (solver.ifCache.contains(hash))
 		// 	solver.ifCache(hash)
 
-		if (Instant.now.isAfter(deadline))
+		if Instant.now.isAfter(deadline) then
 			SimpleResult.Unwinnable
 
-		else if (state.cardsLeft == 0 || perform.isClue)
+		else if state.cardsLeft == 0 || perform.isClue then
 			val newState = advanceState(state, perform, playerTurn, draw = None)
 			// println(s"${indent(depth)}no draw, stacks ${newState.playStacks}")
 			val winnable = winnableSimpler(newState, state.nextPlayerIndex(playerTurn), remaining, deadline, depth + 1)
 
 			// println(s"${indent(depth)}winnable? $winnable")
 
-			val res = if (winnable) SimpleResult.AlwaysWinnable else SimpleResult.Unwinnable
+			val res = if winnable then SimpleResult.AlwaysWinnable else SimpleResult.Unwinnable
 			// solver.ifCache = solver.ifCache.updated(hash, res)
 			res
 
@@ -130,7 +130,7 @@ extension[G <: Game] (solver: EndgameSolver[G])
 			// println(s"${indent(depth)}remaining: $remaining, winnable draws: $winnableDraws")
 
 			val res =
-				if (winnableDraws.isEmpty)
+				if winnableDraws.isEmpty then
 					SimpleResult.Unwinnable
 				else
 					SimpleResult.WinnableWithDraws(winnableDraws.toList)
@@ -144,7 +144,7 @@ def advanceState(state: State, perform: PerformAction, playerIndex: Int, draw: O
 
 		s.copy(
 			hands = s.hands.updated(playerIndex, newHand),
-			nextCardOrder = newCardOrder + (if (s.cardsLeft > 0) 1 else 0),
+			nextCardOrder = newCardOrder + (if s.cardsLeft > 0 then 1 else 0),
 			cardsLeft = 0.max(s.cardsLeft - 1),
 			endgameTurns = s.endgameTurns match {
 				case Some(endgameTurns) => Some(endgameTurns - 1)
@@ -155,7 +155,7 @@ def advanceState(state: State, perform: PerformAction, playerIndex: Int, draw: O
 		.when(_.deck.lift(newCardOrder).flatMap(_.id()).isEmpty) { st =>
 			val deck = st.deck
 			val newCard = draw.getOrElse(Card(-1, -1, newCardOrder, st.turnCount))
-			if (deck.length == newCardOrder)
+			if deck.length == newCardOrder then
 				st.copy(deck = deck :+ newCard)
 			else
 				st.copy(deck = deck.updated(newCardOrder, newCard))
@@ -167,7 +167,7 @@ def advanceState(state: State, perform: PerformAction, playerIndex: Int, draw: O
 				case None =>
 					state.copy(strikes = state.strikes + 1)
 				case Some(id) =>
-					if (state.isPlayable(id))
+					if state.isPlayable(id) then
 						state.withPlay(id)
 					else
 						state.copy(strikes = state.strikes + 1).withDiscard(id, target)

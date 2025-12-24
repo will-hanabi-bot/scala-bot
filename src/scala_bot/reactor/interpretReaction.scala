@@ -5,7 +5,7 @@ import scala_bot.logger.Log
 
 def calcSlot(focusSlot: Int, slot: Int) =
 	val other = (focusSlot + 5 - slot) % 5
-	if (other == 0) 5 else other
+	if other == 0 then 5 else other
 
 private def calcTargetSlot(prev: Reactor, game: Reactor, order: Int, wc: ReactorWC) =
 	val ReactorWC(_, reacter, receiver, receiverHand, _, focusSlot, _, _) = wc
@@ -17,7 +17,7 @@ private def calcTargetSlot(prev: Reactor, game: Reactor, order: Int, wc: Reactor
 			Log.warn(s"Receiver no longer has slot $targetSlot!")
 			None
 		case Some(receiveOrder) =>
-			if (!game.state.hands(receiver).contains(receiveOrder))
+			if !game.state.hands(receiver).contains(receiveOrder) then
 				Log.warn(s"Receiver no longer has order $receiveOrder!")
 				None
 			else
@@ -36,7 +36,7 @@ def elimDcDc(state: State, common: Player, meta: Vector[ConvData], reacter: Int,
 			status == CardStatus.CalledToDiscard ||
 			(state.deck(receiverHand(targetSlot - 1)).clued && !state.deck(receiveOrder).clued)
 
-		if (skip)
+		if skip then
 			(c, m)
 		else
 			state.hands(reacter).lift(reactSlot - 1) match {
@@ -64,7 +64,7 @@ def elimPlayDc(state: State, common: Player, meta: Vector[ConvData], reacter: In
 			status == CardStatus.CalledToDiscard ||
 			(state.deck(receiverHand(targetSlot - 1)).clued && !state.deck(receiveOrder).clued)
 
-		if (skip)
+		if skip then
 			(c, m)
 		else
 			state.hands(reacter).lift(reactSlot - 1) match {
@@ -79,7 +79,7 @@ def elimPlayDc(state: State, common: Player, meta: Vector[ConvData], reacter: In
 	}
 
 val updateMeta = (meta: Vector[ConvData], common: Player, receiveOrder: Int) =>
-	if (common.thoughts(receiveOrder).inferred.isEmpty)
+	if common.thoughts(receiveOrder).inferred.isEmpty then
 		meta.updated(receiveOrder, meta(receiveOrder).copy(trash = true))
 	else
 		meta
@@ -89,7 +89,7 @@ def elimDcPlay(state: State, common: Player, meta: Vector[ConvData], reacter: In
 		val status = m(receiveOrder).status
 		lazy val reactSlot = calcSlot(focusSlot, i + 1)
 
-		if (status == CardStatus.CalledToPlay || status == CardStatus.CalledToDiscard)
+		if status == CardStatus.CalledToPlay || status == CardStatus.CalledToDiscard then
 			(c, m)
 		else
 			state.hands(reacter).lift(reactSlot - 1) match {
@@ -108,7 +108,7 @@ def elimPlayPlay(state: State, common: Player, meta: Vector[ConvData], reacter: 
 		val status = m(receiveOrder).status
 		lazy val reactSlot = calcSlot(focusSlot, i + 1)
 
-		if (status == CardStatus.CalledToPlay || status == CardStatus.CalledToDiscard)
+		if status == CardStatus.CalledToPlay || status == CardStatus.CalledToDiscard then
 			(c, m)
 		else
 			state.hands(reacter).lift(reactSlot - 1) match {
@@ -176,16 +176,16 @@ def reactDiscard(prev: Reactor, game: Reactor, playerIndex: Int, order: Int, wc:
 	val ReactorWC(_, reacter, receiver, receiverHand, clue, focusSlot, inverted, turn) = wc
 	lazy val knownTrash = prev.common.thinksTrash(prev, reacter)
 
-	if (playerIndex != reacter)
+	if playerIndex != reacter then
 		game
-	else if (inverted)
+	else if inverted then
 		// We were waiting for a response inversion and they reacted unnaturally
-		val unnatural = if (knownTrash.isEmpty)
+		val unnatural = if knownTrash.isEmpty then
 			prev.state.hands(reacter)(0) != order
 		else
 			!knownTrash.contains(order)
 
-		if (unnatural)
+		if unnatural then
 			game.rewind(turn, InterpAction(ClueInterp.Reactive)) match {
 				case Right(newGame) => newGame
 				case Left(err) =>
@@ -206,7 +206,7 @@ def reactDiscard(prev: Reactor, game: Reactor, playerIndex: Int, order: Int, wc:
 						elimDcDc(prev.state, newCommon, newMeta, reacter, receiverHand, focusSlot, targetSlot)
 				}
 
-				val action = if (clue.kind == ClueKind.Colour) "play" else "dc"
+				val action = if clue.kind == ClueKind.Colour then "play" else "dc"
 				Log.info(s"reactive dc+$action, reacter ${state.names(reacter)} (slot $reactSlot) receiver ${state.names(receiver)} (slot $targetSlot), focus slot $focusSlot (order ${state.hands(receiver)(targetSlot - 1)})")
 				game.copy(common = newCommon, meta = newMeta)
 			case None =>
@@ -218,10 +218,10 @@ def reactPlay(prev: Reactor, game: Reactor, playerIndex: Int, order: Int, wc: Re
 	val ReactorWC(_, reacter, receiver, receiverHand, clue, focusSlot, inverted, turn) = wc
 	lazy val knownPlayables = prev.common.obviousPlayables(prev, reacter)
 
-	if (playerIndex != reacter)
+	if playerIndex != reacter then
 		game
-	else if (inverted)
-		if (!knownPlayables.contains(order))
+	else if inverted then
+		if !knownPlayables.contains(order) then
 			game.rewind(turn, InterpAction(ClueInterp.Reactive)) match {
 				case Right(newGame) => newGame
 				case Left(err) =>
@@ -243,7 +243,7 @@ def reactPlay(prev: Reactor, game: Reactor, playerIndex: Int, order: Int, wc: Re
 						val (newCommon, newMeta) = targetIDiscard(prev, game, wc, targetSlot)
 						elimPlayDc(prev.state, newCommon, newMeta, reacter, receiverHand, focusSlot, targetSlot)
 				}
-				val action = if (clue.kind == ClueKind.Colour) "dc" else "play"
+				val action = if clue.kind == ClueKind.Colour then "dc" else "play"
 				Log.info(s"reactive play+$action, reacter ${state.names(reacter)} (slot $reactSlot) receiver ${state.names(receiver)} (slot $targetSlot), focus slot $focusSlot (order ${state.hands(receiver)(targetSlot - 1)})")
 				game.copy(common = newCommon, meta = newMeta)
 		}

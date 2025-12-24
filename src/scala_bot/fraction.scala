@@ -4,7 +4,7 @@ import scala.math.Numeric
 
 @scala.annotation.tailrec
 def gcd(a: Long, b: Long): Long =
-	if (b == 0) math.abs(a) else gcd(b, a % b)
+	if b == 0 then math.abs(a) else gcd(b, a % b)
 
 def lcm(a: Long, b: Long) =
 	math.abs(a * b) / gcd(a, b)
@@ -12,15 +12,15 @@ def lcm(a: Long, b: Long) =
 case class Frac(numer: Long, denom: Long):
 	def toDecimal = numer.toDouble / denom.toDouble
 
-	override def toString: String = if (denom == 1) s"$numer" else s"$numer/$denom"
+	override def toString: String = if denom == 1 then s"$numer" else s"$numer/$denom"
 
 	def reduced =
 		lazy val div = gcd(numer, denom)
-		if (numer == 0)
+		if numer == 0 then
 			Frac.zero
-		else if (numer > denom && numer % denom == 0)
+		else if numer > denom && numer % denom == 0 then
 			Frac(numer / denom, 1)
-		else if (div > 1)
+		else if div > 1 then
 			Frac(numer / div, denom / div)
 		else
 			this
@@ -78,7 +78,7 @@ object Frac:
 	def one = Frac(1, 1)
 
 	def apply(numer: Int, denom: Int): Frac =
-		if (denom == 0)
+		if denom == 0 then
 			throw new IllegalArgumentException("denominator cannot be zero")
 		new Frac(numer, denom)
 

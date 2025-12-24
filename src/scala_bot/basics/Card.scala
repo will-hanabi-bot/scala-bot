@@ -30,7 +30,7 @@ case class Identity(suitIndex: Int, rank: Int) extends Identifiable:
 
 object Identity {
 	inline def fromOrd(ord: Int): Identity =
-		if (ord < 30)
+		if ord < 30 then
 			val suitIndex = ord / 5
 			val rank = (ord % 5) + 1
 			Identity(suitIndex, rank)
@@ -87,10 +87,10 @@ case class Thought(
 	reset: Boolean = false
 ) extends Identifiable:
 	def id(infer: Boolean = false, symmetric: Boolean = false) =
-		if (possible.length == 1) {
+		if possible.length == 1 then {
 			Some(possible.head)
 		}
-		else if (!symmetric && suitIndex != -1) {
+		else if !symmetric && suitIndex != -1 then {
 			Some(Identity(suitIndex, rank))
 		}
 		else {
@@ -98,14 +98,14 @@ case class Thought(
 		}
 
 	inline def possibilities: IdentitySet =
-		if (inferred.isEmpty) { possible } else { inferred }
+		if inferred.isEmpty then { possible } else { inferred }
 
 	def resetInferences(): Thought =
-		if (reset) {
+		if reset then {
 			return this
 		}
 
-		val newInfoLock = if (infoLock.exists(_.nonEmpty)) infoLock else None
+		val newInfoLock = if infoLock.exists(_.nonEmpty) then infoLock else None
 		this.copy(
 			reset = true,
 			inferred = newInfoLock match {
@@ -140,12 +140,12 @@ case class ConvData(
 		focused = false,
 		urgent = false,
 		trash = false,
-		status = if (status == CardStatus.ChopMoved) status else CardStatus.None,
+		status = if status == CardStatus.ChopMoved then status else CardStatus.None,
 		by = None
 	)
 
 	def reason(turnCount: Int) =
-		if (reasoning.lastOption.forall(_ != turnCount))
+		if reasoning.lastOption.forall(_ != turnCount) then
 			copy(reasoning = turnCount +: reasoning)
 		else
 			this

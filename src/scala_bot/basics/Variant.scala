@@ -37,7 +37,7 @@ case class Variant(
 				case _ => {
 					val colour = Variant.colours.find(_.name == suit).getOrElse(throw new IllegalArgumentException(s"Colour '$suit' not found!"))
 					val abbreviation = colour.abbreviation.getOrElse(suit.charAt(0).toLower)
-					if (!acc.contains(abbreviation)) {
+					if !acc.contains(abbreviation) then {
 						abbreviation
 					} else {
 						suit.toLowerCase.find(c => !acc.contains(c))
@@ -58,7 +58,7 @@ case class Variant(
 
 	def cardCount(id: Identity): Int =
 		val Identity(suitIndex, rank) = id
-		if (DARK.matches(suits(suitIndex)) || criticalRank.contains(rank))
+		if DARK.matches(suits(suitIndex)) || criticalRank.contains(rank) then
 			1
 		else
 			Vector(3, 2, 2, 2, 1)(rank - 1)
@@ -67,35 +67,35 @@ case class Variant(
 		val Identity(suitIndex, rank) = id
 		val suit = suits(suitIndex)
 
-		if (clue.kind == ClueKind.Colour)
-			if (WHITISH.matches(suit))
+		if clue.kind == ClueKind.Colour then
+			if WHITISH.matches(suit) then
 				return false
 
-			if (RAINBOWISH.matches(suit))
+			if RAINBOWISH.matches(suit) then
 				return true
 
-			if (specialRank.contains(rank))
+			if specialRank.contains(rank) then
 				return rainbowS || !whiteS
 
-			if (PRISM.matches(suit))
+			if PRISM.matches(suit) then
 				return ((rank - 1) % colourableSuits.length) == clue.value
 
 			suits(suitIndex) == colourableSuits(clue.value)
 		else
-			if (BROWNISH.matches(suit))
+			if BROWNISH.matches(suit) then
 				return false
 
-			if (specialRank.contains(rank))
-				if (pinkS)
+			if specialRank.contains(rank) then
+				if pinkS then
 					return rank != clue.value
 
-				if (brownS)
+				if brownS then
 					return false
 
-				if (deceptiveS)
-					return (suitIndex % 4) + (if (rank == 1) 2 else 1) == clue.value
+				if deceptiveS then
+					return (suitIndex % 4) + (if rank == 1 then 2 else 1) == clue.value
 
-			if (PINKISH.matches(suit))
+			if PINKISH.matches(suit) then
 				return true
 
 			rank == clue.value

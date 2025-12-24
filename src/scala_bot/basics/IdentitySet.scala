@@ -12,7 +12,7 @@ extension(ids: IdentitySet)
 		value == other.value
 
 	inline def head: Identity =
-		if (value == 0)
+		if value == 0 then
 			throw new NoSuchElementException("head of empty IdentitySet!")
 		val bit = java.lang.Long.numberOfTrailingZeros(ids)
 		Identity.fromOrd(bit)
@@ -22,7 +22,7 @@ extension(ids: IdentitySet)
 
 	inline def foreachFast(inline f: Identity => Unit): Unit =
 		var remaining = ids
-		while (remaining != 0L) {
+		while remaining != 0L do {
 			val bit = java.lang.Long.numberOfTrailingZeros(remaining)
 			f(Identity.fromOrd(bit))
 
@@ -31,7 +31,7 @@ extension(ids: IdentitySet)
 
 	def foreach(f: Identity => Unit): Unit =
 		var remaining = ids
-		while (remaining != 0L) {
+		while remaining != 0L do {
 			val bit = java.lang.Long.numberOfTrailingZeros(remaining)
 			f(Identity.fromOrd(bit))
 
@@ -41,7 +41,7 @@ extension(ids: IdentitySet)
 	inline def forall(inline f: Identity => Boolean) =
 		var remaining = ids
 		var res = true
-		while (remaining != 0L && res) {
+		while remaining != 0L && res do {
 			val bit = java.lang.Long.numberOfTrailingZeros(remaining)
 			res &= f(Identity.fromOrd(bit))
 
@@ -52,7 +52,7 @@ extension(ids: IdentitySet)
 	inline def exists(inline f: Identity => Boolean) =
 		var remaining = ids
 		var res = false
-		while (remaining != 0L && !res) {
+		while remaining != 0L && !res do {
 			val bit = java.lang.Long.numberOfTrailingZeros(remaining)
 			res |= f(Identity.fromOrd(bit))
 
@@ -63,7 +63,7 @@ extension(ids: IdentitySet)
 	def toList =
 		var remaining = ids
 		var res = List.empty[Identity]
-		while (remaining != 0L) {
+		while remaining != 0L do {
 			val bit = java.lang.Long.numberOfTrailingZeros(remaining)
 			res = Identity.fromOrd(bit) +: res
 
@@ -74,7 +74,7 @@ extension(ids: IdentitySet)
 	def map[A](f: Identity => A) =
 		var remaining = ids
 		var res = Seq.empty[A]
-		while (remaining != 0L) {
+		while remaining != 0L do {
 			val bit = java.lang.Long.numberOfTrailingZeros(remaining)
 			res = f(Identity.fromOrd(bit)) +: res
 
@@ -86,12 +86,12 @@ extension(ids: IdentitySet)
 		var bits = ids
 		var res = ids
 
-		while (bits != 0) {
+		while bits != 0 do {
 			val tz = java.lang.Long.numberOfTrailingZeros(bits)
 			bits &= bits - 1
 
 			val id = Identity.fromOrd(tz)
-			if (!cond(id))
+			if !cond(id) then
 				res &= ~(1L << tz)
 		}
 		res
@@ -99,7 +99,7 @@ extension(ids: IdentitySet)
 	def flatMap[A](f: Identity => Iterable[A]) =
 		var remaining = ids
 		var res = Seq.empty[A]
-		while (remaining != 0L) {
+		while remaining != 0L do {
 			val bit = java.lang.Long.numberOfTrailingZeros(remaining)
 			res = f(Identity.fromOrd(bit)) ++: res
 
@@ -110,9 +110,9 @@ extension(ids: IdentitySet)
 	def withFilter(p: Identity => Boolean) =
 		var remaining = ids
 		var res = Seq.empty[Identity]
-		while (remaining != 0L) {
+		while remaining != 0L do {
 			val bit = java.lang.Long.numberOfTrailingZeros(remaining)
-			if (p(Identity.fromOrd(bit)))
+			if p(Identity.fromOrd(bit)) then
 				res = Identity.fromOrd(bit) +: res
 
 			remaining &= (remaining - 1)
@@ -146,7 +146,7 @@ extension(ids: IdentitySet)
 	def fmt(state: State) =
 		val str = StringBuilder()
 		var remaining = ids
-		while (remaining != 0L) {
+		while remaining != 0L do {
 			val bit = java.lang.Long.numberOfTrailingZeros(remaining)
 			str ++= state.logId(Identity.fromOrd(bit)) + ","
 
@@ -168,9 +168,9 @@ object IdentitySet:
 		var i = 0
 		var res = 0L
 
-		while (i < maxIds) {
+		while i < maxIds do {
 			val id = Identity.fromOrd(i)
-			if (cond(id))
+			if cond(id) then
 				res |= (1L << i)
 
 			i = i + 1

@@ -31,7 +31,7 @@ def parseArgs(args: Seq[String]) =
 	args.foldLeft(Map[String, String]()) { (acc, arg) =>
 		val parts = arg.split("=")
 
-		if (parts.length != 2)
+		if parts.length != 2 then
 			throw new IllegalArgumentException(s"Invalid argument $arg")
 
 		acc.updated(parts(0), parts(1))
@@ -63,15 +63,15 @@ def main(args: String*): Unit =
 				def loop: IO[Unit] =
 					ws.receive().flatMap {
 					case WebSocketFrame.Text(text, finalFrame, _) =>
-						if (!finalFrame)
+						if !finalFrame then
 							buffer.update(_ + text) *> loop
 						else
-							for {
+							for
 								acc <- buffer.getAndUpdate(_ => "")
 								full = acc + text
 								_   <- client.handleMsg(full)
 								_   <- loop
-							} yield ()
+							yield ()
 
 					case WebSocketFrame.Close(_, _) => IO.println("Connection closed")
 
@@ -85,16 +85,16 @@ def main(args: String*): Unit =
 
 		def startSender(ws: WebSocket[IO], queue: Queue[IO, String]): IO[FiberIO[Unit]] = {
 			def loop: IO[Unit] =
-				for {
+				for
 					msg <- queue.take
 					_   <- ws.send(WebSocketFrame.text(msg))
 					_   <- IO.sleep(500.millis)
 					_   <- loop
-				} yield ()
+				yield ()
 			loop.start
 		}
 
-		for {
+		for
 			_        <- IO.println("connected!")
 			wsQueue  <- Queue.unbounded[IO, String]
 			consoleQ <- Queue.unbounded[IO, ConsoleCmd]
@@ -104,7 +104,7 @@ def main(args: String*): Unit =
 			_        <- startSender(ws, wsQueue)
 			_        <- IO { Variant.init() }
 			_        <- (console.join, receive(client)).parTupled
-		} yield ()
+		yield ()
 
 	val parsedArgs = parseArgs(args)
 	val env = readEnv(parsedArgs)
@@ -116,7 +116,7 @@ def main(args: String*): Unit =
 		.getOrElse(throw new IllegalStateException(s"Missing HANABI_USERNAME$index env variable!"))
 
 	val program = HttpClientCatsBackend.resource[IO]().use { backend =>
-		for {
+		for
 			response <- basicRequest.post(uri"https://hanab.live:443/login")
 				.header("Content-Type", "application/x-www-form-urlencoded")
 				.body(Map("username" -> username, "password" -> password, "version" -> "bot"))
@@ -127,7 +127,7 @@ def main(args: String*): Unit =
 				.response(asWebSocket(useWebSocket))
 				.header("Cookie", cookie)
 				.send(backend)
-		} yield ()
+		yield ()
 	}.handleErrorWith { err =>
 		IO { err.printStackTrace() } *> IO.raiseError(err)
 	}

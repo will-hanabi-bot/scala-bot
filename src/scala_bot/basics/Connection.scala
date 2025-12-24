@@ -58,8 +58,8 @@ case class FinesseConn(
 	inserted: Boolean = false
 ) extends Connection:
 	def kind =
-		if (possiblyBluff) "possiblyBluff"
-		else if (bluff) "bluff"
+		if possiblyBluff then "possiblyBluff"
+		else if bluff then "bluff"
 		else "finesse"
 
 case class PositionalConn(

@@ -113,7 +113,7 @@ extension[G <: Game](game: G)
 	def handleAction(action: Action)(using ops: GameOps[G]): G =
 		val state = game.state
 
-		if (state.actionList.length < state.turnCount)
+		if state.actionList.length < state.turnCount then
 			throw new IllegalStateException(s"Turn count ${state.turnCount}, actionList ${state.actionList}")
 
 		val newGame = withState(_.copy(actionList = addAction(state.actionList, action, state.turnCount)))
@@ -141,7 +141,7 @@ extension[G <: Game](game: G)
 				ops.copyWith(newGame, GameUpdates(inProgress = Some(false)))
 
 			case turn @ TurnAction(num, currentPlayerIndex) =>
-				if (currentPlayerIndex == -1)	// game ended
+				if currentPlayerIndex == -1 then	// game ended
 					newGame
 				else
 					newGame.withState(_.copy(
@@ -192,7 +192,7 @@ extension[G <: Game](game: G)
 	def simulateClue(action: ClueAction, free: Boolean = false, log: Boolean = false)(using ops: GameOps[G]) =
 		val level = Logger.level
 
-		if (!log)
+		if !log then
 			Logger.setLevel(LogLevel.Off)
 
 		// Log.info(s"----- SIMULATING CLUE ${action.fmt(game.state)} -----")
@@ -200,7 +200,7 @@ extension[G <: Game](game: G)
 		val hypoGame = ops.copyWith(game, GameUpdates(catchup = Some(true)))
 			.withState(s => s.copy(
 				actionList = addAction(s.actionList, action, s.turnCount),
-				clueTokens = s.clueTokens + (if (free) 1 else 0)
+				clueTokens = s.clueTokens + (if free then 1 else 0)
 			))
 			.handleClue(game, action)
 			.pipe(ops.copyWith(_, GameUpdates(catchup = Some(false))))
@@ -214,7 +214,7 @@ extension[G <: Game](game: G)
 	def simulateAction(action: Action, draw: Option[Identity] = None, log: Boolean = false)(using ops: GameOps[G]): G =
 		val level = Logger.level
 
-		if (!log)
+		if !log then
 			Logger.setLevel(LogLevel.Off)
 
 		val playerIndex = action.playerIndex
@@ -242,15 +242,15 @@ extension[G <: Game](game: G)
 	def rewind(turn: Int, action: Action)(using ops: GameOps[G]): Either[String, G] =
 		val state = game.state
 
-		if (turn < 1 || turn > state.actionList.length + 1)
+		if turn < 1 || turn > state.actionList.length + 1 then
 			return Left(s"attempted to rewind to invalid turn $turn")
 
 		Log.info(s"Rewinding to insert $action on turn $turn!")
 
-		if (state.actionList(turn).contains(action))
+		if state.actionList(turn).contains(action) then
 			return Left("action was already rewinded")
 
-		if (game.rewindDepth > 4)
+		if game.rewindDepth > 4 then
 			return Left("rewind depth went too deep")
 
 		Log.highlight(Console.GREEN, "------- STARTING REWIND -------")
@@ -288,7 +288,7 @@ extension[G <: Game](game: G)
 			notes = Some(game.notes),
 			state = Some(newGame.state.copy(
 				deck = newGame.state.deck.map { c =>
-					if (c.id().nonEmpty) c else
+					if c.id().nonEmpty then c else
 						game.deckIds(c.order).fold(c) { id =>
 							c.copy(suitIndex = id.suitIndex, rank = id.rank)
 						}
@@ -299,7 +299,7 @@ extension[G <: Game](game: G)
 	def replay(turn: Int)(using ops: GameOps[G]): Either[String, G] =
 		val state = game.state
 
-		if (game.rewindDepth > 4)
+		if game.rewindDepth > 4 then
 			return Left("rewind depth went too deep")
 
 		Log.highlight(Console.GREEN, "------- STARTING REPLAY -------")
@@ -330,7 +330,7 @@ extension[G <: Game](game: G)
 			notes = Some(game.notes),
 			state = Some(newGame.state.copy(
 				deck = newGame.state.deck.map { c =>
-					if (c.id().nonEmpty) c else
+					if c.id().nonEmpty then c else
 						game.deckIds(c.order).fold(c) { id =>
 							c.copy(suitIndex = id.suitIndex, rank = id.rank)
 						}
@@ -351,14 +351,14 @@ extension[G <: Game](game: G)
 					Logger.setLevel(LogLevel.Off)
 
 					def loop(g: G, actions: Iterator[Action]): G =
-						if (g.state.turnCount == turn - 1)
+						if g.state.turnCount == turn - 1 then
 							Logger.setLevel(level)
 
-						if (g.state.turnCount == turn || actions.isEmpty)
+						if g.state.turnCount == turn || actions.isEmpty then
 							g
 						else
 							val action = actions.next()
-							if (action.isInstanceOf[InterpAction])
+							if action.isInstanceOf[InterpAction] then
 								loop(g, actions)
 							else
 								loop(g.handleAction(action), actions)
@@ -374,24 +374,24 @@ extension[G <: Game](game: G)
 			.withState(_.copy(actionList = actions))
 
 	def getNote(order: Int): String =
-		if (game.meta(order).trash)
+		if game.meta(order).trash then
 			return "kt"
 
 		val thought = game.common.thoughts(order)
 
-		val note = if (thought.inferred.isEmpty)
+		val note = if thought.inferred.isEmpty then
 			"??"
-		else if (thought.inferred == thought.possible)
+		else if thought.inferred == thought.possible then
 			""
-		else if (thought.inferred.length <= 6)
+		else if thought.inferred.length <= 6 then
 			game.common.strInfs(game.state, order)
 		else
 			"..."
 
 		game.meta(order).status match {
-			case CardStatus.CalledToPlay => s"[f]${if (note.isEmpty) "" else s" [$note]"}"
-			case CardStatus.Finessed => s"[f]${if (note.isEmpty) "" else s" [$note]"}"
-			case CardStatus.ChopMoved => s"[cm]${if (note.isEmpty) "" else s" [$note]"}"
+			case CardStatus.CalledToPlay => s"[f]${if note.isEmpty then "" else s" [$note]"}"
+			case CardStatus.Finessed => s"[f]${if note.isEmpty then "" else s" [$note]"}"
+			case CardStatus.ChopMoved => s"[cm]${if note.isEmpty then "" else s" [$note]"}"
 			case CardStatus.CalledToDiscard => "dc"
 			case _ => note
 		}
@@ -403,26 +403,26 @@ extension[G <: Game](game: G)
 			val card = state.deck(order)
 			lazy val note = getNote(order)
 
-			if ((!card.clued && game.meta(order).status == CardStatus.None) || note.isEmpty)
+			if (!card.clued && game.meta(order).status == CardStatus.None) || note.isEmpty then
 				acc
 			else
 				val linkNote = game.common.links.foldLeft(List()) { (a, link) =>
-					if (link.getOrders.contains(order) && link.promise.isDefined)
+					if link.getOrders.contains(order) && link.promise.isDefined then
 						a :+ state.logId(link.promise.get)
 					else a
 				}.mkString("? ")
 
-				val finalNote = if (!linkNote.isEmpty)
-					if (note.contains("]")) s"$note?" else s"[$note] $linkNote?"
+				val finalNote = if !linkNote.isEmpty then
+					if note.contains("]") then s"$note?" else s"[$note] $linkNote?"
 				else
 					note
 
 				val write = notes.get(order).forall(prev => finalNote != prev.last && state.turnCount > prev.turn)
 
-				if (write)
+				if write then
 					val full = notes.get(order).map(n => s"${n.full} | ").getOrElse("").appendedAll(s"t${state.turnCount}: $finalNote")
 
-					val newCmds = if (!game.catchup && game.inProgress)
+					val newCmds = if !game.catchup && game.inProgress then
 						("note", ujson.Obj("tableID" -> game.tableID, "order" -> order, "note" -> full).toString) +: cmds
 					else
 						cmds

@@ -72,7 +72,7 @@ private def revert(g: HGroup, order: Int, ids: List[Identity]) =
 	// Log.info(s"reverting, removing ${ids.map(g.state.logId)} from $order")
 	val newInferred = g.common.thoughts(order).inferred.difference(ids)
 
-	if (newInferred.isEmpty)
+	if newInferred.isEmpty then
 		g.withThought(order) { t =>
 			t.copy(
 				inferred = t.oldInferred.map(_.intersect(t.possible)).getOrElse(t.possible),
@@ -103,7 +103,7 @@ def refreshWCs(prev: HGroup, game: HGroup, action: Action, beforeClueInterp: Boo
 			case UpdateResult.Advance(nextIndex, skipped) =>
 				struct.copy(
 					wcs = wc.copy(connections = conns.drop(nextIndex)) +: struct.wcs,
-					toRemove = if (!skipped) struct.toRemove else conns.take(nextIndex) ++: struct.toRemove,
+					toRemove = if !skipped then struct.toRemove else conns.take(nextIndex) ++: struct.toRemove,
 				)
 
 			case UpdateResult.AmbiguousPassback =>
@@ -115,12 +115,12 @@ def refreshWCs(prev: HGroup, game: HGroup, action: Action, beforeClueInterp: Boo
 			case UpdateResult.Demonstrated(nextIndex, skipped) =>
 				struct.copy(
 					wcs = nextIndex.fold(struct.wcs)(i => wc.copy(connections = conns.drop(i)) +: struct.wcs),
-					toRemove = if (!skipped) struct.toRemove else nextIndex.fold(conns)(conns.take) ++: struct.toRemove,
+					toRemove = if !skipped then struct.toRemove else nextIndex.fold(conns)(conns.take) ++: struct.toRemove,
 					demos = wc +: struct.demos
 				)
 			case UpdateResult.Remove =>
 				struct.copy(
-					toRemove = PromptConn(-1, wc.focus, wc.inference) +: (if (wc.symmetric) List() else conns) ++: struct.toRemove,
+					toRemove = PromptConn(-1, wc.focus, wc.inference) +: (if wc.symmetric then List() else conns) ++: struct.toRemove,
 					remFocuses = struct.remFocuses + wc.focus,
 				)
 			case UpdateResult.Complete => struct
@@ -149,7 +149,7 @@ def refreshWCs(prev: HGroup, game: HGroup, action: Action, beforeClueInterp: Boo
 	.pipe { g =>
 		demos.foldLeft(g) { (acc, wc) =>
 			// Demonstrating a hidden connection means they must play all the hidden cards + the actual one
-			if (wc.connections(0).hidden)
+			if wc.connections(0).hidden then
 				val nonHiddenIndex = wc.connections.indexWhere(!_.hidden)
 				(1 to nonHiddenIndex).foldLeft(acc) { (a, i) =>
 					a.withXMeta(wc.connections(i).order)(_.copy(maybeFinessed = false))
@@ -166,7 +166,7 @@ def refreshWCs(prev: HGroup, game: HGroup, action: Action, beforeClueInterp: Boo
 				(wc.connections.exists(c => c.order == conn.order && c.ids.length == conn.ids.length && c.ids.forall(conn.ids.contains)))
 			}
 
-			if (shared || conn.isInstanceOf[KnownConn] || conn.isInstanceOf[PlayableConn])
+			if shared || conn.isInstanceOf[KnownConn] || conn.isInstanceOf[PlayableConn] then
 				acc
 			else
 				revert(acc, conn.order, conn.ids)
@@ -175,7 +175,7 @@ def refreshWCs(prev: HGroup, game: HGroup, action: Action, beforeClueInterp: Boo
 	.pipe { g =>
 		remFocuses.foldLeft(g) { case (acc, focus) =>
 			val sameFocusWcs = retainWCs.filter(_.focus == focus)
-			if (sameFocusWcs.nonEmpty && sameFocusWcs.forall(_.ambiguousSelf))
+			if sameFocusWcs.nonEmpty && sameFocusWcs.forall(_.ambiguousSelf) then
 				val turn = sameFocusWcs.head.turn
 				val action = acc.state.actionList(turn).collectFirst { case a: ClueAction => a }.get
 				Log.info(s"assigning previously-ambiguous connections to ${sameFocusWcs.map(w => g.state.logId(w.inference))}")
@@ -190,14 +190,14 @@ def refreshWCs(prev: HGroup, game: HGroup, action: Action, beforeClueInterp: Boo
 	.elim(goodTouch = true)
 
 def updateWc(prev: HGroup, game: HGroup, action: Action, wc: WaitingConnection, beforeClueInterp: Boolean): UpdateResult =
-	if (wc.connections.isEmpty)
+	if wc.connections.isEmpty then
 		return UpdateResult.Complete
 
 	val state = game.state
 	val reacting = wc.currConn.reacting
 
-	if (!beforeClueInterp)
-		Log.info(s"waiting for connecting ${wc.currConn.ids.map(state.logId).mkString(",")} (${wc.currConn.order}) ${wc.currConn.kind} for ${state.logId(wc.inference)}${if (wc.ambiguousSelf) " (ambiguous self)" else ""}")
+	if !beforeClueInterp then
+		Log.info(s"waiting for connecting ${wc.currConn.ids.map(state.logId).mkString(",")} (${wc.currConn.order}) ${wc.currConn.kind} for ${state.logId(wc.inference)}${if wc.ambiguousSelf then " (ambiguous self)" else ""}")
 
 	val impossibleConn = wc.connections.find { conn =>
 		game.common.thoughts(conn.order).possible.intersect(conn.ids).isEmpty
@@ -206,35 +206,35 @@ def updateWc(prev: HGroup, game: HGroup, action: Action, wc: WaitingConnection, 
 	lazy val impossibleFocus = wc.connections.headOption.forall(!_.isInstanceOf[PositionalConn]) &&
 		!game.common.thoughts(wc.focus).possible.contains(wc.inference)
 
-	if (wc.ambiguousSelf)
+	if wc.ambiguousSelf then
 		UpdateResult.Keep
 
-	else if (impossibleConn.isDefined)
+	else if impossibleConn.isDefined then
 		val c = impossibleConn.get
 		Log.warn(s"future connection depends on ${c.order} having ids ${c.ids.map(state.logId).mkString(",")}, removing")
 		UpdateResult.Remove
 
-	else if (impossibleFocus)
+	else if impossibleFocus then
 		Log.warn(s"connection depends on focus ${wc.focus} having id ${state.logId(wc.inference)}, removing")
 		UpdateResult.Remove
 
-	else if (stompedWc(prev, game, action, wc))
+	else if stompedWc(prev, game, action, wc) then
 		Log.warn(s"connection was clued directly, cancelling")
 		UpdateResult.Remove
 
-	else if (beforeClueInterp)
+	else if beforeClueInterp then
 		UpdateResult.Keep
 
-	else if (otherPlay(game, action, wc))
+	else if otherPlay(game, action, wc) then
 		Log.highlight(Console.CYAN, s"${state.names(action.playerIndex)} played connecting card, continuing")
 		resolveOtherPlay(game, wc)
 
 	// The turn we were waiting for
-	else if (action.playerIndex == reacting)
-		if (state.hands(reacting).contains(wc.currConn.order))
+	else if action.playerIndex == reacting then
+		if state.hands(reacting).contains(wc.currConn.order) then
 			val altWc = unplayableAlt(game, action, wc)
 
-			if (altWc.isDefined)
+			if altWc.isDefined then
 				Log.highlight(Console.CYAN, s"not all possibilities playable ${game.state.logConns(altWc.get.connections)}, waiting")
 				UpdateResult.Keep
 			else
@@ -268,7 +268,7 @@ def otherPlay(game: HGroup, action: Action, wc: WaitingConnection) =
 def resolveOtherPlay(game: HGroup, wc: WaitingConnection) =
 	val nextIndex = wc.getNextIndex(game.state)
 
-	if (wc.currConn.isInstanceOf[FinesseConn] || game.level < Level.IntermediateFinesses)
+	if wc.currConn.isInstanceOf[FinesseConn] || game.level < Level.IntermediateFinesses then
 		UpdateResult.Demonstrated(nextIndex, skipped = true)
 	else
 		nextIndex.fold(UpdateResult.Complete) {
@@ -294,7 +294,7 @@ def resolveRetained(prev: HGroup, game: HGroup, action: Action, wc: WaitingConne
 		!state.isBasicTrash(i) && !prev.state.isPlayable(i)
 	}
 
-	if (unplayableIds.nonEmpty)
+	if unplayableIds.nonEmpty then
 		Log.info(s"$name didn't play into unplayable ${wc.currConn.kind}: ${unplayableIds.fmt(state)}")
 		return UpdateResult.Keep
 
@@ -303,7 +303,7 @@ def resolveRetained(prev: HGroup, game: HGroup, action: Action, wc: WaitingConne
 		wc.connections.tail.exists(c => c.order == connOrder && c.hidden)
 	}
 
-	if (hiddenWc.nonEmpty)
+	if hiddenWc.nonEmpty then
 		Log.info(s"hidden connection as part of ${state.logConns(hiddenWc.get.connections)}")
 		return UpdateResult.Keep
 
@@ -320,7 +320,7 @@ def resolveRetained(prev: HGroup, game: HGroup, action: Action, wc: WaitingConne
 		case _: PromptConn => true
 	})
 
-	if (!missedReaction)
+	if !missedReaction then
 		return UpdateResult.Keep
 
 	val olderUnplayableFinesse =
@@ -339,30 +339,30 @@ def resolveRetained(prev: HGroup, game: HGroup, action: Action, wc: WaitingConne
 			}
 		}
 
-	if (olderUnplayableFinesse)
+	if olderUnplayableFinesse then
 		Log.info(s"allowing $name to clue, need to wait for unplayable older finesse")
 		return UpdateResult.Keep
 
 	action match {
 		case _: ClueAction =>
-			if (wc.currConn.isInstanceOf[PromptConn] && game.lastMove.exists(m => m != ClueInterp.Mistake && m != ClueInterp.Stall))
+			if wc.currConn.isInstanceOf[PromptConn] && game.lastMove.exists(m => m != ClueInterp.Mistake && m != ClueInterp.Stall) then
 				Log.info(s"allowing $name to defer a prompt by giving a useful clue ${game.lastMove.get}")
 				return UpdateResult.Keep
 
-			if (game.level >= Level.IntermediateFinesses && game.importantAction(reacting))
-				if (wc.currConn.isPossiblyBluff)
+			if game.level >= Level.IntermediateFinesses && game.importantAction(reacting) then
+				if wc.currConn.isPossiblyBluff then
 					Log.info(s"$name not allowed to defer a potential bluff")
 				else
 					Log.info(s"allowing $name to defer a finesse for an important clue")
 					return UpdateResult.Keep
 
 		case PlayAction(_, order, _, _) =>
-			if (game.isBlindPlaying(order))
-				if (game.xmeta(order).turnFinessed.get < wc.turn)
+			if game.isBlindPlaying(order) then
+				if game.xmeta(order).turnFinessed.get < wc.turn then
 					Log.info(s"$name played into older finesse, continuing to wait")
 					return UpdateResult.Keep
 
-				if (game.meta(connOrder).hidden && state.deck(connOrder).clued)
+				if game.meta(connOrder).hidden && state.deck(connOrder).clued then
 					Log.info(s"$name jumped ahead in layered finesse, continuing to wait")
 					return UpdateResult.Keep
 			// else
@@ -385,7 +385,7 @@ def resolveRetained(prev: HGroup, game: HGroup, action: Action, wc: WaitingConne
 			!f.ambiguousPassback
 	}
 
-	if (passback)
+	if passback then
 		Log.info(s"$name didn't play into ${wc.currConn.kind} but they need to play multiple non-hidden cards, passing back")
 		return UpdateResult.AmbiguousPassback
 
@@ -405,7 +405,7 @@ def resolveRetained(prev: HGroup, game: HGroup, action: Action, wc: WaitingConne
 		}
 	}.flatten
 
-	if (allowableHesitation.isDefined)
+	if allowableHesitation.isDefined then
 		Log.highlight(Console.CYAN, s"${state.names(reacting)} didn't play but allowable hesitation on ${state.names(allowableHesitation.get)}")
 		return UpdateResult.SelfPassback
 
@@ -437,15 +437,15 @@ def resolvePlayed(game: HGroup, wc: WaitingConnection, play: Int): UpdateResult 
 		)
 	}
 
-	if (missedReaction)
-		if (wc.currConn.isInstanceOf[FinesseConn] && stompedFinesse)
+	if missedReaction then
+		if wc.currConn.isInstanceOf[FinesseConn] && stompedFinesse then
 			Log.info(s"connecting card was stomped on, not confirming finesse")
 
-			if (nextIndex.exists(wc.connections(_).reacting == wc.currConn.reacting))
+			if nextIndex.exists(wc.connections(_).reacting == wc.currConn.reacting) then
 				Log.info(s"connection requires a self blind play, removing due to occam's razor")
 				return UpdateResult.Remove
 
-		else if (wc.currConn.isInstanceOf[FinesseConn] || game.level < Level.IntermediateFinesses)
+		else if wc.currConn.isInstanceOf[FinesseConn] || game.level < Level.IntermediateFinesses then
 			return UpdateResult.Demonstrated(nextIndex)
 
 	nextIndex.fold(UpdateResult.Complete)(UpdateResult.Advance(_))

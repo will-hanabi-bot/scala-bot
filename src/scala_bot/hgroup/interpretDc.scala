@@ -8,8 +8,8 @@ def interpretTransfer(game: HGroup, action: DiscardAction, holder: Int, dupe: Op
 	val DiscardAction(playerIndex, order, suitIndex, rank, _) = action
 	val id = Identity(suitIndex, rank)
 
-	if (playerIndex == holder)
-		if (dupe.exists(game.players(holder).thoughts(_).matches(id, infer = true)))
+	if playerIndex == holder then
+		if dupe.exists(game.players(holder).thoughts(_).matches(id, infer = true)) then
 			Log.info("discarded dupe of own hand")
 		else
 			Log.warn(s"discarded useful ${state.logId(id)} but dupe was in their own hand!")
@@ -17,10 +17,10 @@ def interpretTransfer(game: HGroup, action: DiscardAction, holder: Int, dupe: Op
 
 	val cluedTargets = state.hands(holder).filter(o => game.isTouched(o) && validTransfer(game, id)(o))
 
-	if (cluedTargets.isEmpty)
+	if cluedTargets.isEmpty then
 		state.hands(holder).find(validTransfer(game, id)) match {
 			case Some(uncluedTarget) if dupe.contains(uncluedTarget) =>
-				Log.info(s"${if (state.isPlayable(id)) "gd" else "baton"} to ${state.names(holder)}'s ${uncluedTarget}")
+				Log.info(s"${if state.isPlayable(id) then "gd" else "baton"} to ${state.names(holder)}'s ${uncluedTarget}")
 				DiscardResult.GentlemansDiscard(uncluedTarget)
 
 			case _ if (holder == state.ourPlayerIndex) =>
@@ -44,7 +44,7 @@ def interpretTransfer(game: HGroup, action: DiscardAction, holder: Int, dupe: Op
 				}
 		}
 
-	else if (dupe.exists(!cluedTargets.contains(_)))
+	else if dupe.exists(!cluedTargets.contains(_)) then
 		Log.warn(s"looks like sarcastic discard to $cluedTargets, but should be $dupe!")
 		DiscardResult.Mistake
 

@@ -38,7 +38,7 @@ case class State(
 		val deckInts = Array.ofDim[Int](deck.length)
 		loop(0, _ < deck.length, _ + 1) { i =>
 			val id = deck(i).id()
-			deckInts(i) = if (id.isDefined) id.get.toOrd else 0
+			deckInts(i) = if id.isDefined then id.get.toOrd else 0
 		}
 		MurmurHash3.productHash((hands, deckInts, clueTokens, halfClueToken, endgameTurns))
 
@@ -50,7 +50,7 @@ case class State(
 		val newBase = baseCount.updated(id.toOrd, baseCount(id.toOrd) + 1)
 
 		val (newMax, newCritical, newTrash, newPlayable) =
-			if (criticalSet.contains(id))
+			if criticalSet.contains(id) then
 				(maxRanks.updated(suitIndex, math.min(maxRanks(suitIndex), rank - 1)),
 				criticalSet.difference(id),
 				trashSet.union(id),
@@ -58,7 +58,7 @@ case class State(
 			else
 				val critical = cardCount(id.toOrd) - newBase(id.toOrd) == 1 && !isBasicTrash(id)
 				(maxRanks,
-				if (critical) criticalSet.union(id) else criticalSet,
+				if critical then criticalSet.union(id) else criticalSet,
 				trashSet,
 				playableSet)
 
@@ -85,11 +85,11 @@ case class State(
 		).when(_ => id.rank == 5)(_.regainClue)
 
 	def tryPlay(id: Identity) =
-		if (isPlayable(id)) withPlay(id) else this
+		if isPlayable(id) then withPlay(id) else this
 
 	def regainClue =
-		if (variant.clueStarved)
-			if (halfClueToken)
+		if variant.clueStarved then
+			if halfClueToken then
 				copy(clueTokens = clueTokens + 1, halfClueToken = false)
 			else
 				copy(halfClueToken = clueTokens < 8)
@@ -157,7 +157,7 @@ case class State(
 
 	def holderOf(order: Int): Int =
 		loop(0, _ < numPlayers, _ + 1) { i =>
-			if (hands(i).fastExists(_ == order))
+			if hands(i).fastExists(_ == order) then
 				return i
 		}
 		throw new IllegalArgumentException(s"Tried to get holder of $order, hands were $hands!")
@@ -166,14 +166,14 @@ case class State(
 		order < numPlayers * HAND_SIZE(numPlayers)
 
 	def expandShort(short: String) =
-		if (short.length != 2)
+		if short.length != 2 then
 			throw new IllegalArgumentException(s"Short should be exactly 2 characters! (eg. r5)")
 
 		val suitIndex = variant.shortForms.indexOf(short.charAt(0))
-		if (suitIndex == -1)
+		if suitIndex == -1 then
 			throw new IllegalArgumentException(s"Colour $short doesn't exist in selected variant!")
 
-		if (!short.charAt(1).isDigit)
+		if !short.charAt(1).isDigit then
 			throw new IllegalArgumentException(s"Rank $short doesn't exist in selected variant!")
 
 		Identity(suitIndex, short.charAt(1) - '0')
@@ -195,9 +195,9 @@ case class State(
 
 	def logConn(conn: Connection) =
 		val ids = conn.ids
-		val idStr = if (ids.length == 1) logId(ids.head) else s"[${ids.map(logId).mkString(",")}]"
+		val idStr = if ids.length == 1 then logId(ids.head) else s"[${ids.map(logId).mkString(",")}]"
 		val extra = conn match {
-			case f: FinesseConn => if (f.certain) " (certain)" else if (f.hidden) " (hidden)" else ""
+			case f: FinesseConn => if f.certain then " (certain)" else if f.hidden then " (hidden)" else ""
 			case _ => ""
 		}
 
@@ -207,7 +207,7 @@ case class State(
 		s"[${conns.map(logConn).mkString(" -> ")}]"
 
 	def logConns(conns: Seq[Connection], nextId: Identity) =
-		val terminator = if (nextId.rank > 5) "" else s" -> ${logId(nextId)}?"
+		val terminator = if nextId.rank > 5 then "" else s" -> ${logId(nextId)}?"
 
 		s"[${conns.map(logConn).mkString(" -> ")}$terminator]"
 
@@ -230,10 +230,10 @@ object State:
 				cardsLeft += count
 				cardCount(id.toOrd) = count
 
-				if (rank == 1)
+				if rank == 1 then
 					playableSet = playableSet.union(id)
 
-				if (count == 1)
+				if count == 1 then
 					criticalSet = criticalSet.union(id)
 			}
 		}

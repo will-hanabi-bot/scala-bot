@@ -30,7 +30,7 @@ def interpClue(ctx: ClueContext): HGroup =
 			return game.when (_ => pinkFix1s) { g =>
 				val fixedOrder = oldOrdered1s.head
 
-				if (chop && (clue.value == 2 || clue.value == 5))
+				if chop && (clue.value == 2 || clue.value == 5) then
 					Log.info(s"pink fix!")
 					g.withThought(fixedOrder)(t => t.copy(
 						inferred = t.possible.difference(state.playableSet)
@@ -61,14 +61,14 @@ def interpClue(ctx: ClueContext): HGroup =
 
 	val stall = stallingSituation(ctx)
 
-	if (stall.isDefined)
+	if stall.isDefined then
 		val (interp, thinksStall) = stall.get
 
-		if (thinksStall.size > 0 && thinksStall.size < state.numPlayers)
+		if thinksStall.size > 0 && thinksStall.size < state.numPlayers then
 			Log.warn(s"asymmetric! only ${thinksStall.map(state.names)} think stall")
 			// return game.copy(lastMove = Some(ClueInterp.Mistake))
 
-		else if (thinksStall.size == state.numPlayers)
+		else if thinksStall.size == state.numPlayers then
 			Log.info(s"stalling situation $interp")
 
 			return game
@@ -86,7 +86,7 @@ def interpClue(ctx: ClueContext): HGroup =
 
 	val distributionIds = distributionClue(prev, game, action, focus)
 
-	if (distributionIds.isDefined)
+	if distributionIds.isDefined then
 		Log.info(s"distribution clue!")
 
 		return game
@@ -98,7 +98,7 @@ def interpClue(ctx: ClueContext): HGroup =
 			.withMeta(focus)(_.copy(focused = true))
 			.copy(lastMove = Some(ClueInterp.Distribution))
 
-	if (game.level >= Level.BasicCM && !state.inEndgame)
+	if game.level >= Level.BasicCM && !state.inEndgame then
 		def badCM(chopMoved: Seq[Int]) =
 			game.chop(target).exists { oldChop =>
 				state.deck(oldChop).id().exists { chopId =>
@@ -126,10 +126,10 @@ def interpClue(ctx: ClueContext): HGroup =
 
 		val tcm = interpretTcm(ctx)
 
-		if (tcm.isDefined)
+		if tcm.isDefined then
 			// All newly cards are trash
 			return list.foldLeft(game) { (acc, order) =>
-				if (prev.state.deck(order).clued)
+				if prev.state.deck(order).clued then
 					acc
 				else
 					acc.withThought(order) { t =>
@@ -143,15 +143,15 @@ def interpClue(ctx: ClueContext): HGroup =
 			}
 			.pipe(performCM(_, tcm.get))
 			.copy(lastMove = Some(
-				if (badCM(tcm.get)) ClueInterp.Mistake else ClueInterp.Discard
+				if badCM(tcm.get) then ClueInterp.Mistake else ClueInterp.Discard
 			))
 
 		val cm5 = interpret5cm(ctx)
 
-		if (cm5.isDefined)
+		if cm5.isDefined then
 			return performCM(game, cm5.get)
 				.copy(lastMove = Some(
-					if (badCM(cm5.get)) ClueInterp.Mistake else ClueInterp.Discard
+					if badCM(cm5.get) then ClueInterp.Mistake else ClueInterp.Discard
 				))
 
 	val pinkTrashFix = state.includesVariant(PINKISH) &&
@@ -162,7 +162,7 @@ def interpClue(ctx: ClueContext): HGroup =
 			common.isTrash(game, Identity(suitIndex, clue.value), focus)
 		}
 
-	if (pinkTrashFix)
+	if pinkTrashFix then
 		Log.info(s"pink trash fix!")
 		return game
 			.withThought(focus) { t =>
@@ -180,11 +180,11 @@ def interpClue(ctx: ClueContext): HGroup =
 			)}
 			.copy(lastMove = Some(ClueInterp.Fix))
 
-	val savePoss = if (!chop) List() else (for
+	val savePoss = if !chop then List() else (for
 		inf <- common.thoughts(focus).inferred if
 			!state.isBasicTrash(inf) &&
 			visibleFind(state, common, inf, infer = true, excludeOrder = focus).isEmpty && {
-			if (clue.kind == ClueKind.Colour)
+			if clue.kind == ClueKind.Colour then
 				colourSave(prev, action, inf, focus)
 			else
 				rankSave(prev, action, inf, focus)
@@ -192,7 +192,7 @@ def interpClue(ctx: ClueContext): HGroup =
 	yield
 		FocusPossibility(inf, List(), ClueInterp.Save)).toList
 
-	if (savePoss.nonEmpty)
+	if savePoss.nonEmpty then
 		Log.info(s"found saves: [${savePoss.map(fp => state.logId(fp.id)).mkString(",")}]")
 
 	val thinksStall = stall.map(_._2).getOrElse(Set())
@@ -221,7 +221,7 @@ def interpClue(ctx: ClueContext): HGroup =
 		giver == state.ourPlayerIndex ||
 		simplest.exists(fp => state.deck(focus).matches(fp.id))
 
-	if (noSelf)
+	if noSelf then
 		Log.info(s"simplest focus possibilities [${simplest.map(fp => state.logId(fp.id)).mkString(",")}]")
 		resolveClue(ctx, simplest)
 	else

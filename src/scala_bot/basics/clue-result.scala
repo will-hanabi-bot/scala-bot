@@ -10,12 +10,12 @@ def elimResult(prev: Game, game: Game, hand: IndexedSeq[Int], list: Seq[Int]) =
 		val card = state.deck(order)
 		val status = game.meta(order).status
 
-		if (card.clued && status != CardStatus.CalledToDiscard && thought.possible.length < prevThought.possible.length)
-			if (!prev.state.deck(order).clued && !prev.isBlindPlaying(order) && !game.common.orderKt(game, order))
+		if card.clued && status != CardStatus.CalledToDiscard && thought.possible.length < prevThought.possible.length then
+			if !prev.state.deck(order).clued && !prev.isBlindPlaying(order) && !game.common.orderKt(game, order) then
 				(order +: newTouched, fill, elim)
-			else if (list.contains(order) && state.hasConsistentInfs(thought) && status != CardStatus.CalledToPlay)
+			else if list.contains(order) && state.hasConsistentInfs(thought) && status != CardStatus.CalledToPlay then
 				(newTouched, order +: fill, elim)
-			else if (state.hasConsistentInfs(thought))
+			else if state.hasConsistentInfs(thought) then
 				(newTouched, fill, order +: elim)
 			else
 				(newTouched, fill, elim)
@@ -28,12 +28,12 @@ def badTouchResult(prev: Game, game: Game, action: ClueAction) =
 	val ClueAction(giver, target, _, _) = action
 
 	val dupeScores = prev.players.zipWithIndex.map { (player, i) =>
-		if (i == target) 99 else
+		if i == target then 99 else
 			state.hands(target).map { order =>
 				val card = state.deck(order)
 
 				// Not newly clued, trash id or we don't know: don't care about duplicating
-				if (prev.state.deck(order).clued || !card.clued || card.id().forall(state.isBasicTrash))
+				if prev.state.deck(order).clued || !card.clued || card.id().forall(state.isBasicTrash) then
 					0
 				else
 					state.hands(i).count{ o =>
@@ -46,9 +46,9 @@ def badTouchResult(prev: Game, game: Game, action: ClueAction) =
 	val avoidableDupe = dupeScores(giver) - dupeScores.min
 
 	val inter = state.hands(target).foldRight((List[Int](), List[Int]())) { case (order, (badTouch, trash)) =>
-		if (prev.state.deck(order).clued || !state.deck(order).clued)
+		if prev.state.deck(order).clued || !state.deck(order).clued then
 			(badTouch, trash)
-		else if (game.common.orderKt(game, order))
+		else if game.common.orderKt(game, order) then
 			(badTouch, order +: trash)
 		else
 			state.deck(order).id() match {
@@ -70,7 +70,7 @@ def badTouchResult(prev: Game, game: Game, action: ClueAction) =
 				}
 			}
 
-		if (duplicated)
+		if duplicated then
 			(order +: badTouch, trash)
 		else
 			(badTouch, trash)
@@ -80,9 +80,9 @@ def badTouchResult(prev: Game, game: Game, action: ClueAction) =
 
 def playablesResult(prev: Game, game: Game) =
 	game.me.hypoPlays.foldRight((List[Int](), List[Int]())) { case (order, (blindPlays, playables)) =>
-		if (prev.me.hypoPlays.contains(order))
+		if prev.me.hypoPlays.contains(order) then
 			(blindPlays, playables)
-		else if (game.isBlindPlaying(order) && !prev.isBlindPlaying(order))
+		else if game.isBlindPlaying(order) && !prev.isBlindPlaying(order) then
 			(order +: blindPlays, order +: playables)
 		else
 			(blindPlays, order +: playables)

@@ -48,10 +48,10 @@ def fetchGame(args: Seq[String]) =
 
 	val List(id, indexR, file, conventionR, levelR) = List("id", "index", "file", "convention", "level").map(parsedArgs.lift(_))
 
-	if (id.isEmpty && file.isEmpty)
+	if id.isEmpty && file.isEmpty then
 		throw new IllegalArgumentException("Must provide either id or file argument.")
 
-	if (indexR.isEmpty)
+	if indexR.isEmpty then
 		throw new IllegalArgumentException("Missing required argument 'index'!")
 
 	val index = indexR.get.toInt
@@ -63,7 +63,7 @@ def fetchGame(args: Seq[String]) =
 		case None => GameData.fetchFile(file.get)
 	}
 
-	if (index > players.length)
+	if index > players.length then
 		throw new IllegalArgumentException(s"Replay only has ${players.length} players!")
 
 	Variant.init()
@@ -92,8 +92,8 @@ def processGame[G <: Game](game: G, data: GameData, index: Int)(using ops: GameO
 					acc.handleAction(DrawAction(
 						playerIndex,
 						order,
-						if (playerIndex == index) -1 else deck(order).suitIndex,
-						if (playerIndex == index) -1 else deck(order).rank
+						if playerIndex == index then -1 else deck(order).suitIndex,
+						if playerIndex == index then -1 else deck(order).rank
 					))
 				}
 			}
@@ -109,8 +109,8 @@ def processGame[G <: Game](game: G, data: GameData, index: Int)(using ops: GameO
 								a.handleAction(DrawAction(
 									playerIndex,
 									order,
-									if (playerIndex == index) -1 else deck(order).suitIndex,
-									if (playerIndex == index) -1 else deck(order).rank
+									if playerIndex == index then -1 else deck(order).suitIndex,
+									if playerIndex == index then -1 else deck(order).rank
 								))
 							case _ => a
 						}
@@ -128,7 +128,7 @@ def processGame[G <: Game](game: G, data: GameData, index: Int)(using ops: GameO
 
 object replay extends IOApp {
 	def run(args: List[String]) =
-		for {
+		for
 			wsQueue  <- Queue.unbounded[IO, String]
 			consoleQ <- Queue.unbounded[IO, ConsoleCmd]
 			game = fetchGame(args)
@@ -136,5 +136,5 @@ object replay extends IOApp {
 			client = new BotClient(wsQueue, gameRef)
 			console  <- spawnConsole(consoleQ, client)
 			_ <- console.join
-		} yield (ExitCode.Success)
+		yield (ExitCode.Success)
 }

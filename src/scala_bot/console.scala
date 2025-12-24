@@ -16,7 +16,7 @@ def spawnConsole(queue: Queue[IO, ConsoleCmd], client: BotClient) =
 	(spawnConsoleInput(queue), spawnConsoleHandler(queue, client)).parTupled.start
 
 def spawnConsoleInput(queue: Queue[IO, ConsoleCmd]) =
-	def loop: IO[Unit] = for {
+	def loop: IO[Unit] = for
 		input <- Console[IO].readLine
 		cmd <- input.split(" ") match {
 			case Array("hand", name) => IO.pure(Some(ConsoleCmd.Hand(name, None)))
@@ -36,18 +36,18 @@ def spawnConsoleInput(queue: Queue[IO, ConsoleCmd]) =
 		}
 		_ <- IO.whenA(cmd.nonEmpty)(queue.offer(cmd.get))
 		_ <- loop
-	} yield ()
+	yield ()
 
 	loop.handleErrorWith { err =>
 		IO { err.printStackTrace() } *> IO.raiseError(err)
 	}
 
 def spawnConsoleHandler(queue: Queue[IO, ConsoleCmd], client: BotClient) =
-	def loop: IO[Unit] = for {
+	def loop: IO[Unit] = for
 		cmd <- queue.take
 		_ <- client.debug(cmd)
 		_ <- loop
-	} yield ()
+	yield ()
 
 	loop.handleErrorWith { err =>
 		IO { err.printStackTrace() } *> IO.raiseError(err)

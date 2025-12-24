@@ -10,18 +10,18 @@ def determineFocus(prev: RefSieve, game: RefSieve, action: ClueAction, push: Boo
 	val state = game.state
 	val newlyTouched = action.list.filter(o => state.deck(o).clued && !prev.state.deck(o).clued)
 
-	if (newlyTouched.isEmpty)
+	if newlyTouched.isEmpty then
 		action.list.max
 
-	else if (push)
+	else if push then
 		val hand = state.hands(action.target)
 
-		if (right)
+		if right then
 			val leastPriority = hand.findLast(!prev.state.deck(_).clued).getOrElse(-1)
-			newlyTouched.minBy(o => if (o == leastPriority) 99 else o)
+			newlyTouched.minBy(o => if o == leastPriority then 99 else o)
 		else
 			val leastPriority = hand.find(!prev.state.deck(_).clued).getOrElse(-1)
-			newlyTouched.maxBy(o => if (o == leastPriority) -99 else o)
+			newlyTouched.maxBy(o => if o == leastPriority then -99 else o)
 
 	else
 		newlyTouched.maxOption.get
@@ -33,15 +33,15 @@ def refPlay(prev: RefSieve, game: RefSieve, action: ClueAction, right: Boolean =
 	val newlyTouched = action.list.filter(o => state.deck(o).clued && !prev.state.deck(o).clued)
 
 	val focus = determineFocus(prev, game, action, push = true, right)
-	val target = if (right)
+	val target = if right then
 		newlyTouched.map(common.refer(prev, hand, _, left = false)).min
 	else
 		newlyTouched.map(common.refer(prev, hand, _, left = true)).max
 
-	if (game.isBlindPlaying(target))
+	if game.isBlindPlaying(target) then
 		Log.info(s"targeting an already known playable!")
 		(None, game)
-	else if (game.meta(target).status == CardStatus.CalledToDiscard)
+	else if game.meta(target).status == CardStatus.CalledToDiscard then
 		Log.info(s"targeting a card called to discard!")
 		(None, game)
 	else
@@ -60,8 +60,8 @@ def refDiscard(prev: RefSieve, game: RefSieve, action: ClueAction): (Option[Clue
 	val focus = determineFocus(prev, game, action, push = false)
 	val targetIndex = hand.indexWhere(o => o < focus && !state.deck(o).clued)
 
-	if (targetIndex == -1)
-		if (prev.common.thinksLocked(prev, action.giver) || prev.state.clueTokens == 8)
+	if targetIndex == -1 then
+		if prev.common.thinksLocked(prev, action.giver) || prev.state.clueTokens == 8 then
 			Log.info(s"rank stall!")
 			(Some(ClueInterp.Stall), game)
 		else
@@ -103,9 +103,9 @@ def targetPlay(prev: RefSieve, game: RefSieve, action: ClueAction, targetOrder: 
 	targetId match {
 		case Some(id) if !focusPoss.exists(_.id == id) =>
 			lazy val conns = connect(prev, game, targetOrder, id, action, unknown, findOwn = true)
-			if (action.giver == state.ourPlayerIndex)
+			if action.giver == state.ourPlayerIndex then
 				(None, game)
-			else if (conns.isEmpty)
+			else if conns.isEmpty then
 				Log.warn(s"targeting an unplayable card!")
 				(None, game)
 			else
@@ -124,7 +124,7 @@ def resolvePlay(game: RefSieve, action: ClueAction, targetOrder: Int, focusPoss:
 	matchedFps.flatMap(_.connections).foldLeft(initial) { case ((acc, modified), conn) =>
 		val order = conn.order
 		val newGame = acc.withThought(order) { t =>
-			val newInferred = if (modified.contains(order))
+			val newInferred = if modified.contains(order) then
 				t.inferred.union(conn.ids)
 			else
 				t.inferred.intersect(conn.ids)
