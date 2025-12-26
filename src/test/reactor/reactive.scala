@@ -9,7 +9,7 @@ import scala.util.chaining.scalaUtilChainingOps
 class Reactive extends munit.FunSuite:
 	override def beforeAll() = Logger.setLevel(LogLevel.Off)
 
-	test("it understands a reactive play play") {
+	test("it understands a reactive play play"):
 		val game = setup(Reactor.apply, Vector(
 			Vector("xx", "xx", "xx", "xx", "xx"),
 			Vector("b1", "g2", "r2", "r3", "g5"),
@@ -25,9 +25,8 @@ class Reactive extends munit.FunSuite:
 
 		assertEquals(game.meta(game.state.hands(Cathy.ordinal)(0)).status, CardStatus.CalledToPlay)
 		hasInfs(game, None, Cathy, 1, Vector("r1", "y1", "g1", "b2", "p1"))
-	}
 
-	test("it reacts to a reactive play play") {
+	test("it reacts to a reactive play play"):
 		val game = setup(Reactor.apply, Vector(
 			Vector("xx", "xx", "xx", "xx", "xx"),
 			Vector("b1", "g2", "r2", "r3", "g5"),
@@ -41,9 +40,8 @@ class Reactive extends munit.FunSuite:
 		hasInfs(game, None, Alice, 1, Vector("r1", "y1", "g1", "p1"))
 
 		assertEquals(game.takeAction, PerformAction.Play(game.state.hands(Alice.ordinal)(0)))
-	}
 
-	test("it receives a reactive play play") {
+	test("it receives a reactive play play"):
 		val game = setup(Reactor.apply, Vector(
 			Vector("xx", "xx", "xx", "xx", "xx"),
 			Vector("b1", "g2", "r2", "r3", "g5"),
@@ -57,9 +55,8 @@ class Reactive extends munit.FunSuite:
 		// Alice's slot 2 is called to play.
 		assertEquals(game.meta(game.state.hands(Alice.ordinal)(1)).status, CardStatus.CalledToPlay)
 		hasInfs(game, None, Alice, 2, Vector("r1", "y1", "g2", "b1", "p1"))
-	}
 
-	test("it reacts to a reverse reactive play play") {
+	test("it reacts to a reverse reactive play play"):
 		val game = setup(Reactor.apply, Vector(
 			Vector("xx", "xx", "xx", "xx", "xx"),
 			Vector("b1", "b2", "r2", "r3", "g5"),
@@ -80,9 +77,8 @@ class Reactive extends munit.FunSuite:
 		.pipe(takeTurn("Bob plays b1", "y5"))
 
 		hasInfs(game, None, Cathy, 4, Vector("r1", "y1", "g2", "p1"))
-	}
 
-	test("it elims a reactive play play") {
+	test("it elims a reactive play play"):
 		val game = setup(Reactor.apply, Vector(
 			Vector("xx", "xx", "xx", "xx", "xx"),
 			Vector("r1", "g2", "r2", "y3", "g5"),
@@ -113,9 +109,8 @@ class Reactive extends munit.FunSuite:
 
 		// Bob can play slot 2, so Cathy can write !playable on slot 3.
 		assert(Seq("r1", "y1", "g1", "b1", "p1").map(state.expandShort).forall(!common.thoughts(state.hands(Cathy.ordinal)(2)).inferred.contains(_)))
-	}
 
-	test("it understands a reactive dc play") {
+	test("it understands a reactive dc play"):
 		val game = setup(Reactor.apply, Vector(
 			Vector("xx", "xx", "xx", "xx", "xx"),
 			Vector("r3", "g2", "r2", "r3", "g5"),
@@ -133,9 +128,8 @@ class Reactive extends munit.FunSuite:
 
 		assertEquals(game.meta(game.state.hands(Cathy.ordinal)(0)).status, CardStatus.CalledToPlay)
 		hasInfs(game, None, Cathy, 1, Vector("r1", "y1", "g1", "p1"))
-	}
 
-	test("it elims a reactive dc play") {
+	test("it elims a reactive dc play"):
 		val game = setup(Reactor.apply, Vector(
 			Vector("xx", "xx", "xx", "xx", "xx"),
 			Vector("b1", "g2", "r2", "g5", "y3"),
@@ -165,9 +159,8 @@ class Reactive extends munit.FunSuite:
 		// Bob can discard the other slots, so Cathy can write !playable on slots 2 and 3.
 		assert(Seq("r2", "y2", "g2", "b1", "p1").map(state.expandShort).forall(!common.thoughts(state.hands(Cathy.ordinal)(1)).inferred.contains(_)))
 		assert(Seq("r2", "y2", "g2", "b1", "p1").map(state.expandShort).forall(!common.thoughts(state.hands(Cathy.ordinal)(2)).inferred.contains(_)))
-	}
 
-	test("it elims a reactive play dc") {
+	test("it elims a reactive play dc"):
 		val game = setup(Reactor.apply, Vector(
 			Vector("xx", "xx", "xx", "xx", "xx"),
 			Vector("b1", "g2", "r2", "g5", "y3"),
@@ -191,9 +184,8 @@ class Reactive extends munit.FunSuite:
 
 		// However, ALice's slot 2 is known !trash.
 		assert(game.common.thoughts(game.state.hands(Alice.ordinal)(1)).inferred.forall(!game.state.isBasicTrash(_)))
-	}
 
-	test("it reacts to a reactive finesse") {
+	test("it reacts to a reactive finesse"):
 		val game = setup(Reactor.apply, Vector(
 			Vector("xx", "xx", "xx", "xx", "xx"),
 			Vector("b2", "g2", "r2", "r3", "g5"),
@@ -208,9 +200,8 @@ class Reactive extends munit.FunSuite:
 		hasInfs(game, None, Alice, 1, Vector("r1"))
 
 		assertEquals(game.takeAction, PerformAction.Play(game.state.hands(Alice.ordinal)(0)))
-	}
 
-	test("it doesnt play target an unclued dupe") {
+	test("it doesnt play target an unclued dupe"):
 		val game = setup(Reactor.apply, Vector(
 			Vector("xx", "xx", "xx", "xx", "xx"),
 			Vector("r3", "g2", "r2", "r3", "g5"),
@@ -227,9 +218,8 @@ class Reactive extends munit.FunSuite:
 
 		// We should discard slot 5 (so that Bob plays slot 2).
 		assertEquals(game.meta(game.state.hands(Alice.ordinal)(4)).status, CardStatus.CalledToDiscard)
-	}
 
-	test("it doesnt play target a discarding dupe") {
+	test("it doesnt play target a discarding dupe"):
 		val game = setup(Reactor.apply, Vector(
 			Vector("xx", "xx", "xx", "xx", "xx"),
 			Vector("r3", "g2", "y3", "r3", "g5"),
@@ -248,9 +238,8 @@ class Reactive extends munit.FunSuite:
 
 		// We should discard slot 4 (so that Bob plays the non-discarding dupe in slot 4).
 		assertEquals(game.meta(game.state.hands(Alice.ordinal)(3)).status, CardStatus.CalledToDiscard)
-	}
 
-	test("it doesnt dc target an unclued dupe") {
+	test("it doesnt dc target an unclued dupe"):
 		val game = setup(Reactor.apply, Vector(
 			Vector("xx", "xx", "xx", "xx", "xx"),
 			Vector("r3", "y1", "r2", "r3", "g5"),
@@ -266,9 +255,8 @@ class Reactive extends munit.FunSuite:
 
 		// We should play slot 4 (so that Bob discards slot 1).
 		assertEquals(game.meta(game.state.hands(Alice.ordinal)(3)).status, CardStatus.CalledToPlay)
-	}
 
-	test("it reacts to a sacrifice") {
+	test("it reacts to a sacrifice"):
 		val game = setup(Reactor.apply, Vector(
 			Vector("xx", "xx", "xx", "xx", "xx"),
 			Vector("r4", "b2", "y3", "p3", "g5"),
@@ -281,9 +269,8 @@ class Reactive extends munit.FunSuite:
 
 		// We should play slot 2 (Bob discards y3 in slot 3).
 		assertEquals(game.meta(game.state.hands(Alice.ordinal)(1)).status, CardStatus.CalledToPlay)
-	}
 
-	test("it shifts a reaction") {
+	test("it shifts a reaction"):
 		val game = setup(Reactor.apply, Vector(
 			Vector("xx", "xx", "xx", "xx", "xx"),
 			Vector("b1", "g2", "r2", "r3", "g5"),
@@ -309,9 +296,8 @@ class Reactive extends munit.FunSuite:
 
 		// Bob's slot 1 should still be allowed to be b1.
 		assert(game.common.thoughts(game.state.hands(Bob.ordinal)(0)).inferred.contains(game.state.expandShort("b1")))
-	}
 
-	test("it targets a self connection") {
+	test("it targets a self connection"):
 		val game = setup(Reactor.apply, Vector(
 			Vector("xx", "xx", "xx", "xx", "xx"),
 			Vector("b1", "r5", "b2", "b3", "g4"),
@@ -327,4 +313,3 @@ class Reactive extends munit.FunSuite:
 
 		// Alice's slot 4 is called to discard (4 + 3 = 2)
 		assertEquals(game.meta(game.state.hands(Alice.ordinal)(3)).status, CardStatus.CalledToDiscard)
-	}

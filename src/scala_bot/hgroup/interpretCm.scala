@@ -76,10 +76,9 @@ def interpret5cm(ctx: ClueContext): Option[Vector[Int]] =
 
 def interpretOcm(prev: HGroup, action: PlayAction | DiscardAction) =
 	val state = prev.state
-	val (playerIndex, order) = action match {
+	val (playerIndex, order) = action match
 		case PlayAction(p, o, _, _) => (p, o)
 		case DiscardAction(p, o, _, _, _) => (p, o)
-	}
 
 	val ordered1s = prev.order1s(state.hands(playerIndex))
 	val offset = ordered1s.indexOf(order)
@@ -97,14 +96,13 @@ def interpretOcm(prev: HGroup, action: PlayAction | DiscardAction) =
 		None
 
 	else
-		prev.chop(target) match {
+		prev.chop(target) match
 			case None =>
 				Log.warn(s"attempted to interpret ocm on ${state.names(target)}, but they had no chop!")
 				None
 			case Some(chop) =>
 				Log.highlight(Console.CYAN, s"ocm on ${state.names(target)}, distance $offset")
 				Some(List(chop))
-		}
 
 
 def performCM(game: HGroup, cmOrders: Seq[Int]) =

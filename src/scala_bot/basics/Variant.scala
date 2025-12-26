@@ -29,29 +29,31 @@ case class Variant(
 	shorts: Option[Vector[Char]] = None
 ):
 	lazy val shortForms: Vector[Char] =
-		shorts.getOrElse(suits.reverse.foldRight(Vector()){ (suit, acc) =>
-			val short: Char = suit match {
-				case "Black" => 'k'
-				case "Pink" => 'i'
-				case "Brown" => 'n'
-				case _ => {
-					val colour = Variant.colours.find(_.name == suit).getOrElse(throw new IllegalArgumentException(s"Colour '$suit' not found!"))
-					val abbreviation = colour.abbreviation.getOrElse(suit.charAt(0).toLower)
-					if !acc.contains(abbreviation) then {
-						abbreviation
-					} else {
-						suit.toLowerCase.find(c => !acc.contains(c))
-							.getOrElse(throw new IllegalArgumentException(s"No unused character found for suit '$suit' in $suits!"))
-					}
-				}
-			}
-			short +: acc
-		}.reverse)
+		shorts.getOrElse:
+			suits.reverse.foldRight(Vector()): (suit, acc) =>
+				val short: Char = suit match
+					case "Black" => 'k'
+					case "Pink" => 'i'
+					case "Brown" => 'n'
+					case _ =>
+						val colour = Variant.colours.find(_.name == suit).getOrElse(throw new IllegalArgumentException(s"Colour '$suit' not found!"))
+						val abbreviation = colour.abbreviation.getOrElse(suit.charAt(0).toLower)
+						if !acc.contains(abbreviation) then
+							abbreviation
+						else
+							suit.toLowerCase.find(c => !acc.contains(c))
+								.getOrElse(throw new IllegalArgumentException(s"No unused character found for suit '$suit' in $suits!"))
+				short +: acc
+			.reverse
 
 	val colourableSuits = suits.filterNot(NO_COLOUR.matches)
 
 	def allIds =
-		(0 until suits.length).flatMap(suitIndex => (1 to 5).map(Identity(suitIndex, _)))
+		for
+			suitIndex <- 0 until suits.length
+			rank <- 1 to 5
+		yield
+			Identity(suitIndex, rank)
 
 	def touchPossibilities(clue: BaseClue) =
 		allIds.filter(idTouched(_, clue))

@@ -6,7 +6,7 @@ import scala_bot.logger.Log
 
 case class MatchEntry(order: Int, unknownTo: Int)
 
-extension (p: Player) {
+extension (p: Player)
 	def cardElim(state: State) =
 		var certainMap = p.certainMap
 
@@ -19,7 +19,7 @@ extension (p: Player) {
 		var dirty = p.dirty
 		// var dirtyIds = IdentitySet.empty
 
-		dirty.toArray.fastForeach { order =>
+		dirty.toArray.fastForeach: order =>
 			val thought = thoughts(order)
 			val id = thought.id(symmetric = p.isCommon)
 
@@ -37,16 +37,15 @@ extension (p: Player) {
 					else
 						certainMap.updated(id.get.toOrd, MatchEntry(order, unknownTo) +: certains)
 				// dirtyIds = dirtyIds.union(id.get)
-		}
 
 		def updateMap(id: Identity, exclude: BitSet): (Boolean, IdentitySet) =
 			var changed = false
 			var recursiveIds = IdentitySet.empty
 			var crossElimRemovals = BitSet.empty
 
-			loop(0, _ < state.numPlayers, _ + 1, !exclude.contains(_)) { playerIndex =>
+			loop(0, _ < state.numPlayers, _ + 1, !exclude.contains(_)): playerIndex =>
 				val hand = state.hands(playerIndex)
-				hand.fastForeach { order =>
+				hand.fastForeach: order =>
 					val thought = thoughts(order)
 					val noElim =
 						!thought.possible.contains(id) ||
@@ -96,8 +95,6 @@ extension (p: Player) {
 
 							recursiveIds = recursiveIds.union(recursiveId)
 							crossElimRemovals += order
-				}
-			}
 
 			crossElimCandidates = crossElimCandidates.filterNot(crossElimRemovals.contains)
 			(changed, recursiveIds)
@@ -111,17 +108,15 @@ extension (p: Player) {
 			var recursiveIds = IdentitySet.empty
 			var eliminated = IdentitySet.empty
 
-			ids.foreachFast { id =>
+			ids.foreach: id =>
 				val knownCount = certainMap(id.toOrd).length
 
-				if knownCount == state.cardCount(id.toOrd) then {
+				if knownCount == state.cardCount(id.toOrd) then
 					val (innerChanged, innerRecursiveIds) = updateMap(id, BitSet.empty)
 
 					eliminated = eliminated.union(id)
 					changed ||= innerChanged
 					recursiveIds = recursiveIds.union(innerRecursiveIds)
-				}
-			}
 
 			if !recursiveIds.isEmpty then
 				changed = basicElim(recursiveIds) || changed
@@ -140,22 +135,18 @@ extension (p: Player) {
 			var changed = false
 			val groups = entries.groupBy(state.deck(_).id())
 
-			for (id, group) <- groups do {
-				id.foreach { id =>
+			for (id, group) <- groups do
+				id.foreach: id =>
 					val certains = certainMap(id.toOrd).filter(c => !group.contains(c.order)).length
 
-					if group.size == state.cardCount(id.toOrd) - certains then {
+					if group.size == state.cardCount(id.toOrd) - certains then
 						val (innerChanged, _) = updateMap(id, BitSet.fromSpecific(group.map(state.holderOf)))
 						changed ||= innerChanged
-					}
-				}
-			}
 
 			// Now elim all the cards outside of this entry
-			for id <- ids do {
+			for id <- ids do
 				val (innerChanged, _) = updateMap(id, BitSet.fromSpecific(entries.map(state.holderOf)))
 				changed ||= innerChanged
-			}
 
 			basicElim(ids) || changed
 
@@ -180,22 +171,21 @@ extension (p: Player) {
 				val newAccIds = accIds.union(thoughts(order).possible)
 
 				val nextContained = contained + order
-				val nextCertains = {
+				val nextCertains =
 					val delta = thoughts(order).possible.difference(accIds)
 
 					val allCertains = if delta.isEmpty then
 						certains
 					else
 						var mCertains = certains
-						delta.foreachFast { id =>
-							certainMap(id.toOrd).fastForeach { c =>
+
+						delta.foreach: id =>
+							certainMap(id.toOrd).fastForeach: c =>
 								mCertains = mCertains + c.order
-							}
-						}
+
 						mCertains
 
 					allCertains -- nextContained
-				}
 
 				val included = cross(remaining.tail, nextContained, newAccIds, nextCertains)
 				if included then
@@ -208,8 +198,8 @@ extension (p: Player) {
 
 		val _ = basicElim(state.allIds)
 
-		loop(0, _ < state.numPlayers, _ + 1) { playerIndex =>
-			state.hands(playerIndex).fastForeach { order =>
+		loop(0, _ < state.numPlayers, _ + 1): playerIndex =>
+			state.hands(playerIndex).fastForeach: order =>
 				val thought = thoughts(order)
 				val possible = thought.possible
 
@@ -219,20 +209,15 @@ extension (p: Player) {
 
 				if canCrossElim then
 					crossElimCandidates = order +: crossElimCandidates
-			}
-		}
 
-		val candidates = crossElimCandidates.filter { order =>
+		val candidates = crossElimCandidates.filter: order =>
 			val thought = thoughts(order)
 			var certains = BitSet.empty
-			thought.possible.foreachFast { id =>
-				certainMap(id.toOrd).fastForeach { c =>
+			thought.possible.foreach: id =>
+				certainMap(id.toOrd).fastForeach: c =>
 					certains = certains + c.order
-				}
-			}
 
 			state.multiplicity(thought.possible) - certains.size <= crossElimCandidates.length
-		}
 
 		while candidates.length > 1 && crossElim(candidates) do {}
 
@@ -263,8 +248,8 @@ extension (p: Player) {
 		var resets = List.empty[Int]
 		var newThoughts = p.thoughts
 
-		state.hands.fastForeach { hand =>
-			hand.fastForeach { order =>
+		state.hands.fastForeach: hand =>
+			hand.fastForeach: order =>
 				if canElim(order) then
 					val thought = newThoughts(order)
 					val newInferred = thought.inferred.difference(state.trashSet)
@@ -280,15 +265,13 @@ extension (p: Player) {
 
 					if reset then
 						resets = order +: resets
-			}
-		}
 
 		(resets, p.copy(thoughts = newThoughts, dirty = dirty))
 
 	def elimLink(game: Game, matches: Seq[Int], focus: Int, id: Identity, goodTouch: Boolean): Player =
 		Log.info(s"eliminating ${game.state.logId(id)} link from focus (${p.name})! $matches --> $focus")
 
-		val newThoughts = matches.foldLeft(p.thoughts) { (thoughts, order) =>
+		val newThoughts = matches.foldLeft(p.thoughts): (thoughts, order) =>
 			val thought = thoughts(order)
 			val newInferred = if order == focus then
 				IdentitySet.single(id)
@@ -298,14 +281,13 @@ extension (p: Player) {
 			val newThought =
 				if newInferred.isEmpty && !thought.reset then
 					thought.resetInferences()
-						.when(_ => goodTouch) { t =>
+						.when(_ => goodTouch): t =>
 							t.copy(inferred = t.inferred.filter(!p.isTrash(game, _, order)))
-						}
 				else
 					thought.copy(inferred = newInferred)
 
 			thoughts.updated(order, newThought)
-		}
+
 		p.copy(thoughts = newThoughts, dirty = p.dirty ++ matches)
 
 	def findLinks(game: Game, goodTouch: Boolean) =
@@ -321,16 +303,15 @@ extension (p: Player) {
 
 		var newPlayer = p
 
-		state.hands.fastForeach { hand =>
+		state.hands.fastForeach: hand =>
 			var infMap = Map.empty[IdentitySet, List[Int]]
-			hand.fastForeach { o =>
+			hand.fastForeach: o =>
 				if linkable(o) then
 					val infs = newPlayer.thoughts(o).inferred
 					infMap = infMap.updated(infs, o +: infMap.getOrElse(infs, Nil))
-			}
 
 			val keys = infMap.keysIterator
-			while keys.nonEmpty do {
+			while keys.nonEmpty do
 				val inferred = keys.next()
 				val orders = infMap(inferred)
 				if orders.length > 1 then
@@ -342,17 +323,16 @@ extension (p: Player) {
 						// We have enough inferred cards to elim elsewhere
 						Log.info(s"adding link $orders infs ${inferred.fmt(state)} (${p.name})")
 						newPlayer = newPlayer.copy(links = Link.Unpromised(orders, inferred.toList) +: newPlayer.links)
-			}
-		}
+
 		newPlayer
 
 	def refreshLinks(game: Game, goodTouch: Boolean) =
 		val state = game.state
 
-		val initial = (p.copy(links = Nil), List[Int]())
-		val (newPlayer, sarcastics) = p.links.foldRight(initial) { (link, acc) =>
+		val initial = (p.copy(links = Nil), List.empty[Int])
+		val (newPlayer, sarcastics) = p.links.foldRight(initial): (link, acc) =>
 			val (player, sarcastics) = acc
-			link match {
+			link match
 				case Link.Promised(orders, id, target) =>
 					lazy val viableOrders = orders.filter(player.thoughts(_).possible.contains(id))
 
@@ -388,13 +368,12 @@ extension (p: Player) {
 						(player.copy(links = Link.Sarcastic(viableOrders, id) +: player.links), sarcastics)
 
 				case Link.Unpromised(orders, ids) =>
-					val revealed = orders.filter { o =>
+					val revealed = orders.filter: o =>
 						val thought = player.thoughts(o)
 
 						thought.id(symmetric = true).nonEmpty ||
 						ids.exists(!thought.possible.contains(_)) ||
 						!state.hands.flatten.contains(o)		// An unknown card was played/discarded hypothetically; in hypo, we would know what it is
-					}
 
 					lazy val focused = orders.filter(game.meta(_).focused)
 
@@ -404,26 +383,21 @@ extension (p: Player) {
 						Log.info(s"resolving unpromised link for ${state.logId(ids.head)} to ${focused.head} (${p.name})")
 						(player.elimLink(game, orders, focused.head, ids.head, goodTouch), sarcastics)
 					else
-						ids.find(i => orders.exists(!player.thoughts(_).inferred.contains(i))) match {
+						ids.find(i => orders.exists(!player.thoughts(_).inferred.contains(i))) match
 							case Some(lostInf) =>
 								Log.info(s"linked orders $orders lost inference ${state.logId(lostInf)}")
 								(player, sarcastics)
 							case None =>
 								(player.copy(links = link +: player.links), sarcastics)
-						}
-			}
-		}
 		(sarcastics, newPlayer.findLinks(game, goodTouch))
 
 	def refreshPlayLinks(game: Game) =
-		p.playLinks.foldRight(p.copy(playLinks = Nil)) { case (PlayLink(orders, prereqs, target), acc) =>
-			val remOrders = orders.filter(o => game.state.hands.exists(h => h.contains(o)))
-			if remOrders.isEmpty then
-				// The target must be playable now.
-				acc.withThought(target) { t =>
-					t.copy(inferred = t.inferred.intersect(game.state.playableSet))
-				}
-			else
-				acc.copy(playLinks = PlayLink(remOrders, prereqs, target) +: acc.playLinks)
-		}
-}
+		p.playLinks.foldRight(p.copy(playLinks = Nil)):
+			case (PlayLink(orders, prereqs, target), acc) =>
+				val remOrders = orders.filter(o => game.state.hands.exists(h => h.contains(o)))
+				if remOrders.isEmpty then
+					// The target must be playable now.
+					acc.withThought(target): t =>
+						t.copy(inferred = t.inferred.intersect(game.state.playableSet))
+				else
+					acc.copy(playLinks = PlayLink(remOrders, prereqs, target) +: acc.playLinks)

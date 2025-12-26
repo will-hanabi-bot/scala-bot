@@ -10,7 +10,7 @@ import scala.util.chaining.scalaUtilChainingOps
 class Prompts extends munit.FunSuite:
 	override def beforeAll() = Logger.setLevel(LogLevel.Off)
 
-	test("recognizes a prompt via ref play") {
+	test("recognizes a prompt via ref play"):
 		val game = setup(RefSieve.apply, Vector(
 			Vector("xx", "xx", "xx", "xx", "xx"),
 			Vector("b1", "r1", "y4", "y4", "g4"),
@@ -26,9 +26,8 @@ class Prompts extends munit.FunSuite:
 
 		// Bob's r1 should be prompted.
 		hasInfs(game, None, Bob, 2, Vector("r1"))
-	}
 
-	test("recognizes a prompt via fill-in") {
+	test("recognizes a prompt via fill-in"):
 		val game = setup(RefSieve.apply, Vector(
 			Vector("xx", "xx", "xx", "xx", "xx"),
 			Vector("b1", "r1", "y4", "y4", "g4"),
@@ -43,9 +42,8 @@ class Prompts extends munit.FunSuite:
 
 		// Bob's r1 should be prompted.
 		hasInfs(game, None, Bob, 2, Vector("r1"))
-	}
 
-	test("doesn't give wrong prompt") {
+	test("doesn't give wrong prompt"):
 		val game = setup(RefSieve.apply, Vector(
 			Vector("xx", "xx", "xx", "xx", "xx"),
 			Vector("b1", "r1", "r5", "y4", "g4"),
@@ -61,9 +59,8 @@ class Prompts extends munit.FunSuite:
 
 		// This clue is nonsensical.
 		assertEquals(game.lastMove, Some(ClueInterp.Mistake))
-	}
 
-	test("recognizes a double prompt via fill-in") {
+	test("recognizes a double prompt via fill-in"):
 		val game = setup(RefSieve.apply, Vector(
 			Vector("xx", "xx", "xx", "xx", "xx"),
 			Vector("b4", "r2", "r1", "y4", "g4"),
@@ -82,9 +79,8 @@ class Prompts extends munit.FunSuite:
 		// Bob's r1 and r2 should be prompted.
 		hasInfs(game, None, Bob, 3, Vector("r1"))
 		hasInfs(game, None, Bob, 2, Vector("r2"))
-	}
 
-	test("doesn't give double prompts without filling in") {
+	test("doesn't give double prompts without filling in"):
 		val game = setup(RefSieve.apply, Vector(
 			Vector("xx", "xx", "xx", "xx", "xx"),
 			Vector("b4", "r2", "r1", "y4", "g4"),
@@ -99,9 +95,8 @@ class Prompts extends munit.FunSuite:
 
 		// This clue is nonsensical.
 		assertEquals(game.lastMove, Some(ClueInterp.Mistake))
-	}
 
-	test("plays into a prompt") {
+	test("plays into a prompt"):
 		val game = setup(RefSieve.apply, Vector(
 			Vector("xx", "xx", "xx", "xx", "xx"),
 			Vector("g1", "r2", "b4", "p4", "g4"),
@@ -118,9 +113,8 @@ class Prompts extends munit.FunSuite:
 
 		// We should be prompted in slot 2 for r1.
 		hasInfs(game, None, Alice, 2, Vector("r1"))
-	}
 
-	test("doesnt play into a satisfied prompt") {
+	test("doesnt play into a satisfied prompt"):
 		val game = setup(RefSieve.apply, Vector(
 			Vector("xx", "xx", "xx", "xx"),
 			Vector("r1", "y4", "b4", "p4"),
@@ -139,4 +133,3 @@ class Prompts extends munit.FunSuite:
 
 		// We shouldn't be prompted in slot 1 for r1.
 		assert(game.common.thoughts(game.state.hands(Alice.ordinal)(0)).inferred.length > 1)
-	}

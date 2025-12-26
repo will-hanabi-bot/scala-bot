@@ -10,38 +10,35 @@ def findMustPlays(state: State, hand: Vector[Int]) =
 	val ids = hand.fastMap(state.deck(_).id())
 	var ret = List.empty[Identity]
 
-	loop(0, _ < hand.length, _ + 1, ids(_).isDefined) { i =>
+	loop(0, _ < hand.length, _ + 1, ids(_).isDefined): i =>
 		val id = ids(i).get
 		if !state.isBasicTrash(id) then
 			var matches = 1
 
-			loop(i + 1, _ < hand.length, _ + 1) { j =>
+			loop(i + 1, _ < hand.length, _ + 1): j =>
 				if ids(j).isDefined && ids(j).get.toOrd == id.toOrd then
 					matches += 1
-			}
 
 			if matches == state.cardCount(id.toOrd) - state.baseCount(id.toOrd) then
 				ret = id +: ret
-	}
+
 	ret
 
 def unwinnableState(state: State, playerTurn: Int, depth: Int = 0): Boolean =
 	if state.ended || state.pace < 0 then
 		return true
 
-	val voidPlayers = (0 until state.numPlayers).fastFilter {
+	val voidPlayers = (0 until state.numPlayers).fastFilter:
 		state.hands(_).fastForall(state.deck(_).id().forall(state.isBasicTrash))
-	}
 
 	// println(s"${indent(depth)}void players: $voidPlayers, endgame_turns: ${state.endgameTurns}, current turn: ${state.names(playerTurn)}")
 
 	val mustPlays = state.hands.map(findMustPlays(state, _))
 	val mustStartEndgame = mustPlays.zipWithIndex.filter(_._1.size > 1).map(_._2)
 
-	val impossibleEndgame = state.endgameTurns.exists { endgameTurns =>
-		val possiblePlayers = (0 until endgameTurns).fastCount { i =>
+	val impossibleEndgame = state.endgameTurns.exists: endgameTurns =>
+		val possiblePlayers = (0 until endgameTurns).fastCount: i =>
 			!voidPlayers.contains((playerTurn + i) % state.numPlayers)
-		}
 
 		val doublePlay = (0 until endgameTurns)
 			.fastMap(i => (playerTurn + i) % state.numPlayers)
@@ -55,7 +52,6 @@ def unwinnableState(state: State, playerTurn: Int, depth: Int = 0): Boolean =
 			true
 		else
 			false
-	}
 
 	if impossibleEndgame then
 		return true
@@ -82,36 +78,33 @@ def unwinnableState(state: State, playerTurn: Int, depth: Int = 0): Boolean =
 def triviallyWinnable(game: Game, playerTurn: Int): WinnableResult =
 	val state = game.state
 
-	state.endgameTurns match {
+	state.endgameTurns match
 		case Some(endgameTurns) if state.remScore <= endgameTurns =>
 			val initial = (PerformAction.Discard(state.hands(playerTurn).head), state.playStacks)
 
-			val (perform, finalPlayStacks) = (0 until endgameTurns).foldLeft(initial) { (acc, i) =>
+			val (perform, finalPlayStacks) = (0 until endgameTurns).foldLeft(initial): (acc, i) =>
 				val (action, stacks) = acc
 				val playerIndex = (playerTurn + i) % state.numPlayers
 				val playables = game.players(playerIndex).obviousPlayables(game, playerIndex)
 
 				if playables.isEmpty then
 					acc
-				else state.deck(playables.head).id() match {
+				else state.deck(playables.head).id() match
 					case None => acc
 					case Some(id) =>
 						val perform = if i == 0 then PerformAction.Play(playables.head) else action
 						(perform, stacks.updated(id.suitIndex, id.rank))
-				}
-			}
 
 			Either.cond(finalPlayStacks.sum == state.maxScore, (List(perform), Frac.one), "")
 
 		case _ => UNWINNABLE
-	}
 
 /** Generates a map of game arrangements for the possible actions.*/
 def genArrs(game: Game, remaining: RemainingMap, clueOnly: Boolean, _depth: Int = 0): (List[GameArr], List[GameArr]) =
 	val state = game.state
 	val undrawn = GameArr(Frac.one, remaining, None)
 
-	assert(remaining.values.map(_.missing).sum == state.cardsLeft, s"genArr failed $remaining ${state.cardsLeft}")
+	assert(remaining.values.summing(_.missing) == state.cardsLeft, s"genArr failed $remaining ${state.cardsLeft}")
 
 	val drawn =
 		if clueOnly then
@@ -124,7 +117,7 @@ def genArrs(game: Game, remaining: RemainingMap, clueOnly: Boolean, _depth: Int 
 
 		else
 			val drawnArrs = {
-				val (usefulArrs, trashArr) = remaining.foldLeft((List.empty[GameArr], GameArr(Frac.zero, remaining, None))) {
+				val (usefulArrs, trashArr) = remaining.foldLeft((List.empty[GameArr], GameArr(Frac.zero, remaining, None))):
 					case ((acc, trashArr), (id, RemainingEntry(missing, _))) if state.isBasicTrash(id) =>
 						val newProb = Frac(missing, state.cardsLeft)
 						val newRemaining = remaining.rem(id)
@@ -134,7 +127,6 @@ def genArrs(game: Game, remaining: RemainingMap, clueOnly: Boolean, _depth: Int 
 						val newProb = Frac(missing, state.cardsLeft)
 						val newRemaining = remaining.rem(id)
 						(GameArr(newProb, newRemaining, Some(id)) +: acc, trashArr)
-				}
 				if trashArr.prob > Frac.zero then
 					usefulArrs :+ trashArr
 				else

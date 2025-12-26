@@ -10,10 +10,9 @@ trait ClueLike:
 	def base: BaseClue = BaseClue(kind, value)
 
 	def fmt(state: State, target: Int) =
-		val clueValue = kind match {
+		val clueValue = kind match
 			case ClueKind.Colour => state.variant.suits(value).toLowerCase
 			case ClueKind.Rank => value.toString
-		}
 		s"($clueValue to ${state.names(target)})"
 
 	def isEq(other: ClueLike): Boolean =
@@ -28,11 +27,10 @@ case class BaseClue(kind: ClueKind, value: Int) extends ClueLike:
 
 object BaseClue:
 	def fromJSON(json: ujson.Value) =
-		val kind = json.obj("type").num match {
+		val kind = json.obj("type").num match
 			case 0 => ClueKind.Colour
 			case 1 => ClueKind.Rank
 			case _ => throw new IllegalArgumentException("Invalid clue kind")
-		}
 		BaseClue(kind, json.obj("value").num.toInt)
 
 case class CardClue(

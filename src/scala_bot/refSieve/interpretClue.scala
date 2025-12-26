@@ -45,12 +45,11 @@ def refPlay(prev: RefSieve, game: RefSieve, action: ClueAction, right: Boolean =
 		Log.info(s"targeting a card called to discard!")
 		(None, game)
 	else
-		targetPlay(prev, game, action, target) match {
+		targetPlay(prev, game, action, target) match
 			case res @ (None, _) => res
 			case (interp, result) =>
 				Log.info(s"ref play on ${state.names(clueTarget)}'s slot ${hand.indexOf(target) + 1} (focus $focus) infs ${result.common.strInfs(result.state, target)}")
 				(interp, result)
-		}
 
 def refDiscard(prev: RefSieve, game: RefSieve, action: ClueAction): (Option[ClueInterp], RefSieve) =
 	val state = game.state
@@ -90,17 +89,18 @@ def targetPlay(prev: RefSieve, game: RefSieve, action: ClueAction, targetOrder: 
 	val (common, state) = (game.common, game.state)
 	val unknown = common.thoughts(targetOrder).id(infer = true, symmetric = true).isEmpty
 
-	val focusPoss = (for
-		inf <- common.thoughts(targetOrder).inferred if visibleFind(state, common, inf, infer = true, excludeOrder = targetOrder).isEmpty
-		conns <- connect(prev, game, targetOrder, inf, action, unknown)
-	yield
-		FocusPossibility(inf, conns, ClueInterp.Play)).toList
+	val focusPoss =
+		for
+			inf   <- common.thoughts(targetOrder).inferred if visibleFind(state, common, inf, infer = true, excludeOrder = targetOrder).isEmpty
+			conns <- connect(prev, game, targetOrder, inf, action, unknown)
+		yield
+			FocusPossibility(inf, conns, ClueInterp.Play)
 
 	Log.info(s"focus possibilities [${focusPoss.map(fp => state.logId(fp.id)).mkString(",")}]")
 
 	val targetId = common.thoughts(targetOrder).id().orElse(state.deck(targetOrder).id())
 
-	targetId match {
+	targetId match
 		case Some(id) if !focusPoss.exists(_.id == id) =>
 			lazy val conns = connect(prev, game, targetOrder, id, action, unknown, findOwn = true)
 			if action.giver == state.ourPlayerIndex then
@@ -114,53 +114,56 @@ def targetPlay(prev: RefSieve, game: RefSieve, action: ClueAction, targetOrder: 
 
 		case _ =>
 			(Some(ClueInterp.Play), resolvePlay(game, action, targetOrder, focusPoss, targetId))
-	}
 
-def resolvePlay(game: RefSieve, action: ClueAction, targetOrder: Int, focusPoss: List[FocusPossibility], targetId: Option[Identity]): RefSieve =
+def resolvePlay(game: RefSieve, action: ClueAction, targetOrder: Int, focusPoss: Seq[FocusPossibility], targetId: Option[Identity]): RefSieve =
 	val ClueAction(giver = giver, list = list, target = clueTarget, clue = _) = action
 	val matchedFps = focusPoss.filter(fp => targetId.exists(_.matches(fp.id)))
 
 	val initial = (game, Set[Int]())
 	matchedFps.flatMap(_.connections).foldLeft(initial) { case ((acc, modified), conn) =>
 		val order = conn.order
-		val newGame = acc.withThought(order) { t =>
+		val newGame = acc.withThought(order): t =>
 			val newInferred = if modified.contains(order) then
 				t.inferred.union(conn.ids)
 			else
 				t.inferred.intersect(conn.ids)
 			t.copy(inferred = newInferred)
-		}
-		.when(_ => conn.isInstanceOf[FinesseConn]) {
-			_.withMeta(order) { _.copy(
-				status = CardStatus.Finessed,
-				by = Some(action.giver))
-			.reason(game.state.turnCount)}
+
+		.when(_ => conn.isInstanceOf[FinesseConn]):
+			_.withMeta(order):
+				 _.copy(
+					status = CardStatus.Finessed,
+					by = Some(action.giver)
+				).reason(game.state.turnCount)
 			.withThought(order)(_.copy(oldInferred = Some(game.common.thoughts(order).inferred)))
-		}
+
 		(newGame, modified + order)
 	}._1
-	.pipe { g => g.copy(
-		waiting = g.waiting :++ focusPoss.collect {
-			case fp if fp.connections.nonEmpty => WaitingConnection(
-				fp.connections,
-				giver,
-				clueTarget,
-				g.state.turnCount,
-				targetOrder,
-				fp.id,
-				symmetric = targetId.exists(!(_).matches(fp.id))
-			)
-		})
-	}
-	.withThought(targetOrder) { t =>
+
+	.pipe: g =>
+		g.copy(
+			waiting = g.waiting :++ focusPoss.collect:
+				case fp if fp.connections.nonEmpty => WaitingConnection(
+					fp.connections,
+					giver,
+					clueTarget,
+					g.state.turnCount,
+					targetOrder,
+					fp.id,
+					symmetric = targetId.exists(!(_).matches(fp.id))
+				)
+		)
+
+	.withThought(targetOrder): t =>
 		val poss = IdentitySet.from(focusPoss.map(_.id))
 		t.copy(
 			inferred = t.inferred.intersect(poss),
 			infoLock = Some(t.possible.intersect(poss))
 		)
-	}
-	.withMeta(targetOrder) { m => m.copy(
-		focused = m.focused || list.contains(targetOrder),
-		status = CardStatus.CalledToPlay,
-		by = Some(action.giver))
-	.reason(game.state.turnCount)}
+
+	.withMeta(targetOrder): m =>
+		m.copy(
+			focused = m.focused || list.contains(targetOrder),
+			status = CardStatus.CalledToPlay,
+			by = Some(action.giver))
+		.reason(game.state.turnCount)

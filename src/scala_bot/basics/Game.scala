@@ -118,7 +118,7 @@ extension[G <: Game](game: G)
 
 		val newGame = withState(_.copy(actionList = addAction(state.actionList, action, state.turnCount)))
 
-		action match {
+		action match
 			case clue: ClueAction =>
 				Log.highlight(Console.YELLOW, s"Turn ${state.turnCount}: ${action.fmt(state)}")
 				newGame.handleClue(game, clue)
@@ -154,7 +154,6 @@ extension[G <: Game](game: G)
 				ops.copyWith(newGame, GameUpdates(nextInterp = Some(Some(interp))))
 
 			case _ => game
-		}
 
 	inline def me = game.players(game.state.ourPlayerIndex)
 
@@ -178,9 +177,8 @@ extension[G <: Game](game: G)
 
 	/** Returns whether the order is known to be a particular special suit from empathy. */
 	def knownAs(order: Int, regex: Regex) =
-		game.common.thoughts(order).possible.forall { i =>
+		game.common.thoughts(order).possible.forall: i =>
 			regex.matches(game.state.variant.suits(i.suitIndex))
-		}
 
 	def handleClue(prev: G, clue: ClueAction)(using ops: GameOps[G]) =
 		ops.interpretClue(prev, game.onClue(clue).elim(goodTouch = true), clue)
@@ -219,22 +217,18 @@ extension[G <: Game](game: G)
 
 		val playerIndex = action.playerIndex
 
-		val hypoGame = withCatchup(
+		val hypoGame = withCatchup:
 			_.handleAction(action)
-			.when(_ => action.requiresDraw) { g =>
+			.when(_ => action.requiresDraw): g =>
 				g.handleAction(TurnAction(g.state.turnCount, playerIndex))
-				.when(_.state.cardsLeft > 0) { g2 =>
+				.when(_.state.cardsLeft > 0): g2 =>
 					val order = g2.state.nextCardOrder
 
-					val action = g2.deckIds.lift(order).flatten.orElse(draw) match {
+					val action = g2.deckIds.lift(order).flatten.orElse(draw) match
 						case Some(id) => DrawAction(playerIndex, order, id.suitIndex, id.rank)
 						case None => DrawAction(playerIndex, order, -1, -1)
-					}
 
 					g2.handleAction(action)
-				}
-			}
-		)
 
 		Logger.setLevel(level)
 		hypoGame
@@ -259,27 +253,23 @@ extension[G <: Game](game: G)
 		Logger.setLevel(LogLevel.Off)
 
 		val newGame = ops.blank(game, keepDeck = true)
-			.pipe { g =>
-				ops.copyWith(g, GameUpdates(
+			.pipe:
+				ops.copyWith(_, GameUpdates(
 					catchup = Some(true),
 					rewindDepth = Some(game.rewindDepth + 1),
 				))
-			}
-			.pipe {
-				state.actionList.take(turn).flatten.foldLeft(_){ (acc, action) => action match {
-					case DrawAction(playerIndex, order, _, _)
-						if acc.state.hands(playerIndex).contains(order) => acc
-					case _ =>
-						acc.handleAction(action)
-				}}
-			}
-			.pipe { g =>
+			.pipe:
+				state.actionList.take(turn).flatten.foldLeft(_): (acc, action) =>
+					action match
+						case DrawAction(playerIndex, order, _, _)
+							if acc.state.hands(playerIndex).contains(order) => acc
+						case _ =>
+							acc.handleAction(action)
+			.pipe:
 				Logger.setLevel(level)
-				g.handleAction(action)
-			}
-			.pipe {
+				_.handleAction(action)
+			.pipe:
 				state.actionList.drop(turn).flatten.foldLeft(_)(_.handleAction(_))
-			}
 
 		Log.highlight(Console.GREEN, s"------- REWIND COMPLETE -------")
 
@@ -287,14 +277,10 @@ extension[G <: Game](game: G)
 			catchup = Some(game.catchup),
 			notes = Some(game.notes),
 			state = Some(newGame.state.copy(
-				deck = newGame.state.deck.map { c =>
+				deck = newGame.state.deck.map: c =>
 					if c.id().nonEmpty then c else
-						game.deckIds(c.order).fold(c) { id =>
-							c.copy(suitIndex = id.suitIndex, rank = id.rank)
-						}
-				}
-			))
-		)))
+						game.deckIds(c.order).fold(c): id =>
+							c.copy(suitIndex = id.suitIndex, rank = id.rank))))))
 
 	def replay(turn: Int)(using ops: GameOps[G]): Either[String, G] =
 		val state = game.state
@@ -308,20 +294,19 @@ extension[G <: Game](game: G)
 		// Logger.setLevel(LogLevel.Off)
 
 		val newGame = ops.blank(game, keepDeck = true)
-			.pipe { g =>
-				ops.copyWith(g, GameUpdates(
+			.pipe:
+				ops.copyWith(_, GameUpdates(
 					catchup = Some(true),
 					rewindDepth = Some(game.rewindDepth + 1),
 				))
-			}
-			.pipe {
-				state.actionList.flatten.foldLeft(_){ (acc, action) => action match {
-					case DrawAction(playerIndex, order, _, _)
-						if acc.state.hands(playerIndex).contains(order) => acc
-					case _ =>
-						acc.handleAction(action)
-				}}
-			}
+			.pipe:
+				state.actionList.flatten.foldLeft(_): (acc, action) =>
+					action match
+						case DrawAction(playerIndex, order, _, _)
+							if acc.state.hands(playerIndex).contains(order) => acc
+						case _ =>
+							acc.handleAction(action)
+
 
 		Log.highlight(Console.GREEN, s"------- REPLAY COMPLETE -------")
 
@@ -329,14 +314,10 @@ extension[G <: Game](game: G)
 			catchup = Some(game.catchup),
 			notes = Some(game.notes),
 			state = Some(newGame.state.copy(
-				deck = newGame.state.deck.map { c =>
+				deck = newGame.state.deck.map: c =>
 					if c.id().nonEmpty then c else
-						game.deckIds(c.order).fold(c) { id =>
-							c.copy(suitIndex = id.suitIndex, rank = id.rank)
-						}
-				}
-			))
-		)))
+						game.deckIds(c.order).fold(c): id =>
+							c.copy(suitIndex = id.suitIndex, rank = id.rank))))))
 
 	def navigate(turn: Int)(using ops: GameOps[G]) =
 		Log.highlight(Console.GREEN, s"------- NAVIGATING (turn $turn) -------")
@@ -366,11 +347,10 @@ extension[G <: Game](game: G)
 					loop(_, actions.flatten.iterator)
 				}
 			.pipe(ops.copyWith(_, GameUpdates(catchup = Some(game.catchup))))
-			.when(g => !g.catchup && g.state.currentPlayerIndex == g.state.ourPlayerIndex) { g =>
+			.when(g => !g.catchup && g.state.currentPlayerIndex == g.state.ourPlayerIndex): g =>
 				val perform = g.takeAction
 				Log.highlight(Console.BLUE, s"Suggested action: ${perform.fmt(g, accordingTo = Some(g.me))}")
 				g
-			}
 			.withState(_.copy(actionList = actions))
 
 	def getNote(order: Int): String =
@@ -388,17 +368,16 @@ extension[G <: Game](game: G)
 		else
 			"..."
 
-		game.meta(order).status match {
+		game.meta(order).status match
 			case CardStatus.CalledToPlay => s"[f]${if note.isEmpty then "" else s" [$note]"}"
 			case CardStatus.Finessed => s"[f]${if note.isEmpty then "" else s" [$note]"}"
 			case CardStatus.ChopMoved => s"[cm]${if note.isEmpty then "" else s" [$note]"}"
 			case CardStatus.CalledToDiscard => "dc"
 			case _ => note
-		}
 
 	def updateNotes()(using ops: GameOps[G]): G =
 		val (state, notes) = (game.state, game.notes)
-		val (cmds, newNotes) = game.state.hands.flatten.foldLeft((List[(String, String)](), notes)) { (acc, order) =>
+		val (cmds, newNotes) = game.state.hands.flatten.foldLeft((List.empty[(String, String)], notes)): (acc, order) =>
 			val (cmds, newNotes) = acc
 			val card = state.deck(order)
 			lazy val note = getNote(order)
@@ -406,7 +385,7 @@ extension[G <: Game](game: G)
 			if (!card.clued && game.meta(order).status == CardStatus.None) || note.isEmpty then
 				acc
 			else
-				val linkNote = game.common.links.foldLeft(List()) { (a, link) =>
+				val linkNote = game.common.links.foldLeft(Nil) { (a, link) =>
 					if link.getOrders.contains(order) && link.promise.isDefined then
 						a :+ state.logId(link.promise.get)
 					else a
@@ -430,6 +409,5 @@ extension[G <: Game](game: G)
 					(newCmds, newNotes + (order -> Note(state.turnCount, finalNote, full)))
 				else
 					acc
-		}
 
 		ops.copyWith(game, GameUpdates(notes = Some(newNotes), queuedCmds = Some(game.queuedCmds ++ cmds)))

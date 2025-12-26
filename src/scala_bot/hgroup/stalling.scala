@@ -107,54 +107,53 @@ def alternativeClue(prev: HGroup, game: HGroup, giver: Int, maxStall: Int, origC
 		val (badTouch, _, _) = badTouchResult(game, hypo, action)
 		val (_, playables) = playablesResult(game, hypo)
 
-		hypo.lastMove.get.matches {
+		hypo.lastMove.get.matches:
 			case ClueInterp.Play =>
 				playables.exists(!game.state.deck(_).clued) &&
 				badTouch.isEmpty &&
 				// Can't expect them to clue a possible clued dupe in their hand
-				!playables.forall(game.state.deck(_).id().exists(id => game.state.hands(giver).exists { o =>
-					game.isTouched(o) && game.players(giver).thoughts(o).inferred.contains(id)
-				}))
+				!playables.forall(game.state.deck(_).id().exists: id =>
+					game.state.hands(giver).exists: o =>
+						game.isTouched(o) && game.players(giver).thoughts(o).inferred.contains(id)
+				)
 
 			case ClueInterp.Save =>
 				true
 
 			case ClueInterp.Stall =>
 				val interp = hypo.stallInterp.get
-				interp match {
+				interp match
 					case StallInterp.Stall5 =>
 						hypo.level >= 2 && !hypo.stalled5 && STALL_INDICES(interp) < maxStall
 
 					case i => STALL_INDICES(i) < maxStall
-				}
-		}
 
 	val state = game.state
 
-	(for
-		target <- (0 until state.numPlayers).view if target != giver && target != state.ourPlayerIndex
-		clue <- state.allValidClues(target) if clue != origClue
-		list = state.clueTouched(state.hands(target), clue)
-		action = ClueAction(giver, target, list, clue.toBase) if
-			game.meta(game.determineFocus(game, action).focus).status != CardStatus.Finessed
-		hypo = prev.copy(allowFindOwn = false, noRecurse = true)
-			.simulateClue(action) if satisfied(hypo, action)
-	yield
-		Log.info(s"found alt clue ${clue.fmt(state)} ${hypo.lastMove.get}")
-		val newWCs = hypo.waiting.filter { wc =>
-			wc.turn == hypo.state.turnCount && wc.connections.forall { conn =>
-				// Only count valid wcs based on the new info we have
-				conn.ids.exists(game.common.thoughts(conn.order).possible.contains)
-			}
-		}
-		val seenBy = (0 until state.numPlayers).filterNot { p =>
-			p == target ||
-			newWCs.exists(_.connections.exists { conn =>
-				conn.kind != "known" && p == state.holderOf(conn.order)
-			})
-		}
-		seenBy)
-	.foldLeft((0 until state.numPlayers).toSet)(_ -- _)
+	val seenBy =
+		for
+			target <- 0 until state.numPlayers if target != giver && target != state.ourPlayerIndex
+			clue <- state.allValidClues(target) if clue != origClue
+			list = state.clueTouched(state.hands(target), clue)
+			action = ClueAction(giver, target, list, clue.toBase) if
+				game.meta(game.determineFocus(game, action).focus).status != CardStatus.Finessed
+			hypo = prev.copy(allowFindOwn = false, noRecurse = true)
+				.simulateClue(action) if satisfied(hypo, action)
+		yield
+			Log.info(s"found alt clue ${clue.fmt(state)} ${hypo.lastMove.get}")
+			val newWCs = hypo.waiting.filter: wc =>
+				wc.turn == hypo.state.turnCount &&
+				wc.connections.forall: conn =>
+					// Only count valid wcs based on the new info we have
+					conn.ids.exists(game.common.thoughts(conn.order).possible.contains)
+
+			(0 until state.numPlayers).filterNot: p =>
+				p == target ||
+				newWCs.exists:
+					_.connections.exists: conn =>
+						conn.kind != "known" && p == state.holderOf(conn.order)
+
+	seenBy.foldLeft((0 until state.numPlayers).toSet)(_ -- _)
 
 def stallingSituation(ctx: ClueContext): Option[(StallInterp, Set[Int])] =
 	val ClueContext(prev, game, action) = ctx
@@ -163,16 +162,14 @@ def stallingSituation(ctx: ClueContext): Option[(StallInterp, Set[Int])] =
 
 	Log.info(s"severity $severity")
 
-	isStall(ctx, severity).flatMap { stall =>
+	isStall(ctx, severity).flatMap: stall =>
 		val giverLoaded = prev.common.thinksPlayables(prev, giver).nonEmpty ||
 			(prev.common.thinksTrash(prev, giver).nonEmpty && prev.state.clueTokens < 8)
 
-		Option.when(!giverLoaded) {
+		Option.when(!giverLoaded):
 			if game.noRecurse then
 				(stall, (0 to game.state.numPlayers).toSet)
 			else
 				val fullClue = Clue(clue.kind, clue.value, target)
 				val thinksStall = alternativeClue(prev, game, giver, STALL_TO_SEVERITY(stall), fullClue)
 				(stall, thinksStall)
-		}
-	}

@@ -9,7 +9,7 @@ import scala_bot.logger.{Logger, LogLevel}
 class Stable extends munit.FunSuite:
 	override def beforeAll() = Logger.setLevel(LogLevel.Off)
 
-	test("it understands a ref play") {
+	test("it understands a ref play"):
 		val game = setup(Reactor.apply, Vector(
 			Vector("xx", "xx", "xx", "xx", "xx"),
 			Vector("b1", "g2", "r2", "r3", "g5"),
@@ -19,9 +19,8 @@ class Stable extends munit.FunSuite:
 
 		assertEquals(game.meta(game.state.hands(Bob.ordinal)(0)).status, CardStatus.CalledToPlay)
 		hasInfs(game, None, Bob, 1, Vector("r1", "y1", "b1", "p1"))
-	}
 
-	test("it understands a gapped ref play") {
+	test("it understands a gapped ref play"):
 		val game = setup(Reactor.apply, Vector(
 			Vector("xx", "xx", "xx", "xx", "xx"),
 			Vector("p4", "b1", "p2", "b5", "g4"),
@@ -31,9 +30,8 @@ class Stable extends munit.FunSuite:
 
 		assertEquals(game.meta(game.state.hands(Bob.ordinal)(1)).status, CardStatus.CalledToPlay)
 		hasInfs(game, None, Bob, 2, Vector("r1", "y1", "g1", "b1"))
-	}
 
-	test("it understands a chop ref play") {
+	test("it understands a chop ref play"):
 		val game = setup(Reactor.apply, Vector(
 			Vector("xx", "xx", "xx", "xx", "xx"),
 			Vector("b1", "b2", "p2", "b5", "g4"),
@@ -42,9 +40,8 @@ class Stable extends munit.FunSuite:
 		.pipe(takeTurn("Alice clues blue to Bob"))
 
 		hasInfs(game, None, Bob, 1, Vector("b1"))
-	}
 
-	test("it understands a ref discard") {
+	test("it understands a ref discard"):
 		val game = setup(Reactor.apply, Vector(
 			Vector("xx", "xx", "xx", "xx", "xx"),
 			Vector("p4", "p2", "p2", "b5", "g3"),
@@ -53,9 +50,8 @@ class Stable extends munit.FunSuite:
 		.pipe(takeTurn("Alice clues 4 to Bob"))
 
 		assertEquals(game.meta(game.state.hands(Bob.ordinal)(1)).status, CardStatus.CalledToDiscard)
-	}
 
-	test("it gives a ref discard") {
+	test("it gives a ref discard"):
 		val game = setup(Reactor.apply, Vector(
 			Vector("xx", "xx", "xx", "xx", "xx"),
 			Vector("p4", "p2", "p2", "b5", "g3"),
@@ -64,9 +60,8 @@ class Stable extends munit.FunSuite:
 
 		// Alice should clue 4 to Bob.
 		assertEquals(game.takeAction, PerformAction.Rank(Bob.ordinal, 4))
-	}
 
-	test("eliminates direct ranks from focus") {
+	test("eliminates direct ranks from focus"):
 		val game = setup(Reactor.apply, Vector(
 			Vector("xx", "xx", "xx", "xx", "xx"),
 			Vector("p4", "p2", "p2", "r5", "g3"),
@@ -83,9 +78,8 @@ class Stable extends munit.FunSuite:
 		// Alice's slot 3 should be trash
 		val trash = game.common.thinksTrash(game, Alice.ordinal)
 		assert(trash.contains(game.state.hands(Alice.ordinal)(2)))
-	}
 
-	test("it understands a lock") {
+	test("it understands a lock"):
 		val game = setup(Reactor.apply, Vector(
 			Vector("xx", "xx", "xx", "xx", "xx"),
 			Vector("p4", "p2", "p2", "b5", "g4"),
@@ -94,9 +88,8 @@ class Stable extends munit.FunSuite:
 		.pipe(takeTurn("Alice clues 4 to Bob"))
 
 		assert(game.common.obviousLocked(game, Bob.ordinal))
-	}
 
-	test("it doesn't focus the wrong card for the last id") {
+	test("it doesn't focus the wrong card for the last id"):
 		val game = setup(Reactor.apply, Vector(
 			Vector("xx", "xx", "xx", "xx", "xx"),
 			Vector("r1", "y1", "g1", "b1", "p1"),
@@ -111,9 +104,8 @@ class Stable extends munit.FunSuite:
 		.pipe(takeTurn("Cathy clues 3 to Alice (slots 2,5)"))
 
 		assertEquals(game.takeAction, PerformAction.Play(0))
-	}
 
-	test("it interprets a fix") {
+	test("it interprets a fix"):
 		val game = setup(Reactor.apply, Vector(
 			Vector("xx", "xx", "xx", "xx", "xx"),
 			Vector("r1", "p2", "p2", "b5", "g4"),
@@ -130,9 +122,8 @@ class Stable extends munit.FunSuite:
 		// Bob's slot 1 should be known trash.
 		assert(game.common.thinksTrash(game, Player.Bob.ordinal).contains(game.state.hands(Player.Bob.ordinal)(0)))
 		hasInfs(game, None, Bob, 1, Vector("r1"))
-	}
 
-	test("it interprets a reveal through an unknown card") {
+	test("it interprets a reveal through an unknown card"):
 		val game = setup(Reactor.apply, Vector(
 			Vector("xx", "xx", "xx", "xx", "xx"),
 			Vector("r2", "y2", "g2", "b2", "b4"),
@@ -147,4 +138,3 @@ class Stable extends munit.FunSuite:
 		// We should play slot 4 as g1, instead of trying to play slot 3 to sacrifice b4.
 		assertEquals(game.meta(game.state.hands(Player.Alice.ordinal)(2)).status, CardStatus.None)
 		hasInfs(game, None, Alice, 4, Vector("g1"))
-	}

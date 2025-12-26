@@ -12,7 +12,7 @@ extension[G <: Game](game: G)
 		val BaseClue(kind, value) = clue
 		val newPossible = IdentitySet.from(state.variant.touchPossibilities(clue))
 
-		state.hands(target).foldLeft(game) { (newGame, order) =>
+		state.hands(target).foldLeft(game): (newGame, order) =>
 			if list.contains(order) then
 				val touchedGame = newGame.withCard(order)(c => c.copy(
 						clued = true,
@@ -27,30 +27,27 @@ extension[G <: Game](game: G)
 				val newThought = touchedGame.common.thoughts(order)
 
 				touchedGame
-					.when(_ => newThought.possible.length == 1) { g =>
+					.when(_ => newThought.possible.length == 1): g =>
 						val id = newThought.possible.head
 						g.withCard(order)(c => c.copy(suitIndex = id.suitIndex, rank = id.rank))
 							.pipe(ops.copyWith(_, GameUpdates(deckIds = Some(g.deckIds.updated(order, Some(id))))))
-					}
-					.when(_ => newThought.inferred.length < game.common.thoughts(order).inferred.length)
-						(_.withMeta(order)(_.reason(state.turnCount)))
+
+					.when(_ => newThought.inferred.length < game.common.thoughts(order).inferred.length):
+						_.withMeta(order)(_.reason(state.turnCount))
 			else
 				newGame.withThought(order)(t => t.copy(
 					inferred = t.inferred.difference(newPossible),
 					possible = t.possible.difference(newPossible),
 					infoLock = t.infoLock.map(_.difference(newPossible))
 				))
-		}
-		.withState { s => s.copy(
-			endgameTurns = s.endgameTurns.map(_ - 1),
-			clueTokens = s.clueTokens - 1
-		)}
+		.withState: s =>
+			s.copy(endgameTurns = s.endgameTurns.map(_ - 1), clueTokens = s.clueTokens - 1)
 
 	def onDiscard(action: DiscardAction)(using ops: GameOps[G]): G =
 		val DiscardAction(playerIndex, order, suitIndex, rank, failed) = action
 		val id = Identity(suitIndex, rank)
 
-		game.withState { s =>
+		game.withState: s =>
 			s.copy(
 				hands = s.hands.updated(playerIndex, s.hands(playerIndex).filter(_ != order)),
 				endgameTurns = s.endgameTurns.map(_ - 1)
@@ -58,13 +55,12 @@ extension[G <: Game](game: G)
 			.cond(_ => failed)
 				(_.copy(strikes = s.strikes + 1))
 				(_.regainClue)
-		}
-		.when(_ => suitIndex != -1 && rank != -1) { g =>
+
+		.when(_ => suitIndex != -1 && rank != -1): g =>
 			g.withState(_.withDiscard(id, order))
 			.withId(order, id)
-			.withThought(order)
-				(_.copy(suitIndex, rank, inferred = IdentitySet.single(id), possible = IdentitySet.single(id)))
-		}
+			.withThought(order):
+				_.copy(suitIndex, rank, inferred = IdentitySet.single(id), possible = IdentitySet.single(id))
 
 	def onDraw(action: DrawAction)(using ops: GameOps[G]): G =
 		val DrawAction(playerIndex, order, suitIndex, rank) = action
@@ -72,44 +68,41 @@ extension[G <: Game](game: G)
 		if game.state.hands(playerIndex).length == HAND_SIZE(game.state.numPlayers) then
 			throw new Exception(s"${game.state.names(playerIndex)} already has a full hand!")
 
-		val id = Option.when(suitIndex != -1 && rank != -1) {
-			game.deckIds.lift(order).flatten.foreach { id =>
+		val id = Option.when(suitIndex != -1 && rank != -1):
+			game.deckIds.lift(order).flatten.foreach: id =>
 				if id != Identity(suitIndex, rank) then
 					throw new Exception(s"drew ${game.state.logId(Identity(suitIndex, rank))}, expected ${game.state.logId(id)} ${game.deckIds.map(game.state.logId)} ${order}")
-			}
-			Identity(suitIndex, rank)
-		}
 
-		game.pipe { g =>
+			Identity(suitIndex, rank)
+
+		game.pipe: g =>
 			val deckIds = g.deckIds
 
 			if deckIds.length == order then
 				ops.copyWith(g, GameUpdates(deckIds = Some(deckIds :+ id)))
 			else if deckIds.length > order then
-				if deckIds(order).isEmpty then
+				if deckIds(order).isDefined then g else
 					ops.copyWith(g, GameUpdates(deckIds = Some(deckIds.updated(order, id))))
-				else
-					g
 			else
 				throw new IllegalArgumentException(s"Only have ${deckIds.length} deck ids, but drew card with order $order! ${g.state.hands}")
-		}
-		.tap { g =>
+
+		.tap: g =>
 			assert(g.state.deck.length == order, s"Deck length ${g.state.deck.length} doesn't match drawn order $order!s")
 			assert(g.state.deck.length == g.state.nextCardOrder, "deck length doesn't match next order")
 			assert(g.common.thoughts.length == g.players(0).thoughts.length, "common thoughts length differs from player 0's thoughts")
 			assert(g.common.thoughts.length == g.meta.length, "common thoughts length differs from meta length")
-		}
-		.withState { s =>
+
+		.withState: s =>
 			s.copy(
 				hands = s.hands.updated(playerIndex, order +: s.hands(playerIndex)),
 				deck = s.deck :+ Card(suitIndex, rank, order, s.turnCount),
 				nextCardOrder = order + 1,
 				cardsLeft = s.cardsLeft - 1
 			)
-			.when(s => s.cardsLeft == 0 && s.endgameTurns.isEmpty)
-				(_.copy(endgameTurns = Some(s.numPlayers)))
-		}
-		.when(order == _.meta.length) { g =>
+			.when(s => s.cardsLeft == 0 && s.endgameTurns.isEmpty):
+				_.copy(endgameTurns = Some(s.numPlayers))
+
+		.when(order == _.meta.length): g =>
 			ops.copyWith(g, GameUpdates(
 				players = Some(g.players.zipWithIndex.map((player, i) => player.copy(
 					thoughts = player.thoughts :+ Thought(
@@ -126,20 +119,18 @@ extension[G <: Game](game: G)
 				)),
 				meta = Some(g.meta :+ ConvData(order))
 			))
-		}
 
 	def onPlay(action: PlayAction)(using ops: GameOps[G]): G =
 		val PlayAction(playerIndex, order, suitIndex, rank) = action
 		val id = Identity(suitIndex, rank)
 
-		game.withState { s =>
+		game.withState: s =>
 			s.copy(
 				hands = s.hands.updated(playerIndex, s.hands(playerIndex).filter(_ != order)),
 				endgameTurns = s.endgameTurns.map(_ - 1)
 			)
-		}
-		.when(_ => suitIndex != -1 && rank != -1) { g =>
-			g.withState(_.withPlay(id))
+		.when(_ => suitIndex != -1 && rank != -1):
+			_.withState(_.withPlay(id))
 			.withId(order, id)
 			.withThought(order)(_.copy(
 				suitIndex,
@@ -147,14 +138,13 @@ extension[G <: Game](game: G)
 				inferred = IdentitySet.single(id),
 				possible = IdentitySet.single(id)
 			))
-		}
 
 	def elim(goodTouch: Boolean = true)(using ops: GameOps[G]): G =
 		val state = game.state
 		var newThoughts = game.common.thoughts
 		var newMeta = game.meta
 
-		for order <- state.hands.flatten do {
+		for order <- state.hands.flatten do
 			var thought = game.common.thoughts(order)
 			if thought.inferred.isEmpty && !thought.reset then
 				newThoughts = newThoughts.updated(order, thought.resetInferences())
@@ -168,7 +158,6 @@ extension[G <: Game](game: G)
 			if thought.infoLock.exists(_.isEmpty) then
 				Log.warn(s"lost info lock on $order!")
 				newThoughts = newThoughts.updated(order, thought.copy(infoLock = None))
-		}
 
 		var (resets, newCommon) = game.common.copy(thoughts = newThoughts).cardElim(state)
 		if goodTouch then
@@ -179,9 +168,9 @@ extension[G <: Game](game: G)
 		val (sarcastics, _newCommon) = newCommon.refreshLinks(game, goodTouch)
 		newCommon = _newCommon.refreshPlayLinks(game).updateHypoStacks(game)
 
-		val newPlayers = game.players.map { p =>
+		val newPlayers = game.players.map: p =>
 			p.copy(
-				thoughts = p.thoughts.zipWithIndex.map {
+				thoughts = p.thoughts.zipWithIndex.map:
 					case (t, order) if newCommon.dirty.contains(order) =>
 						val thought = newCommon.thoughts(order)
 						t.copy(
@@ -190,29 +179,26 @@ extension[G <: Game](game: G)
 							infoLock = thought.infoLock,
 							reset = thought.reset
 					)
-					case (t, _) => t
-				},
+					case (t, _) => t,
 				links = newCommon.links,
 				playLinks = newCommon.playLinks,
 				dirty = newCommon.dirty
-			).cardElim(state)._2
-			.when(_ => goodTouch)
-				(_.goodTouchElim(game)._2)
+			)
+			.cardElim(state)._2
+			.when(_ => goodTouch):
+				_.goodTouchElim(game)._2
 			.refreshLinks(game, goodTouch)._2
 			.refreshPlayLinks(game)
 			.updateHypoStacks(game)
 			.copy(dirty = BitSet.empty)
-		}
 
-		for order <- resets do {
+		for order <- resets do
 			val entry = newMeta(order)
 			if entry.status == CardStatus.CalledToPlay then
 				newMeta = newMeta.updated(order, entry.copy(status = CardStatus.None, by = None))
-		}
 
-		for order <- sarcastics do {
+		for order <- sarcastics do
 			newMeta = newMeta.updated(order, newMeta(order).copy(status = CardStatus.Sarcastic))
-		}
 
 		ops.copyWith(game, GameUpdates(
 			common = Some(newCommon.copy(dirty = BitSet.empty)),

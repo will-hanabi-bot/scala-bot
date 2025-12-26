@@ -10,7 +10,7 @@ import scala.util.chaining.scalaUtilChainingOps
 class Stall5 extends munit.FunSuite:
 	override def beforeAll() = Logger.setLevel(LogLevel.Off)
 
-	test("gives a 5 stall before ending early game") {
+	test("gives a 5 stall before ending early game"):
 		val game = setup(HGroup.atLevel(2), Vector(
 			Vector("xx", "xx", "xx", "xx", "xx"),
 			Vector("g4", "r5", "b4", "y4", "b3")
@@ -21,9 +21,8 @@ class Stall5 extends munit.FunSuite:
 
 		assert(game.lastMove == Some(ClueInterp.Stall))
 		assert(game.stallInterp == Some(StallInterp.Stall5))
-	}
 
-	test("doesn't 5 stall on a trash 5") {
+	test("doesn't 5 stall on a trash 5"):
 		val game = setup(HGroup.atLevel(2), Vector(
 			Vector("xx", "xx", "xx", "xx", "xx"),
 			Vector("g4", "r5", "b4", "y4", "b3")
@@ -34,4 +33,3 @@ class Stall5 extends munit.FunSuite:
 		.pipe(takeTurn("Alice clues 5 to Bob"))
 
 		assert(game.lastMove == Some(ClueInterp.Mistake))
-	}

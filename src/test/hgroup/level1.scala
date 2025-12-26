@@ -10,7 +10,7 @@ import scala.util.chaining.scalaUtilChainingOps
 class Level1 extends munit.FunSuite:
 	override def beforeAll() = Logger.setLevel(LogLevel.Off)
 
-	test("does not finesse from a 2 Save") {
+	test("does not finesse from a 2 Save"):
 		val game = setup(HGroup.atLevel(1), Vector(
 			Vector("xx", "xx", "xx", "xx", "xx"),
 			Vector("r5", "r4", "r2", "y4", "y2"),
@@ -24,9 +24,8 @@ class Level1 extends munit.FunSuite:
 
 		assert(game.common.thoughts(game.state.hands(Alice.ordinal)(0)).inferred.length > 0)
 		assertEquals(game.meta(game.state.hands(Alice.ordinal)(0)).status, CardStatus.None)
-	}
 
-	test("counts playables connecting on unknown plays") {
+	test("counts playables connecting on unknown plays"):
 		val game = setup(HGroup.atLevel(1), Vector(
 			Vector("xx", "xx", "xx", "xx", "xx"),
 			Vector("r1", "g1", "p5", "r2", "y2"),
@@ -40,4 +39,3 @@ class Level1 extends munit.FunSuite:
 
 		val (_, playables) = playablesResult(game, hypo)
 		assertEquals(playables.length, 1)
-	}

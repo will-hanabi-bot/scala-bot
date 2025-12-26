@@ -9,7 +9,7 @@ import scala.util.chaining.scalaUtilChainingOps
 class Invert extends munit.FunSuite:
 	override def beforeAll() = Logger.setLevel(LogLevel.Off)
 
-	test("it reacts to a response inversion") {
+	test("it reacts to a response inversion"):
 		val game = setup(Reactor.apply, Vector(
 			Vector("xx", "xx", "xx", "xx", "xx"),
 			Vector("g1", "y5", "g4", "b4", "b4"),
@@ -31,9 +31,8 @@ class Invert extends munit.FunSuite:
 
 		// Bob is called to play g1.
 		assertEquals(game.meta(game.state.hands(Bob.ordinal)(0)).status, CardStatus.CalledToPlay)
-	}
 
-	test("it receives a response inversion") {
+	test("it receives a response inversion"):
 		val game = setup(Reactor.apply, Vector(
 			Vector("xx", "xx", "xx", "xx", "xx"),
 			Vector("g4", "y5", "g4", "b4", "b4"),
@@ -55,9 +54,8 @@ class Invert extends munit.FunSuite:
 
 		// Slot 3 is no longer called to play.
 		assertEquals(game.meta(game.state.hands(Alice.ordinal)(2)).status, CardStatus.None)
-	}
 
-	test("it doesn't receive a declined inversion play") {
+	test("it doesn't receive a declined inversion play"):
 		val game = setup(Reactor.apply, Vector(
 			Vector("xx", "xx", "xx", "xx", "xx"),
 			Vector("g4", "y5", "g4", "b4", "b4"),
@@ -79,9 +77,8 @@ class Invert extends munit.FunSuite:
 
 		// Slot 3 is still called to play.
 		assertEquals(game.meta(game.state.hands(Alice.ordinal)(2)).status, CardStatus.CalledToPlay)
-	}
 
-	test("it doesn't receive a declined inversion discard") {
+	test("it doesn't receive a declined inversion discard"):
 		val game = setup(Reactor.apply, Vector(
 			Vector("xx", "xx", "xx", "xx", "xx"),
 			Vector("g4", "y5", "g4", "b4", "b3"),
@@ -101,9 +98,8 @@ class Invert extends munit.FunSuite:
 
 		// Slot 4 is still called to discard.
 		assertEquals(game.meta(game.state.hands(Alice.ordinal)(3)).status, CardStatus.CalledToDiscard)
-	}
 
-	test("it understands a bad lock") {
+	test("it understands a bad lock"):
 		val game = setup(Reactor.apply, Vector(
 			Vector("xx", "xx", "xx", "xx", "xx"),
 			Vector("g4", "y5", "g1", "b4", "b1"),
@@ -123,4 +119,3 @@ class Invert extends munit.FunSuite:
 		// Cathy is called to play slot 2.
 		assertEquals(game.meta(game.state.hands(Cathy.ordinal)(1)).status, CardStatus.CalledToPlay)
 		assert(!game.common.obviousLocked(game, Cathy.ordinal))
-	}

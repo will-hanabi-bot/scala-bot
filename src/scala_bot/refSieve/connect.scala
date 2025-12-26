@@ -17,13 +17,12 @@ def findConnecting(prev: RS, game: RS, id: Identity, playerIndex: Int, connected
 	if known.exists(!ignore.contains(_)) then
 		return Some(KnownConn(playerIndex, known.get, id))
 
-	val playable = hand.find { o =>
+	val playable = hand.find: o =>
 		val thought = player.thoughts(o)
 
 		!connected.contains(o) &&
 		(game.isBlindPlaying(o) || (if findOwn then thought.inferred else thought.possible).forall(state.isPlayable)) &&
 		thought.inferred.contains(id)
-	}
 
 	if playable.exists(p => state.deck(p).matches(id, assume = findOwn) && !ignore.contains(p)) then
 		return Some(PlayableConn(playerIndex, playable.get, id))
@@ -31,19 +30,17 @@ def findConnecting(prev: RS, game: RS, id: Identity, playerIndex: Int, connected
 	if looksDirect || playable.nonEmpty then
 		return None
 
-	game.common.findPrompt(prev, playerIndex, id, connected, ignore, rightmost = true).map { prompt =>
+	game.common.findPrompt(prev, playerIndex, id, connected, ignore, rightmost = true).map: prompt =>
 		if !state.deck(prompt).matches(id, assume = findOwn) then
 			if state.deck(prompt).id().isDefined then
 				Log.warn(s"wrong prompt! ${state.logId(prompt)} looks like ${state.logId(id)}")
 			None
 		else
 			Some(PromptConn(playerIndex, prompt, id))
-	}
-	.getOrElse {
+	.getOrElse:
 		game.findFinesse(playerIndex, connected, ignore)
-		.filter(state.deck(_).matches(id, assume = findOwn))
-		.map(FinesseConn(playerIndex, _, List(id)))
-	}
+			.filter(state.deck(_).matches(id, assume = findOwn))
+			.map(FinesseConn(playerIndex, _, List(id)))
 
 def connect(prev: RS, game: RS, targetOrder: Int, id: Identity, action: ClueAction, unknown: Boolean, findOwn: Boolean = false): Option[List[Connection]] =
 	val state = game.state
@@ -64,15 +61,13 @@ def connect(prev: RS, game: RS, targetOrder: Int, id: Identity, action: ClueActi
 
 			val nextPlayerIndex = state.nextPlayerIndex(playerIndex)
 
-			connecting.match {
+			connecting.match
 				case None if (playerIndex == action.target && unknown) || (turnsSincePlay == state.numPlayers) => None
 				case None =>
 					loop(nextRank, nextPlayerIndex, connections, turnsSincePlay + 1)
 				case Some(conn) =>
 					loop(nextRank + 1, nextPlayerIndex, conn +: connections, 1)
-			}
 
-	loop(state.playStacks(suitIndex) + 1, state.nextPlayerIndex(action.giver), List()).map { conns =>
+	loop(state.playStacks(suitIndex) + 1, state.nextPlayerIndex(action.giver), List()).map: conns =>
 		Log.info(s"found connections ${state.logConns(conns, id)}")
 		conns
-	}

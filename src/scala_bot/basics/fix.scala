@@ -28,11 +28,10 @@ def checkFix(prev: Game, game: Game, action: ClueAction): FixResult =
 	if cluedResets.nonEmpty || duplicateReveals.nonEmpty then
 		return FixResult.Normal(cluedResets, duplicateReveals)
 
-	val noNewInfoFixes = list.filter { o =>
+	val noNewInfoFixes = list.filter: o =>
 		prevPlayables.contains(o) &&
 		list.forall(prev.state.deck(_).clued) &&
 		prev.common.thoughts(o).possible == game.common.thoughts(o).possible
-	}
 
 	if noNewInfoFixes.nonEmpty then
 		FixResult.NoNewInfo(noNewInfoFixes.toList)
@@ -53,14 +52,13 @@ def connectableSimple[G <: Game](game: G, player: Player, start: Int, target: In
 		val playables = player.obviousPlayables(game, start)
 
 		val connectables = playables.view.map { order =>
-			player.thoughts(order).id(infer = true).map { playId =>
+			player.thoughts(order).id(infer = true).map: playId =>
 				val newGame = game
 					.simulateAction(TurnAction(state.turnCount, start))	// Go to starting player's turn
 					.simulateAction(PlayAction(start, order, playId.suitIndex, playId.rank))
 					.simulateAction(TurnAction(state.turnCount + 1, nextPlayerIndex))
 
 				connectableSimple(newGame, player, nextPlayerIndex, target, id)
-			}
 		}.flatten.find(_.nonEmpty)
 
 		connectables.getOrElse(connectableSimple(game, player, nextPlayerIndex, target, id))
@@ -85,9 +83,8 @@ def distributionClue(prev: Game, game: Game, action: ClueAction, focus: Int): Op
 	def loop(poss: List[Identity], useful: IdentitySet): Option[IdentitySet] =
 		if poss.isEmpty then Some(useful) else
 			val p = poss.head
-			lazy val duplicated = state.hands.zipWithIndex.exists { (hand, i) =>
+			lazy val duplicated = state.hands.zipWithIndex.exists: (hand, i) =>
 				i != target && hand.exists(o => game.isTouched(o) && game.orderMatches(o, p, infer = true))
-			}
 
 			if state.isBasicTrash(p) then
 				loop(poss.tail, useful)
@@ -105,16 +102,14 @@ def rainbowMismatch(game: Game, action: ClueAction, id: Identity, prompt: Int, f
 
 	lazy val rainbowFocus =
 		if target == state.ourPlayerIndex then
-			game.me.thoughts(focus).possible.forall { c =>
+			game.me.thoughts(focus).possible.forall: c =>
 				RAINBOWISH.matches(state.variant.suits(c.suitIndex))
-			}
 		else
 			RAINBOWISH.matches(state.variant.suits(state.deck(focus).suitIndex))
 
-	lazy val matchingClues = state.allColourClues(target).filter { c =>
+	lazy val matchingClues = state.allColourClues(target).filter: c =>
 		state.clueTouched(state.hands(target), c).sorted == list.sorted &&	// touches the same cards
 		state.deck(prompt).clues.contains(c)								// prompt was clued with this
-	}
 
 	clue.kind == ClueKind.Colour &&
 	RAINBOWISH.matches(state.variant.suits(id.suitIndex)) &&

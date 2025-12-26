@@ -10,7 +10,7 @@ import scala.util.chaining.scalaUtilChainingOps
 class Finesses extends munit.FunSuite:
 	override def beforeAll() = Logger.setLevel(LogLevel.Off)
 
-	test("recognizes a finesse via ref play") {
+	test("recognizes a finesse via ref play"):
 		val game = setup(RefSieve.apply, Vector(
 			Vector("xx", "xx", "xx", "xx", "xx"),
 			Vector("b1", "r4", "y4", "y4", "g4"),
@@ -21,9 +21,8 @@ class Finesses extends munit.FunSuite:
 		// Bob's b1 should be finessed.
 		hasInfs(game, None, Bob, 1, Vector("b1"))
 		assertEquals(game.meta(game.state.hands(Bob.ordinal)(0)).status, CardStatus.Finessed)
-	}
 
-	test("recognizes a finesse via fill-in") {
+	test("recognizes a finesse via fill-in"):
 		val game = setup(RefSieve.apply, Vector(
 			Vector("xx", "xx", "xx", "xx", "xx"),
 			Vector("b1", "b4", "b4", "y4", "g4"),
@@ -37,9 +36,8 @@ class Finesses extends munit.FunSuite:
 		// Bob's b1 should be finessed.
 		hasInfs(game, None, Bob, 1, Vector("b1"))
 		assertEquals(game.meta(game.state.hands(Bob.ordinal)(0)).status, CardStatus.Finessed)
-	}
 
-	test("plays into an unknown finesse") {
+	test("plays into an unknown finesse"):
 		val game = setup(RefSieve.apply, Vector(
 			Vector("xx", "xx", "xx", "xx", "xx"),
 			Vector("r2", "r4", "g4", "p4", "g4"),
@@ -52,9 +50,8 @@ class Finesses extends munit.FunSuite:
 		// We should be finessed in slot 1 for r1.
 		hasInfs(game, None, Alice, 1, Vector("r1"))
 		assertEquals(game.meta(game.state.hands(Alice.ordinal)(0)).status, CardStatus.Finessed)
-	}
 
-	test("doesn't play into a satisfied finesse") {
+	test("doesn't play into a satisfied finesse"):
 		val game = setup(RefSieve.apply, Vector(
 			Vector("xx", "xx", "xx", "xx"),
 			Vector("r1", "y4", "b4", "p4"),
@@ -67,9 +64,8 @@ class Finesses extends munit.FunSuite:
 
 		// We shouldn"t be finessed in slot 1 for r1.
 		assertEquals(game.meta(game.state.hands(Alice.ordinal)(0)).status, CardStatus.None)
-	}
 
-	test("writes the correct notes on potential finesses") {
+	test("writes the correct notes on potential finesses"):
 		val game = setup(RefSieve.apply, Vector(
 			Vector("xx", "xx", "xx", "xx", "xx"),
 			Vector("y4", "r4", "g4", "p4", "g4"),
@@ -86,9 +82,8 @@ class Finesses extends munit.FunSuite:
 
 		// Alice's slot 1 can be any non-green 1.
 		hasInfs(game, None, Alice, 1, Vector("r1", "y1", "b1", "p1"))
-	}
 
-	test("recognizes a finesse via fill-in") {
+	test("recognizes a finesse via fill-in"):
 		val game = setup(RefSieve.apply, Vector(
 			Vector("xx", "xx", "xx", "xx", "xx"),
 			Vector("r1", "r4", "r4", "p4", "g4"),
@@ -104,9 +99,8 @@ class Finesses extends munit.FunSuite:
 		// Bob's slot 1 should be finessed.
 		hasInfs(game, None, Bob, 1, Vector("r1"))
 		assertEquals(game.meta(game.state.hands(Bob.ordinal)(0)).status, CardStatus.Finessed)
-	}
 
-	test("plays into a finesse via fill-in") {
+	test("plays into a finesse via fill-in"):
 		val game = setup(RefSieve.apply, Vector(
 			Vector("xx", "xx", "xx", "xx", "xx"),
 			Vector("r2", "r4", "r4", "p4", "g4"),
@@ -123,9 +117,8 @@ class Finesses extends munit.FunSuite:
 		// Alice's slot 1 should be finessed.
 		hasInfs(game, None, Alice, 1, Vector("r1"))
 		assertEquals(game.meta(game.state.hands(Alice.ordinal)(0)).status, CardStatus.Finessed)
-	}
 
-	test("understands a prompt + finesse") {
+	test("understands a prompt + finesse"):
 		val game = setup(RefSieve.apply, Vector(
 			Vector("xx", "xx", "xx", "xx"),
 			Vector("r1", "y4", "b4", "p4"),
@@ -144,9 +137,8 @@ class Finesses extends munit.FunSuite:
 		// Cathy's slot 1 should be finessed.
 		hasInfs(game, None, Cathy, 1, Vector("r2"))
 		assertEquals(game.meta(game.state.hands(Cathy.ordinal)(0)).status, CardStatus.Finessed)
-	}
 
-	test("understands a prompt + finesse") {
+	test("understands a prompt + finesse"):
 		val game = setup(RefSieve.apply, Vector(
 			Vector("xx", "xx", "xx", "xx"),
 			Vector("r1", "y4", "b4", "p4"),
@@ -165,9 +157,8 @@ class Finesses extends munit.FunSuite:
 		// Cathy's slot 1 should be finessed.
 		hasInfs(game, None, Cathy, 1, Vector("r2"))
 		assertEquals(game.meta(game.state.hands(Cathy.ordinal)(0)).status, CardStatus.Finessed)
-	}
 
-	test("doesn't give finesse that looks like prompt") {
+	test("doesn't give finesse that looks like prompt"):
 		val game = setup(RefSieve.apply, Vector(
 			Vector("xx", "xx", "xx", "xx", "xx"),
 			Vector("r2", "r5", "g5", "p2", "p4"),
@@ -182,9 +173,8 @@ class Finesses extends munit.FunSuite:
 
 		// This clue is nonsensical.
 		assertEquals(game.lastMove, Some(ClueInterp.Mistake))
-	}
 
-	test("understands a self-finesse") {
+	test("understands a self-finesse"):
 		val game = setup(RefSieve.apply, Vector(
 			Vector("xx", "xx", "xx", "xx", "xx"),
 			Vector("r1", "r2", "b4", "g4", "p4")
@@ -199,9 +189,8 @@ class Finesses extends munit.FunSuite:
 		// Bob's slot 1 should be finessed.
 		hasInfs(game, None, Bob, 1, Vector("r1"))
 		assertEquals(game.meta(game.state.hands(Bob.ordinal)(0)).status, CardStatus.Finessed)
-	}
 
-	test("doesn't give self-finesses that look direct") {
+	test("doesn't give self-finesses that look direct"):
 		val game = setup(RefSieve.apply, Vector(
 			Vector("xx", "xx", "xx", "xx", "xx"),
 			Vector("r1", "r2", "b4", "g4", "p4")
@@ -210,9 +199,8 @@ class Finesses extends munit.FunSuite:
 
 		// This clue is nonsensical.
 		assertEquals(game.lastMove, Some(ClueInterp.Mistake))
-	}
 
-	test("doesn't give self-finesses that look direct 2") {
+	test("doesn't give self-finesses that look direct 2"):
 		val game = setup(RefSieve.apply, Vector(
 			Vector("xx", "xx", "xx", "xx", "xx"),
 			Vector("r1", "y4", "b4", "p4", "g4"),
@@ -222,9 +210,8 @@ class Finesses extends munit.FunSuite:
 
 		// This clue is nonsensical.
 		assertEquals(game.lastMove, Some(ClueInterp.Mistake))
-	}
 
-	test("doesn't give self-finesse that looks like prompt") {
+	test("doesn't give self-finesse that looks like prompt"):
 		val game = setup(RefSieve.apply, Vector(
 			Vector("xx", "xx", "xx", "xx", "xx"),
 			Vector("r2", "r5", "g5", "r3", "p4")
@@ -240,4 +227,3 @@ class Finesses extends munit.FunSuite:
 
 		// This clue is nonsensical.
 		assertEquals(game.lastMove, Some(ClueInterp.Mistake))
-	}

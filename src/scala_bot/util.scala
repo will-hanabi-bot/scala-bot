@@ -9,11 +9,10 @@ inline def loop(
 	inline only: Int => Boolean = _ => true
 )(inline body: Int => Unit) =
 	var i = start
-	while cond(i) do {
+	while cond(i) do
 		if only(i) then
 			body(i)
 		i = advance(i)
-	}
 
 extension [A](a: A)
 	def cond(condition: A => Boolean)(ifTrue: A => A)(ifFalse: A => A): A =
@@ -22,73 +21,103 @@ extension [A](a: A)
 	def when(condition: A => Boolean)(f: A => A): A =
 		if condition(a) then f(a) else a
 
-	def unless(condition: Boolean)(f: A => A): A =
-		if !condition then f(a) else a
-
 	def matches(cond: PartialFunction[A, Boolean]): Boolean =
 		cond.applyOrElse(a, _ => false)
 
-extension [A](a: Iterable[A])
+extension[A](it: Iterator[A])
 	def existsM(cond: PartialFunction[A, Boolean]): Boolean =
-		a.fastExists(_.matches(cond))
+		it.fastExists(_.matches(cond))
 
 	inline def fastForeach(inline f: A => Unit): Unit =
-		val it = a.iterator
-
-		while it.hasNext do {
+		while it.hasNext do
 			f(it.next)
-		}
 
 	inline def fastForall(inline f: A => Boolean): Boolean =
-		val it = a.iterator
 		var satisfied = true
 
-		while it.hasNext && satisfied do {
+		while it.hasNext && satisfied do
 			if !f(it.next) then
 				satisfied = false
-		}
 		satisfied
 
 	inline def fastCount(inline f: A => Boolean): Int =
-		val it = a.iterator
 		var res = 0
-
-		while it.hasNext do {
+		while it.hasNext do
 			if f(it.next) then
 				res += 1
-		}
 		res
 
 	inline def fastExists(inline f: A => Boolean): Boolean =
-		val it = a.iterator
 		var exists = false
-
-		while it.hasNext && !exists do {
+		while it.hasNext && !exists do
 			if f(it.next) then
 				exists = true
-		}
 		exists
+
+	def summing[N](f: A => N)(using numeric: Numeric[N]) =
+		var res = numeric.zero
+		while it.hasNext do
+			res = numeric.plus(res, f(it.next))
+		res
+
+	def maximizing[N](default: N)(f: A => N)(using numeric: Numeric[N]) =
+		var currMax = default
+		while it.hasNext do
+			currMax = numeric.max(currMax, f(it.next))
+		currMax
+
+extension [A](a: Iterable[A])
+	def existsM(cond: PartialFunction[A, Boolean]): Boolean =
+		a.iterator.fastExists(_.matches(cond))
+
+	inline def fastForeach(inline f: A => Unit): Unit =
+		a.iterator.fastForeach(f)
+
+	inline def fastForall(inline f: A => Boolean): Boolean =
+		a.iterator.fastForall(f)
+
+	inline def fastCount(inline f: A => Boolean): Int =
+		a.iterator.fastCount(f)
+
+	inline def fastExists(inline f: A => Boolean): Boolean =
+		a.iterator.fastExists(f)
+
+	def summing[N](f: A => N)(using numeric: Numeric[N]) =
+		val it = a.iterator
+		var res = numeric.zero
+
+		while it.hasNext do
+			res = numeric.plus(res, f(it.next))
+
+		res
+
+	def maximizing[N](default: N)(f: A => N)(using numeric: Numeric[N]) =
+		val it = a.iterator
+		var currMax = default
+
+		while it.hasNext do
+			currMax = numeric.max(currMax, f(it.next))
+
+		currMax
 
 extension [A](seq: IndexedSeq[A])
 	inline def fastMap[B](inline f: A => B): IndexedSeq[B] =
 		var res = IndexedSeq.empty[B]
 		var i = 0
 
-		while i < seq.length do {
+		while i < seq.length do
 			res = res :+ f(seq(i))
 			i += 1
-		}
 		res
 
 	inline def fastFilter(inline f: A => Boolean): IndexedSeq[A] =
 		var res = IndexedSeq.empty[A]
 		var i = 0
 
-		while i < seq.length do {
+		while i < seq.length do
 			if f(seq(i)) then
 				res = res :+ seq(i)
 			i += 1
-		}
 		res
 
 extension [A](seq: IndexedSeq[Int])
@@ -96,10 +125,9 @@ extension [A](seq: IndexedSeq[Int])
 		var i = 0
 		var sum = 0
 
-		while i < seq.length do {
+		while i < seq.length do
 			sum += seq(i)
 			i += 1
-		}
 		sum
 
 def visibleFind(
@@ -112,7 +140,7 @@ def visibleFind(
 	excludeOrder: Int = -1,
 	cond: (playerIndex: Int, order: Int) => Boolean = (_, _) => true
 ) =
-	state.hands.zipWithIndex.flatMap { (hand, playerIndex) =>
+	state.hands.zipWithIndex.flatMap: (hand, playerIndex) =>
 		hand.filter { order =>
 			order != excludeOrder &&
 			player.thoughts(order).matches(
@@ -121,20 +149,18 @@ def visibleFind(
 				symmetric = symmetric || playerIndex == player.playerIndex,
 				assume = assume
 			) &&
-			!player.links.exists { l =>
+			!player.links.exists: l =>
 				val orders = l.getOrders
 				orders.contains(excludeOrder) && orders.contains(order)
-			} &&
+			&&
 			cond(playerIndex, order)
 		}
-	}
 
 def clueToPerform(clue: Clue): PerformAction.Colour | PerformAction.Rank =
 	val Clue(kind, value, target) = clue
-	kind match {
+	kind match
 		case ClueKind.Colour => PerformAction.Colour(target, value)
-		case ClueKind.Rank => PerformAction.Rank(target, value)
-	}
+		case ClueKind.Rank   => PerformAction.Rank(target, value)
 
 def performToAction(state: State, perform: PerformAction, playerIndex: Int, deck: Option[IndexedSeq[Identity]] = None) =
 	val deckId = (order: Int) =>
@@ -143,9 +169,9 @@ def performToAction(state: State, perform: PerformAction, playerIndex: Int, deck
 	val clueTouched = (orders: Seq[Int], clue: BaseClue) =>
 		orders.filter(deckId(_).map(state.variant.cardTouched(_, clue)).getOrElse(false))
 
-	perform match {
+	perform match
 		case PerformAction.Play(target) =>
-			deckId(target) match {
+			deckId(target) match
 				case Some(id) =>
 					if state.isPlayable(id) then
 						PlayAction(playerIndex, target, id.suitIndex, id.rank)
@@ -153,14 +179,14 @@ def performToAction(state: State, perform: PerformAction, playerIndex: Int, deck
 						DiscardAction(playerIndex, target, id.suitIndex, id.rank, true)
 				case None =>
 					DiscardAction(playerIndex, target, -1, -1, true)
-			}
+
 		case PerformAction.Discard(target) =>
-			deckId(target) match {
+			deckId(target) match
 				case Some(id) =>
 					DiscardAction(playerIndex, target, id.suitIndex, id.rank, false)
 				case None =>
 					DiscardAction(playerIndex, target, -1, -1, false)
-			}
+
 		case PerformAction.Colour(target, value) =>
 			val clue = BaseClue(ClueKind.Colour, value)
 			val list = clueTouched(state.hands(target), clue)
@@ -173,7 +199,6 @@ def performToAction(state: State, perform: PerformAction, playerIndex: Int, deck
 
 		case PerformAction.Terminate(target, value) =>
 			GameOverAction(value, target)
-	}
 
 def clueToAction(state: State, clue: Clue, giver: Int): ClueAction =
 	val list = state.clueTouched(state.hands(clue.target), clue)

@@ -18,7 +18,7 @@ def interpretTransfer(game: HGroup, action: DiscardAction, holder: Int, dupe: Op
 	val cluedTargets = state.hands(holder).filter(o => game.isTouched(o) && validTransfer(game, id)(o))
 
 	if cluedTargets.isEmpty then
-		state.hands(holder).find(validTransfer(game, id)) match {
+		state.hands(holder).find(validTransfer(game, id)) match
 			case Some(uncluedTarget) if dupe.contains(uncluedTarget) =>
 				Log.info(s"${if state.isPlayable(id) then "gd" else "baton"} to ${state.names(holder)}'s ${uncluedTarget}")
 				DiscardResult.GentlemansDiscard(uncluedTarget)
@@ -32,7 +32,7 @@ def interpretTransfer(game: HGroup, action: DiscardAction, holder: Int, dupe: Op
 					state.hands(i).find(state.deck(_).matches(id)).map(i -> _)
 				}.headOption
 
-				other match {
+				other match
 					case Some((otherHolder, otherDupe)) =>
 						interpretTransfer(game, action, otherHolder, Some(otherDupe))
 
@@ -41,8 +41,6 @@ def interpretTransfer(game: HGroup, action: DiscardAction, holder: Int, dupe: Op
 
 					case None =>
 						interpretTransfer(game, action, state.ourPlayerIndex, None)
-				}
-		}
 
 	else if dupe.exists(!cluedTargets.contains(_)) then
 		Log.warn(s"looks like sarcastic discard to $cluedTargets, but should be $dupe!")
@@ -63,7 +61,7 @@ def interpretUsefulDcH(game: HGroup, action: DiscardAction): DiscardResult =
 		state.hands(i).find(state.deck(_).matches(id)).map(i -> _)
 	}.headOption
 
-	dupe match {
+	dupe match
 		case Some((dupeHolder, dupeOrder)) =>
 			interpretTransfer(game, action, dupeHolder, Some(dupeOrder))
 
@@ -74,4 +72,3 @@ def interpretUsefulDcH(game: HGroup, action: DiscardAction): DiscardResult =
 		case None =>
 			// Since we can't find it, we must be the target
 			interpretTransfer(game, action, state.ourPlayerIndex, None)
-	}

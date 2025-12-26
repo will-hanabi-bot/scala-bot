@@ -54,10 +54,9 @@ case class ClueAction(
 	clue: BaseClue
 ) extends Action:
 	def fmt(state: State) =
-		val value = clue.kind match {
+		val value = clue.kind match
 			case ClueKind.Colour => state.variant.colourableSuits(clue.value).toLowerCase()
 			case ClueKind.Rank => clue.value.toString
-		}
 		s"${state.names(giver)} clues $value to ${state.names(target)}"
 
 	def playerIndex = giver
@@ -120,12 +119,11 @@ object PlayAction:
 		)
 
 	def apply(playerIndex: Int, order: Int, id: Option[Identity]): PlayAction =
-		id match {
+		id match
 			case Some(Identity(suitIndex, rank)) =>
 				PlayAction(playerIndex, order, suitIndex, rank)
 			case None =>
 				PlayAction(playerIndex, order, -1, -1)
-		}
 
 case class DiscardAction(
 	playerIndex: Int,
@@ -151,12 +149,11 @@ object DiscardAction:
 		)
 
 	def apply(playerIndex: Int, order: Int, id: Option[Identity]): DiscardAction =
-		id match {
+		id match
 			case Some(Identity(suitIndex, rank)) =>
 				DiscardAction(playerIndex, order, suitIndex, rank)
 			case None =>
 				DiscardAction(playerIndex, order, -1, -1)
-		}
 
 case class StrikeAction(
 	num: Int,
@@ -203,9 +200,9 @@ object InterpAction:
 	def fromJSON(json: ujson.Value) =
 		throw new Exception("can't parse InterpAction from json!")
 
-object Action {
+object Action:
 	def fromJSON(json: ujson.Value) =
-		json.obj("type").str match {
+		json.obj("type").str match
 			case "clue"    => Some(ClueAction.fromJSON(json))
 			case "discard" => Some(DiscardAction.fromJSON(json))
 			case "play"    => Some(PlayAction.fromJSON(json))
@@ -215,8 +212,6 @@ object Action {
 			case "strike"  => Some(StrikeAction.fromJSON(json))
 			case "gameOver" => Some(GameOverAction.fromJSON(json))
 			case _     => None
-		}
-}
 
 def addAction(actionList: Vector[List[Action]], action: Action, turn: Int) =
 	if turn < actionList.size then
@@ -237,16 +232,15 @@ enum PerformAction:
 	case Rank(target: Int, value: Int)
 	case Terminate(target: Int, value: Int)
 
-	def isClue: Boolean = this match {
+	def isClue: Boolean = this match
 		case Colour(_, _) | Rank(_, _) => true
 		case _ => false
-	}
 
 	def fmt(game: Game, accordingTo: Option[Player] = None) =
 		val state = game.state
 		val player = accordingTo.getOrElse(game.common)
 
-		this match {
+		this match
 			case PerformAction.Play(target) =>
 				val slot = state.ourHand.indexOf(target) + 1
 				s"Play slot $slot, inferences ${player.strInfs(state, target)}"
@@ -263,12 +257,11 @@ enum PerformAction:
 
 			case PerformAction.Terminate(target, value) =>
 				s"Game ended: $target $value"
-		}
 
 	def fmtObj(game: Game, playerIndex: Int) =
 		val (state, deckIds) = (game.state, game.deckIds)
 
-		val actionType = this match {
+		val actionType = this match
 			case PerformAction.Play(target) =>
 				s"play ${state.logId(deckIds(target))}, order $target"
 
@@ -276,11 +269,10 @@ enum PerformAction:
 				s"discard ${state.logId(deckIds(target))}, order $target"
 
 			case _ => fmt(game)
-		}
 		s"$actionType (${state.names(playerIndex)})"
 
 	def json(tableID: Int) =
-		this match {
+		this match
 			case PerformAction.Play(target) =>
 				ujson.Obj("tableID" -> tableID, "type" -> 0, "target" -> target)
 			case PerformAction.Discard(target) =>
@@ -291,19 +283,16 @@ enum PerformAction:
 				ujson.Obj("tableID" -> tableID, "type" -> 3, "target" -> target, "value" -> value)
 			case PerformAction.Terminate(target, value) =>
 				ujson.Obj("tableID" -> tableID, "type" -> 4, "target" -> target, "value" -> value)
-		}
 
 object PerformAction:
-	def fromJSON(json: ujson.Value): PerformAction = {
+	def fromJSON(json: ujson.Value): PerformAction =
 		val actionType = json("type").num.toInt
 		lazy val target = json("target").num.toInt
 		lazy val value = json("value").num.toInt
 
-		actionType match {
+		actionType match
 			case 0 => PerformAction.Play(target)
 			case 1 => PerformAction.Discard(target)
 			case 2 => PerformAction.Colour(target, value)
 			case 3 => PerformAction.Rank(target, value)
 			case 4 => PerformAction.Terminate(target, value)
-		}
-	}

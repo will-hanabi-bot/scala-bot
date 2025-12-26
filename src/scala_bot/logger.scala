@@ -14,8 +14,7 @@ object Logger:
 	def setLevel(level: Int): Unit =
 		runtimeLevel = level
 
-	def level =
-		runtimeLevel
+	def level = runtimeLevel
 
 object Log:
 	inline val compileTimePriority = 3

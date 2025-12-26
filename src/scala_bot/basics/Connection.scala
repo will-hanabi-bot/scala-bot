@@ -10,11 +10,11 @@ sealed trait Connection:
 	def kind: String
 	def hidden: Boolean
 
-	def isBluff = this.matches { case f: FinesseConn => f.bluff }
+	def isBluff = this.matches:
+		case f: FinesseConn => f.bluff
 
-	def isPossiblyBluff = this.matches {
+	def isPossiblyBluff = this.matches:
 		case f: FinesseConn => f.bluff || f.possiblyBluff
-	}
 
 case class KnownConn(
 	reacting: Int,
@@ -78,7 +78,8 @@ case class FocusPossibility(
 	save: Boolean = false,
 ):
 	def isBluff =
-		connections.headOption.existsM { case f: FinesseConn => f.bluff }
+		connections.headOption.existsM:
+			case f: FinesseConn => f.bluff
 
 case class WaitingConnection(
 	connections: List[Connection],
@@ -95,9 +96,9 @@ case class WaitingConnection(
 ):
 	/** Returns the index of the next connection that still exists. */
 	def getNextIndex(state: State) =
-		val index = connections.indexWhere { conn =>
+		val index = connections.indexWhere: conn =>
 			state.hands(conn.reacting).contains(conn.order)
-		}
+
 		Option.when(index != -1)(index)
 
 	inline def currConn = connections.head

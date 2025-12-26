@@ -10,7 +10,7 @@ import scala.util.chaining.scalaUtilChainingOps
 class SelfFinesses extends munit.FunSuite:
 	override def beforeAll() = Logger.setLevel(LogLevel.Off)
 
-	test("plays into a self-finesse") {
+	test("plays into a self-finesse"):
 		val game = setup(HGroup.atLevel(2), Vector(
 			Vector("xx", "xx", "xx", "xx", "xx"),
 			Vector("g1", "p4", "b4", "b4", "y4")
@@ -24,9 +24,8 @@ class SelfFinesses extends munit.FunSuite:
 		.pipe(takeTurn("Alice plays g1 (slot 2)"))
 
 		hasInfs(game, None, Alice, 2, Vector("g2"))
-	}
 
-	test("doesn't give a bad self-finesse") {
+	test("doesn't give a bad self-finesse"):
 		val game = setup(HGroup.atLevel(2), Vector(
 			Vector("xx", "xx", "xx", "xx", "xx"),
 			Vector("g1", "p4", "b4", "b4", "y4"),
@@ -40,9 +39,8 @@ class SelfFinesses extends munit.FunSuite:
 
 		// This clue is illegal.
 		assertEquals(game.lastMove, Some(ClueInterp.Mistake))
-	}
 
-	test("interprets a self-finesse when giver knows less") {
+	test("interprets a self-finesse when giver knows less"):
 		val game = setup(HGroup.atLevel(2), Vector(
 			Vector("xx", "xx", "xx", "xx", "xx"),
 			Vector("g3", "r1", "g4", "b1", "g3"),
@@ -53,9 +51,8 @@ class SelfFinesses extends munit.FunSuite:
 
 		// Cathy's slot 1 should be finessed.
 		assertEquals(game.meta(game.state.hands(Cathy.ordinal)(0)).status, CardStatus.Finessed)
-	}
 
-	test("interprets a self-finesse when other possibilities are impossible") {
+	test("interprets a self-finesse when other possibilities are impossible"):
 		val game = setup(HGroup.atLevel(2), Vector(
 			Vector("xx", "xx", "xx", "xx"),
 			Vector("r3", "b4", "g4", "p1"),
@@ -76,9 +73,8 @@ class SelfFinesses extends munit.FunSuite:
 		// Alice's slot 1 should be finessed.
 		assertEquals(game.meta(game.state.hands(Alice.ordinal)(0)).status, CardStatus.Finessed)
 		hasInfs(game, None, Alice, 3, Vector("r2", "y2", "g2"))
-	}
 
-	test("doesn't give a self-finesse that looks like a prompt") {
+	test("doesn't give a self-finesse that looks like a prompt"):
 		val game = setup(HGroup.atLevel(2), Vector(
 			Vector("xx", "xx", "xx", "xx", "xx"),
 			Vector("r3", "b4", "g4", "p1", "b2"),
@@ -91,9 +87,8 @@ class SelfFinesses extends munit.FunSuite:
 
 		// This clue is illegal, since r5 will prompt as r2.
 		assertEquals(game.lastMove, Some(ClueInterp.Mistake))
-	}
 
-	test("gives a self-finesse that doesn't look like a prompt") {
+	test("gives a self-finesse that doesn't look like a prompt"):
 		val game = setup(HGroup.atLevel(2), Vector(
 			Vector("xx", "xx", "xx", "xx", "xx"),
 			Vector("r3", "b3", "g1", "p1", "y2"),
@@ -110,9 +105,8 @@ class SelfFinesses extends munit.FunSuite:
 		// g1 self-finesse, g2 finesse on Cathy
 		assertEquals(game.meta(game.state.hands(Bob.ordinal)(2)).status, CardStatus.Finessed)
 		assertEquals(game.meta(game.state.hands(Cathy.ordinal)(0)).status, CardStatus.Finessed)
-	}
 
-	test("doesn't give a self-finesse that isn't the simplest interpretation") {
+	test("doesn't give a self-finesse that isn't the simplest interpretation"):
 		val game = setup(HGroup.atLevel(2), Vector(
 			Vector("xx", "xx", "xx", "xx"),
 			Vector("g1", "p3", "r3", "g3"),
@@ -126,9 +120,8 @@ class SelfFinesses extends munit.FunSuite:
 
 		// This clue is illegal, since the focus will look like b3.
 		assertEquals(game.lastMove, Some(ClueInterp.Mistake))
-	}
 
-	test("maintains a self-finesse even as inferences are reduced") {
+	test("maintains a self-finesse even as inferences are reduced"):
 		val game = setup(HGroup.atLevel(2), Vector(
 			Vector("xx", "xx", "xx", "xx"),
 			Vector("y1", "b4", "b1", "g1"),
@@ -138,18 +131,16 @@ class SelfFinesses extends munit.FunSuite:
 		.pipe(takeTurn("Alice clues 1 to Bob"))
 		.pipe(takeTurn("Bob plays y1", "p4"))
 		.pipe(takeTurn("Cathy clues 3 to Alice (slot 2)"))
-		.tap { g =>
+		.tap: g =>
 			// All of these are valid self-finesses.
 			hasInfs(g, None, Alice, 1, Vector("r1", "y2", "g2", "b2", "p1"))
 			assertEquals(g.meta(g.state.hands(Alice.ordinal)(0)).status, CardStatus.Finessed)
-		}
 		.pipe(takeTurn("Donald clues green to Alice (slot 4)"))
 
 		// After knowing we have g2 in slot 4, the finesse should still be on.
 		hasInfs(game, None, Alice, 4, Vector("g2"))
 		hasInfs(game, None, Alice, 1, Vector("r1", "y2", "b2", "p1"))
 		assertEquals(game.meta(game.state.hands(Alice.ordinal)(0)).status, CardStatus.Finessed)
-	}
 
 	// test("prefers the simplest connection even when needing to self-finesse") {
 	// 	val game = setup(HGroup.atLevel(2), Vector(
@@ -168,7 +159,7 @@ class SelfFinesses extends munit.FunSuite:
 	// 	.pipe(takeTurn("Cathy clues 4 to Alice (slot 1)"))
 	// }
 
-	test("understands an asymmetric self-finesse") {
+	test("understands an asymmetric self-finesse"):
 		val game = setup(HGroup.atLevel(2), Vector(
 			Vector("xx", "xx", "xx", "xx"),
 			Vector("r3", "r5", "y3", "g4"),
@@ -185,9 +176,8 @@ class SelfFinesses extends munit.FunSuite:
 		// Donald, Bob and Alice can see b5, so we all know this is an r5 finesse.
 		// hasInfs(game, None, Bob, 2, Vector("r5"))
 		assertEquals(game.meta(game.state.hands(Bob.ordinal)(0)).status, CardStatus.Finessed)
-	}
 
-	test("plays even if it could be an asymmetric finesse") {
+	test("plays even if it could be an asymmetric finesse"):
 		val game = setup(HGroup.atLevel(2), Vector(
 			Vector("xx", "xx", "xx", "xx"),
 			Vector("r3", "r5", "y3", "g4"),
@@ -203,9 +193,8 @@ class SelfFinesses extends munit.FunSuite:
 
 		// We must play into this, since we can't assume we have b5.
 		assertEquals(game.meta(game.state.hands(Alice.ordinal)(0)).status, CardStatus.Finessed)
-	}
 
-	test("prefers to self-finesse over assuming asymmetric information") {
+	test("prefers to self-finesse over assuming asymmetric information"):
 		val game = setup(HGroup.atLevel(2), Vector(
 			Vector("xx", "xx", "xx", "xx", "xx"),
 			Vector("g4", "r1", "y2", "r2", "b4"),
@@ -222,9 +211,8 @@ class SelfFinesses extends munit.FunSuite:
 		// Alice's slot 1 should be finessed as g3.
 		hasInfs(game, None, Alice, 1, Vector("y1", "g3", "b1"))
 		assertEquals(game.meta(game.state.hands(Alice.ordinal)(0)).status, CardStatus.Finessed)
-	}
 
-	test("realizes a self-finesse after other possibilities are stomped") {
+	test("realizes a self-finesse after other possibilities are stomped"):
 		val game = setup(HGroup.atLevel(2), Vector(
 			Vector("xx", "xx", "xx", "xx"),
 			Vector("y4", "r5", "y3", "g4"),
@@ -243,9 +231,8 @@ class SelfFinesses extends munit.FunSuite:
 
 		hasInfs(game, None, Alice, 4, Vector("y4", "g4", "p4"))
 		assertEquals(game.meta(game.state.hands(Alice.ordinal)(2)).status, CardStatus.Finessed)
-	}
 
-	test("understands a very delayed finesse") {
+	test("understands a very delayed finesse"):
 		val game = setup(HGroup.atLevel(2), Vector(
 			Vector("xx", "xx", "xx", "xx"),
 			Vector("p4", "y4", "g1", "r4"),
@@ -259,9 +246,8 @@ class SelfFinesses extends munit.FunSuite:
 
 		.pipe(takeTurn("Alice clues 5 to Cathy"))			// 5 Stall
 		.pipe(takeTurn("Bob clues red to Alice (slot 3)"))
-		.tap {
+		.tap:
 			hasInfs(_, None, Alice, 3, Vector("r1"))
-		}
 		.pipe(takeTurn("Cathy plays b1", "g4"))
 		.pipe(takeTurn("Donald clues 5 to Alice (slot 2)"))
 
@@ -269,9 +255,8 @@ class SelfFinesses extends munit.FunSuite:
 
 		// The finesse is revealed to be yellow.
 		hasInfs(game, None, Alice, 4, Vector("y3"))
-	}
 
-	test("understands a fake self-finesse") {
+	test("understands a fake self-finesse"):
 		val game = setup(HGroup.atLevel(2), Vector(
 			Vector("xx", "xx", "xx", "xx", "xx"),
 			Vector("y2", "y5", "b4", "y3", "r1"),
@@ -287,4 +272,3 @@ class SelfFinesses extends munit.FunSuite:
 		// Bob needs to play r1 first to respect r3.
 		assertEquals(game.meta(game.state.hands(Bob.ordinal)(1)).status, CardStatus.Finessed)
 		hasInfs(game, None, Bob, 5, Vector("r3", "y3", "g3"))
-	}

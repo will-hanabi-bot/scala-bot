@@ -28,62 +28,56 @@ import scala_bot.console.{ConsoleCmd, spawnConsole}
 import scala.util.Try
 
 def parseArgs(args: Seq[String]) =
-	args.foldLeft(Map[String, String]()) { (acc, arg) =>
+	args.foldLeft(Map[String, String]()): (acc, arg) =>
 		val parts = arg.split("=")
 
 		if parts.length != 2 then
 			throw new IllegalArgumentException(s"Invalid argument $arg")
 
 		acc.updated(parts(0), parts(1))
-	}
 
 def readEnv(args: Map[String, String]) =
-	Try {
+	Try:
 		val lines = fromFile("./.env").getLines
 
-		lines.foldLeft(args) { (acc, line) =>
-			line.split("=") match {
+		lines.foldLeft(args): (acc, line) =>
+			line.split("=") match
 				case Array(key, value) => acc.updated(key, value)
 				case Array("") => acc
 				case _ =>
 					println(s"malformed line in .env: $line")
 					acc
-			}
-		}
-	}.getOrElse {
+	.getOrElse:
 		println(s"Failed to read .env file (maybe it doesn't exist?)")
 		args
-	}
 
 @main
 def main(args: String*): Unit =
 	def useWebSocket(ws: WebSocket[IO]): IO[Unit] =
 		def receive(client: BotClient): IO[Unit] =
-			Ref.of[IO, String]("").flatMap { buffer =>
+			Ref.of[IO, String]("").flatMap: buffer =>
 				def loop: IO[Unit] =
-					ws.receive().flatMap {
-					case WebSocketFrame.Text(text, finalFrame, _) =>
-						if !finalFrame then
-							buffer.update(_ + text) *> loop
-						else
-							for
-								acc <- buffer.getAndUpdate(_ => "")
-								full = acc + text
-								_   <- client.handleMsg(full)
-								_   <- loop
-							yield ()
+					ws.receive().flatMap:
+						case WebSocketFrame.Text(text, finalFrame, _) =>
+							if !finalFrame then
+								buffer.update(_ + text) *> loop
+							else
+								for
+									acc <- buffer.getAndUpdate(_ => "")
+									full = acc + text
+									_   <- client.handleMsg(full)
+									_   <- loop
+								yield ()
 
-					case WebSocketFrame.Close(_, _) => IO.println("Connection closed")
+						case WebSocketFrame.Close(_, _) => IO.println("Connection closed")
 
-					case _ => loop
-				}.handleErrorWith { err =>
-					IO { err.printStackTrace() } *> IO.raiseError(err)
-				}
+						case _ => loop
+					.handleErrorWith: err =>
+						IO(err.printStackTrace()) *> IO.raiseError(err)
 
 				loop
-			}
 
-		def startSender(ws: WebSocket[IO], queue: Queue[IO, String]): IO[FiberIO[Unit]] = {
+		def startSender(ws: WebSocket[IO], queue: Queue[IO, String]): IO[FiberIO[Unit]] =
 			def loop: IO[Unit] =
 				for
 					msg <- queue.take
@@ -92,7 +86,6 @@ def main(args: String*): Unit =
 					_   <- loop
 				yield ()
 			loop.start
-		}
 
 		for
 			_        <- IO.println("connected!")
@@ -115,7 +108,7 @@ def main(args: String*): Unit =
 	val password = env.lift(s"HANABI_PASSWORD$index")
 		.getOrElse(throw new IllegalStateException(s"Missing HANABI_USERNAME$index env variable!"))
 
-	val program = HttpClientCatsBackend.resource[IO]().use { backend =>
+	val program = HttpClientCatsBackend.resource[IO]().use: backend =>
 		for
 			response <- basicRequest.post(uri"https://hanab.live:443/login")
 				.header("Content-Type", "application/x-www-form-urlencoded")
@@ -128,8 +121,7 @@ def main(args: String*): Unit =
 				.header("Cookie", cookie)
 				.send(backend)
 		yield ()
-	}.handleErrorWith { err =>
-		IO { err.printStackTrace() } *> IO.raiseError(err)
-	}
+	.handleErrorWith: err =>
+		IO(err.printStackTrace()) *> IO.raiseError(err)
 
 	program.unsafeRunSync()

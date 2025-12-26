@@ -9,7 +9,7 @@ import scala.util.chaining.scalaUtilChainingOps
 class Variants extends munit.FunSuite:
 	override def beforeAll() = Logger.setLevel(LogLevel.Off)
 
-	test("it understands a playable pink promise") {
+	test("it understands a playable pink promise"):
 		val game = setup(Reactor.apply, Vector(
 			Vector("xx", "xx", "xx", "xx", "xx"),
 			Vector("b1", "r1", "r4", "y4", "y4"),
@@ -28,9 +28,8 @@ class Variants extends munit.FunSuite:
 		// Alice's slot 4 is not playable.
 		val playables = game.common.obviousPlayables(game, Alice.ordinal)
 		assert(playables.length == 1 && playables(0) == game.state.hands(Alice.ordinal)(1))
-	}
 
-	test("it understands a brown tcm") {
+	test("it understands a brown tcm"):
 		val game = setup(Reactor.apply, Vector(
 			Vector("xx", "xx", "xx", "xx", "xx"),
 			Vector("b1", "r1", "r4", "y4", "y4"),
@@ -46,4 +45,3 @@ class Variants extends munit.FunSuite:
 		val playables = game.common.obviousPlayables(game, Alice.ordinal)
 		assert(playables.isEmpty)
 		assertEquals(game.meta(game.state.hands(Alice.ordinal)(0)).status, CardStatus.None)
-	}

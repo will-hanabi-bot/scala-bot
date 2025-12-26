@@ -64,7 +64,7 @@ object Reactor:
 	private def checkMissed(game: Reactor, playerIndex: Int, actionOrder: Int) =
 		game.state.hands(playerIndex)
 			.find(o => game.meta(o).urgent && o != actionOrder)
-			.fold(game) { urgent =>
+			.fold(game): urgent =>
 				val newCommon = game.common.withThought(urgent)(t => t.copy(
 					inferred = t.oldInferred.getOrElse(throw new Exception(s"No old inferred on $urgent!")),
 					oldInferred = None
@@ -73,22 +73,18 @@ object Reactor:
 					game.meta(urgent).cleared.reason(game.state.turnCount))
 
 				game.copy(common = newCommon, meta = newMeta)
-		}
 
 	private def resetZcs(game: Reactor) =
 		game.copy(zcsTurn = None)
 
 	def chop(game: Reactor, playerIndex: Int) =
-		game.state.hands(playerIndex).find {
+		game.state.hands(playerIndex).find:
 			game.meta(_).status == CardStatus.CalledToDiscard
-		}
-		.orElse {
-			game.state.hands(playerIndex).find { order =>
+		.orElse:
+			game.state.hands(playerIndex).find: order =>
 				game.zcsTurn.forall(_ >= game.state.deck(order).drawnIndex) &&
 				!game.state.deck(order).clued &&
 				game.meta(order).status == CardStatus.None
-			}
-		}
 
 	given GameOps[Reactor] with
 		def copyWith(game: Reactor, updates: GameUpdates) =
@@ -126,14 +122,12 @@ object Reactor:
 			val ClueAction(giver, target, _, _) = action
 
 			val interpretedGame = checkMissed(game, giver, 99)
-				.pipe { g =>
-					g.waiting match {
+				.pipe: g =>
+					g.waiting match
 						case Some(wc) if wc.reacter == giver => g.copy(waiting = None)
 						case _ => g
-					}
-				}
-				.pipe { g =>
-					val (interp, interpGame) = g.nextInterp match {
+				.pipe: g =>
+					val (interp, interpGame) = g.nextInterp match
 						case Some(interp) =>
 							Log.info(s"forcing rewinded interp $interp!")
 							if interp == ClueInterp.Reactive then
@@ -162,14 +156,13 @@ object Reactor:
 									None
 							}.find(_.isDefined).flatten
 
-							val fixed = checkFix(prev, g, action) match {
+							val fixed = checkFix(prev, g, action) match
 								case FixResult.Normal(cluedResets, duplicateReveals) =>
 									cluedResets ++ duplicateReveals
 								case _ => Nil
-							}
 							val allowableFix = target == state.nextPlayerIndex(giver) && fixed.nonEmpty
 
-							reacter match {
+							reacter match
 								case None => (Option.when(allowableFix)(ClueInterp.Fix), g)
 
 								case Some(reacter) if reacter == target =>
@@ -183,31 +176,26 @@ object Reactor:
 										(Some(ClueInterp.Fix), g)
 									else
 										interpretReactive(prev, g, action, reacter, inverted = false)
-							}
-						}
 
 					if interp.isEmpty then
 						Log.warn("interpreted mistake!")
 
 					interpGame.copy(lastMove = Some(interp.getOrElse(ClueInterp.Mistake)))
-				}
 
-			val signalledPlays = interpretedGame.state.hands.flatten.filter { o =>
+			val signalledPlays = interpretedGame.state.hands.flatten.filter: o =>
 				prev.meta(o).status != CardStatus.CalledToPlay && interpretedGame.meta(o).status == CardStatus.CalledToPlay
-			}
 
 			val eliminatedGame = interpretedGame.elim(goodTouch = false)
 			val playsAfterElim = eliminatedGame.state.hands.flatten.filter(eliminatedGame.meta(_).status == CardStatus.CalledToPlay)
 
 			eliminatedGame
-				.when(_ => playsAfterElim.length < signalledPlays.length) { g =>
+				.when(_ => playsAfterElim.length < signalledPlays.length): g =>
 					Log.warn(s"lost play signal on ${signalledPlays.filterNot(playsAfterElim.contains)} after elim!")
 					g.copy(lastMove = Some(ClueInterp.Mistake))
-				}
-				.when(_ => prev.state.canClue)
-					(resetZcs)
-				.when(!_.state.canClue)
-					(_.copy(zcsTurn = Some(state.turnCount)))
+				.when(_ => prev.state.canClue):
+					resetZcs
+				.when(!_.state.canClue):
+					_.copy(zcsTurn = Some(state.turnCount))
 				.copy(nextInterp = None)
 
 		def interpretDiscard(prev: Reactor, game: Reactor, action: DiscardAction): Reactor =
@@ -216,7 +204,7 @@ object Reactor:
 			val id = Identity(suitIndex, rank)
 
 			checkMissed(game, playerIndex, order)
-				.when(_ => failed) { g =>
+				.when(_ => failed): g =>
 					Log.warn("bombed! clearing all information")
 
 					val initial = (g.common, g.meta)
@@ -234,39 +222,37 @@ object Reactor:
 						common = clearedC,
 						meta = clearedM
 					)
-				}
-				.pipe { g => g.waiting match {
-					case Some(wc) =>
-						reactDiscard(prev, g, playerIndex, order, wc)
+				.pipe: g =>
+					g.waiting match
+						case Some(wc) =>
+							reactDiscard(prev, g, playerIndex, order, wc)
 
-					case None if !failed && prev.state.deck(order).clued && suitIndex != -1 && rank != -1 && !state.isBasicTrash(id) =>
-						interpretUsefulDc(g, action) match {
-							case DiscardResult.None =>
-								g.copy(lastMove = Some(DiscardInterp.None))
+						case None if !failed && prev.state.deck(order).clued && suitIndex != -1 && rank != -1 && !state.isBasicTrash(id) =>
+							interpretUsefulDc(g, action) match
+								case DiscardResult.None =>
+									g.copy(lastMove = Some(DiscardInterp.None))
 
-							case DiscardResult.Mistake =>
-								g.copy(lastMove = Some(DiscardInterp.Mistake))
+								case DiscardResult.Mistake =>
+									g.copy(lastMove = Some(DiscardInterp.Mistake))
 
-							case DiscardResult.GentlemansDiscard(target) =>
-								g.copy(
-									common = g.common.withThought(target)(_.copy(
-										inferred = IdentitySet.single(id)
-									)),
-									meta = g.meta.updated(target, g.meta(target).copy(
-										status = CardStatus.GentlemansDiscard
-									)),
-									lastMove = Some(DiscardInterp.GentlemansDiscard)
-								)
-							case DiscardResult.Sarcastic(orders) =>
-								g.copy(
-									common = g.common.copy(
-										links = Link.Sarcastic(orders, id) +: g.common.links
-									),
-									lastMove = Some(DiscardInterp.Sarcastic)
-								)
-						}
-					case None => g
-				}}
+								case DiscardResult.GentlemansDiscard(target) =>
+									g.copy(
+										common = g.common.withThought(target)(_.copy(
+											inferred = IdentitySet.single(id)
+										)),
+										meta = g.meta.updated(target, g.meta(target).copy(
+											status = CardStatus.GentlemansDiscard
+										)),
+										lastMove = Some(DiscardInterp.GentlemansDiscard)
+									)
+								case DiscardResult.Sarcastic(orders) =>
+									g.copy(
+										common = g.common.copy(
+											links = Link.Sarcastic(orders, id) +: g.common.links
+										),
+										lastMove = Some(DiscardInterp.Sarcastic)
+									)
+						case None => g
 				.pipe(_.elim(goodTouch = false))
 				.when(_ => prev.state.canClue)(resetZcs)
 
@@ -274,12 +260,10 @@ object Reactor:
 			val PlayAction(playerIndex, order, _, _) = action
 
 			checkMissed(game, playerIndex, order)
-				.pipe { g =>
-					g.waiting match {
+				.pipe: g =>
+					g.waiting match
 						case Some(wc) => reactPlay(prev, g, playerIndex, order, wc)
 						case None => g
-					}
-				}
 				.pipe(_.elim(goodTouch = false))
 				.when(_ => prev.state.canClue)(resetZcs)
 
@@ -290,11 +274,10 @@ object Reactor:
 			if currentPlayerIndex == -1 then
 				game
 			else
-				val waitedGame = game.waiting match {
+				val waitedGame = game.waiting match
 					case Some(wc) if wc.reacter == state.lastPlayerIndex(currentPlayerIndex) =>
 						game.copy(waiting = None)
 					case _ => game
-				}
 
 				val (newCommon, newMeta) = state.hands(currentPlayerIndex).foldLeft((game.common, game.meta)) { case ((c, m), order) =>
 					if m(order).status == CardStatus.CalledToPlay then
@@ -320,74 +303,64 @@ object Reactor:
 		def takeAction(game: Reactor): PerformAction =
 			val (state, me) = (game.state, game.me)
 
-			state.ourHand.find(game.meta(_).urgent) match {
-				case Some(urgent) => game.meta(urgent).status match {
+			state.ourHand.find(game.meta(_).urgent) match
+				case Some(urgent) => game.meta(urgent).status match
 					case CardStatus.CalledToPlay if !me.thoughts(urgent).possible.forall(state.isBasicTrash) =>
 						return PerformAction.Play(urgent)
 					case CardStatus.CalledToDiscard =>
 						return PerformAction.Discard(urgent)
 					case _ =>
 						Log.warn(s"Unexpected urgent card status ${game.meta(urgent).status}")
-					}
 				case _ => ()
-			}
 
 			if state.inEndgame && state.remScore <= state.variant.suits.length + 1 then
 				Log.highlight(Console.MAGENTA, "trying to solve endgame...")
 
-				EndgameSolver(monteCarlo = true).solve(game) match {
+				EndgameSolver(monteCarlo = true).solve(game) match
 					case Left(err) => Log.info(s"couldn't solve endgame: $err")
 					case Right((perform, _)) =>
 						Log.info(s"endgame solved!")
 						return perform
-				}
 
 			val discardOrders = me.discardable(game, state.ourPlayerIndex)
-			val playableOrders = {
+			val playableOrders =
 				val knownP = me.obviousPlayables(game, state.ourPlayerIndex)
 
 				if knownP.nonEmpty then
 					// Don't play if there is a focused card that looks exactly like this one (no OCM in reactor)
-					knownP.filter { order =>
-						!state.hands(state.ourPlayerIndex).exists { o =>
+					knownP.filter: order =>
+						!state.hands(state.ourPlayerIndex).exists: o =>
 							o != order && me.thoughts(o).possible == me.thoughts(order).possible && game.meta(o).focused
-						}
-					}
 				else
 					me.thinksPlayables(game, state.ourPlayerIndex)
-			}
 
 			Log.info(s"playables $playableOrders")
 			Log.info(s"discardable $discardOrders")
 
 			val canClue = state.canClue && !game.waiting.exists(_.receiver == state.ourPlayerIndex)
 
-			val allClues =
+			val allClues = if !canClue then Nil else
 				for
-					target <- (0 until state.numPlayers) if canClue && target != state.ourPlayerIndex
-					clue <- state.allValidClues(target)
+					target <- (0 until state.numPlayers) if target != state.ourPlayerIndex
+					clue   <- state.allValidClues(target)
 				yield
 					val perform = clueToPerform(clue)
 					val action = performToAction(state, perform, state.ourPlayerIndex)
 					(perform, action)
 
-			val allPlays = playableOrders.map { o =>
+			val allPlays = playableOrders.map: o =>
 				val action = PlayAction(state.ourPlayerIndex, o, me.thoughts(o).id(infer = true))
 				(PerformAction.Play(o), action)
-			}
 
 			val potentialReacter = state.nextPlayerIndex(state.ourPlayerIndex)
 
 			// We have a play and the reacter might play on top of us
 			lazy val potentialForcedPlay = allPlays.nonEmpty &&
 				game.waiting.exists(_.reacter == potentialReacter) &&
-				playableOrders.exists {
-					game.me.thoughts(_).inferred.exists { id =>
-						state.hands(potentialReacter).exists { o =>
+				playableOrders.exists:
+					game.me.thoughts(_).inferred.exists: id =>
+						state.hands(potentialReacter).exists: o =>
 							id.next.contains(state.deck(o).id().get)
-						}
-					}
-				}
 
 			val cantDiscard = state.clueTokens == 8 ||
 				(state.pace == 0 && (allClues.nonEmpty || allPlays.nonEmpty)) ||
@@ -395,20 +368,17 @@ object Reactor:
 			Log.info(s"can discard: ${!cantDiscard} ${state.clueTokens}")
 
 			val allDiscards: Seq[(PerformAction, Action)] = if cantDiscard then Nil else
-				discardOrders.map { o =>
+				discardOrders.map: o =>
 					val action = DiscardAction(state.ourPlayerIndex, o, me.thoughts(o).id(infer = true))
 					(PerformAction.Discard(o), action)
-				}
 
-			val allActions = {
+			val allActions =
 				val as = allClues.concat(allPlays).concat(allDiscards)
 
-				chop(game, state.ourPlayerIndex) match {
+				chop(game, state.ourPlayerIndex) match
 					case Some(chop) if !cantDiscard && (!state.canClue || allPlays.isEmpty) && allDiscards.isEmpty && !me.obviousLocked(game, state.ourPlayerIndex) =>
 						as :+ (PerformAction.Discard(chop), DiscardAction(state.ourPlayerIndex, chop, -1, -1, false))
 					case _ => as
-				}
-			}
 
 			if allActions.isEmpty then
 				if state.clueTokens == 8 then
@@ -443,11 +413,10 @@ object Reactor:
 					clue   <- state.allValidClues(target) if validClue(clue, target)
 				yield
 					clue)
-				.sortBy { clue =>
+				.sortBy: clue =>
 					val list = state.clueTouched(state.hands(clue.target), clue)
 					// Prefer not cluing trash and not previously clued cards
 					list.count(o => state.isBasicTrash(state.deck(o).id().get)) * 10 + list.count(state.deck(_).clued)
-				}
 				.map(clueToPerform)
 
 			Logger.setLevel(level)

@@ -23,7 +23,7 @@ def interpretUsefulDc(game: Game, action: DiscardAction): DiscardResult =
 
 	Log.info("interpreting useful dc!")
 
-	state.hands.flatten.find(state.deck(_).matches(id)) match {
+	state.hands.flatten.find(state.deck(_).matches(id)) match
 		case Some(dupe) =>
 			val holder = state.holderOf(dupe)
 
@@ -53,7 +53,7 @@ def interpretUsefulDc(game: Game, action: DiscardAction): DiscardResult =
 
 		case None if gd =>
 			// Since we can't find it, we must be the target
-			state.ourHand.findLast(game.me.thoughts(_).possible.contains(id)) match {
+			state.ourHand.findLast(game.me.thoughts(_).possible.contains(id)) match
 				case Some(target) =>
 					Log.info(s"gd to our $target")
 					DiscardResult.GentlemansDiscard(target)
@@ -61,10 +61,8 @@ def interpretUsefulDc(game: Game, action: DiscardAction): DiscardResult =
 				case None =>
 					Log.warn("looked like gd but we don't see it and impossible for us to have!")
 					DiscardResult.Mistake
-			}
 
 		case None =>
 			val orders = state.ourHand.filter(validTransfer(game, id))
 			Log.info(s"sarcastic to our $orders")
 			DiscardResult.Sarcastic(orders)
-	}

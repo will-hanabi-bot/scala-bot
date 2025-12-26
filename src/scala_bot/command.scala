@@ -28,9 +28,8 @@ case class GameActionMessage(
 
 object GameActionMessage:
 	def fromJSON(json: ujson.Value): Option[GameActionMessage] =
-		Action.fromJSON(json.obj("action")).map {
+		Action.fromJSON(json.obj("action")).map:
 			GameActionMessage(json.obj("tableID").num.toInt, _)
-		}
 
 case class Spectator(
 	name: String,
@@ -92,19 +91,17 @@ enum Convention:
 	case Reactor, RefSieve, HGroup
 
 object Convention:
-	def from(s: String) = s match {
+	def from(s: String) = s match
 		case "Reactor" => Some(Convention.Reactor)
 		case "RefSieve" => Some(Convention.RefSieve)
 		case "HGroup" => Some(Convention.HGroup)
 		case _ => None
-	}
 
 case class Settings(convention: Convention, level: Int = 1):
-	def str = convention match {
+	def str = convention match
 		case Convention.Reactor => "Reactor 1.0"
 		case Convention.RefSieve => "Ref Sieve"
 		case Convention.HGroup => s"H-Group $level"
-	}
 
 class BotClient(queue: Queue[IO, String], gameRef: Ref[IO, Option[Game]]):
 	private var info: Option[SelfData] = None
@@ -113,32 +110,30 @@ class BotClient(queue: Queue[IO, String], gameRef: Ref[IO, Option[Game]]):
 	private var tables: Map[Int, Table] = Map()
 	private var settings: Settings = Settings(Convention.Reactor)
 
-	def debug(cmd: ConsoleCmd) = gameRef.get.flatMap {
+	def debug(cmd: ConsoleCmd) = gameRef.get.flatMap:
 		case None => IO.println("no active game")
 		case Some(game) =>
 			val state = game.state
-			cmd match {
-				case ConsoleCmd.Hand(name, from) => state.names.indexOf(name) match {
+			cmd match
+				case ConsoleCmd.Hand(name, from) => state.names.indexOf(name) match
 					case -1 =>
 						Log.error(s"Player $name not found.")
 						IO.unit
 					case i =>
-						val player = from.fold(game.common) { name =>
-							state.names.indexOf(name) match {
+						val player = from.fold(game.common): name =>
+							state.names.indexOf(name) match
 								case -1 =>
 									println(s"Player $from not found.")
 									null
 								case index =>
 									game.players(index)
-							}
-						}
 
 						if player != null then
 							val output = List(
 								s"viewing from ${player.name}",
 								s"===================="
-							).concat {
-								state.hands(i).flatMap { order =>
+							).concat:
+								state.hands(i).flatMap: order =>
 									val meta = game.meta(order)
 									val flags = List(
 										Option.when(meta.focused)("focused"),
@@ -156,69 +151,61 @@ class BotClient(queue: Queue[IO, String], gameRef: Ref[IO, Option[Game]]):
 										Option.when(!flags.isEmpty)(s"flags: ${flags.toList}"),
 										Some("====================")
 									).flatten
-								}
-							}
+
 							IO.println(output.mkString("\n"))
 						else
 							IO.unit
-					}
 				case ConsoleCmd.Navigate(arg) =>
-					val turn = arg match {
+					val turn = arg match
 						case NavArg.Turn(turn) => turn
 						case NavArg.NextRound => state.turnCount + state.numPlayers
 						case NavArg.Next => state.turnCount + 1
 						case NavArg.Prev => state.turnCount - 1
 						case NavArg.PrevRound => state.turnCount - state.numPlayers
-					}
 
 					if turn < 1 || turn >= state.actionList.length then
 						Log.error(s"Turn $turn does not exist.")
 						IO.unit
 					else
-						game match {
+						game match
 							case r: Reactor => gameRef.set(Some(r.navigate(turn)))
 							case r: RefSieve => gameRef.set(Some(r.navigate(turn)))
 							case r: HGroup => gameRef.set(Some(r.navigate(turn)))
 							case _ => IO.unit
-						}
-			}
-		}
 
 	def handleMsg(data: String): IO[Unit] =
 		val (command, args) = data.splitAt(data.indexOf(' '))
 
-		command match {
+		command match
 			case "chat" =>
 				handleChat(upickle.read[ChatMessage](ujson.read(args)))
 
 			case "gameAction" =>
-				GameActionMessage.fromJSON(ujson.read(args)) match {
+				GameActionMessage.fromJSON(ujson.read(args)) match
 					case None =>
 						IO.println(s"${Console.RED}failed to read gameAction $args${Console.RESET}") *>
 						IO.unit
 					case Some(action) => handleAction(action)
-				}
 
 			case "gameActionList" =>
 				val msg = GameActionListMessage.fromJSON(ujson.read(args))
 
-				gameRef.get.flatMap {
+				gameRef.get.flatMap:
 					case None => throw new IllegalStateException("Game not initialized")
-					case Some(g) => g match {
+					case Some(g) => g match
 						case r: Reactor => gameRef.set(Some(r.copy(catchup = true)))
 						case r: RefSieve => gameRef.set(Some(r.copy(catchup = true)))
 						case h: HGroup => gameRef.set(Some(h.copy(catchup = true)))
-					}
-				} *>
-				msg.list.init.traverse_ { action =>
+				*>
+				msg.list.init.traverse_ : action =>
 					handleAction(GameActionMessage(msg.tableID, action))
-				} *>
-				gameRef.update {
+				*>
+				gameRef.update:
 					case Some(g2: Reactor) => Some(g2.copy(catchup = false))
 					case Some(g2: RefSieve) => Some(g2.copy(catchup = false))
 					case Some(g2: HGroup) => Some(g2.copy(catchup = false))
 					case other => other
-				} *>
+				*>
 				sendCmd("loaded", ujson.write(ujson.Obj("tableID" -> msg.tableID))) *>
 				IO.sleep(1000.millis) *>
 				handleAction(GameActionMessage(msg.tableID, msg.list.last))
@@ -231,10 +218,9 @@ class BotClient(queue: Queue[IO, String], gameRef: Ref[IO, Option[Game]]):
 				handleInit(upickle.read[InitMessage](args))
 
 			case "left" =>
-				IO {
+				IO:
 					tableID = None
 					gameStarted = false
-				}
 
 			case "table" =>
 				val table = upickle.read[Table](args)
@@ -259,15 +245,14 @@ class BotClient(queue: Queue[IO, String], gameRef: Ref[IO, Option[Game]]):
 				IO { info = Some(upickle.read[SelfData](args)) }
 
 			case _ => IO.unit
-		}
 
 	def leaveRoom(): IO[Unit] =
 		val cmd = if gameStarted then "tableUnattend" else "tableLeave"
 		sendCmd(cmd, ujson.write(ujson.Obj("tableID" -> tableID.get))) *>
-		IO {
+		IO:
 			tableID = None
 			gameStarted = false
-		} *>
+		*>
 		gameRef.set(None)
 
 	def handleInit(data: InitMessage) =
@@ -275,11 +260,10 @@ class BotClient(queue: Queue[IO, String], gameRef: Ref[IO, Option[Game]]):
 		val variant = Variant.getVariant(options.variantName)
 		val state = State(playerNames, ourPlayerIndex, variant)
 
-		val game = settings.convention match {
+		val game = settings.convention match
 			case Convention.Reactor => Reactor(tID, state, inProgress = true)
 			case Convention.RefSieve => RefSieve(tID, state, inProgress = true)
 			case Convention.HGroup => HGroup(tID, state, inProgress = true, settings.level)
-		}
 
 		IO { tableID = Some(tID) } *>
 		gameRef.set(Some(game)) *>
@@ -301,36 +285,32 @@ class BotClient(queue: Queue[IO, String], gameRef: Ref[IO, Option[Game]]):
 			return IO.unit
 
 		else if msg.startsWith("/join") then
-			val table = tables.values.filter(t =>
+			val table = tables.values.filter: t =>
 				(t.players.contains(who) && !t.sharedReplay) ||
-				t.spectators.exists(_.name == who))
-				.maxByOption(_.id)
+				t.spectators.exists(_.name == who)
+			.maxByOption(_.id)
 
-			table match {
+			table match
 				case Some(t) if t.passwordProtected =>
-					msg.split(" ").lift(1) match {
+					msg.split(" ").lift(1) match
 						case Some(password) =>
 							sendCmd("tableJoin", ujson.write(ujson.Obj("tableID" -> t.id, "password" -> password)))
 						case None =>
 							sendPM(who, "Room is password protected, please provide a password.")
-					}
 				case Some(t) => sendCmd("tableJoin", ujson.write(ujson.Obj("tableID" -> t.id)))
 				case None => sendPM(who, "Could not join, as you are not in a room.")
-			}
 
 		else if msg.startsWith("/rejoin") then
-			gameRef.get.flatMap {
+			gameRef.get.flatMap:
 				case Some(_) => sendPM(who, "Could not rejoin, as the bot is already in a game.")
 				case None =>
 					val table = tables.values
 						.filter(_.players.contains(info.get.username))
 						.maxByOption(_.id)
 
-					table match {
+					table match
 						case Some(t) => sendCmd("tableReattend", ujson.write(ujson.Obj("tableID" -> t.id)))
 						case None => sendPM(who, "Could not rejoin, as the bot is not a player in any open room.")
-					}
-			}
 
 		else if msg.startsWith("/settings") then
 			assignSettings(data, true)
@@ -343,90 +323,76 @@ class BotClient(queue: Queue[IO, String], gameRef: Ref[IO, Option[Game]]):
 
 	def handleAction(data: GameActionMessage): IO[Unit] =
 		val action = data.action
-		gameRef.get.flatMap {
+		gameRef.get.flatMap:
 			case None => throw new IllegalStateException("Game not initialized")
 			case Some(g) =>
-				IO {
-					g match {
+				IO:
+					g match
 						case r: Reactor => r.handleAction(action)
 						case r: RefSieve => r.handleAction(action)
 						case h: HGroup => h.handleAction(action)
-					}
-				}
-				.flatMap { newGame =>
+				.flatMap: newGame =>
 					val state = newGame.state
 					val queuedCmds = newGame.queuedCmds
 					val perform = !newGame.catchup &&
 						state.currentPlayerIndex == state.ourPlayerIndex &&
 						!state.ended &&
-						(action match {
+						(action match
 							case _: TurnAction => true
 							case _: DrawAction => state.turnCount == 1
-							case _ => false
-						})
+							case _ => false)
 
-					val turn1IO = action match {
+					val turn1IO = action match
 						case TurnAction(num, _) if num == 1 && newGame.notes.contains(0) =>
 							val note = s"[INFO: v$BOT_VERSION]"
 							sendCmd("note", ujson.write(ujson.Obj("order" -> 0, "note" -> note)))
 						case _ => IO.unit
-					}
 
-					val actIO = IO.whenA(perform) {
-						val suggestedAction = newGame match {
+					val actIO = IO.whenA(perform):
+						val suggestedAction = newGame match
 							case r: Reactor => r.takeAction
 							case r: RefSieve => r.takeAction
 							case h: HGroup => h.takeAction
-						}
+
 						Log.highlight(Console.BLUE, s"Suggested action: ${suggestedAction.fmt(newGame, accordingTo = Some(newGame.me))}")
 						val arg = suggestedAction.json(tableID.get)
 
-						IO.whenA(newGame.inProgress) {
+						IO.whenA(newGame.inProgress):
 							IO.sleep(2.seconds) *> sendCmd("action", ujson.write(arg))
-						}
-					}
 
-					val x = newGame match {
+					val x = newGame match
 						case r: Reactor => r.copy(queuedCmds = Nil)
 						case r: RefSieve => r.copy(queuedCmds = Nil)
 						case h: HGroup => h.copy(queuedCmds = Nil)
-					}
 
 					gameRef.set(Some(x)) *>
 					turn1IO *>
 					queuedCmds.traverse_(sendCmd(_, _)) *>
 					actIO
-				}
-		}
 
 	def assignSettings(data: ChatMessage, pm: Boolean) =
-		val reply = pm match {
+		val reply = pm match
 			case true => (msg: String) => sendPM(data.who, msg)
 			case false => (msg: String) => sendChat(msg)
-		}
 
-		data.msg.split(" ") match {
+		data.msg.split(" ") match
 			case Array(_) =>
 				reply(s"Currently playing with ${settings.str} conventions.")
 
-			case Array(_, conv) => Convention.from(conv) match {
+			case Array(_, conv) => Convention.from(conv) match
 				case None => reply(s"Unrecognized convention $conv.")
 				case Some(c) =>
 					settings = settings.copy(convention = c)
 					reply(s"Currently playing with ${settings.str} conventions.")
-			}
 
-			case Array(_, conv, level) => Convention.from(conv) match {
+			case Array(_, conv, level) => Convention.from(conv) match
 				case None => reply(s"Unrecognized convention $conv.")
 				case Some(c) =>
-					level.toIntOption match {
+					level.toIntOption match
 						case None => reply(s"Unrecognized convention $conv.")
 						case Some(l) =>
 							settings = settings.copy(convention = c, level = l)
 							reply(s"Currently playing with ${settings.str} conventions.")
-					}
-			}
-		}
 
 	def sendPM(recipient: String, msg: String) =
 		queue.offer(s"chatPM ${ujson.Obj(

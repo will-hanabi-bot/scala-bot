@@ -36,10 +36,10 @@ case class State(
 ):
 	lazy val hash =
 		val deckInts = Array.ofDim[Int](deck.length)
-		loop(0, _ < deck.length, _ + 1) { i =>
+		loop(0, _ < deck.length, _ + 1): i =>
 			val id = deck(i).id()
 			deckInts(i) = if id.isDefined then id.get.toOrd else 0
-		}
+
 		MurmurHash3.productHash((hands, deckInts, clueTokens, halfClueToken, endgameTurns))
 
 	def withDiscard(id: Identity, order: Int) =
@@ -72,10 +72,9 @@ case class State(
 		)
 
 	def withPlay(id: Identity) =
-		val newPlayable = id.next match {
+		val newPlayable = id.next match
 			case Some(next) => playableSet.difference(id).union(next)
 			case None => playableSet.difference(id)
-		}
 
 		copy(
 			playStacks = playStacks.updated(id.suitIndex, id.rank),
@@ -129,8 +128,11 @@ case class State(
 		orders.filter(order => variant.cardTouched(deck(order), clue))
 
 	def allColourClues(target: Int) =
-		(0 until variant.colourableSuits.length).view.map(Clue(ClueKind.Colour, _, target))
-			.filter(clue => !clueTouched(hands(target), clue.toBase).isEmpty)
+		for
+			suitIndex <- (0 until variant.colourableSuits.length).view
+			clue = Clue(ClueKind.Colour, suitIndex, target) if clueTouched(hands(target), clue).nonEmpty
+		yield
+			clue
 
 	def allValidClues(target: Int) =
 		val rankClues = (1 to 5).view.map(Clue(ClueKind.Rank, _, target))
@@ -150,16 +152,16 @@ case class State(
 
 	def multiplicity(ids: IdentitySet) =
 		var count = 0
-		ids.foreachFast { id =>
+		ids.foreach: id =>
 			count += cardCount(id.toOrd)
-		}
+
 		count
 
 	def holderOf(order: Int): Int =
-		loop(0, _ < numPlayers, _ + 1) { i =>
+		loop(0, _ < numPlayers, _ + 1): i =>
 			if hands(i).fastExists(_ == order) then
 				return i
-		}
+
 		throw new IllegalArgumentException(s"Tried to get holder of $order, hands were $hands!")
 
 	def inStartingHand(order: Int)=
@@ -182,10 +184,9 @@ case class State(
 		s"${variant.shortForms(id.suitIndex)}${id.rank}"
 
 	def logId(id: Option[Identity]): String =
-		id match {
+		id match
 			case Some(id) => logId(id)
 			case None => "xx"
-		}
 
 	def logId(id: Identifiable): String =
 		logId(id.id())
@@ -196,10 +197,9 @@ case class State(
 	def logConn(conn: Connection) =
 		val ids = conn.ids
 		val idStr = if ids.length == 1 then logId(ids.head) else s"[${ids.map(logId).mkString(",")}]"
-		val extra = conn match {
+		val extra = conn match
 			case f: FinesseConn => if f.certain then " (certain)" else if f.hidden then " (hidden)" else ""
 			case _ => ""
-		}
 
 		s"${conn.order} $idStr ${conn.kind} (${names(conn.reacting)})$extra"
 
@@ -222,8 +222,8 @@ object State:
 		var playableSet = IdentitySet.empty
 		var criticalSet = IdentitySet.empty
 
-		loop(0, _ < variant.suits.length, _ + 1) { suitIndex =>
-			loop(1, _ <= 5, _ + 1) { rank =>
+		loop(0, _ < variant.suits.length, _ + 1): suitIndex =>
+			loop(1, _ <= 5, _ + 1): rank =>
 				val id = Identity(suitIndex, rank)
 				val count = variant.cardCount(id)
 
@@ -235,8 +235,6 @@ object State:
 
 				if count == 1 then
 					criticalSet = criticalSet.union(id)
-			}
-		}
 
 		State(
 			cardsLeft = cardsLeft,

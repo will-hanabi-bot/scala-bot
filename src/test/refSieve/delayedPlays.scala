@@ -10,7 +10,7 @@ import scala.util.chaining.scalaUtilChainingOps
 class DelayedPlays extends munit.FunSuite:
 	override def beforeAll() = Logger.setLevel(LogLevel.Off)
 
-	test("gives a delayed play clue through a playable card") {
+	test("gives a delayed play clue through a playable card"):
 		val game = setup(RefSieve.apply, Vector(
 			Vector("xx", "xx", "xx", "xx", "xx"),
 			Vector("b1", "b4", "y4", "y4", "g4"),
@@ -22,9 +22,8 @@ class DelayedPlays extends munit.FunSuite:
 		.pipe(takeTurn("Alice clues blue to Cathy"))
 
 		assertEquals(game.lastMove, Some(ClueInterp.Play))
-	}
 
-	test("gives a delayed play clue through the leftmost playable card") {
+	test("gives a delayed play clue through the leftmost playable card"):
 		val game = setup(RefSieve.apply, Vector(
 			Vector("xx", "xx", "xx", "xx", "xx"),
 			Vector("b1", "r1", "y4", "y4", "g4"),
@@ -36,9 +35,8 @@ class DelayedPlays extends munit.FunSuite:
 		.pipe(takeTurn("Alice clues blue to Cathy"))
 
 		assertEquals(game.lastMove, Some(ClueInterp.Play))
-	}
 
-	test("doesn't give a delayed play clue through a non-leftmost playable card") {
+	test("doesn't give a delayed play clue through a non-leftmost playable card"):
 		val game = setup(RefSieve.apply, Vector(
 			Vector("xx", "xx", "xx", "xx", "xx"),
 			Vector("b1", "r1", "y4", "y4", "g4"),
@@ -50,9 +48,8 @@ class DelayedPlays extends munit.FunSuite:
 		.pipe(takeTurn("Alice clues blue to Cathy"))
 
 		assertEquals(game.lastMove, Some(ClueInterp.Mistake))
-	}
 
-	test("understands a self-delayed play clue") {
+	test("understands a self-delayed play clue"):
 		val game = setup(RefSieve.apply, Vector(
 			Vector("xx", "xx", "xx", "xx", "xx"),
 			Vector("b1", "b4", "y4", "y4", "g4"),
@@ -67,4 +64,3 @@ class DelayedPlays extends munit.FunSuite:
 
 		hasInfs(game, None, Alice, 1, Vector("p2"))
 		hasInfs(game, None, Alice, 2, Vector("p1"))
-	}

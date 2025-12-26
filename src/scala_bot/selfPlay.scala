@@ -19,32 +19,27 @@ case class GameSummary(
 	score: Int,
 	result: GameResult,
 	actions: Vector[PerformAction],
-	notes: List[List[String]]
+	notes: Seq[Seq[String]]
 )
 
 val NAMES = Vector("Alice", "Bob", "Cathy", "Donald", "Emily")
 
 def simulateGame[G <: Game](gs: Seq[G], deck: Vector[Identity])(using ops: GameOps[G]): GameSummary =
-	val games = gs.zipWithIndex.map { (g, i) =>
-		ops.copyWith(g, GameUpdates(catchup = Some(true)))
-			.pipe { g =>
-				val state = g.state
-				(0 until state.numPlayers).foldLeft(g) { (acc, playerIndex) =>
-					(0 until HAND_SIZE(state.numPlayers)).foldLeft(acc) { (game, _) =>
-						val order = game.state.nextCardOrder
-						val action = DrawAction(
-							playerIndex,
-							order,
-							if playerIndex == i then -1 else deck(order).suitIndex,
-							if playerIndex == i then -1 else deck(order).rank,
-						)
-						game.handleAction(action)
-					}
-				}
-			}
-	}.toList
+	val games = gs.zipWithIndex.map: (g, i) =>
+		ops.copyWith(g, GameUpdates(catchup = Some(true))).pipe: g =>
+			val state = g.state
+			(0 until state.numPlayers).foldLeft(g): (acc, playerIndex) =>
+				(0 until HAND_SIZE(state.numPlayers)).foldLeft(acc): (game, _) =>
+					val order = game.state.nextCardOrder
+					val action = DrawAction(
+						playerIndex,
+						order,
+						if playerIndex == i then -1 else deck(order).suitIndex,
+						if playerIndex == i then -1 else deck(order).rank,
+					)
+					game.handleAction(action)
 
-	def advance[G <: Game](result: (List[G], Vector[PerformAction]))(using ops: GameOps[G]) =
+	def advance[G <: Game](result: (Seq[G], Vector[PerformAction]))(using ops: GameOps[G]) =
 		val (games, actions) = result
 
 		try
@@ -52,13 +47,13 @@ def simulateGame[G <: Game](gs: Seq[G], deck: Vector[Identity])(using ops: GameO
 			val currentGame = games(currentPlayerIndex)
 			val perform = currentGame.takeAction
 
-			val newGames = games.map { game =>
+			val newGames = games.map: game =>
 				val state = game.state
 				val action = performToAction(state, perform, currentPlayerIndex, Some(deck))
 
-				game.handleAction(action).when(!(_).state.ended) {
-					_.when(_.state.nextCardOrder < deck.length) { g =>
-						perform match {
+				game.handleAction(action).when(!(_).state.ended):
+					_.when(_.state.nextCardOrder < deck.length): g =>
+						perform match
 							case PerformAction.Play(_) | PerformAction.Discard(_) =>
 								val order = g.state.nextCardOrder
 
@@ -69,17 +64,11 @@ def simulateGame[G <: Game](gs: Seq[G], deck: Vector[Identity])(using ops: GameO
 									if currentPlayerIndex == g.state.ourPlayerIndex then -1 else deck(order).rank,
 								))
 							case _ => g
-						}
-
-					}
-					.pipe { g =>
+					.pipe: g =>
 						g.handleAction(TurnAction(
 							g.state.turnCount,
 							g.state.nextPlayerIndex(currentPlayerIndex)
 						))
-					}
-				}
-			}
 
 			(newGames, actions :+ perform)
 		catch
@@ -87,7 +76,7 @@ def simulateGame[G <: Game](gs: Seq[G], deck: Vector[Identity])(using ops: GameO
 				e.printStackTrace()
 				(games.updated(0, games(0).withState(_.copy(endgameTurns = Some(0)))), actions)
 
-	val initial = (games, Vector[PerformAction]())
+	val initial = (games, Vector.empty[PerformAction])
 	val (finalGames, actions) = Iterator.iterate(initial)(advance)
 		.dropWhile((games, _) => !games.head.state.ended).next
 
@@ -111,10 +100,9 @@ def simulateGame[G <: Game](gs: Seq[G], deck: Vector[Identity])(using ops: GameO
 		score = state.score,
 		result = result,
 		actions = finalActions,
-		notes = finalGames.map { g =>
+		notes = finalGames.map: g =>
 			(0 until state.nextCardOrder)
-				.map(g.notes.lift(_).map(_.full).getOrElse("")).toList
-		}
+				.map(g.notes.lift(_).map(_.full).getOrElse(""))
 	)
 
 @main
@@ -134,22 +122,21 @@ def selfPlay(args: String*) =
 
 	val deck = variant.allIds.flatMap(id => List.fill(variant.cardCount(id))(id))
 
-	for i <- (seed until seed + numGames) do {
+	for i <- (seed until seed + numGames) do
 		Random.setSeed(i)
 		val shuffledDeck = Random.shuffle(deck).toVector
 		val states = (0 until numPlayers).map(State(NAMES.take(numPlayers), _, variant))
-		val GameSummary(score, result, actions, notes) = convention match {
+		val GameSummary(score, result, actions, notes) = convention match
 			case Convention.Reactor => simulateGame(states.map(Reactor(0, _, false)), shuffledDeck)
 			case Convention.RefSieve => simulateGame(states.map(RefSieve(0, _, false)), shuffledDeck)
 			case Convention.HGroup => simulateGame(states.map(HGroup(0, _, false, level)), shuffledDeck)
-		}
 
 		val actionsJSON = actions.map(_.json(tableID = 0))
 		val data = ujson.Obj(
 			"players" -> NAMES.take(numPlayers),
-			"deck" -> shuffledDeck.map(id => ujson.Obj("suitIndex" -> id.suitIndex, "rank" -> id.rank)),
+			"deck"    -> shuffledDeck.map(id => ujson.Obj("suitIndex" -> id.suitIndex, "rank" -> id.rank)),
 			"actions" -> actionsJSON,
-			"notes" -> notes,
+			"notes"   -> notes,
 			"options" -> ujson.Obj("variant" -> variant.name)
 		).toString
 
@@ -160,4 +147,3 @@ def selfPlay(args: String*) =
 		Files.write(Paths.get(s"seeds/$i.json"), data.getBytes(StandardCharsets.UTF_8))
 
 		println(s"Seed $i: score $score, $result")
-	}

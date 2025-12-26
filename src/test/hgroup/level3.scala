@@ -10,7 +10,7 @@ import scala.util.chaining.scalaUtilChainingOps
 class Playing1s extends munit.FunSuite:
 	override def beforeAll() = Logger.setLevel(LogLevel.Off)
 
-	test("orders starting hand 1s from right to left") {
+	test("orders starting hand 1s from right to left"):
 		val game = setup(HGroup.atLevel(3), Vector(
 			Vector("xx", "xx", "xx", "xx", "xx"),
 			Vector("y5", "r5", "b1", "p3", "y4")
@@ -21,9 +21,8 @@ class Playing1s extends munit.FunSuite:
 
 		val ordered1s = game.order1s(game.state.hands(Alice.ordinal))
 		assertEquals(ordered1s, List(1, 2))
-	}
 
-	test("orders fresh 1s") {
+	test("orders fresh 1s"):
 		val game = setup(HGroup.atLevel(3), Vector(
 			Vector("xx", "xx", "xx", "xx", "xx"),
 			Vector("y5", "r5", "b1", "p3", "y4")
@@ -33,9 +32,8 @@ class Playing1s extends munit.FunSuite:
 
 		val ordered1s = game.order1s(game.state.hands(Alice.ordinal))
 		assertEquals(ordered1s, List(10, 1))
-	}
 
-	test("orders chop focus") {
+	test("orders chop focus"):
 		val game = setup(HGroup.atLevel(3), Vector(
 			Vector("xx", "xx", "xx", "xx", "xx"),
 			Vector("y5", "r5", "b1", "p3", "y4")
@@ -45,9 +43,8 @@ class Playing1s extends munit.FunSuite:
 
 		val ordered1s = game.order1s(game.state.hands(Alice.ordinal))
 		assertEquals(ordered1s, Seq(0, 10, 3))
-	}
 
-	test("doesn't prompt playable 1s") {
+	test("doesn't prompt playable 1s"):
 		val game = setup(HGroup.atLevel(3), Vector(
 			Vector("xx", "xx", "xx", "xx", "xx"),
 			Vector("b2", "r2", "g3", "r5", "b3"),
@@ -60,9 +57,8 @@ class Playing1s extends munit.FunSuite:
 
 		// Alice's 1 can still be any 1 (not prompted to be r1).
 		hasInfs(game, None, Alice, 2, Vector("r1", "y1", "g1", "b1", "p1"))
-	}
 
-	test("recognizes the correct focus of a 1 clue") {
+	test("recognizes the correct focus of a 1 clue"):
 		val game = setup(HGroup.atLevel(3), Vector(
 			Vector("xx", "xx", "xx", "xx", "xx"),
 			Vector("b2", "r2", "g3", "r5", "b3"),
@@ -80,9 +76,8 @@ class Playing1s extends munit.FunSuite:
 
 		// The focus of the clue is Cathy's slot 4.
 		assertEquals(focusResult.focus, game.state.hands(Cathy.ordinal)(3))
-	}
 
-	test("orders 1s correctly when cluing chop moved cards") {
+	test("orders 1s correctly when cluing chop moved cards"):
 		val game = setup(HGroup.atLevel(3), Vector(
 			Vector("xx", "xx", "xx", "xx", "xx"),
 			Vector("r1", "b1", "r4", "y4", "g1")
@@ -95,9 +90,8 @@ class Playing1s extends munit.FunSuite:
 
 		val ordered1s = game.order1s(game.state.hands(Bob.ordinal))
 		assertEquals(ordered1s, Seq(8, 9, 5))
-	}
 
-	test("orders 1s correctly when only cluing chop moved cards") {
+	test("orders 1s correctly when only cluing chop moved cards"):
 		val game = setup(HGroup.atLevel(3), Vector(
 			Vector("xx", "xx", "xx", "xx", "xx"),
 			Vector("y4", "b4", "r4", "r1", "y1")
@@ -111,12 +105,11 @@ class Playing1s extends munit.FunSuite:
 
 		val ordered1s = game.order1s(game.state.hands(Bob.ordinal))
 		assertEquals(ordered1s, Seq(6, 5))
-	}
 
 class Sarcastic extends munit.FunSuite:
 	override def beforeAll() = Logger.setLevel(LogLevel.Off)
 
-	test("understands a sarcastic discard") {
+	test("understands a sarcastic discard"):
 		val game = setup(HGroup.atLevel(3), Vector(
 			Vector("xx", "xx", "xx", "xx", "xx"),
 			Vector("r4", "b4", "g4", "y3", "y1")
@@ -128,9 +121,8 @@ class Sarcastic extends munit.FunSuite:
 		.pipe(takeTurn("Bob discards y1", "r1"))
 
 		hasInfs(game, None, Alice, 4, Vector("y1"))
-	}
 
-	test("sarcastic discards without assuming position") {
+	test("sarcastic discards without assuming position"):
 		val game = setup(HGroup.atLevel(3), Vector(
 			Vector("xx", "xx", "xx", "xx", "xx"),
 			Vector("p4", "g2", "b2", "r4", "p2")
@@ -147,9 +139,8 @@ class Sarcastic extends munit.FunSuite:
 			val inferred = game.players(Bob.ordinal).thoughts(order).inferred
 			inferred.contains(game.state.expandShort("b2"))
 		})
-	}
 
-	test("preserves info lock after a sarcastic discard") {
+	test("preserves info lock after a sarcastic discard"):
 		val game = setup(HGroup.atLevel(3), Vector(
 			Vector("xx", "xx", "xx", "xx", "xx"),
 			Vector("p4", "g2", "b2", "r4", "p2"),
@@ -165,9 +156,8 @@ class Sarcastic extends munit.FunSuite:
 
 		hasInfs(game, None, Alice, 1, Vector("y2", "g2"))
 		hasInfs(game, None, Alice, 2, Vector("r2"))
-	}
 
-	test("generates a link from a sarcastic discard") {
+	test("generates a link from a sarcastic discard"):
 		val game = setup(HGroup.atLevel(3), Vector(
 			Vector("xx", "xx", "xx", "xx", "xx"),
 			Vector("y3", "g2", "b2", "r4", "b5"),
@@ -180,7 +170,7 @@ class Sarcastic extends munit.FunSuite:
 		)
 		.pipe(takeTurn("Bob clues 2 to Alice (slots 3,4,5)"))
 		.pipe(takeTurn("Cathy discards r2", "g1"))
-		.tap { g =>
+		.tap: g =>
 			assert(g.common.links.exists {
 				case Link.Sarcastic(orders, id) =>
 					orders.contains(1) &&
@@ -188,9 +178,7 @@ class Sarcastic extends munit.FunSuite:
 					id.matches(g.state.expandShort("r2"))
 				case _ => false
 			})
-		}
 		.pipe(takeTurn("Alice clues 5 to Bob"))
 		.pipe(takeTurn("Bob clues green to Alice (slot 3)"))
 
 		hasInfs(game, None, Alice, 4, Vector("r2"))
-	}

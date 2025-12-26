@@ -2,7 +2,7 @@ package scala_bot.fraction
 
 import scala.math.Numeric
 
-@scala.annotation.tailrec
+@annotation.tailrec
 def gcd(a: Long, b: Long): Long =
 	if b == 0 then math.abs(a) else gcd(b, a % b)
 
@@ -82,7 +82,7 @@ object Frac:
 			throw new IllegalArgumentException("denominator cannot be zero")
 		new Frac(numer, denom)
 
-	implicit val fracIsNumeric: Numeric[Frac] = new Numeric[Frac] {
+	implicit val fracIsNumeric: Numeric[Frac] = new Numeric[Frac]:
 		override def zero: Frac = Frac.zero
 
 		def plus(x: Frac, y: Frac) = x + y
@@ -111,8 +111,6 @@ object Frac:
 
 		def parseString(str: String) =
 			val pattern = """(\d+)/(\d+)""".r
-			str match {
+			str match
 				case pattern(numer, denom) => Some(Frac(numer.toInt, denom.toInt))
 				case _ => None
-			}
-	}

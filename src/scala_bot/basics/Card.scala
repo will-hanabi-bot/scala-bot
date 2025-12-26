@@ -7,13 +7,9 @@ trait Identifiable:
 	def id(infer: Boolean = false, symmetric: Boolean = false): Option[Identity]
 
 	def matches(other: Identifiable, infer: Boolean = false, symmetric: Boolean = false, assume: Boolean = false): Boolean =
-		id(infer, symmetric) match {
-			case None => assume
-			case Some(a) =>
-				other.id(infer, symmetric).exists { b =>
-					a.suitIndex == b.suitIndex && a.rank == b.rank
-				}
-		}
+		id(infer, symmetric).fold(assume): a =>
+			other.id(infer, symmetric).exists: b =>
+				a.suitIndex == b.suitIndex && a.rank == b.rank
 
 case class Identity(suitIndex: Int, rank: Int) extends Identifiable:
 	def id(infer: Boolean = false, symmetric: Boolean = false) =
@@ -28,7 +24,7 @@ case class Identity(suitIndex: Int, rank: Int) extends Identifiable:
 	def next: Option[Identity] =
 		Option.when(rank < 5)(Identity(suitIndex, rank + 1))
 
-object Identity {
+object Identity:
 	inline def fromOrd(ord: Int): Identity =
 		if ord < 30 then
 			val suitIndex = ord / 5
@@ -36,7 +32,6 @@ object Identity {
 			Identity(suitIndex, rank)
 		else
 			throw new Error(s"Couldn't convert ordinal $ord to identity!")
-}
 
 enum CardStatus:
 	case None,
@@ -51,7 +46,7 @@ enum CardStatus:
 		Bluffed
 
 	override def toString(): String =
-		this match {
+		this match
 			case CardStatus.None => "none"
 			case CardStatus.ChopMoved => "chop moved"
 			case CardStatus.CalledToPlay => "called to play"
@@ -62,7 +57,6 @@ enum CardStatus:
 			case CardStatus.FMaybeBluffed => "finessed, maybe bluffed"
 			case CardStatus.MaybeBluffed => "maybe bluffed"
 			case CardStatus.Bluffed => "bluffed"
-		}
 
 case class Card(
 	suitIndex: Int,
@@ -87,31 +81,27 @@ case class Thought(
 	reset: Boolean = false
 ) extends Identifiable:
 	def id(infer: Boolean = false, symmetric: Boolean = false) =
-		if possible.length == 1 then {
+		if possible.length == 1 then
 			Some(possible.head)
-		}
-		else if !symmetric && suitIndex != -1 then {
+		else if !symmetric && suitIndex != -1 then
 			Some(Identity(suitIndex, rank))
-		}
-		else {
+		else
 			Option.when(infer && inferred.length == 1)(inferred.head)
-		}
 
 	inline def possibilities: IdentitySet =
-		if inferred.isEmpty then { possible } else { inferred }
+		if inferred.isEmpty then possible else inferred
 
 	def resetInferences(): Thought =
-		if reset then {
+		if reset then
 			return this
-		}
 
 		val newInfoLock = if infoLock.exists(_.nonEmpty) then infoLock else None
 		this.copy(
 			reset = true,
-			inferred = newInfoLock match {
+			inferred = newInfoLock match
 				case None => possible
 				case Some(ids) => possible.intersect(ids)
-			},
+			,
 			infoLock = newInfoLock
 		)
 

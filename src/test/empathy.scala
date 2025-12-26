@@ -9,16 +9,15 @@ import scala.util.chaining.scalaUtilChainingOps
 class Empathy extends munit.FunSuite:
 	override def beforeAll() = Logger.setLevel(LogLevel.Off)
 
-	test("it fails impossible setup") {
+	test("it fails impossible setup"):
 		intercept[IllegalArgumentException] {
 			setup(Reactor.apply, Vector(
 				Vector("xx", "xx", "xx", "xx", "xx"),
 				Vector("r1", "r1", "r1", "r1", "r1")
 			))
 		}
-	}
 
-	test("it elims from count") {
+	test("it elims from count"):
 		val game = setup(Reactor.apply, Vector(
 			Vector("xx", "xx", "xx", "xx", "xx"),
 			Vector("r1", "r1", "r1", "r2", "r2")
@@ -28,9 +27,8 @@ class Empathy extends munit.FunSuite:
 		.pipe(takeTurn("Bob clues red to Alice (slot 5)"))
 
 		hasPoss(game, Some(Player.Alice), Player.Alice, 5, Vector("r3", "r4", "r5"))
-	}
 
-	test("it visibly elims 5s") {
+	test("it visibly elims 5s"):
 		val game = setup(Reactor.apply, Vector(
 			Vector("xx", "xx", "xx", "xx"),		// p5, t5 in slots 3 and 4
 			Vector("g2", "b1", "r1", "g5"),
@@ -52,9 +50,8 @@ class Empathy extends munit.FunSuite:
 		hasPoss(game, None, Player.Bob, 4, Vector("g5"))
 		hasPoss(game, None, Player.Cathy, 4, Vector("b5"))
 		hasPoss(game, None, Player.Donald, 4, Vector("y5"))
-	}
 
-	test("it visibly elims mixed cards") {
+	test("it visibly elims mixed cards"):
 		val game = setup(Reactor.apply, Vector(
 			Vector("xx", "xx", "xx", "xx", "xx"),
 			Vector("g2", "b1", "r4", "r5", "y3"),
@@ -77,4 +74,3 @@ class Empathy extends munit.FunSuite:
 		// Bob's cards could be r4 or r5.
 		hasPoss(game, None, Player.Bob, 3, Vector("r4", "r5"))
 		hasPoss(game, None, Player.Bob, 4, Vector("r4", "r5"))
-	}

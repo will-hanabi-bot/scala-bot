@@ -58,10 +58,9 @@ def fetchGame(args: Seq[String]) =
 	val convention = conventionR.flatMap(Convention.from).getOrElse(Convention.Reactor)
 	val level = levelR.map(_.toInt).getOrElse(1)
 
-	val data @ GameData(players, deck, actions, options) = id match {
+	val data @ GameData(players, deck, actions, options) = id match
 		case Some(id) => GameData.fetchId(id)
-		case None => GameData.fetchFile(file.get)
-	}
+		case None     => GameData.fetchFile(file.get)
 
 	if index > players.length then
 		throw new IllegalArgumentException(s"Replay only has ${players.length} players!")
@@ -70,7 +69,7 @@ def fetchGame(args: Seq[String]) =
 	val variant = Variant.getVariant(options.map(_.variant).getOrElse("No Variant"))
 
 	val state = State(players, index, variant)
-	convention match {
+	convention match
 		case Convention.Reactor =>
 			val game = Reactor(0, state, false).copy(catchup = true)
 			processGame(game, data, index)
@@ -80,14 +79,13 @@ def fetchGame(args: Seq[String]) =
 		case Convention.HGroup =>
 			val game = HGroup(0, state, false, level).copy(catchup = true)
 			processGame(game, data, index)
-	}
 
 def processGame[G <: Game](game: G, data: GameData, index: Int)(using ops: GameOps[G]) =
 	val GameData(players, deck, actions, options) = data
 	game
-		.pipe { g =>
-			(0 until g.state.numPlayers).foldLeft(g) { (a, playerIndex) =>
-				(0 until HAND_SIZE(g.state.numPlayers)).foldLeft(a) { (acc, _) =>
+		.pipe: g =>
+			(0 until g.state.numPlayers).foldLeft(g): (a, playerIndex) =>
+				(0 until HAND_SIZE(g.state.numPlayers)).foldLeft(a): (acc, _) =>
 					val order = acc.state.nextCardOrder
 					acc.handleAction(DrawAction(
 						playerIndex,
@@ -95,15 +93,12 @@ def processGame[G <: Game](game: G, data: GameData, index: Int)(using ops: GameO
 						if playerIndex == index then -1 else deck(order).suitIndex,
 						if playerIndex == index then -1 else deck(order).rank
 					))
-				}
-			}
-		}
-		.pipe {
-			actions.foldLeft(_) { (acc, action) =>
+		.pipe:
+			actions.foldLeft(_): (acc, action) =>
 				val playerIndex = acc.state.currentPlayerIndex
 				acc.handleAction(performToAction(acc.state, action, playerIndex, Some(deck)))
-					.when(_.state.nextCardOrder < deck.length) { a =>
-						action match {
+					.when(_.state.nextCardOrder < deck.length): a =>
+						action match
 							case PerformAction.Play(_) | PerformAction.Discard(_) =>
 								val order = a.state.nextCardOrder
 								a.handleAction(DrawAction(
@@ -113,20 +108,14 @@ def processGame[G <: Game](game: G, data: GameData, index: Int)(using ops: GameO
 									if playerIndex == index then -1 else deck(order).rank
 								))
 							case _ => a
-						}
-					}
-					.when(a => action.isInstanceOf[PerformAction.Play] && a.state.strikes == 3) {
+					.when(a => action.isInstanceOf[PerformAction.Play] && a.state.strikes == 3):
 						_.handleAction(GameOverAction(0, playerIndex))
-					}
-					.pipe { g =>
+					.pipe: g =>
 						val nextPlayerIndex = g.state.nextPlayerIndex(g.state.currentPlayerIndex)
 						g.handleAction(TurnAction(g.state.turnCount, nextPlayerIndex))
-					}
-			}
-		}
 		.pipe(ops.copyWith(_, GameUpdates(catchup = Some(false))))
 
-object replay extends IOApp {
+object replay extends IOApp:
 	def run(args: List[String]) =
 		for
 			wsQueue  <- Queue.unbounded[IO, String]
@@ -137,4 +126,3 @@ object replay extends IOApp {
 			console  <- spawnConsole(consoleQ, client)
 			_ <- console.join
 		yield (ExitCode.Success)
-}

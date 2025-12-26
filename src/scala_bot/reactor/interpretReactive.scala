@@ -16,24 +16,18 @@ private def reactiveContext(prev: Reactor, game: Reactor, action: ClueAction, re
 
 	// Update play stacks to the reacter's turn
 	val afterOthers = playersUntil(state.numPlayers, state.nextPlayerIndex(giver), reacter)
-		.foldLeft(prev.state) { (s, i) =>
+		.foldLeft(prev.state): (s, i) =>
 			val hypoPrev = prev.copy(state = s)
-			val playable = {
+			val playable =
 				val ps = prev.common.obviousPlayables(hypoPrev, i)
 				ps.find(prev.meta(_).urgent).orElse(ps.headOption)
-			}
 
-			playable.flatMap(state.deck(_).id()) match {
-				case Some(id) => s.tryPlay(id)
-				case None => s
-			}
-		}
+			playable.flatMap(state.deck(_).id()).fold(s)(s.tryPlay)
 
 	// The receiver can also play their own known playables first
 	val hypoState = prev.common.obviousPlayables(prev.copy(state = afterOthers), receiver)
-		.foldLeft(afterOthers) { (s, selfPlay) =>
-			state.deck(selfPlay).id().map(s.tryPlay).getOrElse(s)
-		}
+		.foldLeft(afterOthers): (s, selfPlay) =>
+			state.deck(selfPlay).id().fold(s)(s.tryPlay)
 
 	(possibleConns, knownPlays, hypoState)
 
@@ -43,11 +37,11 @@ def interpretReactiveColour(prev: Reactor, game: Reactor, action: ClueAction, fo
 	val (possibleConns, knownPlays, hypoState) = reactiveContext(prev, game, action, reacter)
 
 	val playTargets = state.hands(receiver).zipWithIndex
-		.filter { (o, _) =>
+		.filter: (o, _) =>
 			game.meta(o).status != CardStatus.CalledToDiscard &&
 			!knownPlays.contains(o) &&
 			state.deck(o).id().exists(hypoState.isPlayable)
-		}.sortBy { (o, i) =>
+		.sortBy: (o, i) =>
 			// Unclued dupe, with a clued dupe
 			val uncluedDupe = !prev.state.deck(o).clued && state.hands(receiver).exists { o2 =>
 					o2 < o &&
@@ -55,7 +49,6 @@ def interpretReactiveColour(prev: Reactor, game: Reactor, action: ClueAction, fo
 					state.deck(o).matches(state.deck(o2))
 				}
 			if uncluedDupe then 99 else i
-		}
 
 	// Try targeting all play targets
 	playTargets.view.flatMap { case (_, index) =>
@@ -63,7 +56,7 @@ def interpretReactiveColour(prev: Reactor, game: Reactor, action: ClueAction, fo
 		val reactSlot = calcSlot(focusSlot, targetSlot)
 		lazy val prevTrash = prev.common.thinksTrash(prev, reacter)
 
-		state.hands(reacter).lift(reactSlot - 1) match {
+		state.hands(reacter).lift(reactSlot - 1) match
 			case None =>
 				Log.warn(s"Reacter doesn't have slot $reactSlot!")
 				None
@@ -80,41 +73,39 @@ def interpretReactiveColour(prev: Reactor, game: Reactor, action: ClueAction, fo
 				val newGame = targetDiscard(game.copy(common = newCommon), action, reactOrder, urgent = true)
 				Log.info(s"reactive dc+play, reacter ${state.names(reacter)} (slot $reactSlot) receiver ${state.names(receiver)} (slot $targetSlot), focus slot $focusSlot")
 				Some((Some(ClueInterp.Reactive), newGame))
-		}
-	}.headOption
+	}
+	.headOption
 	.getOrElse {
 		// Didn't work, so target trash (NOTE: this was temporarily giver's trash. why?)
 		val prevKt = prev.common.thinksTrash(prev, receiver)
-		val dcTargets = {
-			val unknownTrash = state.hands(receiver).zipWithIndex.filter { (o, _) =>
-				!prevKt.contains(o) &&
-				(state.isBasicTrash(state.deck(o).id().get) ||
-					state.hands(receiver).exists(o2 => o2 != o && state.deck(o).matches(state.deck(o2)))) // duped in the same hand
-			}.sortBy { (o, _) =>
-				if prev.state.deck(o).clued then
-					0
-				else if state.hands(receiver).exists(o2 => o2 < o && prev.state.deck(o2).clued && state.deck(o).matches(state.deck(o2))) then
-					-1		// Unclued dupe, with a clued dupe
-				else
-					1
-			}
+		val dcTargets =
+			val unknownTrash = state.hands(receiver).zipWithIndex
+				.filter: (o, _) =>
+					!prevKt.contains(o) &&
+					(state.isBasicTrash(state.deck(o).id().get) ||
+						state.hands(receiver).exists(o2 => o2 != o && state.deck(o).matches(state.deck(o2)))) // duped in the same hand
+				.sortBy: (o, _) =>
+					if prev.state.deck(o).clued then
+						0
+					else if state.hands(receiver).exists(o2 => o2 < o && prev.state.deck(o2).clued && state.deck(o).matches(state.deck(o2))) then
+						-1		// Unclued dupe, with a clued dupe
+					else
+						1
 
-			lazy val knownTrash = state.hands(receiver).zipWithIndex.filter { (o, _) =>
+			lazy val knownTrash = state.hands(receiver).zipWithIndex.filter: (o, _) =>
 				state.isBasicTrash(state.deck(o).id().get)
-			}
 
-			lazy val sacrifices = state.hands(receiver).zipWithIndex.filter { (o, _) =>
-				!prevKt.contains(o) && !state.isCritical(state.deck(o).id().get)
-			}.sortBy { (o, _) =>
-				val id = state.deck(o).id().get
-				-game.common.playableAway(id) * 10 + (5 - id.rank)
-			}
+			lazy val sacrifices = state.hands(receiver).zipWithIndex
+				.filter: (o, _) =>
+					!prevKt.contains(o) && !state.isCritical(state.deck(o).id().get)
+				.sortBy: (o, _) =>
+					val id = state.deck(o).id().get
+					-game.common.playableAway(id) * 10 + (5 - id.rank)
 
 			if unknownTrash.isEmpty then
 				if knownTrash.isEmpty then sacrifices else knownTrash
 			else
 				unknownTrash
-		}
 
 		if dcTargets.isEmpty then
 			Log.warn(s"reactive clue but receiver had no playable, trash or sacrifice targets!")
@@ -129,7 +120,7 @@ def interpretReactiveColour(prev: Reactor, game: Reactor, action: ClueAction, fo
 					val reactSlot = calcSlot(focusSlot, targetSlot)
 					lazy val prevPlays = prev.common.obviousPlayables(prev, reacter)
 
-					state.hands(reacter).lift(reactSlot - 1) match {
+					state.hands(reacter).lift(reactSlot - 1) match
 						case None =>
 							Log.warn(s"Reacter doesn't have slot $reactSlot!")
 							None
@@ -144,13 +135,11 @@ def interpretReactiveColour(prev: Reactor, game: Reactor, action: ClueAction, fo
 								t.copy(oldInferred = Some(t.inferred))
 							}
 							val (interp, newGame) = targetPlay(game.copy(common = newCommon), action, reactOrder, urgent = true, stable = false)
-							interp match {
+							interp match
 								case None => Some(None, newGame)
 								case Some(_) =>
 									Log.info(s"reactive play+dc, reacter ${state.names(reacter)} (slot ${reactSlot}) receiver ${state.names(receiver)} (slot ${targetSlot}), focus slot ${focusSlot}")
 									Some(Some(ClueInterp.Reactive), newGame)
-							}
-				}
 			}.headOption
 			.getOrElse(None, game)
 	}
@@ -160,18 +149,18 @@ def interpretReactiveRank(prev: Reactor, game: Reactor, action: ClueAction, focu
 	val state = game.state
 	val (possibleConns, knownPlays, hypoState) = reactiveContext(prev, game, action, reacter)
 
-	val playTargets = state.hands(receiver).zipWithIndex.filter { (o, _) =>
-		game.meta(o).status != CardStatus.CalledToDiscard &&
-		!knownPlays.contains(o) &&
-		state.deck(o).id().exists(hypoState.isPlayable)
-	}.sortBy { (o, i) =>
-		// Do not target an unclued copy when there is a clued copy
-		val uncluedDupe = !prev.state.deck{9}.clued &&
-			state.hands(receiver).exists{ o2 =>
-				o2 != o && prev.state.deck(o2).clued && state.deck(o).matches(state.deck(o2))
-			}
-		if uncluedDupe then 99 else i
-	}
+	val playTargets = state.hands(receiver).zipWithIndex
+		.filter: (o, _) =>
+			game.meta(o).status != CardStatus.CalledToDiscard &&
+			!knownPlays.contains(o) &&
+			state.deck(o).id().exists(hypoState.isPlayable)
+		.sortBy: (o, i) =>
+			// Do not target an unclued copy when there is a clued copy
+			val uncluedDupe = !prev.state.deck{9}.clued &&
+				state.hands(receiver).exists{ o2 =>
+					o2 != o && prev.state.deck(o2).clued && state.deck(o).matches(state.deck(o2))
+				}
+			if uncluedDupe then 99 else i
 
 	playTargets.view.flatMap { (target, index) =>
 		val targetSlot = index + 1
@@ -179,7 +168,7 @@ def interpretReactiveRank(prev: Reactor, game: Reactor, action: ClueAction, focu
 		val receiveOrder = target
 		lazy val prevPlays = prev.common.obviousPlayables(prev, reacter)
 
-		state.hands(reacter).lift(reactSlot - 1) match {
+		state.hands(reacter).lift(reactSlot - 1) match
 			case None =>
 				Log.warn(s"Reacter doesn't have slot $reactSlot!")
 				None
@@ -194,13 +183,11 @@ def interpretReactiveRank(prev: Reactor, game: Reactor, action: ClueAction, focu
 				val nextGame = newGame.withThought(reactOrder) { t =>
 					t.copy(inferred = t.inferred.difference(state.deck(receiveOrder).id().get))
 				}
-				interp match {
+				interp match
 					case None => Some(None, nextGame)
 					case Some(_) =>
 						Log.info(s"reactive play+play, reacter ${state.names(reacter)} (slot ${reactSlot}) receiver ${state.names(receiver)} (slot ${targetSlot}), focus slot ${focusSlot}")
 						Some((Some(ClueInterp.Reactive), nextGame))
-				}
-		}
 	}.headOption
 	.getOrElse {
 		val finesseTargets = state.hands(receiver).zipWithIndex.filter { (order, _) =>

@@ -11,7 +11,7 @@ import scala_bot.logger.{Logger, LogLevel}
 class Endgame extends munit.FunSuite:
 	override def beforeAll() = Logger.setLevel(LogLevel.Off)
 
-	test("it clues to start b45 endgame") {
+	test("it clues to start b45 endgame"):
 		val game = setup(Reactor.apply, Vector(
 			Vector("xx", "xx", "xx", "xx"),
 			Vector("b4", "y1", "g1", "b5"),
@@ -42,9 +42,8 @@ class Endgame extends munit.FunSuite:
 				assertEquals(winrate, Frac.one)
 				assert(perform.isClue)
 		}
-	}
 
-	test("it clues to start endgame on a_double player") {
+	test("it clues to start endgame on a_double player"):
 		val game = setup(Reactor.apply, Vector(
 			Vector("xx", "xx", "xx", "xx"),
 			Vector("g5", "y4", "g1", "r1"),
@@ -74,9 +73,8 @@ class Endgame extends munit.FunSuite:
 				assertEquals(winrate, Frac.one)
 				assert(perform.isClue)
 		}
-	}
 
-	test("it plays to start simple endgame") {
+	test("it plays to start simple endgame"):
 		val game = setup(Reactor.apply, Vector(
 			Vector("xx", "xx", "xx", "xx"),
 			Vector("r1", "r1", "y1", "b5"),
@@ -106,9 +104,8 @@ class Endgame extends munit.FunSuite:
 				assertEquals(winrate, Frac.one)
 				assertEquals(perform, PerformAction.Play(game.state.hands(Alice.ordinal)(0)))
 		}
-	}
 
-	test("it plays to start endgame when other has dupes") {
+	test("it plays to start endgame when other has dupes"):
 		val game = setup(Reactor.apply, Vector(
 			Vector("xx", "xx", "xx", "xx"),
 			Vector("b1", "p4", "b1", "p4"),
@@ -139,9 +136,8 @@ class Endgame extends munit.FunSuite:
 				// Alice should play p3.
 				assertEquals(perform, PerformAction.Play(game.state.hands(Alice.ordinal)(0)))
 		}
-	}
 
-	test("it plays to start a_complex endgame where all cards are seen") {
+	test("it plays to start a_complex endgame where all cards are seen"):
 		val game = setup(Reactor.apply, Vector(
 			Vector("xx", "xx", "xx", "xx", "xx"),
 			Vector("b1", "r1", "g1", "p5", "p2"),
@@ -179,9 +175,8 @@ class Endgame extends munit.FunSuite:
 				// Alice should play r4.
 				assertEquals(perform, PerformAction.Play(game.state.hands(Alice.ordinal)(4)))
 		}
-	}
 
-	test("it calculates basic winrate correctly") {
+	test("it calculates basic winrate correctly"):
 		val game = setup(Reactor.apply, Vector(
 			Vector("xx", "xx", "xx", "xx", "xx"),
 			Vector("b1", "r1", "g1", "y1", "r4"),
@@ -212,4 +207,3 @@ class Endgame extends munit.FunSuite:
 				// Alice should play r3.
 				assertEquals(perform, PerformAction.Play(game.state.hands(Alice.ordinal)(4)))
 		}
-	}

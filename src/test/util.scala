@@ -36,9 +36,9 @@ def setup[G <: Game](
 	val _state = State(playerNames, 0, VARIANTS(variant))
 
 	ops.copyWith(constructor(0, _state, false), GameUpdates(catchup = Some(true)))
-		.pipe { g =>
-			playStacks.fold(g) { stacks =>
-				if (stacks.length != g.state.variant.suits.length)
+		.pipe: g =>
+			playStacks.fold(g): stacks =>
+				if stacks.length != g.state.variant.suits.length then
 					throw new IllegalArgumentException("Invalid play stacks length")
 				ops.copyWith(g, GameUpdates(
 					state = Some(g.state.copy(
@@ -47,12 +47,12 @@ def setup[G <: Game](
 							.flatMap((stack, suitIndex) => (1 to stack).map(Identity(suitIndex, _)))
 							.foldLeft(g.state.baseCount)((acc, id) => acc.updated(id.toOrd, acc(id.toOrd) + 1))
 					)),
-					players = Some(g.players.map { p => p.copy(
+					players = Some(g.players.map(p => p.copy(
 						hypoStacks = stacks,
 						certainMap = stacks.zipWithIndex
 							.flatMap((stack, suitIndex) => (1 to stack).map(Identity(suitIndex, _)))
 							.foldLeft(p.certainMap)((acc, id) => acc.updated(id.toOrd, MatchEntry(61, -1) +: acc(id.toOrd)))
-					)}),
+					))),
 					common = Some(g.common.copy(
 						hypoStacks = stacks,
 						certainMap = stacks.zipWithIndex
@@ -60,10 +60,8 @@ def setup[G <: Game](
 							.foldLeft(g.common.certainMap)((acc, id) => acc.updated(id.toOrd, MatchEntry(61, -1) +: acc(id.toOrd)))
 					))
 				))
-			}
-		}
-		.pipe { g =>
-			if (hands.exists(_.length > HAND_SIZE(hands.length)))
+		.pipe: g =>
+			if hands.exists(_.length > HAND_SIZE(hands.length)) then
 				throw new IllegalArgumentException(s"Hand size should be ${HAND_SIZE(hands.length)} for a ${hands.length}-player game!")
 
 			// Draw all the hands
@@ -74,74 +72,66 @@ def setup[G <: Game](
 					short <- hand.reverse
 				yield
 					orderCounter += 1
-					if (short == "xx")
+					if short == "xx" then
 						DrawAction(playerIndex, orderCounter, -1, -1)
 					else
 						val Identity(suitIndex, rank) = g.state.expandShort(short)
 						DrawAction(playerIndex, orderCounter, suitIndex, rank)
 
 			drawActions.foldLeft(g)(_.handleAction(_))
-		}
-		.pipe { g =>
-			discarded.foldLeft(g) { case (game, short) =>
+		.pipe: g =>
+			discarded.foldLeft(g): (game, short) =>
 				val id = game.state.expandShort(short)
-				game.withState(_.withDiscard(id, 99)).pipe { g =>
+				game.withState(_.withDiscard(id, 99)).pipe: g =>
 					ops.copyWith(g, GameUpdates(
 						common = Some(g.common.copy(
 							certainMap = g.common.certainMap.updated(id.toOrd, MatchEntry(61, -1) +: g.common.certainMap(id.toOrd)))
 						),
-						players = Some(g.players.map { p =>
+						players = Some(g.players.map: p =>
 							p.copy(certainMap = p.certainMap.updated(id.toOrd, MatchEntry(61, -1) +: p.certainMap(id.toOrd)))
-						})
+						)
 					))
-				}
-			}
-		}
-		.tap { g =>
-			for (id <- g.state.variant.allIds) {
+		.tap: g =>
+			for id <- g.state.variant.allIds do
 				val count =	g.state.baseCount(id.toOrd) + visibleFind(g.state, g.me, id).length
 
-				if (count > g.state.cardCount(id.toOrd))
+				if count > g.state.cardCount(id.toOrd) then
 					throw new IllegalArgumentException(s"Found $count copies of ${g.state.logId(id)}!")
-			}
-		}
-		.pipe { _.withState(s =>
-			s.copy(
-				cardsLeft = s.cardsLeft - s.score - discarded.length,
-				currentPlayerIndex = starting.ordinal,
-				clueTokens = clueTokens,
-				strikes = strikes,
-				playableSet = s.allIds.filter(i => s.isPlayable(i) && !s.isBasicTrash(i)),
-				criticalSet = s.allIds.filter(s.isCritical),
-				trashSet = s.allIds.filter(s.isBasicTrash)
-			)
-		)}
+		.pipe:
+			_.withState: s =>
+				s.copy(
+					cardsLeft = s.cardsLeft - s.score - discarded.length,
+					currentPlayerIndex = starting.ordinal,
+					clueTokens = clueTokens,
+					strikes = strikes,
+					playableSet = s.allIds.filter(i => s.isPlayable(i) && !s.isBasicTrash(i)),
+					criticalSet = s.allIds.filter(s.isCritical),
+					trashSet = s.allIds.filter(s.isBasicTrash)
+				)
 		.pipe(init)
 		.pipe(_.elim(goodTouch = true))
-		.pipe { g =>
+		.pipe: g =>
 			ops.copyWith(g, GameUpdates(
 				base = Some(g.state, g.meta, g.players, g.common)
 			))
-		}
 
 def takeTurn[G <: Game](rawAction: String, drawS: String = "")(game: G)(using ops: GameOps[G]) =
 	val state = game.state
 	val action = parseAction(state, rawAction)
 
-	val draw = drawS match {
+	val draw = drawS match
 		case "" => None
 		case s => Some(state.expandShort(s))
-	}
 
-	if (action.playerIndex != state.currentPlayerIndex)
+	if action.playerIndex != state.currentPlayerIndex then
 		throw new IllegalArgumentException(s"Expected '${state.names(state.currentPlayerIndex)}'s turn for action (${action.fmt(state)})!")
 
-	game.withCatchup {
+	game.withCatchup:
 		_.handleAction(action)
-		.pipe { g =>
-			action match {
+		.pipe: g =>
+			action match
 				case PlayAction(_, _, _, _) | DiscardAction(_, _, _, _, _) =>
-					draw match {
+					draw match
 						case Some(_) if state.cardsLeft == 0 =>
 							throw new IllegalArgumentException(s"Cannot draw at 0 cards left")
 
@@ -152,20 +142,16 @@ def takeTurn[G <: Game](rawAction: String, drawS: String = "")(game: G)(using op
 							val Identity(suitIndex, rank) = id
 							val count = state.baseCount(id.toOrd) + visibleFind(state, game.me, id).length
 
-							if (count + 1 > state.cardCount(id.toOrd))
+							if count + 1 > state.cardCount(id.toOrd) then
 								throw new IllegalArgumentException(s"Found ${count + 1} copies of ${state.logId(id)}")
 							g.handleAction(DrawAction(state.currentPlayerIndex, state.nextCardOrder, suitIndex, rank))
 
 						case None =>
 							g.handleAction(DrawAction(state.currentPlayerIndex, state.nextCardOrder, -1, -1))
-					}
 				case _ if draw.isDefined =>
 					throw new IllegalArgumentException(s"Unexpected draw for action $rawAction")
 				case _ => g
-			}
-		}
 		.handleAction(TurnAction(state.turnCount, state.nextPlayerIndex(action.playerIndex)))
-	}
 
 def parseAction(state: State, action: String) =
 	val cluePattern = """(\w+) clues (\d|\w+) to (\w+)(?: \(slots? (\d(?:,\d)*)\))?""".r
@@ -174,36 +160,36 @@ def parseAction(state: State, action: String) =
 
 	def parsePlayer(str: String) =
 		val index = state.names.indexOf(str)
-		if (index == -1)
+		if index == -1 then
 			throw new IllegalArgumentException(s"Player $str not found in [${state.names.mkString(",")}]")
 		index
 
-	action match {
+	action match
 		case cluePattern(giverS, valueS, targetS, slotsS) =>
-			if (!state.canClue)
+			if !state.canClue then
 				throw new IllegalArgumentException(s"Tried to clue with 0 clue tokens")
 
 			val giver = parsePlayer(giverS)
 			val target = parsePlayer(targetS)
 
 			val clue =
-				if ("12345".contains(valueS))
+				if "12345".contains(valueS) then
 					BaseClue(ClueKind.Rank, valueS.toInt)
 				else
 					val colour = state.variant.suits.indexWhere(_.toLowerCase() == valueS.toLowerCase())
-					if (colour == -1)
+					if colour == -1 then
 						throw new IllegalArgumentException(s"Colour $valueS not found in [${state.variant.suits.mkString(",")}]")
 
 					BaseClue(ClueKind.Colour, colour)
 
-			if (target != state.ourPlayerIndex)
+			if target != state.ourPlayerIndex then
 				val list = state.clueTouched(state.hands(target), clue)
 
-				if (list.isEmpty)
+				if list.isEmpty then
 					throw new IllegalArgumentException(s"No cards touched by clue $valueS to $targetS")
 
 				ClueAction(giver, target, list, clue)
-			else if (slotsS == null)
+			else if slotsS == null then
 				throw new IllegalArgumentException(s"Not enough arguments provided (clue to us) in $action, needs '(slot x)'")
 			else
 				val list = slotsS.split(",").map(s => state.ourHand(s.toInt - 1))
@@ -214,37 +200,37 @@ def parseAction(state: State, action: String) =
 			val id = state.expandShort(short)
 			val Identity(suitIndex, rank) = id
 
-			if (playerIndex != state.ourPlayerIndex)
+			if playerIndex != state.ourPlayerIndex then
 				val matching = state.hands(playerIndex).filter(state.deck(_).matches(id))
 
-				matching match {
+				matching match
 					case Vector() =>
 						throw new IllegalArgumentException(s"Unable to find $short to play in ${state.names(playerIndex)}'s hand")
 					case Vector(order) =>
 						// If slot provided, it must be correct
-						if (slotS != null)
+						if slotS != null then
 							val slot = slotS.toInt
-							if (state.hands(playerIndex)(slot - 1) != order)
+							if state.hands(playerIndex)(slot - 1) != order then
 								throw new IllegalArgumentException(s"Identity $short not in slot $slotS")
 
 						PlayAction(playerIndex, order, suitIndex, rank)
 					case _ =>
-						if (slotS == null)
+						if slotS == null then
 							throw new IllegalArgumentException(s"Not enough arguments provided (ambiguous identity) in $action, needs '(slot x)'")
 						else
 							val order = state.hands(playerIndex)(slotS.toInt - 1)
-							if (!state.deck(order).matches(id))
+							if !state.deck(order).matches(id) then
 								throw new IllegalArgumentException(s"Identity $short not in slot $slotS")
 							PlayAction(playerIndex, order, suitIndex, rank)
-				}
-			else if (slotS == null)
+
+			else if slotS == null then
 				throw new IllegalArgumentException(s"Not enough arguments provided (play from us) in $action, needs '(slot x)'")
 			else
 				val order = state.hands(state.ourPlayerIndex)(slotS.toInt - 1)
 				PlayAction(playerIndex, order, suitIndex, rank)
 
 		case discardPattern(playerS, action, short, slotS) =>
-			if (state.clueTokens == 8 && action != "bombs")
+			if state.clueTokens == 8 && action != "bombs" then
 				throw new IllegalArgumentException(s"Tried to discard with 8 clue tokens")
 
 			val playerIndex = parsePlayer(playerS)
@@ -252,30 +238,29 @@ def parseAction(state: State, action: String) =
 			val Identity(suitIndex, rank) = id
 			val failed = action == "bombs"
 
-			if (playerIndex != state.ourPlayerIndex)
+			if playerIndex != state.ourPlayerIndex then
 				val matching = state.hands(playerIndex).filter(state.deck(_).matches(id))
 
-				matching match {
+				matching match
 					case Vector() =>
 						throw new IllegalArgumentException(s"Unable to find $short to discard in $playerIndex's hand")
 					case Vector(order) =>
 					// If slot provided, it must be correct
-						if (slotS != null)
+						if slotS != null then
 							val slot = slotS.toInt
-							if (state.hands(playerIndex)(slot - 1) != order)
+							if state.hands(playerIndex)(slot - 1) != order then
 								throw new IllegalArgumentException(s"Identity $short not in slot $slotS")
 
 						DiscardAction(playerIndex, order, suitIndex, rank, failed)
 					case _ =>
-						if (slotS == null)
+						if slotS == null then
 							throw new IllegalArgumentException(s"Not enough arguments provided (ambiguous identity) in $action, needs '(slot x)'")
 						else
 							val order = state.hands(playerIndex)(slotS.toInt - 1)
-							if (!state.deck(order).matches(id))
+							if !state.deck(order).matches(id) then
 								throw new IllegalArgumentException(s"Identity $short not in slot $slotS")
 							DiscardAction(playerIndex, order, suitIndex, rank, failed)
-				}
-			else if (slotS == null)
+			else if slotS == null then
 				throw new IllegalArgumentException(s"Not enough arguments provided (discard from us) in $action, needs '(slot x)'")
 			else
 				val order = state.hands(state.ourPlayerIndex)(slotS.toInt - 1)
@@ -283,7 +268,6 @@ def parseAction(state: State, action: String) =
 
 		case _ =>
 			throw new IllegalArgumentException(s"Invalid action: $action")
-	}
 
 case class TestClue(
 	kind: ClueKind,
@@ -297,22 +281,19 @@ def preClue[G <: Game](playerIndex: Player, slot: Int, clues: Seq[TestClue])(gam
 	val state = game.state
 	val order = state.hands(playerIndex.ordinal)(slot - 1)
 
-	state.deck(order).id().foreach { id =>
-		clues.find(c => !state.variant.idTouched(id, c.toBase)).foreach { nonTouchingClue =>
+	state.deck(order).id().foreach: id =>
+		clues.find(c => !state.variant.idTouched(id, c.toBase)).foreach: nonTouchingClue =>
 			throw new IllegalArgumentException(
 				s"Clue ${nonTouchingClue.toBase.fmt(state, playerIndex.ordinal)} doesn't touch order $order!")
-		}
-	}
 
 	val possibilities = IdentitySet.from(state.variant.allIds.filter { i =>
 		clues.forall(c => state.variant.idTouched(i, c.toBase))
 	})
 
 	ops.copyWith(game, GameUpdates(
-		common = Some(game.common.withThought(order) { _.copy(
-			inferred = possibilities,
-			possible = possibilities
-		)}),
+		common = Some(game.common.withThought(order):
+			_.copy(inferred = possibilities, possible = possibilities)
+		),
 		state = Some(state.copy(
 			deck = state.deck.updated(order, state.deck(order).copy(
 				clued = true,
@@ -329,13 +310,11 @@ def fullyKnown[G <: Game](playerIndex: Player, slot: Int, short: String)(game: G
 	val card = state.deck(state.hands(playerIndex.ordinal)(slot - 1))
 	val id = state.expandShort(short)
 
-	card.id().foreach { deckId =>
-		if (deckId != id)
-			throw new IllegalArgumentException(
-				s"${state.names(playerIndex.ordinal)}'s card at slot $slot is not ${state.logId(id)}! found ${state.logId(deckId)}")
-	}
+	if card.id().exists(_ != id) then
+		throw new IllegalArgumentException(
+			s"${state.names(playerIndex.ordinal)}'s card at slot $slot is not ${state.logId(id)}! found ${state.logId(card.id().get)}")
 
-	val giver = if (playerIndex == Player.Alice) Player.Bob else Player.Alice
+	val giver = if playerIndex == Player.Alice then Player.Bob else Player.Alice
 
 	preClue(playerIndex, slot, Vector(
 		TestClue(ClueKind.Rank, id.rank, giver),

@@ -29,16 +29,13 @@ case class RefSieve(
 	zcsTurn: Option[Int] = None
 ) extends Game:
 	def chop(playerIndex: Int) =
-		state.hands(playerIndex).find {
+		state.hands(playerIndex).find:
 			meta(_).status == CardStatus.CalledToDiscard
-		}
-		.orElse {
-			state.hands(playerIndex).find { order =>
+		.orElse:
+			state.hands(playerIndex).find: order =>
 				zcsTurn.forall(_ >= state.deck(order).drawnIndex) &&
 				!state.deck(order).clued &&
 				meta(order).status == CardStatus.None
-			}
-		}
 
 	def hasPtd(playerIndex: Int) =
 		!common.thinksLocked(this, playerIndex) &&
@@ -54,9 +51,8 @@ case class RefSieve(
 		chop(bob).flatMap(state.deck(_).id()).exists(id => state.isCritical(id) || state.isPlayable(id))
 
 	def findFinesse(playerIndex: Int, connected: List[Int] = Nil, ignore: Set[Int] = Set()) =
-		val order = state.hands(playerIndex).find { o =>
+		val order = state.hands(playerIndex).find: o =>
 			!this.isTouched(o) && !connected.contains(o)
-		}
 
 		order.filter(!ignore.contains(_))
 
@@ -132,19 +128,19 @@ object RefSieve:
 			// 	return game.rewind()
 			// }
 
-			val fix = checkFix(prev, game, action).matches {
+			val fix = checkFix(prev, game, action).matches:
 				case _: FixResult.Normal => true
-			}
 			val trashPush = !fix && newlyTouched.forall(game.common.orderKt(game, _))
 
 			val intent = determineFocus(prev, game, action, push = false)
 			val distributionIds = distributionClue(prev, game, action, intent)
 
 			if !fix && !trashPush && distributionIds.isDefined then
-				return game.withThought(intent) { t => t.copy(
-					inferred = t.inferred.intersect(distributionIds.get),
-					reset = false
-				)}
+				return game.withThought(intent): t =>
+					t.copy(
+						inferred = t.inferred.intersect(distributionIds.get),
+						reset = false
+					)
 
 			val prevPlayables = prev.common.thinksPlayables(prev, target)
 			val prevLoaded = prev.common.thinksLoaded(prev, target)
@@ -192,11 +188,11 @@ object RefSieve:
 					Log.info(s"revealed a safe action${if fix then " (fix)" else ""}, not continuing")
 
 					val newGame = cluedGame
-						.when(_ => !fix && clue.kind == ClueKind.Rank && newPlayables.forall(newlyTouched.contains)) { g =>
+						.when(_ => !fix && clue.kind == ClueKind.Rank && newPlayables.forall(newlyTouched.contains)): g =>
 							// Playable rank clue
 							val focus = newlyTouched.max
 							g.withMeta(focus)(_.copy(focused = true))
-						}
+
 					(Some(ClueInterp.Reveal), newGame)
 
 				else if clue.kind == ClueKind.Colour then
@@ -216,7 +212,7 @@ object RefSieve:
 			val id = Identity(suitIndex, rank)
 
 			if !failed && prev.state.deck(order).clued && suitIndex != -1 && rank != -1 && !state.isBasicTrash(id) then
-				interpretUsefulDc(game, action) match {
+				interpretUsefulDc(game, action) match
 					case DiscardResult.None =>
 						game.copy(lastMove = Some(DiscardInterp.None))
 
@@ -240,7 +236,6 @@ object RefSieve:
 							),
 							lastMove = Some(DiscardInterp.Sarcastic)
 						)
-				}
 			else
 				game
 
@@ -253,12 +248,11 @@ object RefSieve:
 			if state.inEndgame && state.remScore <= state.variant.suits.length + 1 then
 				Log.highlight(Console.MAGENTA, "trying to solve endgame...")
 
-				EndgameSolver(monteCarlo = true).solve(game) match {
+				EndgameSolver(monteCarlo = true).solve(game) match
 					case Left(err) => Log.info(s"couldn't solve endgame: $err")
 					case Right((perform, _)) =>
 						Log.info(s"endgame solved!")
 						return perform
-				}
 
 			val discardOrders = me.discardable(game, state.ourPlayerIndex)
 			val playableOrders = me.thinksPlayables(game, state.ourPlayerIndex)
@@ -266,19 +260,18 @@ object RefSieve:
 			Log.info(s"playables $playableOrders")
 			Log.info(s"discardable $discardOrders")
 
-			val allClues =
+			val allClues = if !state.canClue then Nil else
 				for
-					target <- (0 until state.numPlayers) if state.canClue && target != state.ourPlayerIndex
-					clue <- state.allValidClues(target)
+					target <- (0 until state.numPlayers) if target != state.ourPlayerIndex
+					clue   <- state.allValidClues(target)
 				yield
 					val perform = clueToPerform(clue)
 					val action = performToAction(state, perform, state.ourPlayerIndex)
 					(perform, action)
 
-			val allPlays = playableOrders.map { o =>
+			val allPlays = playableOrders.map: o =>
 				val action = PlayAction(state.ourPlayerIndex, o, me.thoughts(o).id(infer = true))
 				(PerformAction.Play(o), action)
-			}
 
 			val cantDiscard = state.clueTokens == 8 ||
 				game.mustClue(state.ourPlayerIndex) ||
@@ -286,20 +279,17 @@ object RefSieve:
 			Log.info(s"can discard: ${!cantDiscard} ${state.clueTokens}")
 
 			val allDiscards = if cantDiscard then Nil else
-				discardOrders.map { o =>
+				discardOrders.map: o =>
 					val action = DiscardAction(state.ourPlayerIndex, o, me.thoughts(o).id(infer = true))
 					(PerformAction.Discard(o), action)
-				}
 
-			val allActions = {
+			val allActions =
 				val as = allClues.concat(allPlays).concat(allDiscards)
 
-				game.chop(state.ourPlayerIndex) match {
+				game.chop(state.ourPlayerIndex) match
 					case Some(chop) if !cantDiscard && (!state.canClue || allPlays.isEmpty) && allDiscards.isEmpty && !me.thinksLocked(game, state.ourPlayerIndex) =>
 						as :+ (PerformAction.Discard(chop), DiscardAction(state.ourPlayerIndex, chop, -1, -1, false))
 					case _ => as
-				}
-			}
 
 			if allActions.isEmpty then
 				if state.clueTokens == 8 then
@@ -345,14 +335,14 @@ object RefSieve:
 				val list = state.clueTouched(state.hands(target), clue)
 
 				// Do not simulate clues that touch only previously-clued trash
-				!(list.forall(o => state.deck(o).clued && state.isBasicTrash(state.deck(o).id().get)))
+				!list.forall(o => state.deck(o).clued && state.isBasicTrash(state.deck(o).id().get))
 
 			val allClues =
-				(for
+				for
 					target <- (0 until state.numPlayers) if target != giver
 					clue   <- state.allValidClues(target) if validClue(clue, target)
 				yield
-					clueToPerform(clue))
+					clueToPerform(clue)
 
 			Logger.setLevel(level)
 			allClues

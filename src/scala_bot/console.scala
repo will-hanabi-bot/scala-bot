@@ -18,29 +18,26 @@ def spawnConsole(queue: Queue[IO, ConsoleCmd], client: BotClient) =
 def spawnConsoleInput(queue: Queue[IO, ConsoleCmd]) =
 	def loop: IO[Unit] = for
 		input <- Console[IO].readLine
-		cmd <- input.split(" ") match {
+		cmd <- input.split(" ") match
 			case Array("hand", name) => IO.pure(Some(ConsoleCmd.Hand(name, None)))
 			case Array("hand", name, from) => IO.pure(Some(ConsoleCmd.Hand(name, Some(from))))
 			case Array(nav, arg) if nav == "navigate" || nav == "nav" =>
-				val navArg = arg match {
+				val navArg = arg match
 					case "++" => NavArg.NextRound
 					case "+" => NavArg.Next
 					case "--" => NavArg.PrevRound
 					case "-" => NavArg.Prev
 					case x => NavArg.Turn(x.toInt)
-				}
 				IO.pure(Some(ConsoleCmd.Navigate(navArg)))
 			case _ =>
 				IO.println("unknown command") *>
 				IO.pure(None)
-		}
 		_ <- IO.whenA(cmd.nonEmpty)(queue.offer(cmd.get))
 		_ <- loop
 	yield ()
 
-	loop.handleErrorWith { err =>
+	loop.handleErrorWith: err =>
 		IO { err.printStackTrace() } *> IO.raiseError(err)
-	}
 
 def spawnConsoleHandler(queue: Queue[IO, ConsoleCmd], client: BotClient) =
 	def loop: IO[Unit] = for
@@ -49,6 +46,5 @@ def spawnConsoleHandler(queue: Queue[IO, ConsoleCmd], client: BotClient) =
 		_ <- loop
 	yield ()
 
-	loop.handleErrorWith { err =>
+	loop.handleErrorWith: err =>
 		IO { err.printStackTrace() } *> IO.raiseError(err)
-	}

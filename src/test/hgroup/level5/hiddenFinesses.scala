@@ -10,7 +10,7 @@ import scala.util.chaining.scalaUtilChainingOps
 class HiddenFinesses extends munit.FunSuite:
 	override def beforeAll() = Logger.setLevel(LogLevel.Off)
 
-	test("understands a hidden finesse (rank)") {
+	test("understands a hidden finesse (rank)"):
 		val game = setup(HGroup.atLevel(5), Vector(
 			Vector("xx", "xx", "xx", "xx", "xx"),
 			Vector("r4", "r4", "g4", "r5", "b4"),
@@ -22,14 +22,14 @@ class HiddenFinesses extends munit.FunSuite:
 			init = preClue(Cathy, 5, Vector(TestClue(ClueKind.Rank, 2, Bob)))
 		)
 		.pipe(takeTurn("Bob clues 3 to Alice (slot 3)"))
-		.tap { g =>
+		.tap: g =>
 			hasInfs(g, None, Alice, 3, Vector("r3", "g3"))
-		}
+
 		.pipe(takeTurn("Cathy plays r2", "r1"))
-		.tap { g =>
+		.tap: g =>
 			// Alice's slot 3 should still be [r3,g3] to allow for a hidden finesse.
 			hasInfs(g, None, Alice, 3, Vector("r3", "g3"))
-		}
+
 		.pipe(takeTurn("Alice discards b1 (slot 5)"))
 		.pipe(takeTurn("Bob discards b4", "r1"))
 		.pipe(takeTurn("Cathy discards p3", "y1"))
@@ -37,9 +37,8 @@ class HiddenFinesses extends munit.FunSuite:
 		// Alice's slot 4 (used to be 3) should just be r3 now.
 		hasInfs(game, None, Alice, 4, Vector("r3"))
 		assertEquals(game.meta(game.state.hands(Alice.ordinal)(0)).status, CardStatus.None)
-	}
 
-	test("understands a complicated fake hidden finesse") {
+	test("understands a complicated fake hidden finesse"):
 		val game = setup(HGroup.atLevel(5), Vector(
 			Vector("xx", "xx", "xx", "xx", "xx"),
 			Vector("p1", "p4", "r3", "y3", "r5"),
@@ -50,22 +49,21 @@ class HiddenFinesses extends munit.FunSuite:
 		)
 		.pipe(takeTurn("Alice clues purple to Bob"))
 		.pipe(takeTurn("Bob clues 2 to Alice (slot 1)"))
-		.tap { g =>
+		.tap: g =>
 			hasInfs(g, None, Alice, 1, Vector("r2", "g2", "b2", "p2"))
-		}
+
 		.pipe(takeTurn("Cathy plays b1", "y5"))
 		.pipe(takeTurn("Alice clues 5 to Bob"))
 		.pipe(takeTurn("Bob clues 2 to Cathy"))		// y2 reverse finesse
-		.tap { g =>
+		.tap: g =>
 			hasInfs(g, None, Alice, 2, Vector("y1"))
-		}
+
 		.pipe(takeTurn("Cathy discards g3", "p3"))
 
 		// Cathy didn't play into the green finesse, so we have [r2,b2,p2] in slot 1.
 		hasInfs(game, None, Alice, 1, Vector("r2", "b2", "p2"))
-	}
 
-	test("plays into a hidden finesse") {
+	test("plays into a hidden finesse"):
 		val game = setup(HGroup.atLevel(5), Vector(
 			Vector("xx", "xx", "xx", "xx", "xx"),
 			Vector("g2", "r2", "r3", "p1", "b4"),
@@ -82,9 +80,8 @@ class HiddenFinesses extends munit.FunSuite:
 
 		// Our slot 2 (previously slot 1) should be r1.
 		hasInfs(game, None, Alice, 2, Vector("r1"))
-	}
 
-	test("generates focus possibilities for a potential hidden finesse") {
+	test("generates focus possibilities for a potential hidden finesse"):
 		val game = setup(HGroup.atLevel(5), Vector(
 			Vector("xx", "xx", "xx", "xx", "xx"),
 			Vector("g1", "y4", "b1", "r5", "g4"),
@@ -97,9 +94,8 @@ class HiddenFinesses extends munit.FunSuite:
 		.pipe(takeTurn("Cathy clues green to Alice (slot 2)"))
 
 		hasInfs(game, None, Alice, 2, Vector("g1", "g3"))
-	}
 
-	test("realizes a hidden/layered finesse") {
+	test("realizes a hidden/layered finesse"):
 		val game = setup(HGroup.atLevel(5), Vector(
 			Vector("xx", "xx", "xx", "xx"),
 			Vector("r2", "r2", "y4", "g2"),
@@ -113,7 +109,7 @@ class HiddenFinesses extends munit.FunSuite:
 		.pipe(takeTurn("Bob clues 3 to Cathy"))			// looks like y1 (playable) -> y2 finesse on Alice
 		.pipe(takeTurn("Cathy discards g4", "p4"))
 		.pipe(takeTurn("Donald clues green to Bob"))	// we need to play g1, but "y2" is in slot 1.
-		.tap { g =>
+		.tap: g =>
 			// We are promised y1, y2 and g1
 			// hasInfs(g, None, Alice, 3, Vector("y1", "g1"))
 			assertEquals(g.meta(g.state.hands(Alice.ordinal)(0)).status, CardStatus.Finessed)
@@ -121,16 +117,14 @@ class HiddenFinesses extends munit.FunSuite:
 
 			// Slot 2 is not playable.
 			assert(!g.common.thinksPlayables(g, Alice.ordinal).contains(g.state.hands(Alice.ordinal)(1)))
-		}
 		.pipe(takeTurn("Alice plays y1 (slot 3)"))
 
 		// Alice's slot 2 (previously slot 1) should still be finessed.
 		// hasInfs(game, None, Alice, 2, Vector("g1", "g3"))
 		assertEquals(game.meta(game.state.hands(Alice.ordinal)(1)).status, CardStatus.Finessed)
 		// assertEquals(game.meta(game.state.hands(Alice.ordinal)(2)).status, CardStatus.Finessed)
-	}
 
-	test("realizes a layered finesse") {
+	test("realizes a layered finesse"):
 		val game = setup(HGroup.atLevel(5), Vector(
 			Vector("xx", "xx", "xx", "xx"),
 			Vector("r2", "r2", "y4", "g2"),
@@ -145,23 +139,22 @@ class HiddenFinesses extends munit.FunSuite:
 		.pipe(takeTurn("Alice plays r1 (slot 4)"))
 		.pipe(takeTurn("Bob clues yellow to Cathy"))	// Looks like y3 finesse from us
 		.pipe(takeTurn("Cathy clues green to Bob"))		// we need to play g1, but slot 1 is [y3] and slot 2 is neg 1.
-		.tap { g =>
+		.tap: g =>
 			// hasInfs(g, None, Alice, 3, Vector("y1", "g1"))
 			assertEquals(g.meta(g.state.hands(Alice.ordinal)(0)).status, CardStatus.Finessed)
 			// assertEquals(g.meta(g.state.hands(Alice.ordinal)(1)).status, CardStatus.Finessed)
 
 			// Slot 2 is not playable.
 			assert(!g.common.thinksPlayables(g, Alice.ordinal).contains(g.state.hands(Alice.ordinal)(1)))
-		}
+
 		.pipe(takeTurn("Donald discards b2", "b5"))
 		.pipe(takeTurn("Alice plays g1 (slot 1)"))
 
 		// Alice's slot 2 should still be finessed.
 		hasInfs(game, None, Alice, 2, Vector("y3"))
 		assertEquals(game.meta(game.state.hands(Alice.ordinal)(1)).status, CardStatus.Finessed)
-	}
 
-	test("correctly resolves an ambiguous hidden finesse") {
+	test("correctly resolves an ambiguous hidden finesse"):
 		val game = setup(HGroup.atLevel(5), Vector(
 			Vector("xx", "xx", "xx", "xx"),
 			Vector("r1", "y1", "g1", "g3"),
@@ -179,12 +172,10 @@ class HiddenFinesses extends munit.FunSuite:
 		// 	hasInfs(g, None, Alice, 4, Vector("g4", "b4"))
 		// }
 		.pipe(takeTurn("Alice plays b2 (slot 2)"))		// revealing hidden finesse
-		.tap { g =>
+		.tap: g =>
 			// Slot 2 (previously slot 1) should be g2
 			hasInfs(g, None, Alice, 2, Vector("g2"))
-		}
 		.pipe(takeTurn("Bob discards g1", "p2"))
 		.pipe(takeTurn("Cathy plays b3", "r3"))			// proving b4
 
 		hasInfs(game, None, Alice, 4, Vector("b4"))
-	}

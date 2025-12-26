@@ -10,7 +10,7 @@ import scala.util.chaining.scalaUtilChainingOps
 class General extends munit.FunSuite:
 	override def beforeAll() = Logger.setLevel(LogLevel.Off)
 
-	test("it understands good touch") {
+	test("it understands good touch"):
 		val game = setup(Reactor.apply, Vector(
 			Vector("xx", "xx", "xx", "xx", "xx"),
 			Vector("r4", "g2", "r2", "r3", "g5"),
@@ -28,9 +28,8 @@ class General extends munit.FunSuite:
 
 		// Bob's slot 1 should be known r4.
 		hasInfs(game, None, Bob, 1, Vector("r4"))
-	}
 
-	test("it elims from focus") {
+	test("it elims from focus"):
 		val game = setup(Reactor.apply, Vector(
 			Vector("xx", "xx", "xx", "xx", "xx"),
 			Vector("y4", "g2", "r2", "r3", "g5"),
@@ -47,9 +46,8 @@ class General extends munit.FunSuite:
 		// Alice's slot 2 should be known trash.
 		val hand = game.state.hands(Alice.ordinal)
 		assert(game.common.thinksTrash(game, Alice.ordinal).contains(hand(1)))
-	}
 
-	test("it understands a stable clue to Cathy") {
+	test("it understands a stable clue to Cathy"):
 		val game = setup(Reactor.apply, Vector(
 			Vector("xx", "xx", "xx", "xx", "xx"),
 			Vector("b1", "r4", "r4", "y4", "y4"),
@@ -65,9 +63,8 @@ class General extends munit.FunSuite:
 		assertEquals(game.meta(game.state.hands(Cathy.ordinal)(0)).status, CardStatus.CalledToPlay)
 
 		// takeTurn("Bob plays b1", "p4")
-	}
 
-	test("it understands a reverse reactive clue") {
+	test("it understands a reverse reactive clue"):
 		val game = setup(Reactor.apply, Vector(
 			Vector("xx", "xx", "xx", "xx", "xx"),
 			Vector("b1", "r1", "r4", "y4", "y4"),
@@ -78,16 +75,14 @@ class General extends munit.FunSuite:
 			init = preClue(Bob, 2, Vector(TestClue(ClueKind.Rank, 1, Alice)))
 		)
 		.pipe(takeTurn("Alice clues 4 to Bob"))
-		.tap { g =>
+		.tap: g =>
 			// Cathy is called to play g1.
 			assertEquals(g.meta(g.state.hands(Cathy.ordinal)(1)).status, CardStatus.CalledToPlay)
-		}
 		.pipe(takeTurn("Bob plays b1", "y3"))
 
 		assert(game.common.obviousPlayables(game, Cathy.ordinal).contains(game.state.hands(Cathy.ordinal)(1)))
-	}
 
-	test("it doesn't give a bad reverse reactive clue") {
+	test("it doesn't give a bad reverse reactive clue"):
 		val game = setup(Reactor.apply, Vector(
 			Vector("xx", "xx", "xx", "xx", "xx"),
 			Vector("b1", "r1", "r4", "y4", "y5"),
@@ -109,9 +104,8 @@ class General extends munit.FunSuite:
 			clue = BaseClue(ClueKind.Rank, 4)
 		)
 		assert(evalAction(game, clue) < 8.0)
-	}
 
-	test("it understands targeting dupes") {
+	test("it understands targeting dupes"):
 		val game = setup(Reactor.apply, Vector(
 			Vector("xx", "xx", "xx", "xx", "xx"),
 			Vector("b3", "r4", "r4", "y4", "y5"),
@@ -125,17 +119,15 @@ class General extends munit.FunSuite:
 		)
 		// 4 + 2 = 1
 		.pipe(takeTurn("Cathy clues blue to Bob"))
-		.tap { g =>
+		.tap: g =>
 			// Alice is called to play slot 4.
 			assertEquals(g.meta(g.state.hands(Alice.ordinal)(3)).status, CardStatus.CalledToPlay)
-		}
 		.pipe(takeTurn("Alice plays r1 (slot 4)"))
 
 		// Bob is called to discard slot 2.
 		assertEquals(game.meta(game.state.hands(Bob.ordinal)(1)).status, CardStatus.CalledToDiscard)
-	}
 
-	test("it understands a known delayed stable play") {
+	test("it understands a known delayed stable play"):
 		val game = setup(Reactor.apply, Vector(
 			Vector("xx", "xx", "xx", "xx", "xx"),
 			Vector("g3", "y5", "g4", "b4", "b4"),
@@ -157,9 +149,8 @@ class General extends munit.FunSuite:
 
 		// We should play g2 into it.
 		assertEquals(action, PerformAction.Play(game.state.hands(Alice.ordinal)(1)))
-	}
 
-	test("it understands an unknown delayed stable play") {
+	test("it understands an unknown delayed stable play"):
 		val game = setup(Reactor.apply, Vector(
 			Vector("xx", "xx", "xx", "xx", "xx"),
 			Vector("g2", "y5", "g4", "b4", "b4"),
@@ -180,9 +171,8 @@ class General extends munit.FunSuite:
 		// We should play our 1 into it as g1.
 		assertEquals(action, PerformAction.Play(game.state.hands(Alice.ordinal)(0)))
 		hasInfs(game, None, Alice, 1, Vector("g1"))
-	}
 
-	test("it doesn't give a bad connecting clue") {
+	test("it doesn't give a bad connecting clue"):
 		val game = setup(Reactor.apply, Vector(
 			Vector("xx", "xx", "xx", "xx", "xx"),
 			Vector("b1", "y1", "g1", "g2", "p2"),
@@ -206,9 +196,8 @@ class General extends munit.FunSuite:
 		val result = getResult(game, newGame, clue)
 
 		assertEquals(result, -100.0)
-	}
 
-	test("it understands bob won't react if alternative is on them") {
+	test("it understands bob won't react if alternative is on them"):
 		val game = setup(Reactor.apply, Vector(
 			Vector("xx", "xx", "xx", "xx", "xx"),
 			Vector("y1", "r2", "g1", "g2", "p2"),
@@ -223,9 +212,8 @@ class General extends munit.FunSuite:
 		.pipe(takeTurn("Alice clues 5 to Cathy"))
 
 		assertEquals(game.meta(game.state.hands(Bob.ordinal)(1)).status, CardStatus.None)
-	}
 
-	test("it discards zcs") {
+	test("it discards zcs"):
 		val game = setup(Reactor.apply, Vector(
 			Vector("xx", "xx", "xx", "xx", "xx"),
 			Vector("y4", "r2", "g1", "g2", "p2"),
@@ -238,18 +226,16 @@ class General extends munit.FunSuite:
 		.pipe(takeTurn("Bob plays g1", "b1"))
 		.pipe(takeTurn("Cathy plays r1", "y3"))
 		.pipe(takeTurn("Alice discards p4 (slot 1)"))
-		.tap { g =>
+		.tap: g =>
 			// Bob's chop should be slot 2.
 			assertEquals(Reactor.chop(g, Bob.ordinal), Some(g.state.hands(Bob.ordinal)(1)))
-		}
 		.pipe(takeTurn("Bob discards y4", "r3"))
 
 		assertEquals(game.zcsTurn, None)
 		// Cathy's chop should be slot 1.
 		assertEquals(Reactor.chop(game, Cathy.ordinal), Some(game.state.hands(Cathy.ordinal)(0)))
-	}
 
-	test("it interprets a gd") {
+	test("it interprets a gd"):
 		val game = setup(Reactor.apply, Vector(
 			Vector("xx", "xx", "xx", "xx", "xx"),
 			Vector("y1", "r2", "g1", "g2", "p2"),
@@ -264,9 +250,8 @@ class General extends munit.FunSuite:
 		assertEquals(game.meta(game.state.hands(Alice.ordinal)(4)).status, CardStatus.GentlemansDiscard)
 		hasInfs(game, None, Alice, 5, Vector("y1"))
 		assert(game.common.obviousPlayables(game, Alice.ordinal).contains(0))
-	}
 
-	test("it interprets a sarcastic") {
+	test("it interprets a sarcastic"):
 		val game = setup(Reactor.apply, Vector(
 			Vector("xx", "xx", "xx", "xx", "xx"),
 			Vector("y1", "r2", "g1", "g2", "p2"),
@@ -283,9 +268,8 @@ class General extends munit.FunSuite:
 		assertEquals(game.meta(game.state.hands(Alice.ordinal)(4)).status, CardStatus.Sarcastic)
 		hasInfs(game, None, Alice, 5, Vector("r2"))
 		assert(game.common.obviousPlayables(game, Alice.ordinal).contains(0))
-	}
 
-	test("it doesn't perform a bad gd") {
+	test("it doesn't perform a bad gd"):
 		val game = setup(Reactor.apply, Vector(
 			Vector("xx", "xx", "xx", "xx", "xx"),
 			Vector("y1", "r2", "g1", "g2", "p2"),
@@ -303,4 +287,3 @@ class General extends munit.FunSuite:
 
 		// Discarding g1 in slot 5 is a bad GD.
 		assertEquals(result, -100.0)
-	}

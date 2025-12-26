@@ -12,7 +12,7 @@ private def calcTargetSlot(prev: Reactor, game: Reactor, order: Int, wc: Reactor
 	val reactSlot = prev.state.hands(reacter).indexOf(order) + 1
 	val targetSlot = calcSlot(focusSlot, reactSlot)
 
-	receiverHand.lift(targetSlot - 1) match {
+	receiverHand.lift(targetSlot - 1) match
 		case None =>
 			Log.warn(s"Receiver no longer has slot $targetSlot!")
 			None
@@ -22,7 +22,6 @@ private def calcTargetSlot(prev: Reactor, game: Reactor, order: Int, wc: Reactor
 				None
 			else
 				Some((reactSlot, targetSlot))
-	}
 
 def elimDcDc(state: State, common: Player, meta: Vector[ConvData], reacter: Int, receiverHand: Vector[Int], focusSlot: Int, targetSlot: Int) =
 	// Entire hand is unplayable
@@ -39,7 +38,7 @@ def elimDcDc(state: State, common: Player, meta: Vector[ConvData], reacter: Int,
 		if skip then
 			(c, m)
 		else
-			state.hands(reacter).lift(reactSlot - 1) match {
+			state.hands(reacter).lift(reactSlot - 1) match
 				case None => (c, m)
 				case Some(reactOrder) if newCommon.thoughts(reactOrder).possible.forall(state.isCritical) =>
 					(c, m)
@@ -49,7 +48,6 @@ def elimDcDc(state: State, common: Player, meta: Vector[ConvData], reacter: Int,
 					))
 					Log.info(s"eliminated trash from slot ${i + 1} $receiveOrder - ${newCommon.strInfs(state, receiveOrder)}")
 					(newCommon, newMeta)
-			}
 	}
 
 def elimPlayDc(state: State, common: Player, meta: Vector[ConvData], reacter: Int, receiverHand: Vector[Int], focusSlot: Int, targetSlot: Int) =
@@ -67,7 +65,7 @@ def elimPlayDc(state: State, common: Player, meta: Vector[ConvData], reacter: In
 		if skip then
 			(c, m)
 		else
-			state.hands(reacter).lift(reactSlot - 1) match {
+			state.hands(reacter).lift(reactSlot - 1) match
 				case Some(reactOrder) if newCommon.thoughts(reactOrder).possible.exists(state.isPlayable) =>
 					val newCommon = c.withThought(receiveOrder)(t => t.copy(
 						inferred = t.inferred.difference(state.trashSet)
@@ -75,7 +73,6 @@ def elimPlayDc(state: State, common: Player, meta: Vector[ConvData], reacter: In
 					Log.info(s"eliminated trash from slot ${i + 1} $receiveOrder - ${newCommon.strInfs(state, receiveOrder)}")
 					(newCommon, newMeta)
 				case _ => (c, m)
-			}
 	}
 
 val updateMeta = (meta: Vector[ConvData], common: Player, receiveOrder: Int) =>
@@ -92,7 +89,7 @@ def elimDcPlay(state: State, common: Player, meta: Vector[ConvData], reacter: In
 		if status == CardStatus.CalledToPlay || status == CardStatus.CalledToDiscard then
 			(c, m)
 		else
-			state.hands(reacter).lift(reactSlot - 1) match {
+			state.hands(reacter).lift(reactSlot - 1) match
 				case Some(reactOrder) if !common.thoughts(reactOrder).possible.forall(state.isCritical)=>
 					val newCommon = c.withThought(receiveOrder)(t => t.copy(
 						inferred = t.inferred.difference(state.playableSet)
@@ -100,7 +97,6 @@ def elimDcPlay(state: State, common: Player, meta: Vector[ConvData], reacter: In
 					Log.info(s"eliminated playables from slot ${i + 1} $receiveOrder - ${newCommon.strInfs(state, receiveOrder)}")
 					(newCommon, updateMeta(meta, newCommon, receiveOrder))
 				case _ => (c, m)
-			}
 		}
 
 def elimPlayPlay(state: State, common: Player, meta: Vector[ConvData], reacter: Int, receiverHand: Vector[Int], focusSlot: Int, targetSlot: Int) =
@@ -111,10 +107,10 @@ def elimPlayPlay(state: State, common: Player, meta: Vector[ConvData], reacter: 
 		if status == CardStatus.CalledToPlay || status == CardStatus.CalledToDiscard then
 			(c, m)
 		else
-			state.hands(reacter).lift(reactSlot - 1) match {
+			state.hands(reacter).lift(reactSlot - 1) match
 				case None => (c, m)
 				case Some(reactOrder) =>
-					common.thoughts(reactOrder).possible.intersect(state.playableSet) match {
+					common.thoughts(reactOrder).possible.intersect(state.playableSet) match
 						case IdentitySet() => (c, m)
 
 						case IdentitySet(id) =>
@@ -130,8 +126,6 @@ def elimPlayPlay(state: State, common: Player, meta: Vector[ConvData], reacter: 
 							))
 							Log.info(s"eliminated playables from slot ${i + 1} $receiveOrder - ${newCommon.strInfs(state, receiveOrder)}")
 							(newCommon, updateMeta(meta, newCommon, receiveOrder))
-					}
-			}
 	}
 
 def targetIDiscard(prev: Reactor, game: Reactor, wc: ReactorWC, targetSlot: Int) =
@@ -186,32 +180,29 @@ def reactDiscard(prev: Reactor, game: Reactor, playerIndex: Int, order: Int, wc:
 			!knownTrash.contains(order)
 
 		if unnatural then
-			game.rewind(turn, InterpAction(ClueInterp.Reactive)) match {
+			game.rewind(turn, InterpAction(ClueInterp.Reactive)) match
 				case Right(newGame) => newGame
 				case Left(err) =>
 					Log.warn(s"Failed to rewind a response inversion! $err")
 					game
-			}
 		else
 			game
 	else
-		calcTargetSlot(prev, game, order, wc) match {
+		calcTargetSlot(prev, game, order, wc) match
 			case Some((reactSlot, targetSlot)) =>
-				val (newCommon, newMeta) = clue.kind match {
+				val (newCommon, newMeta) = clue.kind match
 					case ClueKind.Colour =>
 						val (newCommon, newMeta) = targetIPlay(prev, game, wc, targetSlot)
 						elimDcPlay(prev.state, newCommon, newMeta, reacter, receiverHand, focusSlot, targetSlot)
 					case ClueKind.Rank =>
 						val (newCommon, newMeta) = targetIDiscard(prev, game, wc, targetSlot)
 						elimDcDc(prev.state, newCommon, newMeta, reacter, receiverHand, focusSlot, targetSlot)
-				}
 
 				val action = if clue.kind == ClueKind.Colour then "play" else "dc"
 				Log.info(s"reactive dc+$action, reacter ${state.names(reacter)} (slot $reactSlot) receiver ${state.names(receiver)} (slot $targetSlot), focus slot $focusSlot (order ${state.hands(receiver)(targetSlot - 1)})")
 				game.copy(common = newCommon, meta = newMeta)
 			case None =>
 				game
-		}
 
 def reactPlay(prev: Reactor, game: Reactor, playerIndex: Int, order: Int, wc: ReactorWC) =
 	val state = game.state
@@ -222,28 +213,25 @@ def reactPlay(prev: Reactor, game: Reactor, playerIndex: Int, order: Int, wc: Re
 		game
 	else if inverted then
 		if !knownPlayables.contains(order) then
-			game.rewind(turn, InterpAction(ClueInterp.Reactive)) match {
+			game.rewind(turn, InterpAction(ClueInterp.Reactive)) match
 				case Right(newGame) => newGame
 				case Left(err) =>
 					Log.warn(s"Failed to rewind a response inversion! $err")
 					game
-			}
 		else
 			game
 	else
-		calcTargetSlot(prev, game, order, wc) match {
+		calcTargetSlot(prev, game, order, wc) match
 			case None =>
 				game
 			case Some((reactSlot, targetSlot)) =>
-				val (newCommon, newMeta) = clue.kind match {
+				val (newCommon, newMeta) = clue.kind match
 					case ClueKind.Rank =>
 						val (newCommon, newMeta) = targetIPlay(prev, game, wc, targetSlot)
 						elimPlayPlay(prev.state, newCommon, newMeta, reacter, receiverHand, focusSlot, targetSlot)
 					case ClueKind.Colour =>
 						val (newCommon, newMeta) = targetIDiscard(prev, game, wc, targetSlot)
 						elimPlayDc(prev.state, newCommon, newMeta, reacter, receiverHand, focusSlot, targetSlot)
-				}
 				val action = if clue.kind == ClueKind.Colour then "dc" else "play"
 				Log.info(s"reactive play+$action, reacter ${state.names(reacter)} (slot $reactSlot) receiver ${state.names(receiver)} (slot $targetSlot), focus slot $focusSlot (order ${state.hands(receiver)(targetSlot - 1)})")
 				game.copy(common = newCommon, meta = newMeta)
-		}

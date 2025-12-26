@@ -1,5 +1,7 @@
 package scala_bot.basics
 
+import scala_bot.utils._
+
 def elimResult(prev: Game, game: Game, hand: IndexedSeq[Int], list: Seq[Int]) =
 	val state = game.state
 	val initial = (List[Int](), List[Int](), List[Int]())
@@ -27,21 +29,18 @@ def badTouchResult(prev: Game, game: Game, action: ClueAction) =
 	val state = game.state
 	val ClueAction(giver, target, _, _) = action
 
-	val dupeScores = prev.players.zipWithIndex.map { (player, i) =>
+	val dupeScores = prev.players.zipWithIndex.map: (player, i) =>
 		if i == target then 99 else
-			state.hands(target).map { order =>
+			state.hands(target).summing: order =>
 				val card = state.deck(order)
 
 				// Not newly clued, trash id or we don't know: don't care about duplicating
 				if prev.state.deck(order).clued || !card.clued || card.id().forall(state.isBasicTrash) then
 					0
 				else
-					state.hands(i).count{ o =>
+					state.hands(i).count: o =>
 						val thought = player.thoughts(o)
 						state.deck(o).clued && thought.inferred.length > 1 && thought.inferred.contains(card.id().get)
-					}
-			}.sum
-	}
 
 	val avoidableDupe = dupeScores(giver) - dupeScores.min
 
@@ -51,24 +50,21 @@ def badTouchResult(prev: Game, game: Game, action: ClueAction) =
 		else if game.common.orderKt(game, order) then
 			(badTouch, order +: trash)
 		else
-			state.deck(order).id() match {
+			state.deck(order).id() match
 				case Some(id) if state.isBasicTrash(id) =>
 					(order +: badTouch, trash)
 				case _ => (badTouch, trash)
-			}
 	}
 
 	// Previously-finessed cards can be reset (and no longer touched) after the clue, so double-check for "duplicates".
 	val (badTouch, trash) = state.hands(target).foldRight(inter) { case (order, (badTouch, trash)) =>
 		lazy val duplicated =
 			(!prev.state.deck(order).clued && state.deck(order).clued && !badTouch.contains(order) && !trash.contains(order)) &&
-			state.hands.zipWithIndex.exists { (hand, i) =>
-				hand.exists { o =>
+			state.hands.zipWithIndex.exists: (hand, i) =>
+				hand.exists: o =>
 					(prev.isTouched(o) || game.isTouched(o)) &&
 					game.me.thoughts(o).matches(state.deck(order), infer = true) &&
 					(i != target || o < order)
-				}
-			}
 
 		if duplicated then
 			(order +: badTouch, trash)

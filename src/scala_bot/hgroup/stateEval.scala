@@ -9,20 +9,19 @@ def getResult(game: HGroup, hypo: HGroup, action: ClueAction): Double =
 	val (common, state, meta) = (game.common, game.state, game.meta)
 	val ClueAction(giver, target, list, clue) = action
 
-	val newPlayables = state.hands.flatten.filter(o =>
-		meta(o).status != CardStatus.Finessed && hypo.meta(o).status == CardStatus.Finessed)
+	val newPlayables = state.hands.flatten.filter: o =>
+		meta(o).status != CardStatus.Finessed && hypo.meta(o).status == CardStatus.Finessed
 
-	val badPlay = newPlayables.find(o =>
-		!(hypo.me.hypoPlays.contains(o) || (state.inEndgame && state.deck(o).id().exists(state.isPlayable))))
+	val badPlay = newPlayables.find: o =>
+		!(hypo.me.hypoPlays.contains(o) || (state.inEndgame && state.deck(o).id().exists(state.isPlayable)))
 
 	if badPlay.isDefined then
 		Log.warn(s"clue ${clue.fmt(state, target)} results in ${state.logId(badPlay.get)} ${badPlay.get} looking playable! ${hypo.me.hypoPlays}")
 		return -100
 
-	val badTrash = state.hands.flatten.find { o =>
+	val badTrash = state.hands.flatten.find: o =>
 		!meta(o).trash && hypo.meta(o).trash &&
 		state.deck(o).id().exists(visibleFind(game.state, game.players(giver), _, excludeOrder = o).isEmpty)
-	}
 
 	if badTrash.isDefined then
 		Log.warn(s"clue ${clue.fmt(state, target)} results in ${state.logId(badTrash.get)} ${badTrash.get} looking trash!")
@@ -32,20 +31,19 @@ def getResult(game: HGroup, hypo: HGroup, action: ClueAction): Double =
 	val (badTouch, trash, _) = badTouchResult(game, hypo, action)
 	val (_, playables) = playablesResult(game, hypo)
 
-	val revealedTrash = hypo.common.thinksTrash(hypo, target).count(o =>
-		hypo.state.deck(o).clued && !common.thinksTrash(game, target).contains(o))
+	val revealedTrash = hypo.common.thinksTrash(hypo, target).count: o =>
+		hypo.state.deck(o).clued && !common.thinksTrash(game, target).contains(o)
 
-	hypo.lastMove match {
+	hypo.lastMove match
 		// case Some(ClueInterp.Play) if playables.isEmpty && !state.inEndgame =>
 		// 	Log.warn(s"clue ${clue.fmt(state, target)} looks like play but gets no playables!")
 		// 	-100
 		case _ =>
 			// Previously-unclued playables whose copies are already touched
-			val dupedPlayables = hypo.me.hypoPlays.count { p =>
+			val dupedPlayables = hypo.me.hypoPlays.count: p =>
 				!state.deck(p).clued &&
-				state.hands.flatten.exists(o =>
-					o != p && game.isTouched(o) && state.deck(o).matches(state.deck(p)))
-			}
+				state.hands.flatten.exists: o =>
+					o != p && game.isTouched(o) && state.deck(o).matches(state.deck(p))
 
 			val goodTouch: Double =
 				if badTouch.length > 0 then
@@ -66,18 +64,15 @@ def getResult(game: HGroup, hypo: HGroup, action: ClueAction): Double =
 				(if state.inEndgame then 0.1 else 0.05) * elim.length +
 				0.1 * badTouch.length
 
-			hypo.lastMove match {
-				case Some(ClueInterp.Mistake) => value - 10
-				case Some(ClueInterp.Fix) | Some(ClueInterp.Reactive) => value + 1
+			hypo.lastMove match
+				case Some(ClueInterp.Mistake)  => value - 10
+				case Some(ClueInterp.Fix)      => value + 1
 				case _ => value
-			}
-	}
 
 def advanceGame(game: HGroup, action: Action) =
-	action match {
+	action match
 		case clue: ClueAction => game.simulateClue(clue, log = true)
 		case _ => game.simulateAction(action)
-	}
 
 def forceClue(orig: HGroup, game: HGroup, offset: Int, bobOnly: Boolean): Double =
 	val state = game.state
@@ -86,14 +81,14 @@ def forceClue(orig: HGroup, game: HGroup, offset: Int, bobOnly: Boolean): Double
 
 	val allClues =
 		for
-			i <- 0 until state.numPlayers if i != playerIndex && (!bobOnly || i == bob)
+			i    <- 0 until state.numPlayers if i != playerIndex && (!bobOnly || i == bob)
 			clue <- state.allValidClues(i)
 		yield
 			val list = state.clueTouched(state.hands(i), clue)
 			ClueAction(playerIndex, i, list, clue.toBase)
 
 	val level = Logger.level
-	allClues.map { action =>
+	allClues.maximizing(0.0): action =>
 		Logger.setLevel(LogLevel.Off)
 		val hypoGame = advanceGame(game, action)
 
@@ -105,7 +100,6 @@ def forceClue(orig: HGroup, game: HGroup, offset: Int, bobOnly: Boolean): Double
 			Logger.setLevel(level)
 			Log.highlight(Console.YELLOW, s"${action.fmt(state)}: $value")
 			value
-	}.maxOption.getOrElse(0.0)
 
 def advance(orig: HGroup, game: HGroup, offset: Int): Double =
 	val (state, common, meta) = (game.state, game.common, game.meta)
@@ -122,16 +116,14 @@ def advance(orig: HGroup, game: HGroup, offset: Int): Double =
 		evalGame(orig, game)
 
 	else if allPlayables.nonEmpty then
-		val playables = allPlayables.find(meta(_).urgent) match {
+		val playables = allPlayables.find(meta(_).urgent) match
 			case Some(order) => List(order)
-			case None => allPlayables.filter { o =>
+			case None => allPlayables.filter: o =>
 				// Only consider playing the leftmost of similarly-possible cards
 				!allPlayables.exists(p => p > o && common.thoughts(p).possible == common.thoughts(o).possible)
-			}
-		}
 
-		val (knownPlays, unknownPlays) = playables.foldLeft((List.empty[Double], List.empty[Double])) { case ((known, unknown), order) =>
-			val (id, action) = state.deck(order).id() match {
+		val (knownPlays, unknownPlays) = playables.partitionMap: order =>
+			val (id, action) = state.deck(order).id() match
 				case None => (None, PlayAction(playerIndex, order, -1, -1))
 				case Some(id) =>
 					val action = if state.isPlayable(id) then
@@ -139,16 +131,11 @@ def advance(orig: HGroup, game: HGroup, offset: Int): Double =
 					else
 						DiscardAction(playerIndex, order, id.suitIndex, id.rank, failed = true)
 					(Some(id), action)
-			}
 
 			Log.info(s"${state.names(playerIndex)} ${if id.exists(state.isPlayable) then "playing" else "bombing"} ${state.logId(id)}")
 			val value = advance(orig, advanceGame(game, action), offset + 1)
 
-			if player.thoughts(order).id(infer = true).isDefined then
-				(value +: known, unknown)
-			else
-				(known, value +: unknown)
-		}
+			if player.thoughts(order).id(infer = true).isDefined then Left(value) else Right(value)
 
 		val maxPlay = math.min(knownPlays.maxOption.getOrElse(99.9), unknownPlays.minOption.getOrElse(99.9))
 		maxPlay.max(forceClue(orig, game, offset, bobOnly = false))
@@ -172,11 +159,10 @@ def advance(orig: HGroup, game: HGroup, offset: Int): Double =
 		forceClue(orig, game, offset, bobOnly = true)
 
 	else
-		trash.headOption match {
+		trash.headOption match
 			case None =>
-				val chop = game.chop(playerIndex).getOrElse {
+				val chop = game.chop(playerIndex).getOrElse:
 					throw new Exception(s"Player ${state.names(playerIndex)} not locked but no chop! ${state.hands(playerIndex).map(o => s"${state.deck(o).clued} ${game.meta(o).status}").mkString(", ")}")
-				}
 				val id = state.deck(chop).id().get
 				val action = DiscardAction(playerIndex, chop, id.suitIndex, id.rank)
 				val dcGame = advanceGame(game, action)
@@ -207,19 +193,17 @@ def advance(orig: HGroup, game: HGroup, offset: Int): Double =
 
 				Log.info(s"${state.names(playerIndex)} discarding trash ${state.logId(id)}")
 				advance(orig, advanceGame(game, action), offset + 1)
-		}
 
 def evalAction(game: HGroup, action: Action): (HGroup, Double) =
 	Log.highlight(Console.GREEN, s"===== Predicting value for ${action.fmt(game.state)} =====")
 	val state = game.state
 	val hypoGame = advanceGame(game, action)
 
-	val mistake = hypoGame.lastMove.matches {
+	val mistake = hypoGame.lastMove.matches:
 		case Some(ClueInterp.Mistake) if action.isInstanceOf[ClueAction] => true
 		case Some(DiscardInterp.Mistake) if action.isInstanceOf[DiscardAction] => true
-	}
 
-	val value = action match {
+	val value = action match
 		case _ if mistake => -100
 
 		case clue: ClueAction =>
@@ -243,7 +227,6 @@ def evalAction(game: HGroup, action: Action): (HGroup, Double) =
 				-0.5
 
 		case _ => 0.0
-	}
 
 	if value == -100 then
 		Log.info("mistake! -100")
@@ -259,22 +242,20 @@ def evalState(state: State): Double =
 	// The first 2 * (# suits) pts are worth 2.
 	val scoreVal: Double = state.score.min(2 * state.variant.suits.length) + state.score
 
-	val clueVal: Double = state.clueTokens match {
+	val clueVal: Double = state.clueTokens match
 		case 0 					 => -0.5
 		case _ if !state.canClue => -0.25
 		case c if c > 6 		 => 3 + (c - 6) * 0.25
 		case c 					 => c / 2.0
-	}
 
 	val scoreLoss = state.variant.suits.length * 5 - state.maxScore
 	val dcCritVal = -8 * scoreLoss
 
-	val strikesVal = state.strikes match {
+	val strikesVal = state.strikes match
 		case 1 => -1.5
 		case 2 => -3.5
 		case 3 => -100
 		case _ => 0
-	}
 
 	Log.info(s"state eval: score: $scoreVal, clues: $clueVal, dc crit: $dcCritVal, strikes: $strikesVal")
 	scoreVal + clueVal + dcCritVal + strikesVal
@@ -287,8 +268,8 @@ def evalGame(orig: HGroup, game: HGroup): Double =
 
 	val stateVal = evalState(state)
 
-	val futureVal = game.common.hypoPlays.map { order =>
-		game.me.thoughts(order).id(infer = true) match {
+	val futureVal = game.common.hypoPlays.summing: order =>
+		game.me.thoughts(order).id(infer = true) match
 			case None => 0.4
 			case Some(id) =>
 				if state.isBasicTrash(id) then
@@ -297,49 +278,41 @@ def evalGame(orig: HGroup, game: HGroup): Double =
 					0.8
 				else
 					0.4
-		}
-	}.sum
 
-	val bdrVal = state.variant.allIds.map { id =>
+	val bdrVal = 2.5 * state.variant.allIds.summing: id =>
 		val prevDiscarded = orig.state.discardStacks(id.suitIndex)(id.rank - 1)
 		val discarded = state.discardStacks(id.suitIndex)(id.rank - 1).filterNot(prevDiscarded.contains)
 
-		lazy val duplicated = state.hands.flatten.exists { o =>
+		lazy val duplicated = state.hands.flatten.exists: o =>
 			state.deck(o).matches(id) ||
 			game.me.thoughts(o).matches(id, infer = true) && game.meta(o).focused
-		}
 
 		if state.isBasicTrash(id) || id.rank == 5 || discarded.isEmpty then
 			0
 		else if duplicated then
 			-0.1
 		else
-			id.rank match {
+			id.rank match
 				case 1 => -math.pow(discarded.length, 2)
 				case 2 => -3
 				case 3 => -1.5
 				case _ => -1
-			}
-	}.sum * 2.5
 
-	val lockedPenalty = (0 until state.numPlayers).map { playerIndex =>
-		if !game.players(playerIndex).thinksLocked(game, playerIndex) then 0 else (state.clueTokens match {
-			case c if c > 4 => -1
-			case _ => -2
-		})
-	}.sum
+	val lockedPenalty = (0 until state.numPlayers).summing: playerIndex =>
+		if !game.players(playerIndex).thinksLocked(game, playerIndex) then 0 else
+			state.clueTokens match
+				case c if c > 4 => -1
+				case _ => -2
 
-	val endgamePenalty = state.endgameTurns.fold(0) { turns =>
+	val endgamePenalty = state.endgameTurns.fold(0): turns =>
 		val finalScore = (0 until turns).foldLeft(state.playStacks) { (stacks, i) =>
 			val playerIndex = (state.currentPlayerIndex + i + 1) % state.numPlayers
 
-			state.hands(playerIndex).map(state.deck(_).id()).flatten.find(state.isPlayable).fold(stacks) { id =>
+			state.hands(playerIndex).map(state.deck(_).id()).flatten.find(state.isPlayable).fold(stacks): id =>
 				stacks.updated(id.suitIndex, id.rank)
-			}
 		}.sum
 
 		(finalScore - state.maxScore) * 5
-	}
 
 	Log.info(s"state: $stateVal, future: $futureVal, bdr: $bdrVal locked: $lockedPenalty${if endgamePenalty != 0 then s" endgame penalty: ${endgamePenalty}" else ""}")
 	stateVal + futureVal + bdrVal + lockedPenalty + endgamePenalty

@@ -10,7 +10,7 @@ import scala.util.chaining.scalaUtilChainingOps
 class Stable extends munit.FunSuite:
 	override def beforeAll() = Logger.setLevel(LogLevel.Off)
 
-	test("it understands a ref play") {
+	test("it understands a ref play"):
 		val game = setup(RefSieve.apply, Vector(
 			Vector("xx", "xx", "xx", "xx", "xx"),
 			Vector("b1", "g2", "r2", "r3", "g5"),
@@ -20,9 +20,8 @@ class Stable extends munit.FunSuite:
 
 		assertEquals(game.meta(game.state.hands(Bob.ordinal)(0)).status, CardStatus.CalledToPlay)
 		hasInfs(game, None, Bob, 1, Vector("r1", "y1", "b1", "p1"))
-	}
 
-	test("it understands a gapped ref play") {
+	test("it understands a gapped ref play"):
 		val game = setup(RefSieve.apply, Vector(
 			Vector("xx", "xx", "xx", "xx", "xx"),
 			Vector("p4", "b1", "p2", "b5", "g4"),
@@ -32,9 +31,8 @@ class Stable extends munit.FunSuite:
 
 		assertEquals(game.meta(game.state.hands(Bob.ordinal)(1)).status, CardStatus.CalledToPlay)
 		hasInfs(game, None, Bob, 2, Vector("r1", "y1", "g1", "b1"))
-	}
 
-	test("it understands a chop ref play") {
+	test("it understands a chop ref play"):
 		val game = setup(RefSieve.apply, Vector(
 			Vector("xx", "xx", "xx", "xx", "xx"),
 			Vector("b1", "b2", "p2", "b5", "g4"),
@@ -43,9 +41,8 @@ class Stable extends munit.FunSuite:
 		.pipe(takeTurn("Alice clues blue to Bob"))
 
 		hasInfs(game, None, Bob, 1, Vector("b1"))
-	}
 
-	test("it understands a loaded colour clue") {
+	test("it understands a loaded colour clue"):
 		val game = setup(RefSieve.apply, Vector(
 			Vector("xx", "xx", "xx", "xx", "xx"),
 			Vector("b1", "b2", "p2", "b5", "g4"),
@@ -56,9 +53,8 @@ class Stable extends munit.FunSuite:
 		.pipe(takeTurn("Cathy plays b1", "y3"))
 
 		hasInfs(game, None, Cathy, 3, Vector("b2"))
-	}
 
-	test("it understands a playable colour clue is also referential") {
+	test("it understands a playable colour clue is also referential"):
 		val game = setup(RefSieve.apply, Vector(
 			Vector("xx", "xx", "xx", "xx", "xx"),
 			Vector("b1", "b2", "p2", "b5", "g4"),
@@ -70,9 +66,8 @@ class Stable extends munit.FunSuite:
 		.pipe(takeTurn("Bob clues red to Alice (slot 2)"))
 
 		assertEquals(game.meta(game.state.hands(Alice.ordinal)(0)).status, CardStatus.CalledToPlay)
-	}
 
-	test("it understands a ref discard") {
+	test("it understands a ref discard"):
 		val game = setup(RefSieve.apply, Vector(
 			Vector("xx", "xx", "xx", "xx", "xx"),
 			Vector("p4", "p2", "p2", "b5", "g3"),
@@ -81,9 +76,8 @@ class Stable extends munit.FunSuite:
 		.pipe(takeTurn("Alice clues 4 to Bob"))
 
 		assertEquals(game.meta(game.state.hands(Bob.ordinal)(1)).status, CardStatus.CalledToDiscard)
-	}
 
-	test("it gives a ref discard") {
+	test("it gives a ref discard"):
 		val game = setup(RefSieve.apply, Vector(
 			Vector("xx", "xx", "xx", "xx", "xx"),
 			Vector("p4", "p2", "p2", "b5", "g3"),
@@ -92,9 +86,8 @@ class Stable extends munit.FunSuite:
 
 		// Alice should clue 4 to Bob.
 		assertEquals(game.takeAction, PerformAction.Rank(Bob.ordinal, 4))
-	}
 
-	test("it understands a lock") {
+	test("it understands a lock"):
 		val game = setup(RefSieve.apply, Vector(
 			Vector("xx", "xx", "xx", "xx", "xx"),
 			Vector("p5", "p2", "p2", "b4", "g4"),
@@ -105,9 +98,8 @@ class Stable extends munit.FunSuite:
 		.pipe(takeTurn("Alice clues 4 to Bob"))
 
 		assert(game.common.thinksLocked(game, Bob.ordinal))
-	}
 
-	test("it doesn't focus the wrong card for the last id") {
+	test("it doesn't focus the wrong card for the last id"):
 		val game = setup(RefSieve.apply, Vector(
 			Vector("xx", "xx", "xx", "xx", "xx"),
 			Vector("r1", "y1", "g1", "b1", "p1"),
@@ -122,9 +114,8 @@ class Stable extends munit.FunSuite:
 		.pipe(takeTurn("Cathy clues 3 to Alice (slots 2,5)"))
 
 		assertEquals(game.takeAction, PerformAction.Play(0))
-	}
 
-	test("understands a trash push with rank") {
+	test("understands a trash push with rank"):
 		val game = setup(RefSieve.apply, Vector(
 			Vector("xx", "xx", "xx", "xx", "xx"),
 			Vector("g3", "b1", "r2", "r4", "g5")
@@ -139,9 +130,8 @@ class Stable extends munit.FunSuite:
 
 		assertEquals(slot2.status, CardStatus.CalledToPlay)
 		assert(playables.contains(slot2.order))
-	}
 
-	test("understands a trash push touching old cards") {
+	test("understands a trash push touching old cards"):
 		val game = setup(RefSieve.apply, Vector(
 			Vector("xx", "xx", "xx", "xx", "xx"),
 			Vector("g3", "b1", "r2", "r4", "g5")
@@ -158,9 +148,8 @@ class Stable extends munit.FunSuite:
 
 		assertEquals(slot5.status, CardStatus.CalledToPlay)
 		assert(playables.contains(slot5.order))
-	}
 
-	test("wraps around a loaded trash push") {
+	test("wraps around a loaded trash push"):
 		val game = setup(RefSieve.apply, Vector(
 			Vector("xx", "xx", "xx", "xx", "xx"),
 			Vector("g3", "b1", "r2", "r4", "g5")
@@ -177,4 +166,3 @@ class Stable extends munit.FunSuite:
 
 		assertEquals(slot5.status, CardStatus.CalledToPlay)
 		assert(playables.contains(slot5.order))
-	}

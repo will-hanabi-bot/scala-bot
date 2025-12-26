@@ -10,14 +10,12 @@ extension[G <: Game] (solver: EndgameSolver[G])
 	def cluelessWinnable(state: State, playerTurn: Int, deadline: Instant, depth: Int): Option[PerformAction] =
 		val hash = state.hash
 
-		lazy val winnablePlay = state.hands(playerTurn).view.collect {
+		lazy val winnablePlay = state.hands(playerTurn).view.collect:
 			case order if state.deck(order).id().exists(state.isPlayable) =>
 				PerformAction.Play(order)
-		}
-		.find { action =>
+		.find: action =>
 			val newState = advanceState(state, action, playerTurn, draw = None)
 			solver.cluelessWinnable(newState, state.nextPlayerIndex(playerTurn), deadline, depth + 1).isDefined
-		}
 
 		lazy val winnableStall = Option.when(state.canClue) {
 			val action = PerformAction.Rank(0, 0)
@@ -29,13 +27,12 @@ extension[G <: Game] (solver: EndgameSolver[G])
 
 		lazy val discardable = state.hands(playerTurn).find(state.deck(_).id().isEmpty)
 
-		lazy val winnableDc = discardable.flatMap { order =>
+		lazy val winnableDc = discardable.flatMap: order =>
 			val action = PerformAction.Discard(order)
 			val newState = advanceState(state, action, playerTurn, draw = None)
 			val winnable = solver.cluelessWinnable(newState, state.nextPlayerIndex(playerTurn), deadline, depth + 1).isDefined
 
 			Option.when(winnable)(action)
-		}
 
 		if state.score == state.maxScore then
 			Some(PerformAction.Play(99))
@@ -69,7 +66,7 @@ extension[G <: Game] (solver: EndgameSolver[G])
 		val initial = (false, Option.when(state.canClue)(PerformAction.Rank(0, 0)).toList)
 		val possibleActions = state.hands(playerTurn).foldRight(initial) { (order, acc) =>
 			val (foundDc, actions) = acc
-			state.deck(order).id().match {
+			state.deck(order).id().match
 				case None if !foundDc =>
 					(true, PerformAction.Discard(order) +: actions)
 
@@ -80,12 +77,11 @@ extension[G <: Game] (solver: EndgameSolver[G])
 					(true, PerformAction.Discard(order) +: actions)
 
 				case _ => acc
-			}
-		}._2
-		.sortBy {
+		}
+		._2
+		.sortBy:
 			case PerformAction.Play(_) => 0
 			case _ => 1
-		}
 
 		val winnable = possibleActions.exists(winnableIf(state, playerTurn, _, remaining, deadline, depth) match {
 			case SimpleResult.Unwinnable => false
@@ -117,7 +113,7 @@ extension[G <: Game] (solver: EndgameSolver[G])
 			res
 
 		else
-			val winnableDraws = remaining.keys.filter { id =>
+			val winnableDraws = remaining.keys.filter: id =>
 				// TODO: Check whether this should be +1?
 				val draw = Card(id.suitIndex, id.rank, state.nextCardOrder + 1, state.turnCount)
 				val newState = advanceState(state, perform, playerTurn, Some(draw))
@@ -125,7 +121,6 @@ extension[G <: Game] (solver: EndgameSolver[G])
 				val newRemaining = remaining.rem(id)
 
 				winnableSimpler(newState, state.nextPlayerIndex(playerTurn), newRemaining, deadline, depth + 1)
-			}
 
 			// println(s"${indent(depth)}remaining: $remaining, winnable draws: $winnableDraws")
 
@@ -146,22 +141,20 @@ def advanceState(state: State, perform: PerformAction, playerIndex: Int, draw: O
 			hands = s.hands.updated(playerIndex, newHand),
 			nextCardOrder = newCardOrder + (if s.cardsLeft > 0 then 1 else 0),
 			cardsLeft = 0.max(s.cardsLeft - 1),
-			endgameTurns = s.endgameTurns match {
-				case Some(endgameTurns) => Some(endgameTurns - 1)
+			endgameTurns = s.endgameTurns match
+				case Some(endgameTurns)       => Some(endgameTurns - 1)
 				case None if s.cardsLeft == 1 => Some(s.numPlayers)
-				case _ => None
-			}
+				case _                        => None
 		)
-		.when(_.deck.lift(newCardOrder).flatMap(_.id()).isEmpty) { st =>
+		.when(_.deck.lift(newCardOrder).flatMap(_.id()).isEmpty): st =>
 			val deck = st.deck
 			val newCard = draw.getOrElse(Card(-1, -1, newCardOrder, st.turnCount))
 			if deck.length == newCardOrder then
 				st.copy(deck = deck :+ newCard)
 			else
 				st.copy(deck = deck.updated(newCardOrder, newCard))
-		}
 
-	perform match {
+	perform match
 		case PerformAction.Play(target) =>
 			(state.deck(target).id() match {
 				case None =>
@@ -176,12 +169,11 @@ def advanceState(state: State, perform: PerformAction, playerIndex: Int, draw: O
 
 		case PerformAction.Discard(target) =>
 			state.deck(target).id().fold(state)(state.withDiscard(_, target))
-			.regainClue
-			.pipe(removeAndDraw(playerIndex, target))
+				.regainClue
+				.pipe(removeAndDraw(playerIndex, target))
 
 		case _ =>
 			state.copy(
 				clueTokens = state.clueTokens - 1,
 				endgameTurns = state.endgameTurns.map(_ - 1)
 			)
-	}
