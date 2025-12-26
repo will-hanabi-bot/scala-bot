@@ -444,11 +444,11 @@ def connect(ctx: ClueContext, id: Identity, looksDirect: Boolean, thinksStall: S
 		val newCtx = ctx.copy(game = hypo)
 
 		val conn = findConnecting(newCtx, nextId, connCtx, opts)
-			.orElse(findOwn.flatMap { i =>
+			.orElse(findOwn.flatMap: i =>
 				val known = findKnownConn(newCtx, ctx.action.giver, nextId, connCtx.ignore ++ connCtx.connected, findOwn = true)
 
 				// See if we need to correct based on future information
-				val actualKnown = known match {
+				val actualKnown = known match
 					case Some(c @ PlayableConn(reacting, order, id, linked, layered)) =>
 						if linked.forall(!game.future(_).contains(id)) then
 							Log.highlight(Console.CYAN, "playable conn is known to not match in the future, finding again")
@@ -457,12 +457,10 @@ def connect(ctx: ClueContext, id: Identity, looksDirect: Boolean, thinksStall: S
 						else
 							Some(List(c))
 					case k => k.map(List(_))
-				}
 
-				actualKnown.orElse {
+				actualKnown.orElse:
 					findSingleConn(newCtx, i, nextId, connCtx, opts.copy(findOwn = findOwn))
-				}
-			})
+			)
 
 		conn match
 			case None =>
@@ -470,10 +468,10 @@ def connect(ctx: ClueContext, id: Identity, looksDirect: Boolean, thinksStall: S
 				None
 			case Some(conns) =>
 				// Log.info(s"found conns ${state.logConns(conns)} $findOwn")
-				val newGame = conns.foldLeft(hypo) { (acc, conn) =>
+				val newGame = conns.foldLeft(hypo): (acc, conn) =>
 					acc.state.deck(conn.order).id()
 						.orElse(Option.when(conn.ids.length == 1)(conn.ids.head))
-						.fold(acc) { i =>
+						.fold(acc): i =>
 							val action = PlayAction(state.holderOf(conn.order), conn.order, i.suitIndex, i.rank)
 							val level = Logger.level
 
@@ -483,18 +481,17 @@ def connect(ctx: ClueContext, id: Identity, looksDirect: Boolean, thinksStall: S
 							val res = acc.onPlay(action)
 								.pipe(refreshWCs(acc, _, action))
 								.elim(goodTouch = true)
-							Logger.setLevel(level)
 
+							Logger.setLevel(level)
 							res
-						}
-				}
+
 				loop(newGame, nextRank + 1, connections ++ conns)
 
-	loop(game, state.playStacks(suitIndex) + 1, List()).flatMap { conns =>
-		val invalidInsert = conns.existsM { case f: FinesseConn =>
-			f.inserted &&
-			game.findFinesse(f.reacting, focus +: conns.map(_.order)).isEmpty
-		}
+	loop(game, state.playStacks(suitIndex) + 1, List()).flatMap: conns =>
+		val invalidInsert = conns.existsM:
+			case f: FinesseConn =>
+				f.inserted &&
+				game.findFinesse(f.reacting, focus +: conns.map(_.order)).isEmpty
 
 		if invalidInsert then
 			// Log.warn("illegal insert, no space for displaced connection!")
@@ -506,10 +503,8 @@ def connect(ctx: ClueContext, id: Identity, looksDirect: Boolean, thinksStall: S
 
 			Log.info(s"found connections: ${state.logConns(conns, id)}${if symmetric then " (symmetric)" else ""}${if conns.existsM { case f: FinesseConn => f.inserted } then " (inserted)" else ""}")
 			Some(FocusPossibility(id, conns, ClueInterp.Play, symmetric))
-	}
 	.orElse:
-		Option.when (game.level > Level.Bluffs && !assumeTruth && attemptedBluff) {
+		if !(game.level > Level.Bluffs && !assumeTruth && attemptedBluff) then None else
 			Log.highlight(Console.YELLOW, "bluff connection failed, retrying true finesse")
 
 			connect(ctx, id, looksDirect, thinksStall, assumeTruth = true, findOwn)
-		}.flatten

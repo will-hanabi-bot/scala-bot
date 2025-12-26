@@ -153,6 +153,16 @@ def takeTurn[G <: Game](rawAction: String, drawS: String = "")(game: G)(using op
 				case _ => g
 		.handleAction(TurnAction(state.turnCount, state.nextPlayerIndex(action.playerIndex)))
 
+def strToClue(state: State, s: String) =
+	if "12345".contains(s) then
+		BaseClue(ClueKind.Rank, s.toInt)
+	else
+		val colour = state.variant.suits.indexWhere(_.toLowerCase() == s.toLowerCase())
+		if colour == -1 then
+			throw new IllegalArgumentException(s"Colour $s not found in [${state.variant.suits.mkString(",")}]")
+
+		BaseClue(ClueKind.Colour, colour)
+
 def parseAction(state: State, action: String) =
 	val cluePattern = """(\w+) clues (\d|\w+) to (\w+)(?: \(slots? (\d(?:,\d)*)\))?""".r
 	val playPattern = """(\w+) plays (\w\d)(?: \(slot (\d)\))?""".r
@@ -171,16 +181,7 @@ def parseAction(state: State, action: String) =
 
 			val giver = parsePlayer(giverS)
 			val target = parsePlayer(targetS)
-
-			val clue =
-				if "12345".contains(valueS) then
-					BaseClue(ClueKind.Rank, valueS.toInt)
-				else
-					val colour = state.variant.suits.indexWhere(_.toLowerCase() == valueS.toLowerCase())
-					if colour == -1 then
-						throw new IllegalArgumentException(s"Colour $valueS not found in [${state.variant.suits.mkString(",")}]")
-
-					BaseClue(ClueKind.Colour, colour)
+			val clue = strToClue(state, valueS)
 
 			if target != state.ourPlayerIndex then
 				val list = state.clueTouched(state.hands(target), clue)
@@ -277,7 +278,14 @@ case class TestClue(
 	def toBase =
 		BaseClue(kind, value)
 
-def preClue[G <: Game](playerIndex: Player, slot: Int, clues: Seq[TestClue])(game: G)(using ops: GameOps[G]) =
+def preClue[G <: Game](playerIndex: Player, slot: Int, clues: Seq[String])(game: G)(using ops: GameOps[G]) =
+	val testClues = clues.map: clue =>
+		val base = strToClue(game.state, clue)
+		TestClue(base.kind, base.value, if playerIndex == Player.Alice then Player.Bob else Player.Alice)
+
+	_preClue(playerIndex, slot, testClues)(game)
+
+def _preClue[G <: Game](playerIndex: Player, slot: Int, clues: Seq[TestClue])(game: G)(using ops: GameOps[G]) =
 	val state = game.state
 	val order = state.hands(playerIndex.ordinal)(slot - 1)
 
@@ -286,9 +294,9 @@ def preClue[G <: Game](playerIndex: Player, slot: Int, clues: Seq[TestClue])(gam
 			throw new IllegalArgumentException(
 				s"Clue ${nonTouchingClue.toBase.fmt(state, playerIndex.ordinal)} doesn't touch order $order!")
 
-	val possibilities = IdentitySet.from(state.variant.allIds.filter { i =>
-		clues.forall(c => state.variant.idTouched(i, c.toBase))
-	})
+	val possibilities = IdentitySet.from:
+		state.variant.allIds.filter: i =>
+			clues.forall(c => state.variant.idTouched(i, c.toBase))
 
 	ops.copyWith(game, GameUpdates(
 		common = Some(game.common.withThought(order):
@@ -316,7 +324,7 @@ def fullyKnown[G <: Game](playerIndex: Player, slot: Int, short: String)(game: G
 
 	val giver = if playerIndex == Player.Alice then Player.Bob else Player.Alice
 
-	preClue(playerIndex, slot, Vector(
+	_preClue(playerIndex, slot, Vector(
 		TestClue(ClueKind.Rank, id.rank, giver),
 		TestClue(ClueKind.Colour, id.suitIndex, giver)
 	))(game)

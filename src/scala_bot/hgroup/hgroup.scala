@@ -325,7 +325,7 @@ case class HGroup(
 				future = future.padTo(state.deck.length, state.allIds)
 					.updated(order, IdentitySet.single(Identity(suitIndex, rank)))
 			)
-			.replay(state.deck(order).drawnIndex)
+			.replay
 			.toOption
 		}.flatten
 

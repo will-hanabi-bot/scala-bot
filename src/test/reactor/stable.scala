@@ -2,7 +2,7 @@ package tests.reactor.stable
 
 import scala_bot.reactor.Reactor
 import scala_bot.basics._
-import scala_bot.test.{Colour, hasInfs, Player, preClue, setup, takeTurn, TestClue}, Player._
+import scala_bot.test.{hasInfs, hasStatus, Player, preClue, setup, takeTurn}, Player._
 import scala.util.chaining.scalaUtilChainingOps
 import scala_bot.logger.{Logger, LogLevel}
 
@@ -17,7 +17,7 @@ class Stable extends munit.FunSuite:
 		))
 		.pipe(takeTurn("Alice clues green to Bob"))
 
-		assertEquals(game.meta(game.state.hands(Bob.ordinal)(0)).status, CardStatus.CalledToPlay)
+		hasStatus(game, Bob, 1, CardStatus.CalledToPlay)
 		hasInfs(game, None, Bob, 1, Vector("r1", "y1", "b1", "p1"))
 
 	test("it understands a gapped ref play"):
@@ -28,7 +28,7 @@ class Stable extends munit.FunSuite:
 		))
 		.pipe(takeTurn("Alice clues purple to Bob"))
 
-		assertEquals(game.meta(game.state.hands(Bob.ordinal)(1)).status, CardStatus.CalledToPlay)
+		hasStatus(game, Bob, 2, CardStatus.CalledToPlay)
 		hasInfs(game, None, Bob, 2, Vector("r1", "y1", "g1", "b1"))
 
 	test("it understands a chop ref play"):
@@ -49,7 +49,7 @@ class Stable extends munit.FunSuite:
 		))
 		.pipe(takeTurn("Alice clues 4 to Bob"))
 
-		assertEquals(game.meta(game.state.hands(Bob.ordinal)(1)).status, CardStatus.CalledToDiscard)
+		hasStatus(game, Bob, 2, CardStatus.CalledToDiscard)
 
 	test("it gives a ref discard"):
 		val game = setup(Reactor.apply, Vector(
@@ -72,7 +72,7 @@ class Stable extends munit.FunSuite:
 		)
 		.pipe(takeTurn("Cathy clues 1 to Alice (slots 2,3)"))
 
-		assertEquals(game.meta(game.state.hands(Alice.ordinal)(3)).status, CardStatus.None)
+		hasStatus(game, Alice, 4, CardStatus.None)
 		hasInfs(game, None, Alice, 2, Vector("g1"))
 
 		// Alice's slot 3 should be trash
@@ -97,8 +97,7 @@ class Stable extends munit.FunSuite:
 		),
 			playStacks = Some(Vector(3, 3, 3, 3, 2)),
 			starting = Cathy,
-			// Alice's slot 5 is clued with purple.
-			init = preClue(Alice, 5, Vector(TestClue(ClueKind.Colour, Colour.Purple.ordinal, Cathy)))
+			init = preClue(Alice, 5, Seq("purple"))
 		)
 		// Although Alice could play slot 2, she should play slot 5 first.
 		.pipe(takeTurn("Cathy clues 3 to Alice (slots 2,5)"))
@@ -129,12 +128,12 @@ class Stable extends munit.FunSuite:
 			Vector("r2", "y2", "g2", "b2", "b4"),
 			Vector("r4", "y4", "g4", "b4", "p4"),
 		),
-			init = preClue(Bob, 5, Vector(TestClue(ClueKind.Rank, 4, Alice)))
+			init = preClue(Bob, 5, Seq("4"))
 		)
 		.pipe(takeTurn("Alice clues 2 to Bob"))					// locked
 		.pipe(takeTurn("Bob clues purple to Alice (slot 5)"))	// ref play on slot 4
 		.pipe(takeTurn("Cathy clues green to Bob"))
 
 		// We should play slot 4 as g1, instead of trying to play slot 3 to sacrifice b4.
-		assertEquals(game.meta(game.state.hands(Player.Alice.ordinal)(2)).status, CardStatus.None)
+		hasStatus(game, Player.Alice, 3, CardStatus.None)
 		hasInfs(game, None, Alice, 4, Vector("g1"))

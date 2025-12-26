@@ -193,18 +193,19 @@ case class Player(
 		thinksPlayables(game, playerIndex).nonEmpty || thinksTrash(game, playerIndex).nonEmpty
 
 	def thinksLocked(game: Game, playerIndex: Int) =
-		!thinksLoaded(game, playerIndex) && game.state.hands(playerIndex).forall { order =>
+		!thinksLoaded(game, playerIndex) &&
+		game.state.hands(playerIndex).forall: order =>
 			game.state.deck(order).clued ||
 			game.isBlindPlaying(order) ||
 			game.meta(order).status == CardStatus.GentlemansDiscard ||
 			game.meta(order).cm
-		}
 
 	def obviousLoaded(game: Game, playerIndex: Int) =
 		obviousPlayables(game, playerIndex).nonEmpty || thinksTrash(game, playerIndex).nonEmpty
 
 	def obviousLocked(game: Game, playerIndex: Int) =
-		!obviousLoaded(game, playerIndex) && game.state.hands(playerIndex).forall: order =>
+		!obviousLoaded(game, playerIndex) &&
+		game.state.hands(playerIndex).forall: order =>
 			game.state.deck(order).clued ||
 			game.meta(order).status == CardStatus.CalledToPlay ||
 			game.meta(order).cm

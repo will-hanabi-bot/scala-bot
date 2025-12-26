@@ -2,7 +2,7 @@ package tests.reactor.variants
 
 import scala_bot.reactor.Reactor
 import scala_bot.basics._
-import scala_bot.test.{hasInfs, Player, setup, takeTurn}, Player._
+import scala_bot.test.{hasInfs, hasStatus, Player, setup, takeTurn}, Player._
 import scala_bot.logger.{Logger, LogLevel}
 import scala.util.chaining.scalaUtilChainingOps
 
@@ -42,6 +42,5 @@ class Variants extends munit.FunSuite:
 		.pipe(takeTurn("Cathy clues 1 to Alice (slots 2,4)"))
 
 		// Alice does not have a playable.
-		val playables = game.common.obviousPlayables(game, Alice.ordinal)
-		assert(playables.isEmpty)
-		assertEquals(game.meta(game.state.hands(Alice.ordinal)(0)).status, CardStatus.None)
+		assert(game.common.obviousPlayables(game, Alice.ordinal).isEmpty)
+		hasStatus(game, Alice, 1, CardStatus.None)

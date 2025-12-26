@@ -1,7 +1,7 @@
 package tests.hgroup.level2
 
 import scala_bot.basics._
-import scala_bot.test.{Colour, hasInfs, Player, preClue, setup, takeTurn, TestClue}, Player._
+import scala_bot.test.{hasInfs, hasStatus, Player, preClue, setup, takeTurn}, Player._
 import scala_bot.hgroup.HGroup
 import scala_bot.logger.{Logger, LogLevel}
 
@@ -18,9 +18,8 @@ class SelfFinesses extends munit.FunSuite:
 			starting = Bob
 		)
 		.pipe(takeTurn("Bob clues 2 to Alice (slot 1)"))
-		.tap { g =>
-			assertEquals(g.meta(g.state.hands(Alice.ordinal)(1)).status, CardStatus.Finessed)
-		}
+		.tap: g =>
+			hasStatus(g, Alice, 2, CardStatus.Finessed)
 		.pipe(takeTurn("Alice plays g1 (slot 2)"))
 
 		hasInfs(game, None, Alice, 2, Vector("g2"))
@@ -49,8 +48,7 @@ class SelfFinesses extends munit.FunSuite:
 		.pipe(takeTurn("Alice clues 1 to Bob"))
 		.pipe(takeTurn("Bob clues 2 to Cathy"))
 
-		// Cathy's slot 1 should be finessed.
-		assertEquals(game.meta(game.state.hands(Cathy.ordinal)(0)).status, CardStatus.Finessed)
+		hasStatus(game, Cathy, 1, CardStatus.Finessed)
 
 	test("interprets a self-finesse when other possibilities are impossible"):
 		val game = setup(HGroup.atLevel(2), Vector(
@@ -70,8 +68,7 @@ class SelfFinesses extends munit.FunSuite:
 		.pipe(takeTurn("Alice plays b1 (slot 1)"))					// b1, p1 now played
 		.pipe(takeTurn("Bob clues 2 to Alice (slot 3)"))			// neg purple, b2 is clued
 
-		// Alice's slot 1 should be finessed.
-		assertEquals(game.meta(game.state.hands(Alice.ordinal)(0)).status, CardStatus.Finessed)
+		hasStatus(game, Alice, 1, CardStatus.Finessed)
 		hasInfs(game, None, Alice, 3, Vector("r2", "y2", "g2"))
 
 	test("doesn't give a self-finesse that looks like a prompt"):
@@ -81,7 +78,7 @@ class SelfFinesses extends munit.FunSuite:
 			Vector("y2", "b2", "r5", "y3", "y4")
 		),
 			playStacks = Some(Vector(1, 1, 0, 0, 0)),
-			init = preClue(Cathy, 3, Vector(TestClue(ClueKind.Colour, Colour.Red.ordinal, Bob)))
+			init = preClue(Cathy, 3, Seq("red"))
 		)
 		.pipe(takeTurn("Alice clues 3 to Cathy"))
 
@@ -103,8 +100,8 @@ class SelfFinesses extends munit.FunSuite:
 		.pipe(takeTurn("Alice clues 3 to Bob"))
 
 		// g1 self-finesse, g2 finesse on Cathy
-		assertEquals(game.meta(game.state.hands(Bob.ordinal)(2)).status, CardStatus.Finessed)
-		assertEquals(game.meta(game.state.hands(Cathy.ordinal)(0)).status, CardStatus.Finessed)
+		hasStatus(game, Bob, 3, CardStatus.Finessed)
+		hasStatus(game, Cathy, 1, CardStatus.Finessed)
 
 	test("doesn't give a self-finesse that isn't the simplest interpretation"):
 		val game = setup(HGroup.atLevel(2), Vector(
@@ -134,13 +131,13 @@ class SelfFinesses extends munit.FunSuite:
 		.tap: g =>
 			// All of these are valid self-finesses.
 			hasInfs(g, None, Alice, 1, Vector("r1", "y2", "g2", "b2", "p1"))
-			assertEquals(g.meta(g.state.hands(Alice.ordinal)(0)).status, CardStatus.Finessed)
+			hasStatus(g, Alice, 1, CardStatus.Finessed)
 		.pipe(takeTurn("Donald clues green to Alice (slot 4)"))
 
 		// After knowing we have g2 in slot 4, the finesse should still be on.
 		hasInfs(game, None, Alice, 4, Vector("g2"))
 		hasInfs(game, None, Alice, 1, Vector("r1", "y2", "b2", "p1"))
-		assertEquals(game.meta(game.state.hands(Alice.ordinal)(0)).status, CardStatus.Finessed)
+		hasStatus(game, Alice, 1, CardStatus.Finessed)
 
 	// test("prefers the simplest connection even when needing to self-finesse") {
 	// 	val game = setup(HGroup.atLevel(2), Vector(
@@ -152,9 +149,8 @@ class SelfFinesses extends munit.FunSuite:
 	// 		starting = Cathy,
 	// 		playStacks = Some(Vector(0, 2, 1, 0, 1)),
 	// 		init =
-	// 			preClue[HGroup](Bob, 3, Vector(TestClue(ClueKind.Colour, Colour.Yellow.ordinal, Cathy))) andThen
-	// 			preClue(Donald, 4, Vector(TestClue(ClueKind.Rank, 2, Cathy))) andThen
-	// 			(_.copy(level = 2))
+	// 			preClue[HGroup](Bob, 3, Seq("yellow")) andThen
+	// 			preClue[HGroup](Donald, 4, Seq("2"))
 	// 	)
 	// 	.pipe(takeTurn("Cathy clues 4 to Alice (slot 1)"))
 	// }
@@ -175,7 +171,7 @@ class SelfFinesses extends munit.FunSuite:
 
 		// Donald, Bob and Alice can see b5, so we all know this is an r5 finesse.
 		// hasInfs(game, None, Bob, 2, Vector("r5"))
-		assertEquals(game.meta(game.state.hands(Bob.ordinal)(0)).status, CardStatus.Finessed)
+		hasStatus(game, Bob, 1, CardStatus.Finessed)
 
 	test("plays even if it could be an asymmetric finesse"):
 		val game = setup(HGroup.atLevel(2), Vector(
@@ -192,7 +188,7 @@ class SelfFinesses extends munit.FunSuite:
 		.pipe(takeTurn("Donald clues 5 to Bob"))
 
 		// We must play into this, since we can't assume we have b5.
-		assertEquals(game.meta(game.state.hands(Alice.ordinal)(0)).status, CardStatus.Finessed)
+		hasStatus(game, Alice, 1, CardStatus.Finessed)
 
 	test("prefers to self-finesse over assuming asymmetric information"):
 		val game = setup(HGroup.atLevel(2), Vector(
@@ -210,7 +206,7 @@ class SelfFinesses extends munit.FunSuite:
 
 		// Alice's slot 1 should be finessed as g3.
 		hasInfs(game, None, Alice, 1, Vector("y1", "g3", "b1"))
-		assertEquals(game.meta(game.state.hands(Alice.ordinal)(0)).status, CardStatus.Finessed)
+		hasStatus(game, Alice, 1, CardStatus.Finessed)
 
 	test("realizes a self-finesse after other possibilities are stomped"):
 		val game = setup(HGroup.atLevel(2), Vector(
@@ -222,15 +218,15 @@ class SelfFinesses extends munit.FunSuite:
 			starting = Donald,
 			playStacks = Some(Vector(1, 1, 0, 0, 0)),
 			init =
-				preClue[HGroup](Cathy, 3, Vector(TestClue(ClueKind.Rank, 1, Bob))) andThen
-				preClue[HGroup](Cathy, 4, Vector(TestClue(ClueKind.Rank, 1, Bob)))
+				preClue[HGroup](Cathy, 3, Seq("1")) andThen
+				preClue[HGroup](Cathy, 4, Seq("1"))
 		)
 		.pipe(takeTurn("Donald clues 4 to Alice (slot 3)"))
 		.pipe(takeTurn("Alice discards y3 (slot 4)"))
 		.pipe(takeTurn("Bob clues red to Donald"))				// finessing r2, proving !r
 
 		hasInfs(game, None, Alice, 4, Vector("y4", "g4", "p4"))
-		assertEquals(game.meta(game.state.hands(Alice.ordinal)(2)).status, CardStatus.Finessed)
+		hasStatus(game, Alice, 3, CardStatus.Finessed)
 
 	test("understands a very delayed finesse"):
 		val game = setup(HGroup.atLevel(2), Vector(
@@ -270,5 +266,5 @@ class SelfFinesses extends munit.FunSuite:
 		.pipe(takeTurn("Bob plays r1", "b3"))
 
 		// Bob needs to play r1 first to respect r3.
-		assertEquals(game.meta(game.state.hands(Bob.ordinal)(1)).status, CardStatus.Finessed)
+		hasStatus(game, Bob, 2, CardStatus.Finessed)
 		hasInfs(game, None, Bob, 5, Vector("r3", "y3", "g3"))

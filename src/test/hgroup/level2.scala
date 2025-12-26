@@ -1,7 +1,7 @@
 package tests.hgroup.level2
 
 import scala_bot.basics._
-import scala_bot.test.{Colour, hasInfs, Player, setup, takeTurn}, Player._
+import scala_bot.test.{Colour, hasInfs, hasStatus, Player, setup, takeTurn}, Player._
 import scala_bot.hgroup.HGroup
 import scala_bot.logger.{Logger, LogLevel}
 
@@ -22,7 +22,7 @@ class General extends munit.FunSuite:
 		.pipe(takeTurn("Cathy clues 4 to Alice (slots 2,3)"))	// r4, finessing Donald
 		.pipe(takeTurn("Donald clues red to Bob"))				// r5
 
-		assert(game.common.thoughts(game.state.hands(Alice.ordinal)(0)).inferred.length > 0)
+		assert(game.common.thoughts(game.state.hands(Alice.ordinal)(0)).inferred.nonEmpty)
 		assertEquals(game.common.hypoStacks(Colour.Red.ordinal), 5)
 
 	test("self-prompts if impossible to be direct"):
@@ -57,7 +57,7 @@ class General extends munit.FunSuite:
 
 		// Bob's r1 is definitely finessed.
 		assert(!game.xmeta(game.state.hands(Bob.ordinal)(0)).maybeFinessed)
-		assertEquals(game.meta(game.state.hands(Bob.ordinal)(0)).status, CardStatus.Finessed)
+		hasStatus(game, Bob, 1, CardStatus.Finessed)
 
 		// Alice knows that her card is exactly r2.
 		hasInfs(game, Some(Alice), Alice, 1, Vector("r2"))
@@ -106,7 +106,7 @@ class General extends munit.FunSuite:
 
 		// Alice should assume the simpler explanation that she doesn't have to play g2.
 		hasInfs(game, None, Alice, 4, Vector("y3"))
-		assertEquals(game.meta(game.state.hands(Alice.ordinal)(0)).status, CardStatus.None)
+		hasStatus(game, Alice, 1, CardStatus.None)
 
 	test("allows connecting through multiple possibilities"):
 		val game = setup(HGroup.atLevel(2), Vector(

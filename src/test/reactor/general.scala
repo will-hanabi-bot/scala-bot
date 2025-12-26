@@ -1,7 +1,7 @@
 package tests.reactor.general
 
 import scala_bot.basics._
-import scala_bot.test.{Colour, fullyKnown, hasInfs, Player, preClue, setup, takeTurn, TestClue}, Player._
+import scala_bot.test.{Colour, fullyKnown, hasInfs, hasStatus, Player, preClue, setup, takeTurn}, Player._
 import scala_bot.reactor.{evalAction, getResult, Reactor}
 import scala_bot.logger.{Logger,LogLevel}
 
@@ -54,13 +54,13 @@ class General extends munit.FunSuite:
 			Vector("g1", "g4", "g4", "b4", "b4"),
 		),
 			// Bob's slot 1 is clued with 1.
-			init = preClue(Bob, 1, Vector(TestClue(ClueKind.Rank, 1, Alice)))
+			init = preClue(Bob, 1, Seq("1"))
 		)
 		.pipe(takeTurn("Alice clues green to Cathy"))
 
 		// Cathy is called to play g1.
 		// hasInfs(game, None, Cathy, 1, Vector("g1"))
-		assertEquals(game.meta(game.state.hands(Cathy.ordinal)(0)).status, CardStatus.CalledToPlay)
+		hasStatus(game, Cathy, 1, CardStatus.CalledToPlay)
 
 		// takeTurn("Bob plays b1", "p4")
 
@@ -72,12 +72,12 @@ class General extends munit.FunSuite:
 		),
 			clueTokens = 7,
 			// Bob's slot 2 is clued with 1.
-			init = preClue(Bob, 2, Vector(TestClue(ClueKind.Rank, 1, Alice)))
+			init = preClue(Bob, 2, Seq("1"))
 		)
 		.pipe(takeTurn("Alice clues 4 to Bob"))
 		.tap: g =>
 			// Cathy is called to play g1.
-			assertEquals(g.meta(g.state.hands(Cathy.ordinal)(1)).status, CardStatus.CalledToPlay)
+			hasStatus(g, Cathy, 2, CardStatus.CalledToPlay)
 		.pipe(takeTurn("Bob plays b1", "y3"))
 
 		assert(game.common.obviousPlayables(game, Cathy.ordinal).contains(game.state.hands(Cathy.ordinal)(1)))
@@ -114,18 +114,16 @@ class General extends munit.FunSuite:
 			starting = Cathy,
 			// Bob's slots 2 and 3 are clued with red.
 			init =
-				preClue[Reactor](Bob, 2, Vector(TestClue(ClueKind.Colour, Colour.Red.ordinal, Alice))) andThen
-				preClue(Bob, 3, Vector(TestClue(ClueKind.Colour, Colour.Red.ordinal, Alice)))
+				preClue[Reactor](Bob, 2, Seq("red")) andThen
+				preClue(Bob, 3, Seq("red"))
 		)
 		// 4 + 2 = 1
 		.pipe(takeTurn("Cathy clues blue to Bob"))
 		.tap: g =>
-			// Alice is called to play slot 4.
-			assertEquals(g.meta(g.state.hands(Alice.ordinal)(3)).status, CardStatus.CalledToPlay)
+			hasStatus(g, Alice, 4, CardStatus.CalledToPlay)
 		.pipe(takeTurn("Alice plays r1 (slot 4)"))
 
-		// Bob is called to discard slot 2.
-		assertEquals(game.meta(game.state.hands(Bob.ordinal)(1)).status, CardStatus.CalledToDiscard)
+		hasStatus(game, Bob, 2, CardStatus.CalledToDiscard)
 
 	test("it understands a known delayed stable play"):
 		val game = setup(Reactor.apply, Vector(
@@ -135,15 +133,13 @@ class General extends munit.FunSuite:
 		),
 			starting = Cathy,
 			playStacks = Some(Vector(0, 0, 1, 0, 0)),
-			// Alice has a known r1 (slot 1) and a known g2 (slot 2).
 			init =
 				fullyKnown[Reactor](Alice, 1, "r1") andThen
 				fullyKnown[Reactor](Alice, 2, "g2")
 		)
 		.pipe(takeTurn("Cathy clues yellow to Bob"))
 
-		// Bob is called to play g3.
-		assertEquals(game.meta(game.state.hands(Bob.ordinal)(0)).status, CardStatus.CalledToPlay)
+		hasStatus(game, Bob, 1, CardStatus.CalledToPlay)
 
 		val action = game.takeAction
 
@@ -157,14 +153,11 @@ class General extends munit.FunSuite:
 			Vector("b1", "r1", "r4", "y4", "y4"),
 		),
 			starting = Cathy,
-			// Alice's slot 1 is clued with 1.
-			init =
-				preClue(Alice, 1, Vector(TestClue(ClueKind.Rank, 1, Bob)))
+			init = preClue(Alice, 1, Seq("1"))
 		)
 		.pipe(takeTurn("Cathy clues yellow to Bob"))
 
-		// Bob is called to play g2.
-		assertEquals(game.meta(game.state.hands(Bob.ordinal)(0)).status, CardStatus.CalledToPlay)
+		hasStatus(game, Bob, 1, CardStatus.CalledToPlay)
 
 		val action = game.takeAction
 
@@ -179,10 +172,9 @@ class General extends munit.FunSuite:
 			Vector("y1", "p3", "g5", "p5", "r5"),
 		),
 			playStacks = Some(Vector(1, 1, 1, 1, 1)),
-			// Bob's slots 4 and 5 are clued with 2.
 			init =
-				preClue[Reactor](Bob, 4, Vector(TestClue(ClueKind.Rank, 2, Alice))) andThen
-				preClue[Reactor](Bob, 5, Vector(TestClue(ClueKind.Rank, 2, Alice)))
+				preClue[Reactor](Bob, 4, Seq("2")) andThen
+				preClue[Reactor](Bob, 5, Seq("2"))
 		)
 
 		val clue = ClueAction(
@@ -204,14 +196,13 @@ class General extends munit.FunSuite:
 			Vector("r3", "p4", "g5", "y4", "r4"),
 		),
 			playStacks = Some(Vector(1, 0, 0, 0, 0)),
-			// Cathy's g5 is clued with green.
-			init = preClue(Cathy, 3, Vector(TestClue(ClueKind.Colour, Colour.Green.ordinal, Alice))),
+			init = preClue(Cathy, 3, Seq("green")),
 			clueTokens = 8
 		)
 		// Trying to get a finesse, but Bob doesn't see another clue for Alice to give.
 		.pipe(takeTurn("Alice clues 5 to Cathy"))
 
-		assertEquals(game.meta(game.state.hands(Bob.ordinal)(1)).status, CardStatus.None)
+		hasStatus(game, Bob, 2, CardStatus.None)
 
 	test("it discards zcs"):
 		val game = setup(Reactor.apply, Vector(
@@ -247,7 +238,7 @@ class General extends munit.FunSuite:
 		)
 		.pipe(takeTurn("Bob discards y1", "y4"))
 
-		assertEquals(game.meta(game.state.hands(Alice.ordinal)(4)).status, CardStatus.GentlemansDiscard)
+		hasStatus(game, Alice, 5, CardStatus.GentlemansDiscard)
 		hasInfs(game, None, Alice, 5, Vector("y1"))
 		assert(game.common.obviousPlayables(game, Alice.ordinal).contains(0))
 
@@ -265,7 +256,7 @@ class General extends munit.FunSuite:
 		.pipe(takeTurn("Cathy clues blue to Alice (slots 2,3,4)"))
 		.pipe(takeTurn("Alice plays r1 (slot 1)"))
 
-		assertEquals(game.meta(game.state.hands(Alice.ordinal)(4)).status, CardStatus.Sarcastic)
+		hasStatus(game, Alice, 5, CardStatus.Sarcastic)
 		hasInfs(game, None, Alice, 5, Vector("r2"))
 		assert(game.common.obviousPlayables(game, Alice.ordinal).contains(0))
 
@@ -277,8 +268,8 @@ class General extends munit.FunSuite:
 		),
 			init =
 				fullyKnown[Reactor](Alice, 5, "g1") andThen
-				preClue(Bob, 3, Vector(TestClue(ClueKind.Colour, Colour.Green.ordinal, Alice))) andThen
-				preClue(Bob, 4, Vector(TestClue(ClueKind.Colour, Colour.Green.ordinal, Alice))),
+				preClue(Bob, 3, Vector("green")) andThen
+				preClue(Bob, 4, Vector("green")),
 			clueTokens = 6
 		)
 

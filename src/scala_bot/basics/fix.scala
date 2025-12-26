@@ -10,12 +10,11 @@ def checkFix(prev: Game, game: Game, action: ClueAction): FixResult =
 	val prevPlayables = prev.common.thinksPlayables(prev, action.target)
 
 	val (cluedResets, duplicateReveals) = list.foldRight((List[Int](), List[Int]())) { case (order, (cluedResets, duplicateReveals)) =>
-		lazy val duplicated = prev.state.deck(order).clued && list.exists { o =>
+		lazy val duplicated = prev.state.deck(order).clued && list.exists: o =>
 			o != order &&
 			prev.state.deck(o).clued &&
 			game.state.deck(order).matches(game.state.deck(o)) &&
 			!prev.common.thoughts(order).matches(prev.common.thoughts(o), infer = true)
-		}
 
 		if prev.state.deck(order).clued && !prev.common.thoughts(order).reset && !prev.common.orderKt(prev, order) && game.common.thoughts(order).reset then
 			(order +: cluedResets, duplicateReveals)

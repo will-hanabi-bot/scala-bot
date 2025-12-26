@@ -100,7 +100,7 @@ def triviallyWinnable(game: Game, playerTurn: Int): WinnableResult =
 		case _ => UNWINNABLE
 
 /** Generates a map of game arrangements for the possible actions.*/
-def genArrs(game: Game, remaining: RemainingMap, clueOnly: Boolean, _depth: Int = 0): (List[GameArr], List[GameArr]) =
+def genArrs(game: Game, remaining: RemainingMap, clueOnly: Boolean): (List[GameArr], List[GameArr]) =
 	val state = game.state
 	val undrawn = GameArr(Frac.one, remaining, None)
 

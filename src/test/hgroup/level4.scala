@@ -1,7 +1,7 @@
 package tests.hgroup.level4
 
 import scala_bot.basics._
-import scala_bot.test.{hasInfs, Player, setup, takeTurn}, Player._
+import scala_bot.test.{hasInfs, hasStatus, Player, setup, takeTurn}, Player._
 import scala_bot.hgroup.HGroup
 import scala_bot.logger.{Logger, LogLevel}
 
@@ -20,7 +20,7 @@ class TrashCM extends munit.FunSuite:
 		.pipe(takeTurn("Alice clues 1 to Bob"))
 
 		assertEquals(game.lastMove, Some(ClueInterp.Discard))
-		assertEquals(game.meta(game.state.hands(Bob.ordinal)(4)).status, CardStatus.ChopMoved)
+		hasStatus(game, Bob, 5, CardStatus.ChopMoved)
 
 	test("doesn't tcm if chop is trash"):
 		val game = setup(HGroup.atLevel(4), Vector(
@@ -79,7 +79,7 @@ class TrashCM extends munit.FunSuite:
 		.pipe(takeTurn("Alice plays r4 (slot 2)"))
 		.pipe(takeTurn("Bob clues red to Cathy"))
 
-		assertEquals(game.meta(game.state.hands(Cathy.ordinal)(4)).status, CardStatus.ChopMoved)
+		hasStatus(game, Cathy, 5, CardStatus.ChopMoved)
 
 	test("recognizes a delayed tcm on self"):
 		val game = setup(HGroup.atLevel(4), Vector(
@@ -93,7 +93,7 @@ class TrashCM extends munit.FunSuite:
 		.pipe(takeTurn("Bob plays r4", "g1"))
 		.pipe(takeTurn("Cathy clues red to Alice (slot 4)"))
 
-		assertEquals(game.meta(game.state.hands(Alice.ordinal)(4)).status, CardStatus.ChopMoved)
+		hasStatus(game, Alice, 5, CardStatus.ChopMoved)
 		assert(game.meta(game.state.hands(Alice.ordinal)(3)).trash)
 		assertEquals(game.common.thinksPlayables(game, Alice.ordinal).length, 0)
 
@@ -111,8 +111,7 @@ class CM5 extends munit.FunSuite:
 		)
 		.pipe(takeTurn("Bob clues 5 to Alice (slots 3,5)"))
 
-		// Slot 4 should not be chop moved.
-		assertEquals(game.meta(game.state.hands(Alice.ordinal)(3)).status, CardStatus.None)
+		hasStatus(game, Alice, 4, CardStatus.None)
 
 class OrderCM extends munit.FunSuite:
 	override def beforeAll() = Logger.setLevel(LogLevel.Off)
@@ -129,7 +128,7 @@ class OrderCM extends munit.FunSuite:
 		.pipe(takeTurn("Alice plays b1 (slot 3)"))
 
 		assertEquals(game.lastMove, Some(PlayInterp.Mistake))
-		assertEquals(game.meta(game.state.hands(Bob.ordinal)(4)).status, CardStatus.ChopMoved)
+		hasStatus(game, Bob, 5, CardStatus.ChopMoved)
 
 	test("interprets an ocm skipping a player"):
 		val game = setup(HGroup.atLevel(4), Vector(
@@ -143,8 +142,7 @@ class OrderCM extends munit.FunSuite:
 		.pipe(takeTurn("Alice clues 1 to Bob"))
 		.pipe(takeTurn("Bob plays b1", "r1"))
 
-		// Alice's slot 4 should be chop moved.
-		assertEquals(game.meta(game.state.hands(Alice.ordinal)(3)).status, CardStatus.ChopMoved)
+		hasStatus(game, Alice, 4, CardStatus.ChopMoved)
 
 	test("interprets an ocm that bombs"):
 		val game = setup(HGroup.atLevel(4), Vector(
@@ -157,8 +155,7 @@ class OrderCM extends munit.FunSuite:
 		.pipe(takeTurn("Alice clues 1 to Bob"))
 		.pipe(takeTurn("Bob bombs g1", "r1"))
 
-		// Cathy's slot 5 should be chop moved.
-		assertEquals(game.meta(game.state.hands(Cathy.ordinal)(4)).status, CardStatus.ChopMoved)
+		hasStatus(game, Cathy, 5, CardStatus.ChopMoved)
 
 	test("interprets new focus correctly"):
 		val game = setup(HGroup.atLevel(4), Vector(

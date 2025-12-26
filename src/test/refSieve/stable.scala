@@ -2,7 +2,7 @@ package tests.refSieve.stable
 
 import scala_bot.refSieve.RefSieve
 import scala_bot.basics._
-import scala_bot.test.{Colour, hasInfs, Player, preClue, setup, takeTurn, TestClue}, Player._
+import scala_bot.test.{hasInfs, hasStatus, Player, preClue, setup, takeTurn}, Player._
 import scala_bot.logger.{Logger, LogLevel}
 
 import scala.util.chaining.scalaUtilChainingOps
@@ -18,7 +18,7 @@ class Stable extends munit.FunSuite:
 		))
 		.pipe(takeTurn("Alice clues green to Bob"))
 
-		assertEquals(game.meta(game.state.hands(Bob.ordinal)(0)).status, CardStatus.CalledToPlay)
+		hasStatus(game, Bob, 1, CardStatus.CalledToPlay)
 		hasInfs(game, None, Bob, 1, Vector("r1", "y1", "b1", "p1"))
 
 	test("it understands a gapped ref play"):
@@ -29,7 +29,7 @@ class Stable extends munit.FunSuite:
 		))
 		.pipe(takeTurn("Alice clues purple to Bob"))
 
-		assertEquals(game.meta(game.state.hands(Bob.ordinal)(1)).status, CardStatus.CalledToPlay)
+		hasStatus(game, Bob, 2, CardStatus.CalledToPlay)
 		hasInfs(game, None, Bob, 2, Vector("r1", "y1", "g1", "b1"))
 
 	test("it understands a chop ref play"):
@@ -65,7 +65,7 @@ class Stable extends munit.FunSuite:
 		)
 		.pipe(takeTurn("Bob clues red to Alice (slot 2)"))
 
-		assertEquals(game.meta(game.state.hands(Alice.ordinal)(0)).status, CardStatus.CalledToPlay)
+		hasStatus(game, Alice, 1, CardStatus.CalledToPlay)
 
 	test("it understands a ref discard"):
 		val game = setup(RefSieve.apply, Vector(
@@ -75,7 +75,7 @@ class Stable extends munit.FunSuite:
 		))
 		.pipe(takeTurn("Alice clues 4 to Bob"))
 
-		assertEquals(game.meta(game.state.hands(Bob.ordinal)(1)).status, CardStatus.CalledToDiscard)
+		hasStatus(game, Bob, 2, CardStatus.CalledToDiscard)
 
 	test("it gives a ref discard"):
 		val game = setup(RefSieve.apply, Vector(
@@ -107,8 +107,7 @@ class Stable extends munit.FunSuite:
 		),
 			playStacks = Some(Vector(3, 3, 3, 3, 2)),
 			starting = Cathy,
-			// Alice's slot 5 is clued with purple.
-			init = preClue(Alice, 5, Vector(TestClue(ClueKind.Colour, Colour.Purple.ordinal, Cathy)))
+			init = preClue(Alice, 5, Vector("purple"))
 		)
 		// Although Alice could play slot 2, she should play slot 5 first.
 		.pipe(takeTurn("Cathy clues 3 to Alice (slots 2,5)"))

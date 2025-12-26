@@ -2,7 +2,7 @@ package tests.refSieve.safeActions
 
 import scala_bot.refSieve.RefSieve
 import scala_bot.basics._
-import scala_bot.test.{fullyKnown, hasInfs, Player, setup, takeTurn}, Player._
+import scala_bot.test.{fullyKnown, hasInfs, hasStatus, Player, setup, takeTurn}, Player._
 import scala_bot.logger.{Logger, LogLevel}
 
 import scala.util.chaining.scalaUtilChainingOps
@@ -27,7 +27,7 @@ class SafeActions extends munit.FunSuite:
 		)
 		.pipe(takeTurn("Bob clues 1 to Alice (slots 2,3)"))
 
-		assertEquals(game.meta(game.state.hands(Alice.ordinal)(3)).status, CardStatus.None)
+		hasStatus(game, Alice, 4, CardStatus.None)
 
 	test("eliminates direct ranks from focus"):
 		val game = setup(RefSieve.apply, Vector(
@@ -39,7 +39,7 @@ class SafeActions extends munit.FunSuite:
 		)
 		.pipe(takeTurn("Bob clues 1 to Alice (slots 2,3)"))
 
-		assertEquals(game.meta(game.state.hands(Alice.ordinal)(3)).status, CardStatus.None)
+		hasStatus(game, Alice, 4, CardStatus.None)
 		hasInfs(game, None, Alice, 2, Vector("g1"))
 
 		// Alice's slot 3 should be trash
@@ -59,9 +59,7 @@ class SafeActions extends munit.FunSuite:
 		// Bob reveals r2 as a safe action.
 		.pipe(takeTurn("Bob clues 2 to Alice (slots 1,3)"))
 
-		// Alice's slot 4 should not be called to discard.
-		val slot4 = game.meta(game.state.hands(Alice.ordinal)(3))
-		assertEquals(slot4.status, CardStatus.None)
+		hasStatus(game, Alice, 4, CardStatus.None)
 
 	test("doesn't give unloaded clues that connect through own hand"):
 		val game = setup(RefSieve.apply, Vector(
@@ -72,7 +70,7 @@ class SafeActions extends munit.FunSuite:
 		)
 
 		// Alice should not give purple.
-		assert(game.takeAction match {
+		assert(game.takeAction match
 			case PerformAction.Colour(1, 4) => false
 			case _ => true
-		})
+		)

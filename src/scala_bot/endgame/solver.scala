@@ -313,7 +313,7 @@ case class EndgameSolver[G <: Game](
 
 		Log.highlight(Console.GREEN, s"${indent(depth)}actions: ${performs.map((p, _) => p.fmtObj(game, playerTurn)).mkString(", ")}")
 
-		val arrs = genArrs(game, remaining, false, depth)
+		val arrs = genArrs(game, remaining, false)
 		val result = optimize(game, arrs, performs, playerTurn, deadline, depth)
 		simpleCache = simpleCache.updated(hash, result)
 		result

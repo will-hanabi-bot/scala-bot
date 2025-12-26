@@ -2,7 +2,7 @@ package tests.refSieve.prompts
 
 import scala_bot.refSieve.RefSieve
 import scala_bot.basics._
-import scala_bot.test.{Colour, hasInfs, Player, preClue, setup, takeTurn, TestClue}, Player._
+import scala_bot.test.{hasInfs, Player, preClue, setup, takeTurn}, Player._
 import scala_bot.logger.{Logger, LogLevel}
 
 import scala.util.chaining.scalaUtilChainingOps
@@ -35,8 +35,8 @@ class Prompts extends munit.FunSuite:
 		),
 			clueTokens = 7,
 			init =
-				preClue[RefSieve](Bob, 2, Vector(TestClue(ClueKind.Colour, Colour.Red.ordinal, Alice))) andThen
-				preClue(Cathy, 2, Vector(TestClue(ClueKind.Colour, Colour.Red.ordinal, Alice)))
+				preClue[RefSieve](Bob, 2, Seq("red")) andThen
+				preClue[RefSieve](Cathy, 2, Seq("red"))
 		)
 		.pipe(takeTurn("Alice clues 2 to Cathy"))	// getting r2
 
@@ -68,11 +68,9 @@ class Prompts extends munit.FunSuite:
 		),
 			clueTokens = 7,
 			init =
-				// Bob's slots 2 and 3 are clued with red.
-				preClue[RefSieve](Bob, 2, Seq(TestClue(ClueKind.Colour, Colour.Red.ordinal, Alice))) andThen
-				preClue(Bob, 3, Seq(TestClue(ClueKind.Colour, Colour.Red.ordinal, Alice))) andThen
-				// Cathy's slot 2 is clued with red.
-				preClue(Cathy, 2, Seq(TestClue(ClueKind.Colour, Colour.Red.ordinal, Alice)))
+				preClue[RefSieve](Bob, 2, Seq("red")) andThen
+				preClue[RefSieve](Bob, 3, Seq("red")) andThen
+				preClue[RefSieve](Cathy, 2, Seq("red"))
 		)
 		.pipe(takeTurn("Alice clues 3 to Cathy"))
 
@@ -87,9 +85,8 @@ class Prompts extends munit.FunSuite:
 			Vector("y4", "r3", "b4", "p4", "g4")
 		),
 			init =
-				// Bob's slots 2 and 3 are clued with red.
-				preClue[RefSieve](Bob, 2, Seq(TestClue(ClueKind.Colour, Colour.Red.ordinal, Alice))) andThen
-				preClue(Bob, 3, Seq(TestClue(ClueKind.Colour, Colour.Red.ordinal, Alice)))
+				preClue[RefSieve](Bob, 2, Seq("red")) andThen
+				preClue[RefSieve](Bob, 3, Seq("red"))
 		)
 		.pipe(takeTurn("Alice clues blue to Cathy"))
 
@@ -105,9 +102,8 @@ class Prompts extends munit.FunSuite:
 			starting = Player.Cathy,
 			clueTokens = 7,
 			init =
-				// Alice and Bob have a card clued with red in slot 2.
-				preClue[RefSieve](Alice, 2, Seq(TestClue(ClueKind.Colour, Colour.Red.ordinal, Cathy))) andThen
-				preClue(Bob, 2, Seq(TestClue(ClueKind.Colour, Colour.Red.ordinal, Cathy)))
+				preClue[RefSieve](Alice, 2, Seq("red")) andThen
+				preClue[RefSieve](Bob, 2, Seq("red"))
 		)
 		.pipe(takeTurn("Cathy clues 2 to Bob"))		// getting r2
 
@@ -125,9 +121,9 @@ class Prompts extends munit.FunSuite:
 			clueTokens = 7,
 			init =
 				// Alice, Bob, and Cathy all have cards clued with red in slot 1.
-				preClue[RefSieve](Alice, 1, Seq(TestClue(ClueKind.Colour, Colour.Red.ordinal, Donald))) andThen
-				preClue(Bob, 1, Seq(TestClue(ClueKind.Colour, Colour.Red.ordinal, Donald))) andThen
-				preClue(Cathy, 1, Seq(TestClue(ClueKind.Colour, Colour.Red.ordinal, Donald)))
+				preClue[RefSieve](Alice, 1, Seq("red")) andThen
+				preClue[RefSieve](Bob, 1, Seq("red")) andThen
+				preClue[RefSieve](Cathy, 1, Seq("red"))
 		)
 		.pipe(takeTurn("Donald clues 2 to Cathy"))		// prompting Bob's r2
 

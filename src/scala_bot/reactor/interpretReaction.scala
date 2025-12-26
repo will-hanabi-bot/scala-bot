@@ -147,7 +147,7 @@ def targetIDiscard(prev: Reactor, game: Reactor, wc: ReactorWC, targetSlot: Int)
 
 	(newCommon, newMeta)
 
-def targetIPlay(_prev: Reactor, game: Reactor, wc: ReactorWC, targetSlot: Int) =
+def targetIPlay(@annotation.unused _prev: Reactor, game: Reactor, wc: ReactorWC, targetSlot: Int) =
 	val state = game.state
 	val order = wc.receiverHand(targetSlot - 1)
 

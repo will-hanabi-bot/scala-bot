@@ -156,7 +156,7 @@ def advanceState(state: State, perform: PerformAction, playerIndex: Int, draw: O
 
 	perform match
 		case PerformAction.Play(target) =>
-			(state.deck(target).id() match {
+			(state.deck(target).id() match
 				case None =>
 					state.copy(strikes = state.strikes + 1)
 				case Some(id) =>
@@ -164,7 +164,7 @@ def advanceState(state: State, perform: PerformAction, playerIndex: Int, draw: O
 						state.withPlay(id)
 					else
 						state.copy(strikes = state.strikes + 1).withDiscard(id, target)
-			})
+			)
 			.pipe(removeAndDraw(playerIndex, target))
 
 		case PerformAction.Discard(target) =>

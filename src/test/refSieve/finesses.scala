@@ -2,7 +2,7 @@ package tests.refSieve.finesses
 
 import scala_bot.refSieve.RefSieve
 import scala_bot.basics._
-import scala_bot.test.{Colour, hasInfs, Player, preClue, setup, takeTurn, TestClue}, Player._
+import scala_bot.test.{hasInfs, hasStatus, Player, preClue, setup, takeTurn}, Player._
 import scala_bot.logger.{Logger, LogLevel}
 
 import scala.util.chaining.scalaUtilChainingOps
@@ -20,7 +20,7 @@ class Finesses extends munit.FunSuite:
 
 		// Bob's b1 should be finessed.
 		hasInfs(game, None, Bob, 1, Vector("b1"))
-		assertEquals(game.meta(game.state.hands(Bob.ordinal)(0)).status, CardStatus.Finessed)
+		hasStatus(game, Bob, 1, CardStatus.Finessed)
 
 	test("recognizes a finesse via fill-in"):
 		val game = setup(RefSieve.apply, Vector(
@@ -29,13 +29,13 @@ class Finesses extends munit.FunSuite:
 			Vector("b2", "r4", "y4", "p4", "g4")
 		),
 			clueTokens = 7,
-			init = preClue(Cathy, 1, Vector(TestClue(ClueKind.Colour, Colour.Blue.ordinal, Alice)))
+			init = preClue(Cathy, 1, Seq("blue"))
 		)
 		.pipe(takeTurn("Alice clues 2 to Cathy"))
 
 		// Bob's b1 should be finessed.
 		hasInfs(game, None, Bob, 1, Vector("b1"))
-		assertEquals(game.meta(game.state.hands(Bob.ordinal)(0)).status, CardStatus.Finessed)
+		hasStatus(game, Bob, 1, CardStatus.Finessed)
 
 	test("plays into an unknown finesse"):
 		val game = setup(RefSieve.apply, Vector(
@@ -49,7 +49,7 @@ class Finesses extends munit.FunSuite:
 
 		// We should be finessed in slot 1 for r1.
 		hasInfs(game, None, Alice, 1, Vector("r1"))
-		assertEquals(game.meta(game.state.hands(Alice.ordinal)(0)).status, CardStatus.Finessed)
+		hasStatus(game, Alice, 1, CardStatus.Finessed)
 
 	test("doesn't play into a satisfied finesse"):
 		val game = setup(RefSieve.apply, Vector(
@@ -62,8 +62,8 @@ class Finesses extends munit.FunSuite:
 		)
 		.pipe(takeTurn("Donald clues yellow to Cathy"))		// finessing Bob's r1
 
-		// We shouldn"t be finessed in slot 1 for r1.
-		assertEquals(game.meta(game.state.hands(Alice.ordinal)(0)).status, CardStatus.None)
+		// We shouldn't be finessed in slot 1 for r1.
+		hasStatus(game, Alice, 1, CardStatus.None)
 
 	test("writes the correct notes on potential finesses"):
 		val game = setup(RefSieve.apply, Vector(
@@ -74,10 +74,9 @@ class Finesses extends munit.FunSuite:
 			starting = Bob
 		)
 		.pipe(takeTurn("Bob clues green to Alice (slot 2)"))
-		.tap { g =>
+		.tap: g =>
 			// Alice's slot 1 could be any non-green 1, or r2.
 			hasInfs(g, None, Alice, 1, Vector("r1", "r2", "y1", "b1", "p1"))
-		}
 		.pipe(takeTurn("Cathy discards r1", "g5"))
 
 		// Alice's slot 1 can be any non-green 1.
@@ -90,15 +89,13 @@ class Finesses extends munit.FunSuite:
 			Vector("r2", "y4", "b4", "g4", "p4")
 		),
 			clueTokens = 7,
-			init =
-				// Cathy's slot 1 is clued with red.
-				preClue(Cathy, 1, Vector(TestClue(ClueKind.Colour, Colour.Red.ordinal, Alice)))
+			init = preClue(Cathy, 1, Seq("red"))
 		)
 		.pipe(takeTurn("Alice clues 2 to Cathy"))
 
 		// Bob's slot 1 should be finessed.
 		hasInfs(game, None, Bob, 1, Vector("r1"))
-		assertEquals(game.meta(game.state.hands(Bob.ordinal)(0)).status, CardStatus.Finessed)
+		hasStatus(game, Bob, 1, CardStatus.Finessed)
 
 	test("plays into a finesse via fill-in"):
 		val game = setup(RefSieve.apply, Vector(
@@ -108,15 +105,13 @@ class Finesses extends munit.FunSuite:
 		),
 			starting = Player.Cathy,
 			clueTokens = 7,
-			init =
-				// Bob's slot 1 is clued with red.
-				preClue(Bob, 1, Vector(TestClue(ClueKind.Colour, Colour.Red.ordinal, Alice)))
+			init = preClue(Bob, 1, Seq("red"))
 		)
 		.pipe(takeTurn("Cathy clues 2 to Bob"))
 
 		// Alice's slot 1 should be finessed.
 		hasInfs(game, None, Alice, 1, Vector("r1"))
-		assertEquals(game.meta(game.state.hands(Alice.ordinal)(0)).status, CardStatus.Finessed)
+		hasStatus(game, Alice, 1, CardStatus.Finessed)
 
 	test("understands a prompt + finesse"):
 		val game = setup(RefSieve.apply, Vector(
@@ -125,9 +120,7 @@ class Finesses extends munit.FunSuite:
 			Vector("r2", "y4", "g4", "r4"),
 			Vector("g5", "b4", "r3", "y3")
 		),
-			init =
-				// Bob's slot 1 is clued with red.
-				preClue(Bob, 1, Vector(TestClue(ClueKind.Colour, Colour.Red.ordinal, Alice)))
+			init = preClue(Bob, 1, Vector("red"))
 		)
 		.pipe(takeTurn("Alice clues yellow to Donald"))
 
@@ -136,7 +129,7 @@ class Finesses extends munit.FunSuite:
 
 		// Cathy's slot 1 should be finessed.
 		hasInfs(game, None, Cathy, 1, Vector("r2"))
-		assertEquals(game.meta(game.state.hands(Cathy.ordinal)(0)).status, CardStatus.Finessed)
+		hasStatus(game, Cathy, 1, CardStatus.Finessed)
 
 	test("understands a prompt + finesse"):
 		val game = setup(RefSieve.apply, Vector(
@@ -145,9 +138,7 @@ class Finesses extends munit.FunSuite:
 			Vector("r2", "y4", "g4", "r4"),
 			Vector("g5", "b4", "r3", "y3")
 		),
-			init =
-				// Bob's slot 1 is clued with red.
-				preClue(Bob, 1, Vector(TestClue(ClueKind.Colour, Colour.Red.ordinal, Alice)))
+			init = preClue(Bob, 1, Seq("red"))
 		)
 		.pipe(takeTurn("Alice clues yellow to Donald"))
 
@@ -156,7 +147,7 @@ class Finesses extends munit.FunSuite:
 
 		// Cathy's slot 1 should be finessed.
 		hasInfs(game, None, Cathy, 1, Vector("r2"))
-		assertEquals(game.meta(game.state.hands(Cathy.ordinal)(0)).status, CardStatus.Finessed)
+		hasStatus(game, Cathy, 1, CardStatus.Finessed)
 
 	test("doesn't give finesse that looks like prompt"):
 		val game = setup(RefSieve.apply, Vector(
@@ -165,9 +156,7 @@ class Finesses extends munit.FunSuite:
 			Vector("r1", "r3", "p4", "r4", "p5")
 		),
 			playStacks = Some(Vector(1, 0, 0, 0, 0)),
-			init =
-				// Bob has r5 clued with red.
-				preClue(Bob, 2, Vector(TestClue(ClueKind.Colour, Colour.Red.ordinal, Cathy)))
+			init = preClue(Bob, 2, Seq("red"))
 		)
 		.pipe(takeTurn("Alice clues purple to Cathy"))
 
@@ -180,15 +169,13 @@ class Finesses extends munit.FunSuite:
 			Vector("r1", "r2", "b4", "g4", "p4")
 		),
 			clueTokens = 7,
-			init =
-				// Bob's slot 2 is clued with red.
-				preClue(Bob, 2, Vector(TestClue(ClueKind.Colour, Colour.Red.ordinal, Alice)))
+			init = preClue(Bob, 2, Vector("red"))
 		)
 		.pipe(takeTurn("Alice clues 2 to Bob"))
 
 		// Bob's slot 1 should be finessed.
 		hasInfs(game, None, Bob, 1, Vector("r1"))
-		assertEquals(game.meta(game.state.hands(Bob.ordinal)(0)).status, CardStatus.Finessed)
+		hasStatus(game, Bob, 1, CardStatus.Finessed)
 
 	test("doesn't give self-finesses that look direct"):
 		val game = setup(RefSieve.apply, Vector(
@@ -220,8 +207,8 @@ class Finesses extends munit.FunSuite:
 			clueTokens = 7,
 			init =
 				// Bob has r5 and r3 clued with red.
-				preClue[RefSieve](Bob, 2, Vector(TestClue(ClueKind.Colour, Colour.Red.ordinal, Alice))) andThen
-				preClue(Bob, 4, Vector(TestClue(ClueKind.Colour, Colour.Red.ordinal, Alice)))
+				preClue[RefSieve](Bob, 2, Vector("red")) andThen
+				preClue[RefSieve](Bob, 4, Vector("red"))
 		)
 		.pipe(takeTurn("Alice clues 3 to Bob"))
 

@@ -30,7 +30,7 @@ case class Variant(
 ):
 	lazy val shortForms: Vector[Char] =
 		shorts.getOrElse:
-			suits.reverse.foldRight(Vector()): (suit, acc) =>
+			suits.foldLeft(Vector()): (acc, suit) =>
 				val short: Char = suit match
 					case "Black" => 'k'
 					case "Pink" => 'i'
@@ -44,14 +44,13 @@ case class Variant(
 							suit.toLowerCase.find(c => !acc.contains(c))
 								.getOrElse(throw new IllegalArgumentException(s"No unused character found for suit '$suit' in $suits!"))
 				short +: acc
-			.reverse
 
 	val colourableSuits = suits.filterNot(NO_COLOUR.matches)
 
 	def allIds =
 		for
 			suitIndex <- 0 until suits.length
-			rank <- 1 to 5
+			rank      <- 1 to 5
 		yield
 			Identity(suitIndex, rank)
 
@@ -109,16 +108,17 @@ case class Suit(name: String, abbreviation: Option[Char])
 
 object Variant:
 	private var variants: Map[String, Variant] = Map()
-	private var colours: Vector[Suit] = Vector()
+	private var colours: Seq[Suit] = Seq()
 
 	def init(): Unit =
 		val variantsJSON = read[ujson.Value](requests.get(VARIANTS_URL).text()).arr
 		val coloursJSON = read[ujson.Value](requests.get(COLOURS_URL).text()).arr
 
-		colours = coloursJSON.map { suitJson => Suit(
+		colours = coloursJSON.map(suitJson => Suit(
 			suitJson("name").str,
-			suitJson.objOpt.flatMap(_.get("abbreviation").strOpt.map(_.charAt(0).toLower)))
-		}.toVector
+			suitJson.objOpt.flatMap(_.get("abbreviation").strOpt.map(_.charAt(0).toLower))
+		)).toSeq
+
 		variants = variantsJSON.map(Variant.fromJSON).map(v => v.name -> v).toMap
 
 	def fromJSON(json: ujson.Value) =

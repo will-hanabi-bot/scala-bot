@@ -1,7 +1,7 @@
 package tests.hgroup.level5
 
 import scala_bot.basics._
-import scala_bot.test.{Colour, hasInfs, Player, preClue, setup, takeTurn, TestClue}, Player._
+import scala_bot.test.{hasInfs, hasStatus, Player, preClue, setup, takeTurn}, Player._
 import scala_bot.hgroup.HGroup
 import scala_bot.logger.{Logger, LogLevel}
 
@@ -111,14 +111,14 @@ class General extends munit.FunSuite:
 		)
 		.pipe(takeTurn("Bob clues 2 to Cathy"))
 		.tap: g =>
-			assertEquals(g.meta(g.state.hands(Cathy.ordinal)(1)).status, CardStatus.Finessed)
+			hasStatus(g, Cathy, 2, CardStatus.Finessed)
 		.pipe(takeTurn("Cathy discards b4", "r4"))
 
 		// Alice can deduce that she has a playable card on finesse position, but shouldn't play it.
-		assertEquals(game.meta(game.state.hands(Alice.ordinal)(0)).status, CardStatus.None)
+		hasStatus(game, Alice, 1, CardStatus.None)
 
 		// Cathy should still be finessed (slot 2 has moved to slot 3).
-		assertEquals(game.meta(game.state.hands(Cathy.ordinal)(2)).status, CardStatus.Finessed)
+		hasStatus(game, Cathy, 3, CardStatus.Finessed)
 
 	test("still finesses if cards in the finesse are clued, as long as they weren't the original finesse target"):
 		val game = setup(HGroup.atLevel(5), Vector(
@@ -139,7 +139,7 @@ class General extends munit.FunSuite:
 		.pipe(takeTurn("Donald plays b1", "b5"))
 
 		// Alice's b2 in slot 1 should still be finessed.
-		assertEquals(game.meta(game.state.hands(Alice.ordinal)(0)).status, CardStatus.Finessed)
+		hasStatus(game, Alice, 1, CardStatus.Finessed)
 		hasInfs(game, None, Alice, 1, Vector("b2"))
 
 		hasInfs(game, None, Donald, 2, Vector("b4"))
@@ -158,7 +158,7 @@ class General extends munit.FunSuite:
 		.pipe(takeTurn("Cathy clues yellow to Bob"))		// Focusing y3
 
 		// Alice's slot 1 should be [r2, b3, p1] (not g1 since both g3s visible).
-		assertEquals(game.meta(game.state.hands(Alice.ordinal)(0)).status, CardStatus.Finessed)
+		hasStatus(game, Alice, 1, CardStatus.Finessed)
 		hasInfs(game, None, Alice, 1, Vector("r2", "b3", "p1"))
 
 	test("doesn't confirm symmetric finesses after a stomped play"):
@@ -181,7 +181,7 @@ class General extends munit.FunSuite:
 		.pipe(takeTurn("Donald plays p1", "p1"))
 
 		// Alice's y2 should still be finessed
-		assertEquals(game.meta(game.state.hands(Alice.ordinal)(0)).status, CardStatus.Finessed)
+		hasStatus(game, Alice, 1, CardStatus.Finessed)
 		hasInfs(game, None, Alice, 1, Vector("y2"))
 
 	test("eliminates all finesse possibilities when a player doesn't play"):
@@ -228,7 +228,7 @@ class General extends munit.FunSuite:
 		.pipe(takeTurn("Cathy clues green to Bob"))		// g2
 
 		// Alice should not be finessed.
-		assertEquals(game.meta(game.state.hands(Alice.ordinal)(0)).status, CardStatus.None)
+		hasStatus(game, Alice, 1, CardStatus.None)
 
 	test("identifies maybe finessed cards"):
 		val game = setup(HGroup.atLevel(5), Vector(
@@ -275,11 +275,11 @@ class General extends munit.FunSuite:
 
 		.pipe(takeTurn("Bob clues 3 to Alice (slots 1,5)"))
 		.tap: g =>
-			assertEquals(g.meta(g.state.hands(Alice.ordinal)(0)).status, CardStatus.None)
+			hasStatus(g, Alice, 1, CardStatus.None)
 		.pipe(takeTurn("Cathy clues 5 to Bob"))
 
 		// After Cathy stalls, Alice's slot 2 should be finessed.
-		assertEquals(game.meta(game.state.hands(Alice.ordinal)(1)).status, CardStatus.Finessed)
+		hasStatus(game, Alice, 2, CardStatus.Finessed)
 
 	test("can give a finesse while finessed"):
 		val game = setup(HGroup.atLevel(5), Vector(
@@ -294,7 +294,7 @@ class General extends munit.FunSuite:
 		.pipe(takeTurn("Alice clues purple to Bob"))
 
 		// Alice's b1 should still be finessed.
-		assertEquals(game.meta(game.state.hands(Alice.ordinal)(0)).status, CardStatus.Finessed)
+		hasStatus(game, Alice, 1, CardStatus.Finessed)
 
 	test("understands a critical save while finessed, when other potential givers are finessed"):
 		val game = setup(HGroup.atLevel(5), Vector(
@@ -310,7 +310,7 @@ class General extends munit.FunSuite:
 		.pipe(takeTurn("Alice clues 5 to Cathy"))
 
 		// Alice's b1 should still be finessed.
-		assertEquals(game.meta(game.state.hands(Alice.ordinal)(0)).status, CardStatus.Finessed)
+		hasStatus(game, Alice, 1, CardStatus.Finessed)
 
 	// test("understands a critical save where other players only have a play if we play"):
 	// 	val game = setup(HGroup.atLevel(5), Vector(
@@ -326,7 +326,7 @@ class General extends munit.FunSuite:
 	// 	.pipe(takeTurn("Alice clues 5 to Cathy"))	// If we play, Bob will think p2 will play ito
 
 	// 	// Alice's b1 should still be finessed.
-	// 	assertEquals(game.meta(game.state.hands(Alice.ordinal)(0)).status, CardStatus.Finessed)
+	// 	hasStatus(game, Alice, 1, CardStatus.Finessed)
 
 	test("understands a finesse on top of an in-progress connection on other"):
 		val game = setup(HGroup.atLevel(5), Vector(
@@ -341,8 +341,7 @@ class General extends munit.FunSuite:
 		.pipe(takeTurn("Bob clues 5 to Donald"))
 		.pipe(takeTurn("Cathy clues 5 to Donald"))		// should finesse b4 (Alice)
 
-		// Alice's b1 should still be finessed.
-		assertEquals(game.meta(game.state.hands(Alice.ordinal)(0)).status, CardStatus.Finessed)
+		hasStatus(game, Alice, 1, CardStatus.Finessed)
 		hasInfs(game, None, Alice, 1, Vector("b4"))
 
 	test("understands a finesse on top of an in-progress connection on us"):
@@ -359,8 +358,7 @@ class General extends munit.FunSuite:
 		.pipe(takeTurn("Alice clues 5 to Cathy"))
 		.pipe(takeTurn("Bob clues 5 to Cathy"))					// should finesse b4 (Donald)
 
-		// Alice's b1 should still be finessed.
-		assertEquals(game.meta(game.state.hands(Donald.ordinal)(0)).status, CardStatus.Finessed)
+		hasStatus(game, Donald, 1, CardStatus.Finessed)
 		hasInfs(game, None, Donald, 2, Vector("b4"))
 
 	test("understands a layered player won't play if their promised card is unplayable"):
@@ -393,7 +391,7 @@ class Rainbow extends munit.FunSuite:
 		),
 			playStacks = Some(Vector(0, 0, 0, 2, 0)),
 			variant = "Rainbow (5 Suits)",
-			init = preClue(Bob, 2, Vector(TestClue(ClueKind.Colour, Colour.Blue.ordinal, Alice)))
+			init = preClue(Bob, 2, Seq("blue"))
 		)
 		.pipe(takeTurn("Alice clues 2 to Bob"))
 

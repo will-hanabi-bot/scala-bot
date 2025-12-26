@@ -1,7 +1,7 @@
 package tests.hgroup.level5
 
 import scala_bot.basics._
-import scala_bot.test.{hasInfs, Player, setup, takeTurn}, Player._
+import scala_bot.test.{hasInfs, hasStatus, Player, setup, takeTurn}, Player._
 import scala_bot.hgroup.HGroup
 
 import scala.util.chaining.scalaUtilChainingOps
@@ -20,7 +20,7 @@ class QueuedFinesses extends munit.FunSuite:
 		.pipe(takeTurn("Bob clues green to Cathy"))
 		.tap: g =>
 			hasInfs(g, None, Alice, 1, Vector("g1"))
-			assertEquals(g.meta(g.state.hands(Alice.ordinal)(0)).status, CardStatus.Finessed)
+			hasStatus(g, Alice, 1, CardStatus.Finessed)
 		.pipe(takeTurn("Cathy clues 2 to Bob"))
 		.tap: g =>
 			// Only Alice's slot 1 is playable.
@@ -29,7 +29,7 @@ class QueuedFinesses extends munit.FunSuite:
 
 		// Alice's slot 2 should be r1.
 		hasInfs(game, None, Alice, 2, Vector("r1"))
-		assertEquals(game.meta(game.state.hands(Alice.ordinal)(1)).status, CardStatus.Finessed)
+		hasStatus(game, Alice, 2, CardStatus.Finessed)
 
 	test("understands a delayed queued finesse"):
 		val game = setup(HGroup.atLevel(5), Vector(
@@ -129,8 +129,8 @@ class QueuedFinesses extends munit.FunSuite:
 		.pipe(takeTurn("Donald clues green to Cathy"))		// + g3 to Alice's finesses
 		.pipe(takeTurn("Alice plays g1 (slot 2)"))
 		.tap: g =>
-			assertEquals(g.meta(g.state.hands(Alice.ordinal)(2)).status, CardStatus.Finessed)
-			// assertEquals(g.meta(g.state.hands(Alice.ordinal)(3)).status, CardStatus.Finessed)
+			hasStatus(g, Alice, 3, CardStatus.Finessed)
+			// hasStatus(g, Alice, 4, CardStatus.Finessed)
 		.pipe(takeTurn("Bob clues red to Cathy"))
 		.pipe(takeTurn("Cathy plays r1", "g1"))
 		.pipe(takeTurn("Donald clues 5 to Bob"))

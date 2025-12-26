@@ -43,11 +43,11 @@ def interpretReactiveColour(prev: Reactor, game: Reactor, action: ClueAction, fo
 			state.deck(o).id().exists(hypoState.isPlayable)
 		.sortBy: (o, i) =>
 			// Unclued dupe, with a clued dupe
-			val uncluedDupe = !prev.state.deck(o).clued && state.hands(receiver).exists { o2 =>
+			val uncluedDupe = !prev.state.deck(o).clued && state.hands(receiver).exists: o2 =>
 					o2 < o &&
 					prev.state.deck(o2).clued &&
 					state.deck(o).matches(state.deck(o2))
-				}
+
 			if uncluedDupe then 99 else i
 
 	// Try targeting all play targets
@@ -156,13 +156,13 @@ def interpretReactiveRank(prev: Reactor, game: Reactor, action: ClueAction, focu
 			state.deck(o).id().exists(hypoState.isPlayable)
 		.sortBy: (o, i) =>
 			// Do not target an unclued copy when there is a clued copy
-			val uncluedDupe = !prev.state.deck{9}.clued &&
-				state.hands(receiver).exists{ o2 =>
+			val uncluedDupe = !prev.state.deck(9).clued &&
+				state.hands(receiver).exists: o2 =>
 					o2 != o && prev.state.deck(o2).clued && state.deck(o).matches(state.deck(o2))
-				}
+
 			if uncluedDupe then 99 else i
 
-	playTargets.view.flatMap { (target, index) =>
+	playTargets.view.flatMap: (target, index) =>
 		val targetSlot = index + 1
 		val reactSlot = calcSlot(focusSlot, targetSlot)
 		val receiveOrder = target
@@ -180,19 +180,18 @@ def interpretReactiveRank(prev: Reactor, game: Reactor, action: ClueAction, focu
 				None
 			case Some(reactOrder) =>
 				val (interp, newGame) = targetPlay(game, action, reactOrder, urgent = true, stable = false)
-				val nextGame = newGame.withThought(reactOrder) { t =>
+				val nextGame = newGame.withThought(reactOrder): t =>
 					t.copy(inferred = t.inferred.difference(state.deck(receiveOrder).id().get))
-				}
+
 				interp match
 					case None => Some(None, nextGame)
 					case Some(_) =>
 						Log.info(s"reactive play+play, reacter ${state.names(reacter)} (slot ${reactSlot}) receiver ${state.names(receiver)} (slot ${targetSlot}), focus slot ${focusSlot}")
 						Some((Some(ClueInterp.Reactive), nextGame))
-	}.headOption
-	.getOrElse {
-		val finesseTargets = state.hands(receiver).zipWithIndex.filter { (order, _) =>
+	.headOption
+	.getOrElse:
+		val finesseTargets = state.hands(receiver).zipWithIndex.filter: (order, _) =>
 			state.playableAway(state.deck(order).id().get) == 1
-		}
 
 		if finesseTargets.isEmpty then
 			Log.warn("reactive clue but receiver had no playable targets!")
@@ -203,7 +202,7 @@ def interpretReactiveRank(prev: Reactor, game: Reactor, action: ClueAction, focu
 				targetSlot = calcSlot(focusSlot, reactSlot)
 				reactOrder <- state.hands(reacter).lift(reactSlot - 1)
 				(receiveOrder, _) <- finesseTargets.find((_, i) => i + 1 == targetSlot)
-			yield {
+			yield
 				val prevPlays = prev.common.obviousPlayables(prev, reacter)
 
 				lazy val unplayable = !game.common.thoughts(reactOrder).possible.exists(i => state.isPlayable(i) || possibleConns.exists(_._2 == i)) ||
@@ -216,20 +215,17 @@ def interpretReactiveRank(prev: Reactor, game: Reactor, action: ClueAction, focu
 					Log.warn(s"reaction would involve playing unplayable ${state.logId(reactOrder)} $reactOrder!")
 					None
 				else
-					val newCommon = game.common.withThought(reactOrder) { t =>
+					val newCommon = game.common.withThought(reactOrder): t =>
 						t.copy(oldInferred = Some(t.inferred))
-					}
+
 					val (interp, newGame) = targetPlay(game.copy(common = newCommon), action, reactOrder, urgent = true, stable = false)
-					interp match {
+					interp match
 						case None => Some(None, newGame)
 						case Some(_) =>
-							val newGame2 = newGame.withThought(reactOrder) { t =>
+							val newGame2 = newGame.withThought(reactOrder): t =>
 								t.copy(inferred = IdentitySet.single(state.deck(receiveOrder).id().get.prev.get))
-							}
 
 							Log.info(s"reactive finesse, reacter ${state.names(reacter)} (slot ${reactSlot}) receiver ${state.names(receiver)} (slot ${targetSlot}), focus slot ${focusSlot}")
 							Some((Some(ClueInterp.Reactive), newGame2))
-					}
-			}).flatten.headOption
+			).flatten.headOption
 			.getOrElse((None, game))
-	}

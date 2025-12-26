@@ -122,7 +122,7 @@ def advance(orig: RefSieve, game: RefSieve, offset: Int): Double =
 				// Only consider playing the leftmost of similarly-possible cards
 				!allPlayables.exists(p => p > o && common.thoughts(p).possible == common.thoughts(o).possible)
 
-		val (knownPlays, unknownPlays) = playables.foldLeft((List.empty[Double], List.empty[Double])) { case ((known, unknown), order) =>
+		val (knownPlays, unknownPlays) = playables.partitionMap: order =>
 			val (id, action) = state.deck(order).id() match
 				case None => (None, PlayAction(playerIndex, order, -1, -1))
 				case Some(id) =>
@@ -135,11 +135,8 @@ def advance(orig: RefSieve, game: RefSieve, offset: Int): Double =
 			Log.info(s"${state.names(playerIndex)} ${if id.exists(state.isPlayable) then "playing" else "bombing"} ${state.logId(id)}")
 			val value = advance(orig, advanceGame(game, action), offset + 1)
 
-			if player.thoughts(order).id(infer = true).isDefined then
-				(value +: known, unknown)
-			else
-				(known, value +: unknown)
-		}
+			if player.thoughts(order).id(infer = true).isDefined then Left(value) else Right(value)
+
 		math.min(knownPlays.maxOption.getOrElse(99.9), unknownPlays.minOption.getOrElse(99.9))
 
 	else if player.thinksLocked(game, playerIndex) then

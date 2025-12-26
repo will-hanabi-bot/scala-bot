@@ -1,7 +1,7 @@
 package tests.hgroup.level5
 
 import scala_bot.basics._
-import scala_bot.test.{hasInfs, Player, setup, takeTurn}, Player._
+import scala_bot.test.{hasInfs, hasStatus, Player, setup, takeTurn}, Player._
 import scala_bot.hgroup.HGroup
 import scala_bot.logger.{Logger, LogLevel}
 
@@ -20,21 +20,19 @@ class ClandestineFinesses extends munit.FunSuite:
 			clueTokens = 7
 		)
 		.pipe(takeTurn("Bob clues 2 to Alice (slot 3)"))
-		.tap { g =>
+		.tap: g =>
 			hasInfs(g, None, Alice, 3, Vector("r2", "g2"))
-		}
 		.pipe(takeTurn("Cathy plays g1", "b1"))
-		.tap { g =>
+		.tap: g =>
 			// Alice's slot 3 should still be [r2,g2] to allow for a clandestine finesse.
 			hasInfs(g, None, Alice, 3, Vector("r2", "g2"))
-		}
 		.pipe(takeTurn("Alice discards b1 (slot 5)"))
 		.pipe(takeTurn("Bob discards b4", "g5"))
 		.pipe(takeTurn("Cathy plays r1", "r1"))
 
 		// Alice's slot 4 (used to be 3) should just be r2 now.
 		hasInfs(game, None, Alice, 4, Vector("r2"))
-		assertEquals(game.meta(game.state.hands(Alice.ordinal)(0)).status, CardStatus.None)
+		hasStatus(game, Alice, 1, CardStatus.None)
 
 	test("understands a fake clandestine finesse"):
 		val game = setup(HGroup.atLevel(5), Vector(
@@ -54,7 +52,7 @@ class ClandestineFinesses extends munit.FunSuite:
 
 		// Alice's slot 4 (used to be 3) should just be g2 now.
 		hasInfs(game, None, Alice, 4, Vector("g2"))
-		assertEquals(game.meta(game.state.hands(Alice.ordinal)(0)).status, CardStatus.None)
+		hasStatus(game, Alice, 1, CardStatus.None)
 
 	test("understands a symmetric clandestine finesse"):
 		val game = setup(HGroup.atLevel(5), Vector(
@@ -88,7 +86,7 @@ class ClandestineFinesses extends munit.FunSuite:
 		.pipe(takeTurn("Alice clues 2 to Bob"))
 
 		assertEquals(game.lastMove, Some(ClueInterp.Play))
-		assertEquals(game.meta(game.state.hands(Cathy.ordinal)(0)).status, CardStatus.Finessed)
+		hasStatus(game, Cathy, 1, CardStatus.Finessed)
 
 	test("plays into a finesse to prevent a clandestine self-finesse"):
 		val game = setup(HGroup.atLevel(5), Vector(
@@ -101,7 +99,7 @@ class ClandestineFinesses extends munit.FunSuite:
 		.pipe(takeTurn("Bob clues 2 to Cathy"))
 
 		// We must have g1 on finesse, otherwise Cathy will bomb g2 as r2.
-		assertEquals(game.meta(game.state.hands(Alice.ordinal)(0)).status, CardStatus.Finessed)
+		hasStatus(game, Alice, 1, CardStatus.Finessed)
 		hasInfs(game, None, Alice, 1, Vector("g1"))
 
 	test("recognizes fake clandestine finesses"):
@@ -115,15 +113,15 @@ class ClandestineFinesses extends munit.FunSuite:
 		.pipe(takeTurn("Bob clues 2 to Cathy"))		// reverse finesse
 		.tap: g =>
 			// Donald's y1 should be finessed, not our slot 1.
-			assertEquals(g.meta(g.state.hands(Donald.ordinal)(2)).status, CardStatus.Finessed)
+			hasStatus(g, Donald, 3, CardStatus.Finessed)
 			hasInfs(g, None, Donald, 3, Vector("y1"))
 
-			assertEquals(g.meta(g.state.hands(Alice.ordinal)(0)).status, CardStatus.None)
+			hasStatus(g, Alice, 1, CardStatus.None)
 		.pipe(takeTurn("Cathy clues purple to Bob"))
 		.pipe(takeTurn("Donald plays b1", "r5"))
 
 		// Donald's y1 should still be finessed.
-		assertEquals(game.meta(game.state.hands(Donald.ordinal)(2)).status, CardStatus.Finessed)
+		hasStatus(game, Donald, 3, CardStatus.Finessed)
 		hasInfs(game, None, Donald, 3, Vector("y1"))
 
-		assertEquals(game.meta(game.state.hands(Alice.ordinal)(0)).status, CardStatus.None)
+		hasStatus(game, Alice, 1, CardStatus.None)

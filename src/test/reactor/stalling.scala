@@ -2,7 +2,7 @@ package tests.reactor.stalling
 
 import scala_bot.reactor.Reactor
 import scala_bot.basics.CardStatus
-import scala_bot.test.{Player, setup, takeTurn}, Player._
+import scala_bot.test.{hasStatus, Player, setup, takeTurn}, Player._
 import scala_bot.logger.{Logger, LogLevel}
 import scala.util.chaining.scalaUtilChainingOps
 
@@ -18,7 +18,7 @@ class Stalling extends munit.FunSuite:
 		.pipe(takeTurn("Alice clues blue to Cathy"))
 
 		// Bob's slot 3 should be called to discard, as p4 is not playable.
-		assertEquals(game.meta(game.state.hands(Bob.ordinal)(2)).status, CardStatus.CalledToDiscard)
+		hasStatus(game, Bob, 3, CardStatus.CalledToDiscard)
 
 	test("it doesnt react to a cathy play"):
 		val game = setup(Reactor.apply, Vector(
@@ -29,7 +29,7 @@ class Stalling extends munit.FunSuite:
 		.pipe(takeTurn("Alice clues blue to Cathy"))
 
 		// Bob's slot 1 should not called to discard, as this is an allowable play clue on turn 1.
-		assertEquals(game.meta(game.state.hands(Bob.ordinal)(0)).status, CardStatus.None)
+		hasStatus(game, Bob, 1, CardStatus.None)
 
 	test("it reacts to cathy 1s"):
 		val game = setup(Reactor.apply, Vector(
@@ -40,7 +40,7 @@ class Stalling extends munit.FunSuite:
 		.pipe(takeTurn("Alice clues 1 to Cathy"))
 
 		// Bob's slot 5 is called to play, since colour can be given to Cathy.
-		assertEquals(game.meta(game.state.hands(Bob.ordinal)(4)).status, CardStatus.CalledToPlay)
+		hasStatus(game, Bob, 5, CardStatus.CalledToPlay)
 
 	test("it doesnt react to untargetable cathy 1s"):
 		val game = setup(Reactor.apply, Vector(
@@ -51,4 +51,4 @@ class Stalling extends munit.FunSuite:
 		.pipe(takeTurn("Alice clues 1 to Cathy"))
 
 		// Bob's slot 5 is not called to play, since colour can't given to Cathy.
-		assertEquals(game.meta(game.state.hands(Bob.ordinal)(4)).status, CardStatus.None)
+		hasStatus(game, Bob, 5, CardStatus.None)

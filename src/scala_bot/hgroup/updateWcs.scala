@@ -32,7 +32,7 @@ def checkRevealLayer(prev: HGroup, game: HGroup, action: ClueAction) =
 			future = game.future.padTo(state.deck.length, state.allIds)
 				.updated(o, game.common.thoughts(o).possible)
 		)
-		.replay(state.deck(o).drawnIndex)
+		.replay
 		.toOption
 
 def stompedWc(prev: HGroup, game: HGroup, action: Action, wc: WaitingConnection) =

@@ -1,7 +1,7 @@
 package tests.hgroup.level5
 
 import scala_bot.basics._
-import scala_bot.test.{hasInfs, Player, preClue, setup, takeTurn, TestClue}, Player._
+import scala_bot.test.{hasInfs, hasStatus, Player, preClue, setup, takeTurn}, Player._
 import scala_bot.hgroup.HGroup
 import scala_bot.logger.{Logger, LogLevel}
 
@@ -31,7 +31,7 @@ class LayeredFinesses extends munit.FunSuite:
 
 		// Alice's slot 4 (used to be 3) should just be y2 now.
 		hasInfs(game, None, Alice, 4, Vector("y2"))
-		assertEquals(game.meta(game.state.hands(Alice.ordinal)(0)).status, CardStatus.None)
+		hasStatus(game, Alice, 1, CardStatus.None)
 
 	test("understands a fake asymmetric layered finesse"):
 		val game = setup(HGroup.atLevel(5), Vector(
@@ -42,7 +42,7 @@ class LayeredFinesses extends munit.FunSuite:
 		),
 			starting = Donald,
 			playStacks = Some(Vector(0, 0, 0, 1, 0)),
-			init = preClue(Cathy, 4, Vector(TestClue(ClueKind.Rank, 1, Bob)))
+			init = preClue(Cathy, 4, Seq("1"))
 		)
 		.pipe(takeTurn("Donald clues 4 to Alice (slots 2,3)"))
 		.tap: g =>
@@ -54,7 +54,7 @@ class LayeredFinesses extends munit.FunSuite:
 
 		// We should have b3 in slot 1.
 		hasInfs(game, None, Alice, 1, Vector("b3"))
-		assertEquals(game.meta(game.state.hands(Alice.ordinal)(0)).status, CardStatus.Finessed)
+		hasStatus(game, Alice, 1, CardStatus.Finessed)
 
 	test("plays into a layered finesse"):
 		val game = setup(HGroup.atLevel(5), Vector(
@@ -67,12 +67,12 @@ class LayeredFinesses extends munit.FunSuite:
 		.pipe(takeTurn("Cathy clues yellow to Bob"))
 		.tap: g =>
 			hasInfs(g, None, Alice, 1, Vector("y1"))
-			assertEquals(g.meta(g.state.hands(Alice.ordinal)(0)).status, CardStatus.Finessed)
+			hasStatus(g, Alice, 1, CardStatus.Finessed)
 		.pipe(takeTurn("Alice plays g1 (slot 1)"))
 
 		// Alice's slot 2 should be [y1] now.
 		hasInfs(game, None, Alice, 2, Vector("y1"))
-		assertEquals(game.meta(game.state.hands(Alice.ordinal)(1)).status, CardStatus.Finessed)
+		hasStatus(game, Alice, 2, CardStatus.Finessed)
 
 	test("plays into a complex layered finesse"):
 		val game = setup(HGroup.atLevel(5), Vector(
@@ -90,7 +90,7 @@ class LayeredFinesses extends munit.FunSuite:
 
 		// Alice's slot 2 should be [g3] now.
 		hasInfs(game, None, Alice, 2, Vector("g3"))
-		assertEquals(game.meta(game.state.hands(Alice.ordinal)(1)).status, CardStatus.Finessed)
+		hasStatus(game, Alice, 2, CardStatus.Finessed)
 
 	test("understands when it dupes a card in its own layered finesse"):
 		val game = setup(HGroup.atLevel(5), Vector(
@@ -112,7 +112,7 @@ class LayeredFinesses extends munit.FunSuite:
 
 		// Slot 2 should still be finessed as r3.
 		hasInfs(game, None, Alice, 2, Vector("r3"))
-		assertEquals(game.meta(game.state.hands(Alice.ordinal)(1)).status, CardStatus.Finessed)
+		hasStatus(game, Alice, 2, CardStatus.Finessed)
 
 	test("doesn't give a layered finesse on the same id twice"):
 		val game = setup(HGroup.atLevel(5), Vector(
@@ -156,7 +156,7 @@ class LayeredFinesses extends munit.FunSuite:
 			hasInfs(g, None, Alice, 2, Vector("y1"))
 			// Slot 3 should be finessed as the missing r1.
 			hasInfs(g, None, Alice, 3, Vector("r1"))
-			assertEquals(g.meta(g.state.hands(Alice.ordinal)(2)).status, CardStatus.Finessed)
+			hasStatus(g, Alice, 3, CardStatus.Finessed)
 		.pipe(takeTurn("Alice plays r1 (slot 3)"))
 
 		// y1 inference should remain (now on slot 3).
@@ -179,7 +179,7 @@ class LayeredFinesses extends munit.FunSuite:
 
 		// Slot 2 should be finessed as [y1, g1, b2, p1].
 		hasInfs(game, None, Alice, 2, Vector("y1", "g1", "b2", "p1"))
-		assertEquals(game.meta(game.state.hands(Alice.ordinal)(1)).status, CardStatus.Finessed)
+		hasStatus(game, Alice, 2, CardStatus.Finessed)
 
 		// Slot 3 should be known as the missing r1.
 		hasInfs(game, None, Alice, 3, Vector("r1"))

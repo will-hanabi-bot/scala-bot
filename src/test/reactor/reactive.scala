@@ -2,7 +2,7 @@ package tests.reactor.reactive
 
 import scala_bot.reactor.Reactor
 import scala_bot.basics._
-import scala_bot.test.{Colour, hasInfs, Player, preClue, setup, takeTurn, TestClue}, Player._
+import scala_bot.test.{hasInfs, hasStatus, Player, preClue, setup, takeTurn}, Player._
 import scala_bot.logger.{Logger, LogLevel}
 import scala.util.chaining.scalaUtilChainingOps
 
@@ -16,14 +16,12 @@ class Reactive extends munit.FunSuite:
 			Vector("g1", "b5", "p2", "b1", "g4"),
 		))
 		.pipe(takeTurn("Alice clues 5 to Cathy"))
-
-		.tap { g =>
-			assertEquals(g.meta(g.state.hands(Bob.ordinal)(0)).status, CardStatus.CalledToPlay)
+		.tap: g =>
+			hasStatus(g, Bob, 1, CardStatus.CalledToPlay)
 			hasInfs(g, None, Bob, 1, Vector("r1", "y1", "b1", "p1"))
-		}
 		.pipe(takeTurn("Bob plays b1", "p1"))
 
-		assertEquals(game.meta(game.state.hands(Cathy.ordinal)(0)).status, CardStatus.CalledToPlay)
+		hasStatus(game, Cathy, 1, CardStatus.CalledToPlay)
 		hasInfs(game, None, Cathy, 1, Vector("r1", "y1", "g1", "b2", "p1"))
 
 	test("it reacts to a reactive play play"):
@@ -36,7 +34,7 @@ class Reactive extends munit.FunSuite:
 		)
 		.pipe(takeTurn("Cathy clues 2 to Bob"))
 
-		assertEquals(game.meta(game.state.hands(Alice.ordinal)(0)).status, CardStatus.CalledToPlay)
+		hasStatus(game, Alice, 1, CardStatus.CalledToPlay)
 		hasInfs(game, None, Alice, 1, Vector("r1", "y1", "g1", "p1"))
 
 		assertEquals(game.takeAction, PerformAction.Play(game.state.hands(Alice.ordinal)(0)))
@@ -52,8 +50,7 @@ class Reactive extends munit.FunSuite:
 		.pipe(takeTurn("Bob clues 4 to Alice (slot 3)"))
 		.pipe(takeTurn("Cathy plays g1", "y3"))
 
-		// Alice's slot 2 is called to play.
-		assertEquals(game.meta(game.state.hands(Alice.ordinal)(1)).status, CardStatus.CalledToPlay)
+		hasStatus(game, Alice, 2, CardStatus.CalledToPlay)
 		hasInfs(game, None, Alice, 2, Vector("r1", "y1", "g2", "b1", "p1"))
 
 	test("it reacts to a reverse reactive play play"):
@@ -71,9 +68,8 @@ class Reactive extends munit.FunSuite:
 		.pipe(takeTurn("Cathy plays g1", "y3"))
 		.pipe(takeTurn("Alice clues 1 to Bob"))			// Reverse reactive, getting Cathy's g2 and Bob's b2 (4 + 2 = 1)
 
-		.tap { g =>
-			assertEquals(g.meta(g.state.hands(Cathy.ordinal)(3)).status, CardStatus.CalledToPlay)
-		}
+		.tap: g =>
+			hasStatus(g, Cathy, 4, CardStatus.CalledToPlay)
 		.pipe(takeTurn("Bob plays b1", "y5"))
 
 		hasInfs(game, None, Cathy, 4, Vector("r1", "y1", "g2", "p1"))
@@ -85,20 +81,17 @@ class Reactive extends munit.FunSuite:
 			Vector("g3", "b5", "p2", "b1", "g4")
 		),
 			init =
-				// Bob's r2 is clued with red.
-				preClue[Reactor](Bob, 3, Vector(TestClue(ClueKind.Colour, Colour.Red.ordinal, Alice))) andThen
-				// Bob's y3 is clued with 3.
-				preClue(Bob, 4, Vector(TestClue(ClueKind.Rank, 3, Alice)))
+				preClue[Reactor](Bob, 3, Seq("red")) andThen
+				preClue(Bob, 4, Seq("3"))
 		)
 		.pipe(takeTurn("Alice clues 4 to Cathy"))
-		.tap { g =>
-			assertEquals(g.meta(g.state.hands(Bob.ordinal)(0)).status, CardStatus.CalledToPlay)
-		}
+		.tap: g =>
+			hasStatus(g, Bob, 1, CardStatus.CalledToPlay)
 		.pipe(takeTurn("Bob plays r1", "p1"))
 
 		val (common, state) = (game.common, game.state)
 
-		assertEquals(game.meta(state.hands(Cathy.ordinal)(3)).status, CardStatus.CalledToPlay)
+		hasStatus(game, Cathy, 4, CardStatus.CalledToPlay)
 
 		// Since Bob cannot play a known 3, Cathy can't write !playable on slot 1.
 		assert(Seq("r1", "y1", "g1", "b1", "p1").map(state.expandShort).forall(common.thoughts(state.hands(Cathy.ordinal)(0)).inferred.contains))
@@ -119,14 +112,13 @@ class Reactive extends munit.FunSuite:
 			clueTokens = 7
 		)
 		.pipe(takeTurn("Alice clues blue to Cathy"))
-		.tap { g =>
-			assertEquals(g.meta(g.state.hands(Bob.ordinal)(0)).status, CardStatus.CalledToDiscard)
+		.tap: g =>
+			hasStatus(g, Bob, 1, CardStatus.CalledToDiscard)
 			// hasInfs(game, None, Bob, 1, Vector("r1", "y1", "b1", "p1"))
 			assert(g.common.thinksTrash(g, Bob.ordinal).contains(g.state.hands(Bob.ordinal)(0)))
-		}
 		.pipe(takeTurn("Bob discards r3 (slot 1)", "p3"))
 
-		assertEquals(game.meta(game.state.hands(Cathy.ordinal)(0)).status, CardStatus.CalledToPlay)
+		hasStatus(game, Cathy, 1, CardStatus.CalledToPlay)
 		hasInfs(game, None, Cathy, 1, Vector("r1", "y1", "g1", "p1"))
 
 	test("it elims a reactive dc play"):
@@ -138,20 +130,17 @@ class Reactive extends munit.FunSuite:
 			playStacks = Some(Vector(1, 1, 1, 0, 0)),
 			clueTokens = 7,
 			init =
-				// Bob's r2 is clued with red.
-				preClue[Reactor](Bob, 3, Vector(TestClue(ClueKind.Colour, Colour.Red.ordinal, Alice))) andThen
-				// Bob's g5 is clued with 5.
-				preClue(Bob, 4, Vector(TestClue(ClueKind.Rank, 5, Alice)))
+				preClue[Reactor](Bob, 3, Seq("red")) andThen
+				preClue[Reactor](Bob, 4, Seq("5"))
 		)
 		.pipe(takeTurn("Alice clues green to Cathy"))
-		.tap { g =>
-			assertEquals(g.meta(g.state.hands(Bob.ordinal)(0)).status, CardStatus.CalledToDiscard)
-		}
+		.tap: g =>
+			hasStatus(g, Bob, 1, CardStatus.CalledToDiscard)
 		.pipe(takeTurn("Bob discards b1", "b4"))
 
 		val (common, state) = (game.common, game.state)
 
-		assertEquals(game.meta(game.state.hands(Cathy.ordinal)(3)).status, CardStatus.CalledToPlay)
+		hasStatus(game, Cathy, 4, CardStatus.CalledToPlay)
 
 		// Since Bob cannot discard a known 5, Cathy can't write !playable on slot 1.
 		assert(Seq("r1", "r2", "y1", "b1").map(state.expandShort).forall(common.thoughts(state.hands(Cathy.ordinal)(0)).inferred.contains))
@@ -170,14 +159,13 @@ class Reactive extends munit.FunSuite:
 			clueTokens = 7,
 			starting = Bob,
 			init =
-				// Alice's slots 2 and 3 are known red.
-				preClue[Reactor](Alice, 2, Vector(TestClue(ClueKind.Colour, Colour.Red.ordinal, Cathy))) andThen
-				preClue(Alice, 3, Vector(TestClue(ClueKind.Colour, Colour.Red.ordinal, Cathy)))
+				preClue[Reactor](Alice, 2, Seq("red")) andThen
+				preClue[Reactor](Alice, 3, Seq("red"))
 		)
 		.pipe(takeTurn("Bob clues green to Alice (slot 4)"))
 		.pipe(takeTurn("Cathy plays b1", "r4"))
 
-		assertEquals(game.meta(game.state.hands(Alice.ordinal)(2)).status, CardStatus.CalledToDiscard)
+		hasStatus(game, Alice, 3, CardStatus.CalledToDiscard)
 
 		// Alice's slot 1 can still be trash, since Cathy targeted clued trash.
 		assert(game.common.thoughts(game.state.hands(Alice.ordinal)(0)).inferred.exists(game.state.isBasicTrash))
@@ -196,7 +184,7 @@ class Reactive extends munit.FunSuite:
 		.pipe(takeTurn("Cathy clues 3 to Bob"))
 
 		// We should play slot 1 to target Bob's r2.
-		assertEquals(game.meta(game.state.hands(Alice.ordinal)(0)).status, CardStatus.CalledToPlay)
+		hasStatus(game, Alice, 1, CardStatus.CalledToPlay)
 		hasInfs(game, None, Alice, 1, Vector("r1"))
 
 		assertEquals(game.takeAction, PerformAction.Play(game.state.hands(Alice.ordinal)(0)))
@@ -210,14 +198,12 @@ class Reactive extends munit.FunSuite:
 			starting = Cathy,
 			playStacks = Some(Vector(2, 0, 1, 0, 0)),
 			clueTokens = 7,
-			init =
-				// Bob's r3 in slot 4 is clued.
-				preClue(Bob, 4, Vector(TestClue(ClueKind.Colour, Colour.Red.ordinal, Alice)))
+			init = preClue(Bob, 4, Seq("red"))
 		)
 		.pipe(takeTurn("Cathy clues green to Bob"))
 
 		// We should discard slot 5 (so that Bob plays slot 2).
-		assertEquals(game.meta(game.state.hands(Alice.ordinal)(4)).status, CardStatus.CalledToDiscard)
+		hasStatus(game, Alice, 5, CardStatus.CalledToDiscard)
 
 	test("it doesnt play target a discarding dupe"):
 		val game = setup(Reactor.apply, Vector(
@@ -230,14 +216,13 @@ class Reactive extends munit.FunSuite:
 		)
 		.pipe(takeTurn("Cathy clues red to Bob"))
 		.pipe(takeTurn("Alice plays r2 (slot 3)"))	// Targeting discard on r3
-		.tap { g =>
-			assertEquals(g.meta(g.state.hands(Bob.ordinal)(0)).status, CardStatus.CalledToDiscard)
-		}
+		.tap: g =>
+			hasStatus(g, Bob, 1, CardStatus.CalledToDiscard)
 		.pipe(takeTurn("Bob clues 1 to Cathy"))
 		.pipe(takeTurn("Cathy clues yellow to Bob"))
 
 		// We should discard slot 4 (so that Bob plays the non-discarding dupe in slot 4).
-		assertEquals(game.meta(game.state.hands(Alice.ordinal)(3)).status, CardStatus.CalledToDiscard)
+		hasStatus(game, Alice, 4, CardStatus.CalledToDiscard)
 
 	test("it doesnt dc target an unclued dupe"):
 		val game = setup(Reactor.apply, Vector(
@@ -247,14 +232,12 @@ class Reactive extends munit.FunSuite:
 		),
 			starting = Cathy,
 			playStacks = Some(Vector(0, 1, 0, 0, 0)),
-			init =
-				// Bob's r3 in slot 4 is clued.
-				preClue(Bob, 4, Vector(TestClue(ClueKind.Colour, Colour.Red.ordinal, Alice)))
+			init = preClue(Bob, 4, Seq("red"))
 		)
 		.pipe(takeTurn("Cathy clues green to Bob"))
 
 		// We should play slot 4 (so that Bob discards slot 1).
-		assertEquals(game.meta(game.state.hands(Alice.ordinal)(3)).status, CardStatus.CalledToPlay)
+		hasStatus(game, Alice, 4, CardStatus.CalledToPlay)
 
 	test("it reacts to a sacrifice"):
 		val game = setup(Reactor.apply, Vector(
@@ -268,7 +251,7 @@ class Reactive extends munit.FunSuite:
 		.pipe(takeTurn("Cathy clues green to Bob"))
 
 		// We should play slot 2 (Bob discards y3 in slot 3).
-		assertEquals(game.meta(game.state.hands(Alice.ordinal)(1)).status, CardStatus.CalledToPlay)
+		hasStatus(game, Alice, 2, CardStatus.CalledToPlay)
 
 	test("it shifts a reaction"):
 		val game = setup(Reactor.apply, Vector(
@@ -277,21 +260,18 @@ class Reactive extends munit.FunSuite:
 			Vector("g1", "b5", "p2", "b1", "g4"),
 		),
 			starting = Cathy,
-			init =
-				// Alice has a clued 5 in slot 3.
-				preClue(Alice, 3, Vector(TestClue(ClueKind.Rank, 5, Cathy)))
+			init = preClue(Alice, 3, Vector("5"))
 		)
 		.pipe(takeTurn("Cathy clues 3 to Bob"))
-		.tap { g =>
+		.tap: g =>
 			// Normally, Alice would play slot 3 -> Bob slot 1 = 4. However, slot 3 is a known 5.
-			assertEquals(g.meta(g.state.hands(Alice.ordinal)(2)).status, CardStatus.None)
+			hasStatus(g, Alice, 3, CardStatus.None)
 
 			// Instead, Alice should play slot 1 -> Bob slot 3 as a finesse.
-			assertEquals(g.meta(g.state.hands(Alice.ordinal)(0)).status, CardStatus.CalledToPlay)
+			hasStatus(g, Alice, 1, CardStatus.CalledToPlay)
 			hasInfs(g, None, Alice, 1, Vector("r1"))
 
 			assertEquals(g.takeAction, PerformAction.Play(g.state.hands(Alice.ordinal)(0)))
-		}
 		.pipe(takeTurn("Alice plays r1 (slot 1)"))
 
 		// Bob's slot 1 should still be allowed to be b1.
@@ -305,11 +285,9 @@ class Reactive extends munit.FunSuite:
 		),
 			clueTokens = 7,
 			starting = Cathy,
-			init =
-				// Bob's slot 1 is known 1.
-				preClue(Bob, 1, Vector(TestClue(ClueKind.Rank, 1, Alice)))
+			init = preClue(Bob, 1, Seq("1"))
 		)
 		.pipe(takeTurn("Cathy clues red to Bob"))
 
 		// Alice's slot 4 is called to discard (4 + 3 = 2)
-		assertEquals(game.meta(game.state.hands(Alice.ordinal)(3)).status, CardStatus.CalledToDiscard)
+		hasStatus(game, Alice, 4, CardStatus.CalledToDiscard)

@@ -1,7 +1,7 @@
 package tests.hgroup.level5
 
 import scala_bot.basics._
-import scala_bot.test.{fullyKnown, hasInfs, Player, preClue, setup, takeTurn, TestClue}, Player._
+import scala_bot.test.{fullyKnown, hasInfs, hasStatus, Player, preClue, setup, takeTurn}, Player._
 import scala_bot.hgroup.HGroup
 import scala_bot.logger.{Logger, LogLevel}
 
@@ -19,7 +19,7 @@ class HiddenFinesses extends munit.FunSuite:
 			starting = Bob,
 			playStacks = Some(Vector(1, 0, 1, 1, 0)),
 			clueTokens = 4,
-			init = preClue(Cathy, 5, Vector(TestClue(ClueKind.Rank, 2, Bob)))
+			init = preClue(Cathy, 5, Seq("2"))
 		)
 		.pipe(takeTurn("Bob clues 3 to Alice (slot 3)"))
 		.tap: g =>
@@ -36,7 +36,7 @@ class HiddenFinesses extends munit.FunSuite:
 
 		// Alice's slot 4 (used to be 3) should just be r3 now.
 		hasInfs(game, None, Alice, 4, Vector("r3"))
-		assertEquals(game.meta(game.state.hands(Alice.ordinal)(0)).status, CardStatus.None)
+		hasStatus(game, Alice, 1, CardStatus.None)
 
 	test("understands a complicated fake hidden finesse"):
 		val game = setup(HGroup.atLevel(5), Vector(
@@ -45,7 +45,7 @@ class HiddenFinesses extends munit.FunSuite:
 			Vector("g1", "y2", "g2", "b1", "g3")
 		),
 			playStacks = Some(Vector(1, 0, 0, 0, 0)),
-			init = preClue(Cathy, 4, Vector(TestClue(ClueKind.Rank, 1, Bob)))
+			init = preClue(Cathy, 4, Seq("1"))
 		)
 		.pipe(takeTurn("Alice clues purple to Bob"))
 		.pipe(takeTurn("Bob clues 2 to Alice (slot 1)"))
@@ -88,7 +88,7 @@ class HiddenFinesses extends munit.FunSuite:
 			Vector("y3", "g2", "b3", "p5", "p4")
 		),
 			starting = Cathy,
-			init = preClue[HGroup](Bob, 3, Vector(TestClue(ClueKind.Rank, 1, Alice))) andThen
+			init = preClue[HGroup](Bob, 3, Seq("1")) andThen
 				fullyKnown(Cathy, 2, "g2")
 		)
 		.pipe(takeTurn("Cathy clues green to Alice (slot 2)"))
@@ -104,7 +104,7 @@ class HiddenFinesses extends munit.FunSuite:
 		),
 			starting = Bob,
 			playStacks = Some(Vector(1, 0, 0, 0, 0)),
-			init = preClue(Alice, 3, Vector(TestClue(ClueKind.Rank, 1, Alice)))
+			init = preClue(Alice, 3, Seq("1"))
 		)
 		.pipe(takeTurn("Bob clues 3 to Cathy"))			// looks like y1 (playable) -> y2 finesse on Alice
 		.pipe(takeTurn("Cathy discards g4", "p4"))
@@ -112,8 +112,8 @@ class HiddenFinesses extends munit.FunSuite:
 		.tap: g =>
 			// We are promised y1, y2 and g1
 			// hasInfs(g, None, Alice, 3, Vector("y1", "g1"))
-			assertEquals(g.meta(g.state.hands(Alice.ordinal)(0)).status, CardStatus.Finessed)
-			// assertEquals(g.meta(g.state.hands(Alice.ordinal)(1)).status, CardStatus.Finessed)
+			hasStatus(g, Alice, 1, CardStatus.Finessed)
+			// hasStatus(g, Alice, 2, CardStatus.Finessed)
 
 			// Slot 2 is not playable.
 			assert(!g.common.thinksPlayables(g, Alice.ordinal).contains(g.state.hands(Alice.ordinal)(1)))
@@ -121,8 +121,8 @@ class HiddenFinesses extends munit.FunSuite:
 
 		// Alice's slot 2 (previously slot 1) should still be finessed.
 		// hasInfs(game, None, Alice, 2, Vector("g1", "g3"))
-		assertEquals(game.meta(game.state.hands(Alice.ordinal)(1)).status, CardStatus.Finessed)
-		// assertEquals(game.meta(game.state.hands(Alice.ordinal)(2)).status, CardStatus.Finessed)
+		hasStatus(game, Alice, 2, CardStatus.Finessed)
+		// hasStatus(game, Alice, 3, CardStatus.Finessed)
 
 	test("realizes a layered finesse"):
 		val game = setup(HGroup.atLevel(5), Vector(
@@ -133,7 +133,7 @@ class HiddenFinesses extends munit.FunSuite:
 		),
 			starting = Donald,
 			playStacks = Some(Vector(0, 2, 0, 0, 0)),
-			init = preClue(Alice, 3, Vector(TestClue(ClueKind.Rank, 1, Alice)))
+			init = preClue(Alice, 3, Seq("1"))
 		)
 		.pipe(takeTurn("Donald clues 1 to Alice (slot 4)"))
 		.pipe(takeTurn("Alice plays r1 (slot 4)"))
@@ -141,8 +141,8 @@ class HiddenFinesses extends munit.FunSuite:
 		.pipe(takeTurn("Cathy clues green to Bob"))		// we need to play g1, but slot 1 is [y3] and slot 2 is neg 1.
 		.tap: g =>
 			// hasInfs(g, None, Alice, 3, Vector("y1", "g1"))
-			assertEquals(g.meta(g.state.hands(Alice.ordinal)(0)).status, CardStatus.Finessed)
-			// assertEquals(g.meta(g.state.hands(Alice.ordinal)(1)).status, CardStatus.Finessed)
+			hasStatus(g, Alice, 1, CardStatus.Finessed)
+			// hasStatus(g, Alice, 2, CardStatus.Finessed)
 
 			// Slot 2 is not playable.
 			assert(!g.common.thinksPlayables(g, Alice.ordinal).contains(g.state.hands(Alice.ordinal)(1)))
@@ -152,7 +152,7 @@ class HiddenFinesses extends munit.FunSuite:
 
 		// Alice's slot 2 should still be finessed.
 		hasInfs(game, None, Alice, 2, Vector("y3"))
-		assertEquals(game.meta(game.state.hands(Alice.ordinal)(1)).status, CardStatus.Finessed)
+		hasStatus(game, Alice, 2, CardStatus.Finessed)
 
 	test("correctly resolves an ambiguous hidden finesse"):
 		val game = setup(HGroup.atLevel(5), Vector(
@@ -163,14 +163,13 @@ class HiddenFinesses extends munit.FunSuite:
 		),
 			starting = Cathy,
 			playStacks = Some(Vector(5, 5, 1, 1, 5)),
-			init = preClue(Alice, 2, Vector(TestClue(ClueKind.Rank, 2, Bob)))
+			init = preClue(Alice, 2, Seq("2"))
 		)
 		.pipe(takeTurn("Cathy clues 3 to Bob"))			// delayed play or hidden finesse
 		.pipe(takeTurn("Donald clues 4 to Alice (slot 4)"))
-		// .tap { g =>
+		// .tap: g =>
 		// 	// Can connect as b4 (if g2 hidden, then Cathy finesse) or g4
 		// 	hasInfs(g, None, Alice, 4, Vector("g4", "b4"))
-		// }
 		.pipe(takeTurn("Alice plays b2 (slot 2)"))		// revealing hidden finesse
 		.tap: g =>
 			// Slot 2 (previously slot 1) should be g2

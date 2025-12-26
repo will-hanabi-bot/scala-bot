@@ -68,7 +68,7 @@ trait Game:
 
 	def goodTouch: Boolean
 
-	def filterPlayables(_player: Player, _playerIndex: Int, orders: Seq[Int]) =
+	def filterPlayables(@annotation.unused _player: Player, @annotation.unused _playerIndex: Int, orders: Seq[Int]) =
 		orders
 
 trait GameOps[G <: Game]:
@@ -282,7 +282,7 @@ extension[G <: Game](game: G)
 						game.deckIds(c.order).fold(c): id =>
 							c.copy(suitIndex = id.suitIndex, rank = id.rank))))))
 
-	def replay(turn: Int)(using ops: GameOps[G]): Either[String, G] =
+	def replay(using ops: GameOps[G]): Either[String, G] =
 		val state = game.state
 
 		if game.rewindDepth > 4 then
@@ -348,8 +348,7 @@ extension[G <: Game](game: G)
 				}
 			.pipe(ops.copyWith(_, GameUpdates(catchup = Some(game.catchup))))
 			.when(g => !g.catchup && g.state.currentPlayerIndex == g.state.ourPlayerIndex): g =>
-				val perform = g.takeAction
-				Log.highlight(Console.BLUE, s"Suggested action: ${perform.fmt(g, accordingTo = Some(g.me))}")
+				Log.highlight(Console.BLUE, s"Suggested action: ${g.takeAction.fmt(g, accordingTo = Some(g.me))}")
 				g
 			.withState(_.copy(actionList = actions))
 

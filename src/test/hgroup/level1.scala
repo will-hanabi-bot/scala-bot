@@ -1,7 +1,7 @@
 package tests.hgroup.level1
 
 import scala_bot.basics._
-import scala_bot.test.{hasInfs, Player, setup, takeTurn}, Player._
+import scala_bot.test.{hasInfs, hasStatus, Player, setup, takeTurn}, Player._
 import scala_bot.hgroup.HGroup
 import scala_bot.logger.{Logger,LogLevel}
 
@@ -22,8 +22,8 @@ class Level1 extends munit.FunSuite:
 
 		hasInfs(game, None, Bob, 5, Vector("r2", "y2", "g2", "b2", "p2"))
 
-		assert(game.common.thoughts(game.state.hands(Alice.ordinal)(0)).inferred.length > 0)
-		assertEquals(game.meta(game.state.hands(Alice.ordinal)(0)).status, CardStatus.None)
+		assert(game.common.thoughts(game.state.hands(Alice.ordinal)(0)).inferred.nonEmpty)
+		hasStatus(game, Alice, 1, CardStatus.None)
 
 	test("counts playables connecting on unknown plays"):
 		val game = setup(HGroup.atLevel(1), Vector(
