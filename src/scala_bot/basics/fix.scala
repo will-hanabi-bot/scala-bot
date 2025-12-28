@@ -102,16 +102,16 @@ def rainbowMismatch(game: Game, action: ClueAction, id: Identity, prompt: Int, f
 	lazy val rainbowFocus =
 		if target == state.ourPlayerIndex then
 			game.me.thoughts(focus).possible.forall: c =>
-				RAINBOWISH.matches(state.variant.suits(c.suitIndex))
+				state.variant.suits(c.suitIndex).suitType.rainbowish
 		else
-			RAINBOWISH.matches(state.variant.suits(state.deck(focus).suitIndex))
+			state.variant.suits(state.deck(focus).suitIndex).suitType.rainbowish
 
 	lazy val matchingClues = state.allColourClues(target).filter: c =>
 		state.clueTouched(state.hands(target), c).sorted == list.sorted &&	// touches the same cards
 		state.deck(prompt).clues.contains(c)								// prompt was clued with this
 
 	clue.kind == ClueKind.Colour &&
-	RAINBOWISH.matches(state.variant.suits(id.suitIndex)) &&
+	state.variant.suits(id.suitIndex).suitType.rainbowish &&
 	!game.knownAs(prompt, RAINBOWISH) &&
 	rainbowFocus &&
 	// There was free choice to clue a matching colour, but didn't

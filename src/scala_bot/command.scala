@@ -145,7 +145,7 @@ class BotClient(queue: Queue[IO, String], gameRef: Ref[IO, Option[Game]]):
 									List(
 										Some(s"$order: ${state.logId(order)} ${meta.status}"),
 										Some(s"inferred: [${player.strInfs(state, order)}]"),
-										player.thoughts(order).infoLock.map(info => s"info lock: [${info.fmt(state)}]"),
+										player.thoughts(order).infoLock.mapA(info => s"info lock: [${info.fmt(state)}]"),
 										Some(s"possible: [${player.strPoss(state, order)}]"),
 										Some(s"reasoning: ${meta.reasoning}"),
 										Option.when(!flags.isEmpty)(s"flags: ${flags.toList}"),

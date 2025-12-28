@@ -13,7 +13,7 @@ def validTransfer(game: Game, id: Identity)(order: Int) =
 
 	thought.possible.contains(id) &&
 	!thought.id(infer = true, symmetric = true).exists(_.rank < id.rank) &&		// Do not sarcastic on connecting cards
-	thought.infoLock.forall(_.contains(id))
+	thought.infoLock.forallO(_.contains(id))
 
 def interpretUsefulDc(game: Game, action: DiscardAction): DiscardResult =
 	val (common, state) = (game.common, game.state)

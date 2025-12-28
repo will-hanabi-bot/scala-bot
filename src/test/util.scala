@@ -11,12 +11,12 @@ enum Player:
 	case Alice, Bob, Cathy, Donald, Emily
 
 val VARIANTS = Map(
-	"No Variant" 		-> Variant(0, "No Variant", Vector("Red", "Yellow", "Green", "Blue", "Purple"), shorts = Some(Vector('r', 'y', 'g', 'b', 'p'))),
-	"6 Suits" 			-> Variant(0, "6 Suits", Vector("Red", "Yellow", "Green", "Blue", "Purple", "Teal"), shorts = Some(Vector('r', 'y', 'g', 'b', 'p', 't'))),
-	"Rainbow (5 Suits)" -> Variant(16, "Rainbow", Vector("Red", "Yellow", "Green", "Blue", "Rainbow"), shorts = Some(Vector('r', 'y', 'g', 'b', 'm'))),
-	"Black (5 Suits)" 	-> Variant(2, "Black", Vector("Red", "Yellow", "Green", "Blue", "Black"), shorts = Some(Vector('r', 'y', 'g', 'b', 'k'))),
-	"Pink (5 Suits)" 	-> Variant(2, "Pink", Vector("Red", "Yellow", "Green", "Blue", "Pink"), shorts = Some(Vector('r', 'y', 'g', 'b', 'i'))),
-	"Brown (5 Suits)" 	-> Variant(2, "Brown", Vector("Red", "Yellow", "Green", "Blue", "Brown"), shorts = Some(Vector('r', 'y', 'g', 'b', 'n')))
+	"No Variant" 		-> Variant(0, "No Variant", Vector("Red", "Yellow", "Green", "Blue", "Purple"),  shorts = Vector('r', 'y', 'g', 'b', 'p')),
+	"6 Suits" 			-> Variant(0, "6 Suits",    Vector("Red", "Yellow", "Green", "Blue", "Purple", "Teal"), shorts = Vector('r', 'y', 'g', 'b', 'p', 't')),
+	"Rainbow (5 Suits)" -> Variant(16, "Rainbow",   Vector("Red", "Yellow", "Green", "Blue", "Rainbow"), shorts = Vector('r', 'y', 'g', 'b', 'm')),
+	"Black (5 Suits)" 	-> Variant(2, "Black",      Vector("Red", "Yellow", "Green", "Blue", "Black"),   shorts = Vector('r', 'y', 'g', 'b', 'k')),
+	"Pink (5 Suits)" 	-> Variant(2, "Pink",       Vector("Red", "Yellow", "Green", "Blue", "Pink"),    shorts = Vector('r', 'y', 'g', 'b', 'i')),
+	"Brown (5 Suits)" 	-> Variant(2, "Brown",      Vector("Red", "Yellow", "Green", "Blue", "Brown"),   shorts = Vector('r', 'y', 'g', 'b', 'n'))
 )
 
 val NAMES = Vector("Alice", "Bob", "Cathy", "Donald", "Emily")
@@ -157,7 +157,7 @@ def strToClue(state: State, s: String) =
 	if "12345".contains(s) then
 		BaseClue(ClueKind.Rank, s.toInt)
 	else
-		val colour = state.variant.suits.indexWhere(_.toLowerCase() == s.toLowerCase())
+		val colour = state.variant.suits.indexWhere(_.name.toLowerCase() == s.toLowerCase())
 		if colour == -1 then
 			throw new IllegalArgumentException(s"Colour $s not found in [${state.variant.suits.mkString(",")}]")
 

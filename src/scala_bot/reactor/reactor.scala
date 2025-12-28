@@ -67,7 +67,7 @@ object Reactor:
 			.fold(game): urgent =>
 				val newCommon = game.common.withThought(urgent)(t => t.copy(
 					inferred = t.oldInferred.getOrElse(throw new Exception(s"No old inferred on $urgent!")),
-					oldInferred = None
+					oldInferred = IdentitySetOpt.empty
 				))
 				val newMeta = game.meta.updated(urgent,
 					game.meta(urgent).cleared.reason(game.state.turnCount))
@@ -102,7 +102,8 @@ object Reactor:
 				queuedCmds = updates.queuedCmds.getOrElse(game.queuedCmds),
 				nextInterp = updates.nextInterp.getOrElse(game.nextInterp),
 				rewindDepth = updates.rewindDepth.getOrElse(game.rewindDepth),
-				inProgress = updates.inProgress.getOrElse(game.inProgress)
+				inProgress = updates.inProgress.getOrElse(game.inProgress),
+				noRecurse = updates.noRecurse.getOrElse(game.noRecurse)
 			)
 
 		def blank(game: Reactor, keepDeck: Boolean) =
@@ -211,8 +212,8 @@ object Reactor:
 					val (clearedC, clearedM) = state.hands.flatten.foldLeft(initial) { case ((c, m), order) =>
 						val newC = c.withThought(order)(t => t.copy(
 							inferred = t.possible,
-							oldInferred = None,
-							infoLock = None,
+							oldInferred = IdentitySetOpt.empty,
+							infoLock = IdentitySetOpt.empty,
 						))
 						val newM = m.updated(order, m(order).cleared)
 						(newC, newM)

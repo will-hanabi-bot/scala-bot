@@ -131,6 +131,9 @@ extension(ids: IdentitySet)
 
 		str.dropRight(1).toString()
 
+	def toOpt: IdentitySetOpt =
+		ids
+
 object IdentitySet:
 	inline def empty: IdentitySet = 0L
 
@@ -154,3 +157,29 @@ object IdentitySet:
 
 	def unapplySeq(ids: IdentitySet): Option[Seq[Identity]] =
 		Some(ids.toList)
+
+opaque type IdentitySetOpt = Long
+
+extension(ids: IdentitySetOpt)
+	inline def isDefined = ids != -1L
+
+	inline def get: IdentitySet =
+		if ids != -1L then ids else throw new NoSuchElementException("IdentitySetOpt.get")
+
+	inline def getOrElse(a: => IdentitySet): IdentitySet =
+		if ids != -1L then ids else a
+
+	inline def existsO(inline f: IdentitySet => Boolean) =
+		ids != -1L && f(ids)
+
+	inline def forallO(inline f: IdentitySet => Boolean) =
+		ids == -1L || f(ids)
+
+	inline def mapO(f: IdentitySet => IdentitySet): IdentitySetOpt =
+		if ids == -1L then -1L else f(ids)
+
+	def mapA[A](f: IdentitySet => A): Option[A] =
+		Option.when(ids != -1L)(f(ids))
+
+object IdentitySetOpt:
+	inline def empty: IdentitySetOpt = -1L

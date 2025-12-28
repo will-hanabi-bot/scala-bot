@@ -89,7 +89,7 @@ def interpClue(ctx: ClueContext): HGroup =
 			.withThought(focus): t =>
 				t.copy(
 					inferred = t.possible.intersect(distributionIds.get),
-					infoLock = Some(t.possible.intersect(distributionIds.get)),
+					infoLock = t.possible.intersect(distributionIds.get).toOpt,
 					reset = false
 				)
 			.withMeta(focus)(_.copy(focused = true))
@@ -128,7 +128,7 @@ def interpClue(ctx: ClueContext): HGroup =
 						val newInferred = t.possible.intersect(state.trashSet)
 						t.copy(
 							inferred = newInferred,
-							infoLock = Some(newInferred)
+							infoLock = newInferred.toOpt
 						)
 					.withMeta(order)(_.copy(trash = true))
 			.pipe(performCM(_, tcm.get))
@@ -148,7 +148,7 @@ def interpClue(ctx: ClueContext): HGroup =
 		!positional && clue.kind == ClueKind.Rank &&
 		list.forall(o => prev.state.deck(o).clued && game.knownAs(o, PINKISH)) &&
 		state.variant.suits.zipWithIndex.forall: (suit, suitIndex) =>
-			!PINKISH.matches(suit) ||
+			!suit.suitType.pinkish ||
 			common.isTrash(game, Identity(suitIndex, clue.value), focus)
 
 	if pinkTrashFix then
@@ -158,12 +158,12 @@ def interpClue(ctx: ClueContext): HGroup =
 				val newInferred = t.possible.filter(common.isTrash(game, _, focus))
 				t.copy(
 					inferred = newInferred,
-					infoLock = Some(newInferred)
+					infoLock = newInferred.toOpt
 				)
 			.withMeta(focus): m =>
 				m.copy(trash = m.trash ||
 					state.variant.suits.zipWithIndex.forall: (suit, suitIndex) =>
-						!PINKISH.matches(suit) ||
+						!suit.suitType.pinkish ||
 						game.state.isBasicTrash(Identity(suitIndex, clue.value))
 				)
 			.copy(lastMove = Some(ClueInterp.Fix))

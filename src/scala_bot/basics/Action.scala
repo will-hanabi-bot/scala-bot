@@ -55,7 +55,7 @@ case class ClueAction(
 ) extends Action:
 	def fmt(state: State) =
 		val value = clue.kind match
-			case ClueKind.Colour => state.variant.colourableSuits(clue.value).toLowerCase()
+			case ClueKind.Colour => state.variant.colourableSuits(clue.value).name.toLowerCase()
 			case ClueKind.Rank => clue.value.toString
 		s"${state.names(giver)} clues $value to ${state.names(target)}"
 

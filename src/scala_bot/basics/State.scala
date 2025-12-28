@@ -148,7 +148,7 @@ case class State(
 	def canClue = clueTokens > 0
 
 	def includesVariant(regex: Regex) =
-		variant.suits.exists(regex.matches)
+		variant.suits.exists(suit => regex.matches(suit.name))
 
 	def multiplicity(ids: IdentitySet) =
 		var count = 0

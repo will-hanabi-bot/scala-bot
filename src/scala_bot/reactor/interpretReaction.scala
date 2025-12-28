@@ -136,7 +136,7 @@ def targetIDiscard(prev: Reactor, game: Reactor, wc: ReactorWC, targetSlot: Int)
 	val newInferred = common.thoughts(order).inferred.difference(prev.state.criticalSet)
 
 	val newCommon = common.withThought(order)(t => t.copy(
-		oldInferred = Some(t.inferred),
+		oldInferred = t.inferred.toOpt,
 		inferred = newInferred
 	))
 	val newMeta = game.meta.updated(order, meta.copy(
@@ -152,9 +152,9 @@ def targetIPlay(@annotation.unused _prev: Reactor, game: Reactor, wc: ReactorWC,
 	val order = wc.receiverHand(targetSlot - 1)
 
 	val newCommon = game.common.withThought(order)(t => t.copy(
-		oldInferred = Some(t.inferred),
+		oldInferred = t.inferred.toOpt,
 		inferred = t.inferred.intersect(state.playableSet),
-		infoLock = Some(t.inferred.intersect(state.playableSet))
+		infoLock = t.inferred.intersect(state.playableSet).toOpt
 	))
 
 	val newMeta = game.meta.updated(order, game.meta(order).copy(

@@ -218,10 +218,10 @@ case class HGroup(
 			List(list.max, hand(clue.value - 1)).forall(this.knownAs(_, PINKISH))
 
 		lazy val brownTempo = clue.kind == ClueKind.Colour &&
-			state.variant.colourableSuits(clue.value).contains("Brown") &&
+			state.variant.colourableSuits(clue.value).name.contains("Brown") &&
 			reclue
 
-		lazy val muddySuitIndex = state.variant.suits.indexWhere(MUDDY.matches)
+		lazy val muddySuitIndex = state.variant.suits.indexWhere(suit => MUDDY.matches(suit.name))
 		lazy val muddyCards = list.filter(this.knownAs(_, MUDDY))
 		lazy val mudClue = clue.kind == ClueKind.Colour &&
 			state.includesVariant(MUDDY) &&
@@ -389,6 +389,7 @@ object HGroup:
 				nextInterp = updates.nextInterp.getOrElse(game.nextInterp),
 				rewindDepth = updates.rewindDepth.getOrElse(game.rewindDepth),
 				inProgress = updates.inProgress.getOrElse(game.inProgress),
+				noRecurse = updates.noRecurse.getOrElse(game.noRecurse),
 
 				xmeta = game.xmeta.padTo(meta.length, XConvData())
 			)

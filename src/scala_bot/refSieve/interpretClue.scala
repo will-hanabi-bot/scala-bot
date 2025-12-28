@@ -135,7 +135,7 @@ def resolvePlay(game: RefSieve, action: ClueAction, targetOrder: Int, focusPoss:
 					status = CardStatus.Finessed,
 					by = Some(action.giver)
 				).reason(game.state.turnCount)
-			.withThought(order)(_.copy(oldInferred = Some(game.common.thoughts(order).inferred)))
+			.withThought(order)(_.copy(oldInferred = game.common.thoughts(order).inferred.toOpt))
 
 		(newGame, modified + order)
 	}._1
@@ -158,7 +158,7 @@ def resolvePlay(game: RefSieve, action: ClueAction, targetOrder: Int, focusPoss:
 		val poss = IdentitySet.from(focusPoss.map(_.id))
 		t.copy(
 			inferred = t.inferred.intersect(poss),
-			infoLock = Some(t.possible.intersect(poss))
+			infoLock = t.possible.intersect(poss).toOpt
 		)
 
 	.withMeta(targetOrder): m =>

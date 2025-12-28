@@ -95,6 +95,7 @@ object RefSieve:
 				nextInterp = updates.nextInterp.getOrElse(game.nextInterp),
 				rewindDepth = updates.rewindDepth.getOrElse(game.rewindDepth),
 				inProgress = updates.inProgress.getOrElse(game.inProgress),
+				noRecurse = updates.noRecurse.getOrElse(game.noRecurse),
 
 				waiting = game.waiting
 			)

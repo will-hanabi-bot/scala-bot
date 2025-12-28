@@ -11,7 +11,7 @@ trait ClueLike:
 
 	def fmt(state: State, target: Int) =
 		val clueValue = kind match
-			case ClueKind.Colour => state.variant.suits(value).toLowerCase
+			case ClueKind.Colour => state.variant.suits(value).name.toLowerCase
 			case ClueKind.Rank => value.toString
 		s"($clueValue to ${state.names(target)})"
 

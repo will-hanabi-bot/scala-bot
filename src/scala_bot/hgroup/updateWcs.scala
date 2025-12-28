@@ -67,8 +67,8 @@ private def revert(g: HGroup, order: Int, ids: List[Identity]) =
 	if newInferred.isEmpty then
 		g.withThought(order): t =>
 			t.copy(
-				inferred = t.oldInferred.map(_.intersect(t.possible)).getOrElse(t.possible),
-				oldInferred = None
+				inferred = t.oldInferred.mapO(_.intersect(t.possible)).getOrElse(t.possible),
+				oldInferred = IdentitySetOpt.empty
 			)
 		.withMeta(order)(_.copy(status = CardStatus.None))
 	else
@@ -129,7 +129,7 @@ def refreshWCs(prev: HGroup, game: HGroup, action: Action, beforeClueInterp: Boo
 			val newInferred = t.inferred.intersect(ids)
 			t.copy(
 				inferred = newInferred,
-				infoLock = Some(newInferred)
+				infoLock = newInferred.toOpt
 			)
 		.withXMeta(order)(_.copy(maybeFinessed = false))
 	}

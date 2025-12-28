@@ -114,7 +114,7 @@ case class Player(
 
 		lazy val conventionalTrash =
 			thought.possible.forall(isTrash(game, _, order) ||
-			thought.infoLock.exists(_.forall(isTrash(game, _, order))) ||
+			thought.infoLock.existsO(_.forall(isTrash(game, _, order))) ||
 			meta.trash ||
 			meta.status == CardStatus.CalledToDiscard)
 
@@ -141,14 +141,14 @@ case class Player(
 		game.meta(order).status match
 			case CardStatus.CalledToPlay =>
 				thought.possible.intersect(state.playableSet).nonEmpty &&
-				thought.infoLock.forall(_.intersect(state.playableSet).nonEmpty)
+				thought.infoLock.forallO(_.intersect(state.playableSet).nonEmpty)
 
 			case CardStatus.Sarcastic | CardStatus.GentlemansDiscard =>
 				possPlayable(thought.inferred)
 
 			case _ =>
 				possPlayable(thought.possible) ||
-				thought.infoLock.exists(possPlayable)
+				thought.infoLock.existsO(possPlayable)
 
 	def orderPlayable(game: Game, order: Int, excludeTrash: Boolean = false) =
 		val state = game.state
@@ -220,12 +220,12 @@ case class Player(
 			!connected.contains(order) &&				// not already connected
 			state.deck(order).clued &&
 			thought.possible.contains(id) &&			// must be a possibility
-			thought.infoLock.forall(_.contains(id)) &&
+			thought.infoLock.forallO(_.contains(id)) &&
 			(thought.inferred.length != 1 || thought.inferred.contains(id)) &&	// not info-locked on a different id
 			card.clues.exists(state.variant.idTouched(id, _)) &&	// at least one clue matches
 			(
 				// Not trying to prompt a pink id, or forcing pink prompt
-				if !PINKISH.matches(state.variant.suits(id.suitIndex)) || forcePink then
+				if !state.variant.suits(id.suitIndex).suitType.pinkish || forcePink then
 					true
 				else
 					val clues = card.clues
@@ -236,7 +236,7 @@ case class Player(
 
 					lazy val colourMatch = card.clues.exists: c =>
 						c.kind == ClueKind.Colour &&
-						PINKISH.matches(state.variant.colourableSuits(c.value))
+						state.variant.colourableSuits(c.value).suitType.pinkish
 
 					!misranked && colourMatch
 			)
@@ -252,7 +252,7 @@ case class Player(
 			!ignore.contains(order) &&				// not already connected
 			state.deck(order).clued &&
 			thought.possible.contains(id) &&			// must be a possibility
-			thought.infoLock.forall(_.contains(id)) &&
+			thought.infoLock.forallO(_.contains(id)) &&
 			(thought.inferred.length != 1 || thought.inferred.contains(id))	// not info-locked on a different id
 
 	/**

@@ -21,7 +21,7 @@ extension[G <: Game](game: G)
 					.withThought(order)(t => t.copy(
 						inferred = t.inferred.intersect(newPossible),
 						possible = t.possible.intersect(newPossible),
-						infoLock = t.infoLock.map(_.intersect(newPossible))
+						infoLock = t.infoLock.mapO(_.intersect(newPossible))
 					))
 
 				val newThought = touchedGame.common.thoughts(order)
@@ -38,7 +38,7 @@ extension[G <: Game](game: G)
 				newGame.withThought(order)(t => t.copy(
 					inferred = t.inferred.difference(newPossible),
 					possible = t.possible.difference(newPossible),
-					infoLock = t.infoLock.map(_.difference(newPossible))
+					infoLock = t.infoLock.mapO(_.difference(newPossible))
 				))
 		.withState: s =>
 			s.copy(endgameTurns = s.endgameTurns.map(_ - 1), clueTokens = s.clueTokens - 1)
@@ -155,14 +155,14 @@ extension[G <: Game](game: G)
 
 			thought = newThoughts(order)
 
-			if thought.infoLock.exists(_.isEmpty) then
+			if thought.infoLock.existsO(_.isEmpty) then
 				Log.warn(s"lost info lock on $order!")
-				newThoughts = newThoughts.updated(order, thought.copy(infoLock = None))
+				newThoughts = newThoughts.updated(order, thought.copy(infoLock = IdentitySetOpt.empty))
 
 		var (resets, newCommon) = game.common.copy(thoughts = newThoughts).cardElim(state)
 		if goodTouch then
 			val (resets2, newCommon2) = newCommon.goodTouchElim(game)
-			resets ++= resets2
+			resets = resets.union(resets2)
 			newCommon = newCommon2
 
 		val (sarcastics, _newCommon) = newCommon.refreshLinks(game, goodTouch)
@@ -170,16 +170,15 @@ extension[G <: Game](game: G)
 
 		val newPlayers = game.players.map: p =>
 			p.copy(
-				thoughts = p.thoughts.zipWithIndex.map:
-					case (t, order) if newCommon.dirty.contains(order) =>
-						val thought = newCommon.thoughts(order)
+				thoughts = p.thoughts.map: t =>
+					if !newCommon.dirty.contains(t.order) then t else
+						val thought = newCommon.thoughts(t.order)
 						t.copy(
 							possible = thought.possible,
 							inferred = thought.inferred,
 							infoLock = thought.infoLock,
 							reset = thought.reset
-					)
-					case (t, _) => t,
+						),
 				links = newCommon.links,
 				playLinks = newCommon.playLinks,
 				dirty = newCommon.dirty

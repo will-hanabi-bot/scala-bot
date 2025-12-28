@@ -36,7 +36,9 @@ case class GameUpdates(
 	queuedCmds: Option[List[(String, String)]] = None,
 	nextInterp: Option[Option[Interp]] = None,
 	rewindDepth: Option[Int] = None,
-	inProgress: Option[Boolean] = None
+	inProgress: Option[Boolean] = None,
+
+	noRecurse: Option[Boolean] = None
 )
 
 def genPlayers(state: State) =
@@ -178,7 +180,7 @@ extension[G <: Game](game: G)
 	/** Returns whether the order is known to be a particular special suit from empathy. */
 	def knownAs(order: Int, regex: Regex) =
 		game.common.thoughts(order).possible.forall: i =>
-			regex.matches(game.state.variant.suits(i.suitIndex))
+			regex.matches(game.state.variant.suits(i.suitIndex).name)
 
 	def handleClue(prev: G, clue: ClueAction)(using ops: GameOps[G]) =
 		ops.interpretClue(prev, game.onClue(clue).elim(goodTouch = true), clue)
@@ -390,20 +392,22 @@ extension[G <: Game](game: G)
 					else a
 				}.mkString("? ")
 
-				val finalNote = if !linkNote.isEmpty then
-					if note.contains("]") then s"$note?" else s"[$note] $linkNote?"
-				else
-					note
+				val finalNote =
+					if !linkNote.isEmpty then
+						if note.contains("]") then s"$note?" else s"[$note] $linkNote?"
+					else
+						note
 
 				val write = notes.get(order).forall(prev => finalNote != prev.last && state.turnCount > prev.turn)
 
 				if write then
 					val full = notes.get(order).map(n => s"${n.full} | ").getOrElse("").appendedAll(s"t${state.turnCount}: $finalNote")
 
-					val newCmds = if !game.catchup && game.inProgress then
-						("note", ujson.Obj("tableID" -> game.tableID, "order" -> order, "note" -> full).toString) +: cmds
-					else
-						cmds
+					val newCmds =
+						if !game.catchup && game.inProgress then
+							("note", ujson.Obj("tableID" -> game.tableID, "order" -> order, "note" -> full).toString) +: cmds
+						else
+							cmds
 
 					(newCmds, newNotes + (order -> Note(state.turnCount, finalNote, full)))
 				else

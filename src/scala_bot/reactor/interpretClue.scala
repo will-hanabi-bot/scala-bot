@@ -70,7 +70,7 @@ private def tryStable(prev: Reactor, game: Reactor, action: ClueAction, stall: B
 				val newInferred = newCommon.thoughts(focus).inferred.filter(i => state.isPlayable(i) && i.rank == clue.value)
 				newCommon = newCommon.withThought(focus)(t => t.copy(
 					inferred = newInferred,
-					infoLock = Some(newInferred)
+					infoLock = newInferred.toOpt
 				))
 				newMeta = newMeta.updated(focus, newMeta(focus).copy(
 					focused = true,
@@ -159,7 +159,7 @@ private def tryStable(prev: Reactor, game: Reactor, action: ClueAction, stall: B
 					state.includesVariant(BROWNISH) &&
 					clue.kind == ClueKind.Rank &&
 					state.variant.suits.zipWithIndex.exists: (suit, suitIndex) =>
-						BROWNISH.matches(suit) && state.playStacks(suitIndex) + 1 < state.maxRanks(suitIndex) &&
+						suit.suitType.brownish && state.playStacks(suitIndex) + 1 < state.maxRanks(suitIndex) &&
 						!newlyTouched.contains(state.hands(target)(0))
 
 				if brownishTcm then
@@ -332,7 +332,7 @@ def targetPlay(game: Reactor, action: ClueAction, target: Int, urgent: Boolean =
 	state.deck(target).id().foreach: id =>
 		possibleConns.find(_._2 == id).foreach: (connOrder, _) =>
 			newCommon = newCommon.withThought(connOrder)(_.copy(
-				oldInferred = Some(newCommon.thoughts(connOrder).inferred),
+				oldInferred = newCommon.thoughts(connOrder).inferred.toOpt,
 				inferred = IdentitySet.single(id.prev.get)
 			))
 			val meta = newMeta(connOrder)
@@ -346,9 +346,9 @@ def targetPlay(game: Reactor, action: ClueAction, target: Int, urgent: Boolean =
 
 	val reset = newInferred.isEmpty
 	newCommon = newCommon.withThought(target)(t => t.copy(
-		oldInferred = Some(t.inferred),
+		oldInferred = t.inferred.toOpt,
 		inferred = newInferred,
-		infoLock = Some(newInferred)
+		infoLock = newInferred.toOpt
 	))
 
 	newMeta = newMeta.updated(target, newMeta(target).reason(state.turnCount))

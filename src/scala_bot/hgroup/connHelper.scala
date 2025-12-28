@@ -65,7 +65,7 @@ def assignConns(game: HGroup, action: ClueAction, fps: Seq[FocusPossibility], fo
 							thought.inferred
 
 					val newGame = acc.withThought(conn.order): t =>
-						t.copy(inferred = newInferred, oldInferred = Some(t.inferred))
+						t.copy(inferred = newInferred, oldInferred = t.inferred.toOpt)
 					.pipe: g =>
 						val idUncertain =
 							conn.reacting == state.ourPlayerIndex &&
@@ -273,7 +273,7 @@ def resolveClue(ctx: ClueContext, fps: Seq[FocusPossibility], ambiguousOwn: Seq[
 					case c: PromptConn => c.id == i
 					case _: FinesseConn => false
 		Log.highlight(Console.CYAN, s"final infs [${newInferred.fmt(state)}] $focus")
-		t.copy(inferred = newInferred, infoLock = Some(newInferred))
+		t.copy(inferred = newInferred, infoLock = newInferred.toOpt)
 	.pipe(assignConns(_, action, fpsToWrite, focus, ambiguousOwn))
 	.pipe:
 		allFps.foldLeft(_): (a, fp) =>

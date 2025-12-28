@@ -342,10 +342,10 @@ def colourSave(prev: HGroup, action: ClueAction, id: Identity, focus: Int): Bool
 	if !state.variant.cardTouched(id, clue) || !thought.possible.contains(id) || state.isBasicTrash(id) then
 		return false
 
-	if rank == 5 && suit != "Black" && !BROWNISH.matches(suit) then
+	if rank == 5 && suit.name != "Black" && !suit.suitType.brownish then
 		return false
 
-	if suit == "Black" && (rank == 2 || rank == 5) then
+	if suit.name == "Black" && (rank == 2 || rank == 5) then
 		// Newly touched or fill-in cards
 		val fillIns = list.count { o =>
 			!state.deck(o).clued ||
@@ -361,16 +361,16 @@ def colourSave(prev: HGroup, action: ClueAction, id: Identity, focus: Int): Bool
 		if fillIns < 2 && trash == 0 then
 			return false
 
-	if BROWNISH.matches(suit) && prev.common.thinksLoaded(prev, giver) then
+	if suit.suitType.brownish && prev.common.thinksLoaded(prev, giver) then
 		return false
 
-	if "Dark Rainbow|Dark Prism".r.matches(suit) then
+	if "Dark Rainbow|Dark Prism".r.matches(suit.name) then
 		val completed = prev.common.hypoStacks(suitIndex) == state.maxRanks(suitIndex)
 		val savedCrit = list.exists { o =>
 			val card = state.deck(o)
 			!card.clued && card.id().exists { i =>
 				state.isCritical(i) && i.rank != 5 &&
-				"Dark Rainbow|Dark Prism".r.matches(state.variant.suits(i.suitIndex))
+				"Dark Rainbow|Dark Prism".r.matches(state.variant.suits(i.suitIndex).name)
 			}
 		}
 
@@ -382,13 +382,13 @@ def colourSave(prev: HGroup, action: ClueAction, id: Identity, focus: Int): Bool
 		state.variant.suits.length - 2
 
 	// Note that critical 2,3,4 can be saved with anything.
-	if suit.contains("Muddy") && clue.value != muddySaveColour && !(state.isCritical(id) && Set(2,3,4).contains(rank)) then
+	if suit.name.contains("Muddy") && clue.value != muddySaveColour && !(state.isCritical(id) && Set(2,3,4).contains(rank)) then
 		return false
 
-	if suit.contains("Cocoa") && clue.value != muddySaveColour then
+	if suit.name.contains("Cocoa") && clue.value != muddySaveColour then
 		return false
 
-	state.isCritical(id) || (BROWNISH.matches(suit) && rank == 2)
+	state.isCritical(id) || (suit.suitType.brownish && rank == 2)
 
 def rankSave(prev: HGroup, action: ClueAction, id: Identity, focus: Int): Boolean =
 	val state = prev.state
@@ -401,7 +401,7 @@ def rankSave(prev: HGroup, action: ClueAction, id: Identity, focus: Int): Boolea
 
 	// Don't consider save on k3,k4 (or dark i3,i4) with rank
 	// TODO: Florrat Save
-	if "Black|Dark Pink".r.matches(state.variant.suits(suitIndex)) && (rank == 3 || rank == 4) then
+	if "Black|Dark Pink".r.matches(state.variant.suits(suitIndex).name) && (rank == 3 || rank == 4) then
 		return false
 
 	val loaded34 = prev.common.thinksLoaded(prev, giver) &&

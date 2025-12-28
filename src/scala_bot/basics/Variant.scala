@@ -17,36 +17,18 @@ val NO_COLOUR = "White|Gray|Light|Null|Rainbow|Omni|Prism".r
 case class Variant(
 	id: Int,
 	name: String,
-	suits: IndexedSeq[String],
-	criticalRank: Option[Int] = None,
-	clueStarved: Boolean = false,
-	specialRank: Option[Int] = None,
-	rainbowS: Boolean = false,
-	whiteS: Boolean = false,
-	pinkS: Boolean = false,
-	brownS: Boolean = false,
-	deceptiveS: Boolean = false,
-	shorts: Option[Vector[Char]] = None
+	suits: Vector[Suit],
+	shortForms: Vector[Char],
+	colourableSuits: Vector[Suit],
+	criticalRank: Option[Int],
+	clueStarved: Boolean,
+	specialRank: Option[Int],
+	rainbowS: Boolean,
+	whiteS: Boolean,
+	pinkS: Boolean,
+	brownS: Boolean,
+	deceptiveS: Boolean,
 ):
-	lazy val shortForms: Vector[Char] =
-		shorts.getOrElse:
-			suits.foldLeft(Vector()): (acc, suit) =>
-				val short: Char = suit match
-					case "Black" => 'k'
-					case "Pink" => 'i'
-					case "Brown" => 'n'
-					case _ =>
-						val colour = Variant.colours.find(_.name == suit).getOrElse(throw new IllegalArgumentException(s"Colour '$suit' not found!"))
-						val abbreviation = colour.abbreviation.getOrElse(suit.charAt(0).toLower)
-						if !acc.contains(abbreviation) then
-							abbreviation
-						else
-							suit.toLowerCase.find(c => !acc.contains(c))
-								.getOrElse(throw new IllegalArgumentException(s"No unused character found for suit '$suit' in $suits!"))
-				short +: acc
-
-	val colourableSuits = suits.filterNot(NO_COLOUR.matches)
-
 	def allIds =
 		for
 			suitIndex <- 0 until suits.length
@@ -59,7 +41,7 @@ case class Variant(
 
 	def cardCount(id: Identity): Int =
 		val Identity(suitIndex, rank) = id
-		if DARK.matches(suits(suitIndex)) || criticalRank.contains(rank) then
+		if suits(suitIndex).suitType.dark || criticalRank.contains(rank) then
 			1
 		else
 			Vector(3, 2, 2, 2, 1)(rank - 1)
@@ -69,21 +51,21 @@ case class Variant(
 		val suit = suits(suitIndex)
 
 		if clue.kind == ClueKind.Colour then
-			if WHITISH.matches(suit) then
+			if suit.suitType.whitish then
 				return false
 
-			if RAINBOWISH.matches(suit) then
+			if suit.suitType.rainbowish then
 				return true
 
 			if specialRank.contains(rank) then
 				return rainbowS || !whiteS
 
-			if PRISM.matches(suit) then
+			if suit.suitType.prism then
 				return ((rank - 1) % colourableSuits.length) == clue.value
 
 			suits(suitIndex) == colourableSuits(clue.value)
 		else
-			if BROWNISH.matches(suit) then
+			if suit.suitType.brownish then
 				return false
 
 			if specialRank.contains(rank) then
@@ -96,7 +78,7 @@ case class Variant(
 				if deceptiveS then
 					return (suitIndex % 4) + (if rank == 1 then 2 else 1) == clue.value
 
-			if PINKISH.matches(suit) then
+			if suit.suitType.pinkish then
 				return true
 
 			rank == clue.value
@@ -104,7 +86,33 @@ case class Variant(
 	def cardTouched(card: Identifiable, clue: ClueLike) =
 		card.id().exists(idTouched(_, clue))
 
-case class Suit(name: String, abbreviation: Option[Char])
+case class SuitType(
+	whitish: Boolean,
+	rainbowish: Boolean,
+	pinkish: Boolean,
+	brownish: Boolean,
+	dark: Boolean,
+	prism: Boolean,
+	muddy: Boolean
+)
+
+object SuitType:
+	def apply(name: String): SuitType =
+		SuitType(
+			WHITISH.matches(name),
+			RAINBOWISH.matches(name),
+			PINKISH.matches(name),
+			BROWNISH.matches(name),
+			DARK.matches(name),
+			PRISM.matches(name),
+			MUDDY.matches(name)
+		)
+
+case class Suit(
+	name: String,
+	abbreviation: Option[Char],
+	suitType: SuitType
+)
 
 object Variant:
 	private var variants: Map[String, Variant] = Map()
@@ -114,12 +122,76 @@ object Variant:
 		val variantsJSON = read[ujson.Value](requests.get(VARIANTS_URL).text()).arr
 		val coloursJSON = read[ujson.Value](requests.get(COLOURS_URL).text()).arr
 
-		colours = coloursJSON.map(suitJson => Suit(
-			suitJson("name").str,
-			suitJson.objOpt.flatMap(_.get("abbreviation").strOpt.map(_.charAt(0).toLower))
-		)).toSeq
+		colours = coloursJSON.map(suitJson =>
+			Suit(
+				suitJson("name").str,
+				suitJson.obj.get("abbreviation").flatMap(_.strOpt.map(_.charAt(0).toLower)),
+				SuitType(suitJson("name").str)
+			)
+		).toSeq
 
 		variants = variantsJSON.map(Variant.fromJSON).map(v => v.name -> v).toMap
+
+	def apply(
+		id: Int,
+		name: String,
+		suitNames: Vector[String],
+		shorts: Vector[Char]
+	): Variant =
+		val suits = suitNames.zipWithIndex.map((name, i) => Suit(name, Some(shorts(i)), SuitType(name)))
+		val colourableSuits = suits.filterNot(suit => NO_COLOUR.matches(suit.name))
+
+		Variant(id, name, suits, shorts, colourableSuits,
+			criticalRank = None,
+			clueStarved = false,
+			specialRank = None,
+			rainbowS = false,
+			whiteS = false,
+			pinkS = false,
+			brownS = false,
+			deceptiveS = false
+		)
+
+	def apply(
+		id: Int,
+		name: String,
+		suitNames: IndexedSeq[String],
+		criticalRank: Option[Int] = None,
+		clueStarved: Boolean = false,
+		specialRank: Option[Int] = None,
+		rainbowS: Boolean = false,
+		whiteS: Boolean = false,
+		pinkS: Boolean = false,
+		brownS: Boolean = false,
+		deceptiveS: Boolean = false
+	): Variant =
+		val (suits, shortForms, colourableSuits) = suitNames.foldLeft((Vector.empty[Suit], Vector.empty[Char], Vector.empty[Suit])):
+			case ((suits, shortForms, colourableSuits), name) =>
+				val colour = Variant.colours.find(_.name == name)
+
+				val short: Char = name match
+					case "Black" => 'k'
+					case "Pink" => 'i'
+					case "Brown" => 'n'
+					case _ =>
+						val abbreviation = colour.flatMap(_.abbreviation).getOrElse(name.charAt(0).toLower)
+						if !shortForms.contains(abbreviation) then
+							abbreviation
+						else
+							name.toLowerCase.find(c => !shortForms.contains(c))
+								.getOrElse:
+									println(Variant.colours.find(_.name == "Rainbow"))
+									throw new IllegalArgumentException(s"No unused character found for suit '$name' in $suitNames!")
+
+				val suit = colour.getOrElse:
+					Suit(name, Some(short), SuitType(name))
+
+				if NO_COLOUR.matches(name) then
+					(suit +: suits, short +: shortForms, colourableSuits)
+				else
+					(suit +: suits, short +: shortForms, colourableSuits)
+
+		Variant(id, name, suits.reverse, shortForms.reverse, colourableSuits.reverse, criticalRank, clueStarved, specialRank, rainbowS, whiteS, pinkS, brownS, deceptiveS)
 
 	def fromJSON(json: ujson.Value) =
 		val obj = json.obj

@@ -75,8 +75,8 @@ case class Thought(
 	order: Int,
 	possible: IdentitySet,
 	inferred: IdentitySet,
-	oldInferred: Option[IdentitySet] = None,
-	infoLock: Option[IdentitySet] = None,
+	oldInferred: IdentitySetOpt = IdentitySetOpt.empty,
+	infoLock: IdentitySetOpt = IdentitySetOpt.empty,
 	rewinded: Boolean = false,
 	reset: Boolean = false
 ) extends Identifiable:
@@ -95,13 +95,14 @@ case class Thought(
 		if reset then
 			return this
 
-		val newInfoLock = if infoLock.exists(_.nonEmpty) then infoLock else None
+		val newInfoLock = if infoLock.existsO(_.nonEmpty) then infoLock else IdentitySetOpt.empty
 		this.copy(
 			reset = true,
-			inferred = newInfoLock match
-				case None => possible
-				case Some(ids) => possible.intersect(ids)
-			,
+			inferred =
+				if newInfoLock.isDefined then
+					possible.intersect(newInfoLock.get)
+				else
+					possible,
 			infoLock = newInfoLock
 		)
 
