@@ -8,7 +8,7 @@ private def reactiveContext(prev: Reactor, game: Reactor, action: ClueAction, re
 	val ClueAction(giver = giver, target = receiver, clue = _, list = _) = action
 	val state = game.state
 
-	val possibleConns = delayedPlays(game, giver, receiver)
+	val possibleConns = delayedPlays(game, giver, receiver, stable = false)
 
 	val oldPlayables = prev.common.obviousPlayables(prev, receiver)
 	val newPlayables = game.common.obviousPlayables(game, receiver)

@@ -190,14 +190,19 @@ def evalAction(game: Reactor, action: Action): Double =
 		case _ if mistake => -100
 
 		case clue: ClueAction =>
-			val mult = if !game.me.obviousPlayables(game, state.ourPlayerIndex).isEmpty then
+			val mult = if game.me.obviousPlayables(game, state.ourPlayerIndex).nonEmpty then
 				if state.inEndgame then 0.1 else 0.25
 			else
 				0.5
 			getResult(game, hypoGame, clue) * mult - 0.5
 
-		case PlayAction(_, _, suitIndex, rank) =>
-			if suitIndex == -1 || rank == -1 then 1.5 else 0.02 * (5 - rank)
+		case PlayAction(_, order, suitIndex, rank) =>
+			if !game.state.inEndgame && game.me.discardable(game, state.ourPlayerIndex).contains(order) then
+				-0.25
+			else if suitIndex == -1 || rank == -1 then
+				1.5
+			else
+				0.02 * (5 - rank)
 
 		case _ => 0
 

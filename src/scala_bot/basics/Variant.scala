@@ -189,7 +189,7 @@ object Variant:
 				if NO_COLOUR.matches(name) then
 					(suit +: suits, short +: shortForms, colourableSuits)
 				else
-					(suit +: suits, short +: shortForms, colourableSuits)
+					(suit +: suits, short +: shortForms, suit +: colourableSuits)
 
 		Variant(id, name, suits.reverse, shortForms.reverse, colourableSuits.reverse, criticalRank, clueStarved, specialRank, rainbowS, whiteS, pinkS, brownS, deceptiveS)
 

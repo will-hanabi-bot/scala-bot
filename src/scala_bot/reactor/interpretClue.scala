@@ -283,7 +283,7 @@ def interpretReactive(prev: Reactor, game: Reactor, action: ClueAction, reacter:
 			case ClueKind.Colour => interpretReactiveColour(prev, newGame, action, focusSlot, reacter, inverted)
 			case ClueKind.Rank   => interpretReactiveRank(prev, newGame, action, focusSlot, reacter)
 
-def delayedPlays(game: Reactor, giver: Int, receiver: Int) =
+def delayedPlays(game: Reactor, giver: Int, receiver: Int, stable: Boolean) =
 	val (common, state, meta) = (game.common, game.state, game.meta)
 
 	playersUntil(state.numPlayers, state.nextPlayerIndex(giver), receiver).foldLeft(List.empty[(Int, Identity)]): (acc, playerIndex) =>
@@ -291,11 +291,15 @@ def delayedPlays(game: Reactor, giver: Int, receiver: Int) =
 			case Some(urgent) =>
 				// If they have an urgent discard, they can't play a connecting card.
 				if meta(urgent).status == CardStatus.CalledToDiscard then
-					List()
+					Nil
 				// If they have an urgent playable, they can only play that card.
 				else
 					List(urgent)
-			case _ => common.obviousPlayables(game, playerIndex).toList
+			case _ =>
+				val obvious = common.obviousPlayables(game, playerIndex)
+				// If they have more than 1 playable in a reverse reactive clue, they won't know which to play.
+				// TODO: If the reacter has only one 1-away, they do know.
+				if !stable && obvious.length > 1 then Nil else obvious
 
 		playables.foldLeft(acc): (acc, o) =>
 			// Only consider playing the leftmost of similarly-possible cards
@@ -324,7 +328,7 @@ def refPlay(prev: Reactor, game: Reactor, action: ClueAction) =
 def targetPlay(game: Reactor, action: ClueAction, target: Int, urgent: Boolean = false, stable: Boolean = true) =
 	val state = game.state
 	val holder = state.holderOf(target)
-	val possibleConns = delayedPlays(game, action.giver, holder)
+	val possibleConns = delayedPlays(game, action.giver, holder, stable)
 
 	val newInferred = game.common.thoughts(target).inferred.filter(i => state.isPlayable(i) || possibleConns.exists(_._2 == i))
 	var (newCommon, newMeta) = (game.common, game.meta)

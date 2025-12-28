@@ -170,6 +170,9 @@ def reactDiscard(prev: Reactor, game: Reactor, playerIndex: Int, order: Int, wc:
 	val ReactorWC(_, reacter, receiver, receiverHand, clue, focusSlot, inverted, turn) = wc
 	lazy val knownTrash = prev.common.thinksTrash(prev, reacter)
 
+	// TODO: We don't always overwrite lastMove here, but we need to be able to tell if
+	// rewinding an unnatural discard caused the clue to become incorrectly interpreted.
+
 	if playerIndex != reacter then
 		game
 	else if inverted then
@@ -181,7 +184,11 @@ def reactDiscard(prev: Reactor, game: Reactor, playerIndex: Int, order: Int, wc:
 
 		if unnatural then
 			game.rewind(turn, InterpAction(ClueInterp.Reactive)) match
-				case Right(newGame) => newGame
+				case Right(newGame) =>
+					if newGame.lastMove == Some(ClueInterp.Mistake) then
+						newGame.copy(lastMove = Some(DiscardInterp.Mistake))
+					else
+						newGame.copy(lastMove = Some(DiscardInterp.None))
 				case Left(err) =>
 					Log.warn(s"Failed to rewind a response inversion! $err")
 					game
