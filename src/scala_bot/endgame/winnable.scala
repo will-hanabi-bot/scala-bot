@@ -10,30 +10,6 @@ extension[G <: Game] (solver: EndgameSolver[G])
 	def cluelessWinnable(state: State, playerTurn: Int, deadline: Instant, depth: Int): Option[PerformAction] =
 		val hash = state.hash
 
-		lazy val winnablePlay = state.hands(playerTurn).view.collect:
-			case order if state.deck(order).id().exists(state.isPlayable) =>
-				PerformAction.Play(order)
-		.find: action =>
-			val newState = advanceState(state, action, playerTurn, draw = None)
-			solver.cluelessWinnable(newState, state.nextPlayerIndex(playerTurn), deadline, depth + 1).isDefined
-
-		lazy val winnableStall = Option.when(state.canClue) {
-			val action = PerformAction.Rank(0, 0)
-			val newState = advanceState(state, action, playerTurn, draw = None)
-			val winnable = solver.cluelessWinnable(newState, state.nextPlayerIndex(playerTurn), deadline, depth + 1).isDefined
-
-			Option.when(winnable)(action)
-		}.flatten
-
-		lazy val discardable = state.hands(playerTurn).find(state.deck(_).id().isEmpty)
-
-		lazy val winnableDc = discardable.flatMap: order =>
-			val action = PerformAction.Discard(order)
-			val newState = advanceState(state, action, playerTurn, draw = None)
-			val winnable = solver.cluelessWinnable(newState, state.nextPlayerIndex(playerTurn), deadline, depth + 1).isDefined
-
-			Option.when(winnable)(action)
-
 		if state.score == state.maxScore then
 			Some(PerformAction.Play(99))
 
@@ -48,7 +24,27 @@ extension[G <: Game] (solver: EndgameSolver[G])
 			None
 
 		else
-			winnablePlay.orElse(winnableStall).orElse(winnableDc)
+			def actionWinnable(perform: PerformAction) =
+				val newState = advanceState(state, perform, playerTurn, draw = None)
+				solver.cluelessWinnable(newState, state.nextPlayerIndex(playerTurn), deadline, depth + 1).isDefined
+
+			val winnable =
+				state.hands(playerTurn).collectFirst:
+					case order if state.deck(order).id().exists(state.isPlayable) && actionWinnable(PerformAction.Play(order)) =>
+						PerformAction.Play(order)
+				.orElse:
+					if !state.canClue then None else
+						val action = PerformAction.Rank(0, 0)
+						Option.when(actionWinnable(action))(action)
+				.orElse:
+					for
+						discardable <- state.hands(playerTurn).find(state.deck(_).id().isEmpty)
+						action = PerformAction.Discard(discardable) if actionWinnable(action)
+					yield
+						action
+
+			solver.cluelessCache = solver.cluelessCache.updated(hash, winnable)
+			winnable
 
 	def winnableSimpler(state: State, playerTurn: Int, remaining: RemainingMap, deadline: Instant, depth: Int): Boolean =
 		if state.score == state.maxScore then

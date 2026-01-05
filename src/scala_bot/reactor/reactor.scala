@@ -416,8 +416,14 @@ object Reactor:
 					clue)
 				.sortBy: clue =>
 					val list = state.clueTouched(state.hands(clue.target), clue)
-					// Prefer not cluing trash and not previously clued cards
-					list.count(o => state.isBasicTrash(state.deck(o).id().get)) * 10 + list.count(state.deck(_).clued)
+					val nonTrash = list.filterNot(o => state.isBasicTrash(state.deck(o).id().get))
+
+					// Prefer not cluing trash, previously clued cards, and no-info clues
+					if nonTrash.isEmpty then
+						99
+					else
+						-nonTrash.count(!state.deck(_).clued) * 5 +					// unclued non-trash cards
+						-nonTrash.count(!state.deck(_).clues.exists(_.isEq(clue)))	// fill-ins
 				.map(clueToPerform)
 
 			Logger.setLevel(level)

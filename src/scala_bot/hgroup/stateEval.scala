@@ -304,11 +304,11 @@ def evalGame(orig: HGroup, game: HGroup): Double =
 				case c if c > 4 => -1
 				case _ => -2
 
-	val endgamePenalty = state.endgameTurns.fold(0): turns =>
-		val finalScore = (0 until turns).foldLeft(state.playStacks) { (stacks, i) =>
-			val playerIndex = (state.currentPlayerIndex + i + 1) % state.numPlayers
+	val endgamePenalty = orig.state.endgameTurns.fold(0): turns =>
+		val finalScore = (0 until turns).foldLeft(orig.state.playStacks) { (stacks, i) =>
+			val playerIndex = (orig.state.currentPlayerIndex + i + 1) % state.numPlayers
 
-			state.hands(playerIndex).map(state.deck(_).id()).flatten.find(state.isPlayable).fold(stacks): id =>
+			orig.state.hands(playerIndex).map(orig.state.deck(_).id()).flatten.find(orig.state.isPlayable).fold(stacks): id =>
 				stacks.updated(id.suitIndex, id.rank)
 		}.sum
 

@@ -116,11 +116,17 @@ def selfPlay(args: String*) =
 	val level = parsedArgs.getOrElse("level", "1").toInt
 	val numPlayers = parsedArgs.getOrElse("players", "3").toInt
 
+	if !Files.exists(Paths.get("seeds")) then
+		Try(Files.createDirectory(Paths.get("seeds")))
+			.orElse(throw new Exception("failed to create seeds directory!")): Unit
+
 	Logger.setLevel(LogLevel.Off)
 	Variant.init()
 	val variant = Variant.getVariant(variantName)
 
 	val deck = variant.allIds.flatMap(id => List.fill(variant.cardCount(id))(id))
+
+	var results = Map.empty[Int, (GameResult, Int)]
 
 	for i <- (seed until seed + numGames) do
 		Random.setSeed(i)
@@ -131,6 +137,8 @@ def selfPlay(args: String*) =
 			case Convention.RefSieve => simulateGame(states.map(RefSieve(0, _, false)), shuffledDeck)
 			case Convention.HGroup   => simulateGame(states.map(HGroup(0, _, false, level)), shuffledDeck)
 
+		results = results + (i -> (result, score))
+
 		val actionsJSON = actions.map(_.json(tableID = 0))
 		val data = ujson.Obj(
 			"players" -> NAMES.take(numPlayers),
@@ -140,10 +148,13 @@ def selfPlay(args: String*) =
 			"options" -> ujson.Obj("variant" -> variant.name)
 		).toString
 
-		if !Files.exists(Paths.get("seeds")) then
-			Try(Files.createDirectory(Paths.get("seeds")))
-				.orElse(throw new Exception("failed to create seeds directory!")): Unit
-
 		Files.write(Paths.get(s"seeds/$i.json"), data.getBytes(StandardCharsets.UTF_8))
 
 		println(s"Seed $i: score $score, $result")
+
+	if numGames > 1 then
+		val perfectGames = results.values.count(_._1 == GameResult.Perfect)
+		println("----------------")
+		println(s"Perfect scores: $perfectGames/$numGames, ${(perfectGames.toDouble / numGames)}%")
+		println(s"Average score: ${results.values.summing(_._2).toDouble / numGames}")
+		println(s"Result distribution: ${results.groupBy(_._2._1).map((k, v) => k -> v.size)}")

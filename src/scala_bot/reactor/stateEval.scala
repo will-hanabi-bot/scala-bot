@@ -306,11 +306,11 @@ def evalGame(orig: Reactor, game: Reactor): Double =
 				case 3 => -1.5
 				case _ => -1
 
-	val endgamePenalty = state.endgameTurns.fold(0): turns =>
-		val finalScore = (0 until turns).foldLeft(state.playStacks) { (stacks, i) =>
-			val playerIndex = (state.currentPlayerIndex + i + 1) % state.numPlayers
+	val endgamePenalty = orig.state.endgameTurns.fold(0): turns =>
+		val finalScore = (0 until turns).foldLeft(orig.state.playStacks) { (stacks, i) =>
+			val playerIndex = (orig.state.currentPlayerIndex + i + 1) % state.numPlayers
 
-			state.hands(playerIndex).map(state.deck(_).id()).flatten.find(state.isPlayable).fold(stacks): id =>
+			orig.state.hands(playerIndex).map(orig.state.deck(_).id()).flatten.find(orig.state.isPlayable).fold(stacks): id =>
 				stacks.updated(id.suitIndex, id.rank)
 		}.sum
 
