@@ -173,10 +173,23 @@ extension[G <: Game](game: G)
 				thoughts = p.thoughts.map: t =>
 					if !newCommon.dirty.contains(t.order) then t else
 						val thought = newCommon.thoughts(t.order)
+						val newInferred =
+							thought.inferred.intersect(t.possible)
+								.when(_.isEmpty)(_ => t.possible)
+
+						val newInfoLock =
+							if !thought.infoLock.isDefined then
+								thought.infoLock
+							else
+								val ids = thought.infoLock.get.intersect(t.possible)
+								if ids.isEmpty then
+									IdentitySetOpt.empty
+								else
+									ids.toOpt
 						t.copy(
 							possible = thought.possible,
-							inferred = thought.inferred,
-							infoLock = thought.infoLock,
+							inferred = newInferred,
+							infoLock = newInfoLock,
 							reset = thought.reset
 						),
 				links = newCommon.links,

@@ -325,11 +325,29 @@ object Reactor:
 
 			val discardOrders = me.discardable(game, state.ourPlayerIndex)
 			val playableOrders =
+				val commonP = game.common.obviousPlayables(game, state.ourPlayerIndex)
 				val knownP = me.obviousPlayables(game, state.ourPlayerIndex)
 
-				if knownP.nonEmpty then
+				// If there is are commonly known playables that might connect to the reacter,
+				// we must play the oldest one.
+				val possibleConnectors =
+					if commonP.nonEmpty && game.waiting.exists(_.receiver == state.ourPlayerIndex) then
+						val reacter = game.waiting.get.reacter
+						commonP.filter: p =>
+							me.thoughts(p).inferred.exists:
+								_.next.exists: id =>
+									state.hands(reacter).exists: o =>
+										me.thoughts(o).matches(id)
+					else Nil
+
+				if possibleConnectors.nonEmpty then
+					Log.highlight(Console.CYAN, s"restricting playables to $possibleConnectors, since reverse reacter might need to connect")
+					Vector(possibleConnectors.minBy(game.meta(_).signalTurn.getOrElse(99)))
+
+				else if knownP.nonEmpty then
 					// Don't play if there is a focused card that looks exactly like this one (no OCM in reactor)
 					knownP.filter: order =>
+						game.meta(order).status == CardStatus.CalledToPlay ||
 						!state.hands(state.ourPlayerIndex).exists: o =>
 							o != order && me.thoughts(o).possible == me.thoughts(order).possible && game.meta(o).focused
 				else

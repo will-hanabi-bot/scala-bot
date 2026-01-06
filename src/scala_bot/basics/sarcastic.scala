@@ -48,8 +48,12 @@ def interpretUsefulDc(game: Game, action: DiscardAction): DiscardResult =
 				DiscardResult.Sarcastic(orders)
 
 		case None if playerIndex == state.ourPlayerIndex =>
-			// We discarded a card that we don't see nor have the other copy of
-			DiscardResult.Mistake
+			// We discarded a card that we don't see nor have the other copy of,
+			// but we trust that the team made a good decision.
+			if game.meta(order).status == CardStatus.CalledToDiscard then
+				DiscardResult.None
+			else
+				DiscardResult.Mistake
 
 		case None if gd =>
 			// Since we can't find it, we must be the target

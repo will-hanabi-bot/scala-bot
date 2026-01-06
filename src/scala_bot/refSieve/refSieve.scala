@@ -181,8 +181,8 @@ object RefSieve:
 					else	// Reclue
 						targetPlay(game, game, action, list.max)
 
-				else if trashPush then
-					Log.info(s"trash push")
+				else if newPlayables.isEmpty && trashPush then
+					Log.info(s"trash push!")
 					refPlay(prev, game, action)
 
 				else if fix || (loaded && !(clue.kind == ClueKind.Colour && newPlayables.forall(newlyTouched.contains))) then

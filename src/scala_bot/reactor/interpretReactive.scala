@@ -70,9 +70,12 @@ def interpretReactiveColour(prev: Reactor, game: Reactor, action: ClueAction, fo
 				val newCommon = game.common.withThought(reactOrder) { t =>
 					t.copy(oldInferred = t.inferred.toOpt)
 				}
-				val newGame = targetDiscard(game.copy(common = newCommon), action, reactOrder, urgent = true)
-				Log.info(s"reactive dc+play, reacter ${state.names(reacter)} (slot $reactSlot) receiver ${state.names(receiver)} (slot $targetSlot), focus slot $focusSlot")
-				Some((Some(ClueInterp.Reactive), newGame))
+				val (interp, newGame) = targetDiscard(game.copy(common = newCommon), action, reactOrder, urgent = true)
+				interp match
+					case None => Some(None, newGame)
+					case Some(_) =>
+						Log.info(s"reactive dc+play, reacter ${state.names(reacter)} (slot $reactSlot) receiver ${state.names(receiver)} (slot $targetSlot), focus slot $focusSlot")
+						Some((Some(ClueInterp.Reactive), newGame))
 	}
 	.headOption
 	.getOrElse {

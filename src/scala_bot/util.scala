@@ -2,6 +2,13 @@ package scala_bot.utils
 
 import scala_bot.basics._
 
+@annotation.tailrec
+def reduce[A, B](list: Seq[A], initial: B, reducer: (acc: B, curr: A) => Either[B, B]): B =
+	if list.isEmpty then initial else
+		reducer(initial, list.head) match
+			case Left(res) => res
+			case Right(acc) => reduce(list.tail, acc, reducer)
+
 inline def loop(
 	inline start: Int,
 	inline cond: Int => Boolean,
@@ -54,6 +61,14 @@ extension[A](it: Iterator[A])
 				exists = true
 		exists
 
+	@annotation.tailrec
+	def reduce[B](initial: B)(reducer: (acc: B, curr: A) => Either[B, B]): B =
+		if it.isEmpty then initial else
+			val curr = it.next
+			reducer(initial, curr) match
+				case Left(res) => res
+				case Right(acc) => it.reduce(acc)(reducer)
+
 	def summing[N](f: A => N)(using numeric: Numeric[N]) =
 		var res = numeric.zero
 		while it.hasNext do
@@ -81,6 +96,9 @@ extension [A](a: Iterable[A])
 
 	inline def fastExists(inline f: A => Boolean): Boolean =
 		a.iterator.fastExists(f)
+
+	def reduce[B](initial: B)(reducer: (acc: B, curr: A) => Either[B, B]): B =
+		a.iterator.reduce(initial)(reducer)
 
 	def summing[N](f: A => N)(using numeric: Numeric[N]) =
 		val it = a.iterator

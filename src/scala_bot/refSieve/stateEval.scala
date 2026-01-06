@@ -60,7 +60,7 @@ def getResult(game: RefSieve, hypo: RefSieve, action: ClueAction): Double =
 						(if state.inEndgame then 0.01 else 0.1) * revealedTrash +
 						(if state.inEndgame then 0.2 else 0.1) * fill.length +
 						(if state.inEndgame then 0.1 else 0.05) * elim.length +
-						0.1 * badTouch.length
+						-0.1 * badTouch.length
 
 					hypo.lastMove match
 						case Some(ClueInterp.Mistake)  => value - 10

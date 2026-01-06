@@ -40,6 +40,7 @@ private def tryStable(prev: Reactor, game: Reactor, action: ClueAction, stall: B
 	val state = game.state
 	val ClueAction(giver, target, list, clue) = action
 	val newlyTouched = list.filter(!prev.state.deck(_).clued)
+	val nextPlayerIndex = state.nextPlayerIndex(giver)
 
 	var newCommon = game.common
 	var newMeta = game.meta
@@ -80,7 +81,7 @@ private def tryStable(prev: Reactor, game: Reactor, action: ClueAction, stall: B
 	val newGame = game.copy(
 		common = newCommon,
 		meta = newMeta,
-		waiting = Option.when(game.waiting.isEmpty && state.nextPlayerIndex(giver) != target):
+		waiting = Option.when(game.waiting.isEmpty && nextPlayerIndex != target):
 			val receiver = target
 			val focusSlot = reactiveFocus(state, receiver, action)
 
@@ -88,7 +89,7 @@ private def tryStable(prev: Reactor, game: Reactor, action: ClueAction, stall: B
 
 			ReactorWC(
 				giver,
-				reacter = game.state.nextPlayerIndex(giver),
+				reacter = nextPlayerIndex,
 				receiver,
 				receiverHand = state.hands(receiver),
 				clue,
@@ -106,9 +107,9 @@ private def tryStable(prev: Reactor, game: Reactor, action: ClueAction, stall: B
 		case _ =>
 			val common = newGame.common
 			val prevPlayables = prev.common.obviousPlayables(prev, target)
-				.concat(connectableSimple(prev, prev.players(giver), state.nextPlayerIndex(giver), target)).distinct
+				.concat(connectableSimple(prev, prev.players(giver), nextPlayerIndex, target)).distinct
 			val playables = common.obviousPlayables(newGame, target)
-				.concat(connectableSimple(newGame, newGame.players(giver), state.nextPlayerIndex(giver), target)).distinct
+				.concat(connectableSimple(newGame, newGame.players(giver), nextPlayerIndex, target)).distinct
 
 			Log.info(s"playables $playables, prev_playables $prevPlayables")
 
@@ -117,16 +118,28 @@ private def tryStable(prev: Reactor, game: Reactor, action: ClueAction, stall: B
 				!prevPlayables.contains(o) &&
 				(clue.kind == ClueKind.Rank || prev.state.deck(o).clued)
 
+			// Try connecting with an unknown playable
+			lazy val revealConnectable = if nextPlayerIndex == target then None else
+				val prevPlays = prev.common.obviousPlayables(prev, nextPlayerIndex)
+				val possibleConnections =
+					for
+						o  <- list if prev.state.deck(o).clued
+						id <- state.deck(o).id() if state.playableAway(id) == 1
+					yield id
+
+				prevPlays.find: o =>
+					possibleConnections.exists: id =>
+						common.thoughts(o).inferred.contains(id.prev.get)
+
 			if newlyTouched.isEmpty then
 				val safeActions = playables.concat(common.thinksTrash(newGame, target))
 				val oldSafeActions = prevPlayables.concat(prev.common.thinksTrash(prev, target))
 
 				// Try connecting with an unknown playable
 				lazy val connectable =
-					val nextIndex = state.nextPlayerIndex(giver)
 					state.deck(list.max).id() match
-						case Some(focusId) if nextIndex != target && state.playableAway(focusId) == 1 =>
-							prev.common.obviousPlayables(prev, state.nextPlayerIndex(giver)).find:
+						case Some(focusId) if nextPlayerIndex != target && state.playableAway(focusId) == 1 =>
+							prev.common.obviousPlayables(prev, nextPlayerIndex).find:
 								common.thoughts(_).inferred.contains(focusId.prev.get)
 						case _ => None
 
@@ -152,6 +165,15 @@ private def tryStable(prev: Reactor, game: Reactor, action: ClueAction, stall: B
 			else if reveal.isDefined then
 				Log.info(s"revealed a safe action! ${reveal.get} $prevPlayables")
 				(Some(ClueInterp.Reveal), newGame)
+
+			else if revealConnectable.isDefined then
+				Log.highlight(Console.CYAN, s"revealed a potential safe action! playing ${revealConnectable.get} urgently to connect")
+				val connectedGame = newGame
+					.withThought(revealConnectable.get): t =>
+						t.copy(oldInferred = t.inferred.toOpt)
+					.withMeta(revealConnectable.get):
+						_.copy(urgent = true, status = CardStatus.CalledToPlay, by = Some(giver))
+				(Some(ClueInterp.Reveal), connectedGame)
 
 			else if common.orderKt(game, newlyTouched.max) then
 				// at least 1 useful unplayable brown and clue didn't touch chop
@@ -355,7 +377,7 @@ def targetPlay(game: Reactor, action: ClueAction, target: Int, urgent: Boolean =
 		infoLock = newInferred.toOpt
 	))
 
-	newMeta = newMeta.updated(target, newMeta(target).reason(state.turnCount))
+	newMeta = newMeta.updated(target, newMeta(target).reason(state.turnCount).signal(state.turnCount))
 
 	if reset || !state.hasConsistentInfs(newCommon.thoughts(target)) then
 		newCommon = newCommon.withThought(target)(_.resetInferences())
@@ -387,11 +409,19 @@ def targetDiscard(game: Reactor, action: ClueAction, target: Int, urgent: Boolea
 			status = CardStatus.CalledToDiscard,
 			by = Some(action.giver),
 			urgent = urgent
-		).reason(state.turnCount))
+		)
+		.reason(state.turnCount)
+		.signal(state.turnCount))
 	)
 
-	Log.info(s"targeting discard $target (${state.names(action.target)}), infs ${game.common.strInfs(state, target)}${if urgent then ", urgent" else ""}")
-	newGame
+	if newGame.common.thoughts(target).inferred.isEmpty then
+		Log.warn(s"target $target was reset!")
+
+		val resetGame = newGame.copy(common = newGame.common.withThought(target)(_.resetInferences()))
+		(None, resetGame)
+	else
+		Log.info(s"targeting discard $target (${state.names(state.holderOf(target))}), infs ${game.common.strInfs(state, target)}${if urgent then ", urgent" else ""}")
+		(Some(ClueInterp.Discard), newGame)
 
 def refDiscard(prev: Reactor, game: Reactor, action: ClueAction, stall: Boolean): (Option[ClueInterp], Reactor) =
 	val state = game.state
@@ -432,6 +462,7 @@ def refDiscard(prev: Reactor, game: Reactor, action: ClueAction, stall: Boolean)
 				.updated(hand(targetIndex), meta.copy(
 					status = CardStatus.CalledToDiscard,
 					by = Some(giver))
-					.reason(state.turnCount))
+					.reason(state.turnCount)
+					.signal(state.turnCount))
 				.updated(focus, newMeta(focus).copy(focused = true))
 			(Some(ClueInterp.Discard), game.copy(common = newCommon, meta = newMeta))

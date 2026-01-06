@@ -8,6 +8,7 @@ import scala_bot.hgroup.HGroup
 import scala_bot.utils._
 
 import java.nio.file.{Files, Paths}
+import scala.collection.parallel.CollectionConverters._
 import scala.util.Random
 import scala.util.{Try, chaining}, chaining.scalaUtilChainingOps
 import java.nio.charset.StandardCharsets
@@ -126,18 +127,15 @@ def selfPlay(args: String*) =
 
 	val deck = variant.allIds.flatMap(id => List.fill(variant.cardCount(id))(id))
 
-	var results = Map.empty[Int, (GameResult, Int)]
-
-	for i <- (seed until seed + numGames) do
-		Random.setSeed(i)
-		val shuffledDeck = Random.shuffle(deck).toVector
+	val results = (seed until seed + numGames).par.map: i =>
+		val rng = Random(i)
+		val shuffledDeck = rng.shuffle(deck).toVector
 		val states = (0 until numPlayers).map(State(NAMES.take(numPlayers), _, variant))
 		val GameSummary(score, result, actions, notes) = convention match
 			case Convention.Reactor  => simulateGame(states.map(Reactor(0, _, false)), shuffledDeck)
 			case Convention.RefSieve => simulateGame(states.map(RefSieve(0, _, false)), shuffledDeck)
 			case Convention.HGroup   => simulateGame(states.map(HGroup(0, _, false, level)), shuffledDeck)
 
-		results = results + (i -> (result, score))
 
 		val actionsJSON = actions.map(_.json(tableID = 0))
 		val data = ujson.Obj(
@@ -152,9 +150,12 @@ def selfPlay(args: String*) =
 
 		println(s"Seed $i: score $score, $result")
 
+		(result, score)
+	.toList
+
 	if numGames > 1 then
-		val perfectGames = results.values.count(_._1 == GameResult.Perfect)
+		val perfectGames = results.count(_._1 == GameResult.Perfect)
 		println("----------------")
-		println(s"Perfect scores: $perfectGames/$numGames, ${(perfectGames.toDouble / numGames)}%")
-		println(s"Average score: ${results.values.summing(_._2).toDouble / numGames}")
-		println(s"Result distribution: ${results.groupBy(_._2._1).map((k, v) => k -> v.size)}")
+		println(s"Perfect scores: $perfectGames/$numGames, ${(100.0 * perfectGames / numGames)}%")
+		println(s"Average score: ${results.summing(_._2).toDouble / numGames}")
+		println(s"Result distribution: ${results.groupBy(_._1).map((k, v) => k -> v.size)}")

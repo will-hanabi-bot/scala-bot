@@ -126,8 +126,14 @@ case class Player(
 	def orderKt(game: Game, order: Int) =
 		val thought = thoughts(order)
 
+		val sameHandDupe =
+			thought.possible.forall: id =>
+				game.state.isBasicTrash(id) ||
+				game.state.hands(game.state.holderOf(order)).exists: o =>
+					o != order && game.state.deck(o).matches(id)
+
 		(game.meta(order).trash && thought.possible.forall(id => !game.state.isCritical(id))) ||
-		thought.possible.forall(game.state.isBasicTrash) ||
+		sameHandDupe ||
 		(thought.inferred.isEmpty && thought.reset)
 
 	def orderKp(game: Game, order: Int, excludeTrash: Boolean = false) =
@@ -195,10 +201,10 @@ case class Player(
 	def thinksLocked(game: Game, playerIndex: Int) =
 		!thinksLoaded(game, playerIndex) &&
 		game.state.hands(playerIndex).forall: order =>
+			val status = game.meta(order).status
+
 			game.state.deck(order).clued ||
-			game.isBlindPlaying(order) ||
-			game.meta(order).status == CardStatus.GentlemansDiscard ||
-			game.meta(order).cm
+			(status != CardStatus.None && status != CardStatus.CalledToDiscard)
 
 	def obviousLoaded(game: Game, playerIndex: Int) =
 		obviousPlayables(game, playerIndex).nonEmpty || thinksTrash(game, playerIndex).nonEmpty
@@ -206,9 +212,10 @@ case class Player(
 	def obviousLocked(game: Game, playerIndex: Int) =
 		!obviousLoaded(game, playerIndex) &&
 		game.state.hands(playerIndex).forall: order =>
+			val status = game.meta(order).status
+
 			game.state.deck(order).clued ||
-			game.meta(order).status == CardStatus.CalledToPlay ||
-			game.meta(order).cm
+			(status != CardStatus.None && status != CardStatus.CalledToDiscard)
 
 	def findPrompt(prev: Game, playerIndex: Int, id: Identity, connected: List[Int] = Nil, ignore: Set[Int] = Set(), forcePink: Boolean = false, rightmost: Boolean = false) =
 		val state = prev.state

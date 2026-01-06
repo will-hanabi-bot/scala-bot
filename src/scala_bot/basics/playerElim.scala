@@ -50,10 +50,14 @@ extension (p: Player)
 						if reset then
 							thought.copy(possible = newPossible).resetInferences()
 						else if thought.infoLock.isDefined then
+							val newInfoLock =
+								val ids = thought.infoLock.get.difference(id)
+								if ids.isEmpty then IdentitySetOpt.empty else ids.toOpt
+
 							thought.copy(
 								inferred = newInferred,
 								possible = newPossible,
-								infoLock = thought.infoLock.get.difference(id).toOpt
+								infoLock = newInfoLock
 							)
 						else
 							thought.copy(

@@ -95,7 +95,11 @@ case class Thought(
 		if reset then
 			return this
 
-		val newInfoLock = if infoLock.existsO(_.nonEmpty) then infoLock else IdentitySetOpt.empty
+		val newInfoLock =
+			if !infoLock.isDefined then infoLock else
+				val ids = infoLock.get.intersect(possible)
+				if ids.isEmpty then IdentitySetOpt.empty else ids.toOpt
+
 		this.copy(
 			reset = true,
 			inferred =
@@ -123,6 +127,7 @@ case class ConvData(
 	status: CardStatus = CardStatus.None,
 	hidden: Boolean = false,
 	reasoning: List[Int] = Nil,
+	signalTurn: Option[Int] = None,
 	by: Option[Int] = None
 ):
 	inline def cm = status == CardStatus.ChopMoved
@@ -132,6 +137,7 @@ case class ConvData(
 		urgent = false,
 		trash = false,
 		status = if status == CardStatus.ChopMoved then status else CardStatus.None,
+		signalTurn = None,
 		by = None
 	)
 
@@ -140,3 +146,6 @@ case class ConvData(
 			copy(reasoning = turnCount +: reasoning)
 		else
 			this
+
+	def signal(turnCount: Int) =
+		copy(signalTurn = signalTurn.orElse(Some(turnCount)))

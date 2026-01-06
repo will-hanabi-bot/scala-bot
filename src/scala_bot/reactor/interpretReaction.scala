@@ -66,11 +66,11 @@ def elimPlayDc(state: State, common: Player, meta: Vector[ConvData], reacter: In
 			(c, m)
 		else
 			state.hands(reacter).lift(reactSlot - 1) match
-				case Some(reactOrder) if newCommon.thoughts(reactOrder).possible.exists(state.isPlayable) =>
+				case Some(reactOrder) if m(reactOrder).status != CardStatus.CalledToPlay && newCommon.thoughts(reactOrder).possible.exists(state.isPlayable) =>
 					val newCommon = c.withThought(receiveOrder)(t => t.copy(
 						inferred = t.inferred.difference(state.trashSet)
 					))
-					Log.info(s"eliminated trash from slot ${i + 1} $receiveOrder - ${newCommon.strInfs(state, receiveOrder)}")
+					Log.info(s"eliminated trash from slot ${i + 1} $receiveOrder - ${newCommon.strInfs(state, receiveOrder)} react slot $reactSlot $focusSlot $i")
 					(newCommon, newMeta)
 				case _ => (c, m)
 	}

@@ -8,7 +8,6 @@ import scala_bot.utils._
 import java.time.Instant
 import scala.util.chaining.scalaUtilChainingOps
 import scala.util.boundary, boundary.break
-import scala.annotation.threadUnsafe
 
 type WinnableResult = Either[String, (List[PerformAction], Frac)]
 
@@ -27,11 +26,14 @@ case class RemainingEntry(missing: Int, all: Boolean)
 
 type RemainingMap = Map[Identity, RemainingEntry]
 
-extension(remaining: RemainingMap)
+extension (remaining: RemainingMap)
 	def rem(id: Identity) =
 		remaining(id).missing match
 			case 1 => remaining.removed(id)
 			case m => remaining.updated(id, remaining(id).copy(missing = m - 1))
+
+	def fmt2(state: State): String =
+		remaining.map((id, entry) => s"${state.logId(id)} (missing ${entry.missing})").mkString(", ")
 
 def findRemainingIds(game: Game) =
 	val state = game.state
@@ -143,19 +145,19 @@ case class EndgameSolver[G <: Game](
 					Log.info(s"solved in ${start.until(Instant.now()).toMillis()}ms")
 					Right((actions.head, winrate))
 
-		Log.info(s"remaining ids: ${remainingIds.map((id, entry) => s"${state.logId(id)} (missing ${entry.missing})").mkString(", ")}")
+		Log.info(s"remaining ids: ${remainingIds.fmt2(state)}")
 
 		def impossibleArr(ids: Vector[Identity], id: Identity, order: Int) =
 			val thought = game.me.thoughts(order)
 
 			state.deck(order).id().exists(_ != id) ||
-			!thought.possible.contains(id) ||
+			!thought.infoLock.getOrElse(thought.possible).contains(id) ||
 			// We cannot assign a trash id if it is linked for a non-trash id and all other orders are already trash
 			(state.isBasicTrash(id) && linkedOrders.contains(order) && game.me.links.exists: l =>
 				val orders = l.getOrders
 				l.promise.exists(!state.isBasicTrash(_)) && orders.contains(order) && orders.forall: o =>
 					o == order ||
-					ids.zipWithIndex.exists((id, i) => o == unknownOwn(i) && state.isBasicTrash(id)))
+					ids.zipWithIndex.exists((id2, i) => o == unknownOwn(i) && state.isBasicTrash(id2)))
 
 		def expandArr(arrangement: Arrangement): Iterable[Arrangement] =
 			if Instant.now.isAfter(deadline) then
@@ -175,6 +177,7 @@ case class EndgameSolver[G <: Game](
 		val allArrs = Iterator.iterate(initialArr)(_.flatMap(expandArr)).drop(unknownOwn.length).next()
 
 		if Instant.now.isAfter(deadline) then
+			Logger.setLevel(level)
 			return TIMEOUT
 
 		Log.info(s"all arrs ${allArrs.length}")
@@ -187,25 +190,20 @@ case class EndgameSolver[G <: Game](
 
 		val arrs = normalArrs.when(_ => monteCarlo):
 			_.foldLeft(Map[String, List[Arrangement]]()): (acc, arr) =>
-				val trashArr = arr.ids.zipWithIndex.collect:
-					case (id, i) if state.isBasicTrash(id) => i
-				.mkString
-
-				acc.updated(trashArr, arr :: acc.getOrElse(trashArr, List.empty))
+				val nonTrashArr = arr.ids.map(id => if state.isBasicTrash(id) then "_" else state.logId(id)).mkString
+				acc.updated(nonTrashArr, arr +: acc.getOrElse(nonTrashArr, List.empty))
 			.pipe: a =>
-				a.removed("")
-					.flatMap:
-						case (_, arrs) =>
-							val totalWinrate = arrs.summing(_.prob)
-							val amt = arrs.length.min(3)
-							arrs.take(amt).map(arr => arr.copy(prob = totalWinrate / amt))
-					.concat(a.getOrElse("", List.empty))
-					.toList
+				a.flatMap:
+					case (_, arrs) =>
+						val totalWinrate = arrs.summing(_.prob)
+						val amt = arrs.length.min(3)
+						arrs.take(amt).map(arr => arr.copy(prob = totalWinrate / amt))
+				.toList
 		.sortBy(a => -a.prob)
 		.when(_.isEmpty): _ =>
-			List(Arrangement(Vector.empty, Frac.one, Map.empty))
+			List(Arrangement(Vector.empty, Frac.one, remainingIds))
 
-		Log.info(s"arrangements ${arrs.length}")
+		Log.info(s"arrangements ${arrs.map(_._1.map(state.logId).mkString(","))}")
 
 		val hypos = arrs.map:
 			case Arrangement(ids, prob, remaining) =>
@@ -221,17 +219,29 @@ case class EndgameSolver[G <: Game](
 
 				(hypo, actions, gameArrs, prob)
 
-		val allActions = hypos.flatMap(_._2).distinct
+		val allActions =
+			for
+				(_, actions, _, _) <- hypos
+				(perform, _)       <- actions
+			yield
+				perform
+		.distinct
+
 		val (firstHypo, firstActions, firstArrs, firstProb) = hypos.head
+
+		Log.info(s"all actions: ${allActions.map(_.fmt(game))}")
+		Log.info(s"initial arrangement: ${firstHypo.state.ourHand.map(firstHypo.state.logId).mkString(",")} $firstProb")
+
 		val initialActions =
 			val init = optimizeFull(firstHypo, firstArrs, firstActions, state.ourPlayerIndex, deadline)
 
 			// Apply probability of first arrangement
 			init.map(e => e._1 -> e._2 * firstProb) ++
 				// Add all invalid actions with winrate 0 at the end.
-				allActions.filterNot(a => init.exists(_._1 == a._1)).map(_._1 -> Frac.zero)
+				allActions.filterNot(a => init.exists(_._1 == a)).map(_ -> Frac.zero)
 
 		if initialActions.isEmpty then
+			Logger.setLevel(level)
 			return Left("couldn't find any winning actions")
 
 		@annotation.tailrec
@@ -240,7 +250,7 @@ case class EndgameSolver[G <: Game](
 				val (_, bestWinrate) = best
 				val (action, winrate) = actions.head
 
-				Log.highlight(Console.GREEN, s"testing action: ${action.fmt(game)}")
+				Log.highlight(Console.GREEN, s"\ntesting action: ${action.fmt(game)}")
 
 				@annotation.tailrec
 				def inner(remHypos: Seq[(G, Seq[(PerformAction, Seq[Identity])], (Seq[GameArr], Seq[GameArr]), Frac)], winrate: Frac, remProb: Frac): Frac =

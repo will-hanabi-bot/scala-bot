@@ -104,7 +104,7 @@ def genArrs(game: Game, remaining: RemainingMap, clueOnly: Boolean): (List[GameA
 	val state = game.state
 	val undrawn = GameArr(Frac.one, remaining, None)
 
-	assert(remaining.values.summing(_.missing) == state.cardsLeft, s"genArr failed $remaining ${state.cardsLeft}")
+	assert(remaining.values.summing(_.missing) == state.cardsLeft, s"genArr failed ${remaining.fmt2(state)} ${state.cardsLeft}")
 
 	val drawn =
 		if clueOnly then
