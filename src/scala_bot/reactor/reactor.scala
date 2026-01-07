@@ -40,7 +40,15 @@ case class Reactor(
 
 	goodTouch: Boolean = false,
 	zcsTurn: Option[Int] = None
-) extends Game
+) extends Game:
+	def chop(playerIndex: Int) =
+		state.hands(playerIndex).find:
+			meta(_).status == CardStatus.CalledToDiscard
+		.orElse:
+			state.hands(playerIndex).find: order =>
+				zcsTurn.forall(_ >= state.deck(order).drawnIndex) &&
+				!state.deck(order).clued &&
+				meta(order).status == CardStatus.None
 
 object Reactor:
 	private def init(
@@ -67,7 +75,8 @@ object Reactor:
 			.fold(game): urgent =>
 				val newCommon = game.common.withThought(urgent)(t => t.copy(
 					inferred = t.oldInferred.getOrElse(throw new Exception(s"No old inferred on $urgent!")),
-					oldInferred = IdentitySetOpt.empty
+					oldInferred = IdentitySetOpt.empty,
+					infoLock = IdentitySetOpt.empty
 				))
 				val newMeta = game.meta.updated(urgent,
 					game.meta(urgent).cleared.reason(game.state.turnCount))
@@ -76,15 +85,6 @@ object Reactor:
 
 	private def resetZcs(game: Reactor) =
 		game.copy(zcsTurn = None)
-
-	def chop(game: Reactor, playerIndex: Int) =
-		game.state.hands(playerIndex).find:
-			game.meta(_).status == CardStatus.CalledToDiscard
-		.orElse:
-			game.state.hands(playerIndex).find: order =>
-				game.zcsTurn.forall(_ >= game.state.deck(order).drawnIndex) &&
-				!game.state.deck(order).clued &&
-				game.meta(order).status == CardStatus.None
 
 	given GameOps[Reactor] with
 		def copyWith(game: Reactor, updates: GameUpdates) =
@@ -186,7 +186,7 @@ object Reactor:
 			val signalledPlays = interpretedGame.state.hands.flatten.filter: o =>
 				prev.meta(o).status != CardStatus.CalledToPlay && interpretedGame.meta(o).status == CardStatus.CalledToPlay
 
-			val eliminatedGame = interpretedGame.elim(goodTouch = false)
+			val eliminatedGame = interpretedGame.elim
 			val playsAfterElim = eliminatedGame.state.hands.flatten.filter(eliminatedGame.meta(_).status == CardStatus.CalledToPlay)
 
 			eliminatedGame
@@ -224,11 +224,17 @@ object Reactor:
 						meta = clearedM
 					)
 				.pipe: g =>
+					lazy val usefulDc = !failed && prev.state.deck(order).clued &&
+						suitIndex != -1 && rank != -1 &&
+						!state.isBasicTrash(id) &&
+						prev.meta(order).status != CardStatus.CalledToDiscard &&
+						!(prev.common.thinksLocked(prev, playerIndex) && prev.state.clueTokens == 0)
+
 					g.waiting match
 						case Some(wc) =>
 							reactDiscard(prev, g, playerIndex, order, wc)
 
-						case None if !failed && prev.state.deck(order).clued && suitIndex != -1 && rank != -1 && !state.isBasicTrash(id) =>
+						case None if usefulDc  =>
 							interpretUsefulDc(g, action) match
 								case DiscardResult.None =>
 									g.copy(lastMove = Some(DiscardInterp.None))
@@ -254,7 +260,7 @@ object Reactor:
 										lastMove = Some(DiscardInterp.Sarcastic)
 									)
 						case None => g
-				.pipe(_.elim(goodTouch = false))
+				.elim
 				.when(_ => prev.state.canClue)(resetZcs)
 
 		def interpretPlay(prev: Reactor, game: Reactor, action: PlayAction): Reactor =
@@ -265,7 +271,7 @@ object Reactor:
 					g.waiting match
 						case Some(wc) => reactPlay(prev, g, playerIndex, order, wc)
 						case None => g
-				.pipe(_.elim(goodTouch = false))
+				.elim
 				.when(_ => prev.state.canClue)(resetZcs)
 
 		def updateTurn(game: Reactor, action: TurnAction): Reactor =
@@ -299,7 +305,7 @@ object Reactor:
 				}
 
 				waitedGame.copy(common = newCommon, meta = newMeta)
-					.elim(goodTouch = true)
+					.elim
 
 		def takeAction(game: Reactor): PerformAction =
 			val (state, me) = (game.state, game.me)
@@ -323,7 +329,6 @@ object Reactor:
 						Log.info(s"endgame solved!")
 						return perform
 
-			val discardOrders = me.discardable(game, state.ourPlayerIndex)
 			val playableOrders =
 				val commonP = game.common.obviousPlayables(game, state.ourPlayerIndex)
 				val knownP = me.obviousPlayables(game, state.ourPlayerIndex)
@@ -354,7 +359,6 @@ object Reactor:
 					me.thinksPlayables(game, state.ourPlayerIndex)
 
 			Log.info(s"playables $playableOrders")
-			Log.info(s"discardable $discardOrders")
 
 			val canClue = state.canClue && !game.waiting.exists(_.receiver == state.ourPlayerIndex)
 
@@ -387,17 +391,22 @@ object Reactor:
 			Log.info(s"can discard: ${!cantDiscard} ${state.clueTokens}")
 
 			val allDiscards: Seq[(PerformAction, Action)] = if cantDiscard then Nil else
+				val trash = me.thinksTrash(game, state.ourPlayerIndex)
+				val expectedDiscards =
+					if trash.nonEmpty then
+						trash
+					else if (!state.canClue || allPlays.isEmpty) && !me.obviousLocked(game, state.ourPlayerIndex) then
+						game.chop(state.ourPlayerIndex).toVector
+					else
+						Vector.empty
+				val discardOrders = (expectedDiscards ++ me.discardable(game, state.ourPlayerIndex)).distinct
+
+				Log.info(s"discardable $discardOrders")
 				discardOrders.map: o =>
 					val action = DiscardAction(state.ourPlayerIndex, o, me.thoughts(o).id(infer = true))
 					(PerformAction.Discard(o), action)
 
-			val allActions =
-				val as = allClues.concat(allPlays).concat(allDiscards)
-
-				chop(game, state.ourPlayerIndex) match
-					case Some(chop) if !cantDiscard && (!state.canClue || allPlays.isEmpty) && allDiscards.isEmpty && !me.obviousLocked(game, state.ourPlayerIndex) =>
-						as :+ (PerformAction.Discard(chop), DiscardAction(state.ourPlayerIndex, chop, -1, -1, false))
-					case _ => as
+			val allActions = allClues.concat(allPlays).concat(allDiscards)
 
 			if allActions.isEmpty then
 				if state.clueTokens == 8 then
@@ -448,9 +457,10 @@ object Reactor:
 			allClues
 
 		def findAllDiscards(game: Reactor, playerIndex: Int): List[PerformAction] =
-			val trash = game.common.discardable(game, playerIndex)
-			val target = trash.headOption
-				.orElse(chop(game, playerIndex))
-				.getOrElse(game.players(playerIndex).lockedDiscard(game.state, playerIndex))
+			val trash = game.common.thinksTrash(game, playerIndex)
+			val expectedDiscards = if trash.nonEmpty then trash else game.chop(playerIndex).toVector
+
+			val target = expectedDiscards.headOption.getOrElse:
+				game.players(playerIndex).lockedDiscard(game.state, playerIndex)
 
 			List(PerformAction.Discard(target))

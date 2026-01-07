@@ -255,11 +255,8 @@ object RefSieve:
 						Log.info(s"endgame solved!")
 						return perform
 
-			val discardOrders = me.discardable(game, state.ourPlayerIndex)
 			val playableOrders = me.thinksPlayables(game, state.ourPlayerIndex)
-
 			Log.info(s"playables $playableOrders")
-			Log.info(s"discardable $discardOrders")
 
 			val allClues = if !state.canClue then Nil else
 				for
@@ -280,17 +277,22 @@ object RefSieve:
 			Log.info(s"can discard: ${!cantDiscard} ${state.clueTokens}")
 
 			val allDiscards = if cantDiscard then Nil else
+				val trash = me.thinksTrash(game, state.ourPlayerIndex)
+				val expectedDiscards =
+					if trash.nonEmpty then
+						trash
+					else if (!state.canClue || allPlays.isEmpty) && !me.thinksLocked(game, state.ourPlayerIndex) then
+						game.chop(state.ourPlayerIndex).toVector
+					else
+						Vector.empty
+				val discardOrders = (expectedDiscards ++ me.discardable(game, state.ourPlayerIndex)).distinct
+
+				Log.info(s"discardable $discardOrders")
 				discardOrders.map: o =>
 					val action = DiscardAction(state.ourPlayerIndex, o, me.thoughts(o).id(infer = true))
 					(PerformAction.Discard(o), action)
 
-			val allActions =
-				val as = allClues.concat(allPlays).concat(allDiscards)
-
-				game.chop(state.ourPlayerIndex) match
-					case Some(chop) if !cantDiscard && (!state.canClue || allPlays.isEmpty) && allDiscards.isEmpty && !me.thinksLocked(game, state.ourPlayerIndex) =>
-						as :+ (PerformAction.Discard(chop), DiscardAction(state.ourPlayerIndex, chop, -1, -1, false))
-					case _ => as
+			val allActions = allClues.concat(allPlays).concat(allDiscards)
 
 			if allActions.isEmpty then
 				if state.clueTokens == 8 then
@@ -324,7 +326,7 @@ object RefSieve:
 			}
 
 			game.copy(common = newCommon, meta = newMeta)
-				.elim(goodTouch = true)
+				.elim
 
 		def findAllClues(game: RefSieve, giver: Int) =
 			val state = game.state

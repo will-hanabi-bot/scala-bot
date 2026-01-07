@@ -2,7 +2,7 @@ package scala_bot.hgroup
 
 import scala_bot.basics._
 import scala_bot.utils._
-import scala_bot.logger.{Log, Logger, LogLevel}
+import scala_bot.logger.Log
 import scala_bot.utils.visibleFind
 
 def getResult(game: HGroup, hypo: HGroup, action: ClueAction): Double =
@@ -69,37 +69,10 @@ def getResult(game: HGroup, hypo: HGroup, action: ClueAction): Double =
 				case Some(ClueInterp.Fix)      => value + 1
 				case _ => value
 
-def advanceGame(game: HGroup, action: Action) =
-	action match
-		case clue: ClueAction => game.simulateClue(clue, log = true)
-		case _ => game.simulateAction(action)
-
-def forceClue(orig: HGroup, game: HGroup, offset: Int, bobOnly: Boolean): Double =
+def _forceClue(orig: HGroup, game: HGroup, offset: Int, only: Option[Int] = None): Double =
 	val state = game.state
-	val playerIndex = (state.ourPlayerIndex + offset) % state.numPlayers
-	val bob = state.nextPlayerIndex(playerIndex)
-
-	val allClues =
-		for
-			i    <- 0 until state.numPlayers if i != playerIndex && (!bobOnly || i == bob)
-			clue <- state.allValidClues(i)
-		yield
-			val list = state.clueTouched(state.hands(i), clue)
-			ClueAction(playerIndex, i, list, clue.toBase)
-
-	val level = Logger.level
-	allClues.maximizing(0.0): action =>
-		Logger.setLevel(LogLevel.Off)
-		val hypoGame = advanceGame(game, action)
-
-		if hypoGame.lastMove == Some(ClueInterp.Mistake) then
-			Logger.setLevel(level)
-			-100.0
-		else
-			val value = advance(orig, hypoGame, offset + 1)
-			Logger.setLevel(level)
-			Log.highlight(Console.YELLOW, s"${action.fmt(state)}: $value")
-			value
+	val giver = (state.ourPlayerIndex + offset) % state.numPlayers
+	forceClue(game, giver, advance(orig, _, offset + 1), only)
 
 def advance(orig: HGroup, game: HGroup, offset: Int): Double =
 	val (state, common, meta) = (game.state, game.common, game.meta)
@@ -133,12 +106,12 @@ def advance(orig: HGroup, game: HGroup, offset: Int): Double =
 					(Some(id), action)
 
 			Log.info(s"${state.names(playerIndex)} ${if id.exists(state.isPlayable) then "playing" else "bombing"} ${state.logId(id)}")
-			val value = advance(orig, advanceGame(game, action), offset + 1)
+			val value = advance(orig, game.simulate(action), offset + 1)
 
 			if player.thoughts(order).id(infer = true).isDefined then Left(value) else Right(value)
 
 		val maxPlay = math.min(knownPlays.maxOption.getOrElse(99.9), unknownPlays.minOption.getOrElse(99.9))
-		maxPlay.max(forceClue(orig, game, offset, bobOnly = false))
+		maxPlay.max(_forceClue(orig, game, offset))
 
 	else if player.thinksLocked(game, playerIndex) then
 		if !state.canClue then
@@ -146,17 +119,17 @@ def advance(orig: HGroup, game: HGroup, offset: Int): Double =
 			val Identity(suitIndex, rank) = state.deck(lockedDc).id().get
 			val action = DiscardAction(playerIndex, lockedDc, suitIndex, rank)
 			Log.info(s"locked discard! $lockedDc")
-			advance(orig, advanceGame(game, action), offset + 1)
+			advance(orig, game.simulate(action), offset + 1)
 		else
-			forceClue(orig, game, offset, bobOnly = false)
+			_forceClue(orig, game, offset)
 
 	else if state.clueTokens == 8 then
 		Log.info("forced clue at 8 clues!")
-		forceClue(orig, game, offset, bobOnly = false)
+		_forceClue(orig, game, offset)
 
 	else if game.mustClue(playerIndex) then
 		Log.info(s"forcing ${state.names(playerIndex)} to clue ${state.names(state.nextPlayerIndex(playerIndex))}!")
-		forceClue(orig, game, offset, bobOnly = true)
+		_forceClue(orig, game, offset, only = Some(bob))
 
 	else
 		trash.headOption match
@@ -165,7 +138,7 @@ def advance(orig: HGroup, game: HGroup, offset: Int): Double =
 					throw new Exception(s"Player ${state.names(playerIndex)} not locked but no chop! ${state.hands(playerIndex).map(o => s"${state.deck(o).clued} ${game.meta(o).status}").mkString(", ")}")
 				val id = state.deck(chop).id().get
 				val action = DiscardAction(playerIndex, chop, id.suitIndex, id.rank)
-				val dcGame = advanceGame(game, action)
+				val dcGame = game.simulate(action)
 
 				if state.clueTokens > 2 then
 					val clueGame = game.withState(s => s.copy(clueTokens = s.clueTokens - 1))
@@ -192,12 +165,12 @@ def advance(orig: HGroup, game: HGroup, offset: Int): Double =
 				val action = DiscardAction(playerIndex, order, suitIndex, rank)
 
 				Log.info(s"${state.names(playerIndex)} discarding trash ${state.logId(id)}")
-				advance(orig, advanceGame(game, action), offset + 1)
+				advance(orig, game.simulate(action), offset + 1)
 
 def evalAction(game: HGroup, action: Action): (HGroup, Double) =
 	Log.highlight(Console.GREEN, s"===== Predicting value for ${action.fmt(game.state)} =====")
 	val state = game.state
-	val hypoGame = advanceGame(game, action)
+	val hypoGame = game.simulate(action)
 
 	val mistake = hypoGame.lastMove.matches:
 		case Some(ClueInterp.Mistake) if action.isInstanceOf[ClueAction] => true

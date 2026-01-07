@@ -139,7 +139,7 @@ extension[G <: Game](game: G)
 				possible = IdentitySet.single(id)
 			))
 
-	def elim(goodTouch: Boolean = true)(using ops: GameOps[G]): G =
+	def elim(using ops: GameOps[G]): G =
 		val state = game.state
 		var newThoughts = game.common.thoughts
 		var newMeta = game.meta
@@ -160,12 +160,12 @@ extension[G <: Game](game: G)
 				newThoughts = newThoughts.updated(order, thought.copy(infoLock = IdentitySetOpt.empty))
 
 		var (resets, newCommon) = game.common.copy(thoughts = newThoughts).cardElim(state)
-		if goodTouch then
+		if game.goodTouch then
 			val (resets2, newCommon2) = newCommon.goodTouchElim(game)
 			resets = resets.union(resets2)
 			newCommon = newCommon2
 
-		val (sarcastics, _newCommon) = newCommon.refreshLinks(game, goodTouch)
+		val (sarcastics, _newCommon) = newCommon.refreshLinks(game)
 		newCommon = _newCommon.refreshPlayLinks(game).updateHypoStacks(game)
 
 		val newPlayers = game.players.map: p =>
@@ -197,9 +197,9 @@ extension[G <: Game](game: G)
 				dirty = newCommon.dirty
 			)
 			.cardElim(state)._2
-			.when(_ => goodTouch):
+			.when(_ => game.goodTouch):
 				_.goodTouchElim(game)._2
-			.refreshLinks(game, goodTouch)._2
+			.refreshLinks(game)._2
 			.refreshPlayLinks(game)
 			.updateHypoStacks(game)
 			.copy(dirty = BitSet.empty)

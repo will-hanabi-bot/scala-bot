@@ -311,7 +311,7 @@ extension (p: Player)
 
 		(resets, p.copy(thoughts = newThoughts, dirty = dirty))
 
-	def elimLink(game: Game, matches: Seq[Int], focus: Int, id: Identity, goodTouch: Boolean): Player =
+	def elimLink(game: Game, matches: Seq[Int], focus: Int, id: Identity): Player =
 		Log.info(s"eliminating ${game.state.logId(id)} link from focus (${p.name})! $matches --> $focus")
 
 		val newThoughts = matches.foldLeft(p.thoughts): (thoughts, order) =>
@@ -324,7 +324,7 @@ extension (p: Player)
 			val newThought =
 				if newInferred.isEmpty && !thought.reset then
 					thought.resetInferences()
-						.when(_ => goodTouch): t =>
+						.when(_ => game.goodTouch): t =>
 							t.copy(inferred = t.inferred.filter(!p.isTrash(game, _, order)))
 				else
 					thought.copy(inferred = newInferred)
@@ -333,7 +333,7 @@ extension (p: Player)
 
 		p.copy(thoughts = newThoughts, dirty = p.dirty ++ matches)
 
-	def findLinks(game: Game, goodTouch: Boolean) =
+	def findLinks(game: Game) =
 		val state = game.state
 
 		def linkable(order: Int) =
@@ -360,7 +360,7 @@ extension (p: Player)
 				if orders.length > 1 then
 					val focused = orders.filter(game.meta(_).focused)
 					if focused.length == 1 && inferred.length == 1 then
-						newPlayer = newPlayer.elimLink(game, orders, focused.head, inferred.head, goodTouch)
+						newPlayer = newPlayer.elimLink(game, orders, focused.head, inferred.head)
 
 					else if orders.length > inferred.length then
 						// We have enough inferred cards to elim elsewhere
@@ -369,7 +369,7 @@ extension (p: Player)
 
 		newPlayer
 
-	def refreshLinks(game: Game, goodTouch: Boolean) =
+	def refreshLinks(game: Game) =
 		val state = game.state
 
 		val initial = (p.copy(links = Nil), List.empty[Int])
@@ -403,6 +403,7 @@ extension (p: Player)
 						Log.warn(s"promised sarcastic ${state.logId(id)} not found among cards $orders, rewind?")
 						acc
 					else if viableOrders.length == 1 then
+						Log.info(s"resolving sarcastic link for ${state.logId(id)} from $orders to ${viableOrders.head} (${p.name})")
 						(player.withThought(viableOrders.head)(_.copy(inferred = IdentitySet.single(id))),
 							viableOrders.head +: sarcastics)
 					else
@@ -424,7 +425,7 @@ extension (p: Player)
 						acc
 					else if focused.length == 1 && ids.length == 1 then
 						Log.info(s"resolving unpromised link for ${state.logId(ids.head)} to ${focused.head} (${p.name})")
-						(player.elimLink(game, orders, focused.head, ids.head, goodTouch), sarcastics)
+						(player.elimLink(game, orders, focused.head, ids.head), sarcastics)
 					else
 						ids.find(i => orders.exists(!player.thoughts(_).inferred.contains(i))) match
 							case Some(lostInf) =>
@@ -432,7 +433,7 @@ extension (p: Player)
 								(player, sarcastics)
 							case None =>
 								(player.copy(links = link +: player.links), sarcastics)
-		(sarcastics, newPlayer.findLinks(game, goodTouch))
+		(sarcastics, newPlayer.findLinks(game))
 
 	def refreshPlayLinks(game: Game) =
 		p.playLinks.foldRight(p.copy(playLinks = Nil)):

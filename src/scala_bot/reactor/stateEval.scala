@@ -68,10 +68,10 @@ def getResult(game: Reactor, hypo: Reactor, action: ClueAction): Double =
 						// case Some(ClueInterp.Reactive) => value + 1
 						case _ => value
 
-def advanceGame(game: Reactor, action: Action) =
-	action match
-		case clue: ClueAction => game.simulateClue(clue, log = true)
-		case _ => game.simulateAction(action)
+def _forceClue(orig: Reactor, game: Reactor, offset: Int, only: Option[Int] = None): Double =
+	val state = game.state
+	val giver = (state.ourPlayerIndex + offset) % state.numPlayers
+	forceClue(game, giver, advance(orig, _, offset + 1), only)
 
 def advance(orig: Reactor, game: Reactor, offset: Int): Double =
 	val (state, common, meta) = (game.state, game.common, game.meta)
@@ -79,13 +79,14 @@ def advance(orig: Reactor, game: Reactor, offset: Int): Double =
 	val player = game.players(playerIndex)
 
 	val bob = state.nextPlayerIndex(playerIndex)
-	val bobChop = if state.numPlayers == 2 then None else Reactor.chop(game, bob)
+	val bobChop = if state.numPlayers == 2 then None else game.chop(bob)
 
 	val trash = player.thinksTrash(game, playerIndex)
 	lazy val urgentDc = trash.find(meta(_).urgent)
 	lazy val allPlayables = player.obviousPlayables(game, playerIndex)
 
 	lazy val bobClue =
+		state.canClue &&
 		!state.hands(playerIndex).exists(meta(_).urgent) &&
 		offset == 1 &&
 		!common.obviousLoaded(game, bob) &&
@@ -118,17 +119,17 @@ def advance(orig: Reactor, game: Reactor, offset: Int): Double =
 
 			Log.info(s"${state.names(playerIndex)} playing ${state.logId(id)}")
 
-			val advancedGame = advanceGame(game, action)
+			val advancedGame = game.simulate(action)
 			if advancedGame.state.strikes > game.state.strikes then
 				strikes += 1
 
 			advance(orig, advancedGame, offset + 1)
 
 		// Some of the playables cause strikes, but not all, so penalize playing.
-		if strikes < playables.length then
+		if strikes > 0 && strikes < playables.length then
 			playActions.min
 		else
-			playActions.max
+			playActions.max.max(_forceClue(orig, game, offset, only = Some(bob)))
 
 	else if player.obviousLocked(game, playerIndex) then
 		if !state.canClue then
@@ -136,30 +137,40 @@ def advance(orig: Reactor, game: Reactor, offset: Int): Double =
 			val Identity(suitIndex, rank) = state.deck(lockedDc).id().get
 			val action = DiscardAction(playerIndex, lockedDc, suitIndex, rank)
 			Log.info(s"locked discard! $lockedDc")
-			advance(orig, advanceGame(game, action), offset + 1)
-		else
+			advance(orig, game.simulate(action), offset + 1)
+
+		else if bob == state.ourPlayerIndex then
 			val nextGame = game.withState(s => s.copy(clueTokens = s.clueTokens - 1))
 			advance(orig, nextGame, offset + 1)
 
+		else
+			_forceClue(orig, game, offset, only = Some(bob))
+
 	else if state.clueTokens == 8 then
-		val nextGame = game.withState(s => s.copy(clueTokens = s.clueTokens - 1))
 		Log.info("forced clue at 8 clues!")
-		advance(orig, nextGame, offset + 1)
+		if bob == state.ourPlayerIndex then
+			val nextGame = game.withState(s => s.copy(clueTokens = s.clueTokens - 1))
+			advance(orig, nextGame, offset + 1)
+		else
+			_forceClue(orig, game, offset, only = Some(bob))
 
 	else if bobClue then
-		val nextGame = game.withState(s => s.copy(clueTokens = s.clueTokens - 1))
 		Log.info(s"forcing ${state.names(playerIndex)} to clue bob!")
-		0.5 + advance(orig, nextGame, offset + 2)
+		if bob == state.ourPlayerIndex then
+			val nextGame = game.withState(s => s.copy(clueTokens = s.clueTokens - 1))
+			advance(orig, nextGame, offset + 1)
+		else
+			_forceClue(orig, game, offset, only = Some(bob))
 
 	else
 		urgentDc.orElse(trash.headOption) match
 			case None =>
-				val chop = Reactor.chop(game, playerIndex)
+				val chop = game.chop(playerIndex)
 					.orElse(game.zcsTurn.map(_ => game.players(playerIndex).lockedDiscard(game.state, playerIndex))) 	// In ZCS, a player may have no valid discard while not being "locked".
 					.getOrElse(throw new Exception(s"Player ${state.names(playerIndex)} not locked but no chop! ${state.hands(playerIndex).map(meta(_).status)}"))
 				val id = state.deck(chop).id().get
 				val action = DiscardAction(playerIndex, chop, id.suitIndex, id.rank)
-				val dcGame = advanceGame(game, action)
+				val dcGame = game.simulate(action)
 
 				if state.clueTokens > 2 then
 					val clueGame = game.withState(s => s.copy(clueTokens = s.clueTokens - 1))
@@ -186,12 +197,12 @@ def advance(orig: Reactor, game: Reactor, offset: Int): Double =
 				val action = DiscardAction(playerIndex, order, suitIndex, rank)
 
 				Log.info(s"${state.names(playerIndex)} discarding trash ${state.logId(id)}")
-				advance(orig, advanceGame(game, action), offset + 1)
+				advance(orig, game.simulate(action), offset + 1)
 
 def evalAction(game: Reactor, action: Action): Double =
 	Log.highlight(Console.GREEN, s"===== Predicting value for ${action.fmt(game.state)} =====")
 	val state = game.state
-	val hypoGame = advanceGame(game, action)
+	val hypoGame = game.simulate(action)
 
 	val mistake = hypoGame.lastMove.matches:
 		case Some(ClueInterp.Mistake) if action.isInstanceOf[ClueAction] => true
@@ -205,7 +216,8 @@ def evalAction(game: Reactor, action: Action): Double =
 				if state.inEndgame then 0.1 else 0.25
 			else
 				0.5
-			getResult(game, hypoGame, clue) * mult - 0.5
+			val result = getResult(game, hypoGame, clue)
+			result * (if result > 0 then mult else 1) - 0.5
 
 		case PlayAction(_, order, suitIndex, rank) =>
 			if !game.state.inEndgame && game.me.discardable(game, state.ourPlayerIndex).contains(order) then
@@ -217,9 +229,12 @@ def evalAction(game: Reactor, action: Action): Double =
 
 		case DiscardAction(_, order, suitIndex, rank, _) =>
 			val trash = game.me.orderKt(game, order) || game.meta(order).status == CardStatus.CalledToDiscard
+			val chop = game.chop(state.holderOf(order))
 
 			if trash then
 				0
+			else if chop.contains(order) then
+				-0.25
 			else if suitIndex == -1 || rank == -1 then
 				-1.5	 // discarding unknown doesn't incur bdr loss, so this should be punishing
 			else
@@ -238,11 +253,12 @@ def evalAction(game: Reactor, action: Action): Double =
 		best
 
 def evalState(state: State): Double =
-	// The first 2 * (# suits) pts are worth 2.
-	val scoreVal: Double = state.score.min(2 * state.variant.suits.length) + state.score
+	// The first 2 * (# suits) pts are worth 1.5.
+	val scoreVal: Double = state.score.min(2 * state.variant.suits.length) * 0.5 + state.score
 
 	val clueVal: Double = state.clueTokens match
 		case 0 					 => -0.5
+		case 1					 => 0
 		case _ if !state.canClue => -0.25
 		case c if c > 6 		 => 3 + (c - 6) * 0.25
 		case c 					 => c / 2.0
@@ -317,15 +333,13 @@ def evalGame(orig: Reactor, game: Reactor): Double =
 		if state.isBasicTrash(id) || id.rank == 5 || discarded.isEmpty then
 			0
 		else if duplicated then
-			val sameHandDuplicate = duplicate.exists(d => orig.state.hands(state.holderOf(d)).count(state.deck(_).matches(id)) > 1)
-
-			if sameHandDuplicate then 0 else -0.5
+			0
 		else
 			id.rank match
 				case 1 => -math.pow(discarded.length, 2)
 				case 2 => -3
 				case 3 => -1.5
-				case _ => -1
+				case _ => -0.5
 
 	val endgamePenalty = orig.state.endgameTurns.fold(0): turns =>
 		val finalScore = (0 until turns).foldLeft(orig.state.playStacks) { (stacks, i) =>

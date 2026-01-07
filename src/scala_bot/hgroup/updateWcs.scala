@@ -166,7 +166,7 @@ def refreshWCs(prev: HGroup, game: HGroup, action: Action, beforeClueInterp: Boo
 				acc
 	.pipe:
 		_.copy(waiting = retainWCs)
-	.elim(goodTouch = true)
+	.elim
 
 def updateWc(prev: HGroup, game: HGroup, action: Action, wc: WaitingConnection, beforeClueInterp: Boolean): UpdateResult =
 	if wc.connections.isEmpty then

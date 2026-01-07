@@ -1,6 +1,7 @@
 package scala_bot.reactor
 
 import scala_bot.basics._
+import scala_bot.utils._
 import scala_bot.logger.Log
 
 def calcSlot(focusSlot: Int, slot: Int) =
@@ -178,7 +179,7 @@ def reactDiscard(prev: Reactor, game: Reactor, playerIndex: Int, order: Int, wc:
 	else if inverted then
 		// We were waiting for a response inversion and they reacted unnaturally
 		val unnatural = if knownTrash.isEmpty then
-			prev.state.hands(reacter)(0) != order
+			prev.chop(reacter).forall(_ != order)
 		else
 			!knownTrash.contains(order)
 
@@ -214,11 +215,15 @@ def reactDiscard(prev: Reactor, game: Reactor, playerIndex: Int, order: Int, wc:
 def reactPlay(prev: Reactor, game: Reactor, playerIndex: Int, order: Int, wc: ReactorWC) =
 	val state = game.state
 	val ReactorWC(_, reacter, receiver, receiverHand, clue, focusSlot, inverted, turn) = wc
-	lazy val knownPlayables = prev.common.obviousPlayables(prev, reacter)
 
 	if playerIndex != reacter then
 		game
 	else if inverted then
+		val knownPlayables = prev.common.obviousPlayables(prev, reacter)
+		// This should only trigger in 8 clue/locked/endgame situations, since
+		// it wouldn't be inverted or reacter would have obvious playables otherwise.
+		.when(_.isEmpty)(_ => prev.players(reacter).thinksPlayables(prev, reacter).toVector)
+
 		if !knownPlayables.contains(order) then
 			game.rewind(turn, InterpAction(ClueInterp.Reactive)) match
 				case Right(newGame) => newGame

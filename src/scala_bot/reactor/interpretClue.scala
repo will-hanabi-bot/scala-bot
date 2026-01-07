@@ -1,6 +1,7 @@
 package scala_bot.reactor
 
 import scala_bot.basics._
+import scala_bot.utils._
 import scala_bot.logger.Log
 import scala_bot.utils.playersUntil
 
@@ -28,7 +29,7 @@ def interpretStable(prev: Reactor, game: Reactor, action: ClueAction, stall: Boo
 			actionList = addAction(s.actionList, action, s.turnCount)
 		))
 		.onClue(action)
-		.elim(goodTouch = true)
+		.elim
 
 		interpretReactive(prev, hypoGame, action, bob, inverted = true)
 	else
@@ -127,9 +128,11 @@ private def tryStable(prev: Reactor, game: Reactor, action: ClueAction, stall: B
 						id <- state.deck(o).id() if state.playableAway(id) == 1
 					yield id
 
-				prevPlays.find: o =>
-					possibleConnections.exists: id =>
+				prevPlays.findSome: o =>
+					val connectId = possibleConnections.find: id =>
 						common.thoughts(o).inferred.contains(id.prev.get)
+
+					connectId.map(o -> _.prev.get)
 
 			if newlyTouched.isEmpty then
 				val safeActions = playables.concat(common.thinksTrash(newGame, target))
@@ -167,11 +170,15 @@ private def tryStable(prev: Reactor, game: Reactor, action: ClueAction, stall: B
 				(Some(ClueInterp.Reveal), newGame)
 
 			else if revealConnectable.isDefined then
-				Log.highlight(Console.CYAN, s"revealed a potential safe action! playing ${revealConnectable.get} urgently to connect")
+				val (connOrder, connId) = revealConnectable.get
+				Log.highlight(Console.CYAN, s"revealed a potential safe action! playing $connOrder urgently as ${state.logId(connId)} to connect")
 				val connectedGame = newGame
-					.withThought(revealConnectable.get): t =>
-						t.copy(oldInferred = t.inferred.toOpt)
-					.withMeta(revealConnectable.get):
+					.withThought(connOrder): t =>
+						t.copy(
+							inferred = IdentitySet.single(connId),
+							oldInferred = t.inferred.toOpt
+						)
+					.withMeta(connOrder):
 						_.copy(urgent = true, status = CardStatus.CalledToPlay, by = Some(giver))
 				(Some(ClueInterp.Reveal), connectedGame)
 
@@ -237,10 +244,9 @@ def badStable(prev: Reactor, game: Reactor, action: ClueAction, interp: ClueInte
 
 	lazy val altPlay = alternativeClue(prev, target, playOnly = true)
 	lazy val alt = alternativeClue(game, target, playOnly = false)
-	lazy val badPlayable = state.hands(target).find: o =>
-		game.meta(o).status == CardStatus.CalledToPlay &&
-		prev.meta(o).status != CardStatus.CalledToPlay &&
-		!state.hasConsistentInfs(game.common.thoughts(o))
+	lazy val badPlayable = state.hands.flatten.find: o =>
+		game.meta(o).status == CardStatus.CalledToPlay && !state.hasConsistentInfs(game.common.thoughts(o)) &&
+		(prev.meta(o).status != CardStatus.CalledToPlay || prev.state.hasConsistentInfs(prev.common.thoughts(o)))
 
 	lazy val badDiscard = state.hands(target).find: o =>
 		game.meta(o).status == CardStatus.CalledToDiscard &&
@@ -265,6 +271,9 @@ def badStable(prev: Reactor, game: Reactor, action: ClueAction, interp: ClueInte
 		Log.warn(s"bad discard on ${badDiscard.get}!")
 		true
 	// Check for bad lock
+	else if interp == ClueInterp.Lock && prev.common.obviousLocked(prev, target) then
+		Log.warn(s"gave lock clue to already-locked player?!")
+		true
 	else if interp == ClueInterp.Lock && alt.isDefined then
 		Log.warn(s"alternative clue ${alt.get.fmt(state)} was available!")
 		true
@@ -330,7 +339,7 @@ def delayedPlays(game: Reactor, giver: Int, receiver: Int, stable: Boolean) =
 			else
 				common.thoughts(o).id(infer = true) match
 					case Some(id) => (o, Identity(id.suitIndex, id.rank + 1)) +: acc
-					case None => common.thoughts(o).inferred.map(i => o -> Identity(i.suitIndex, i.rank + 1)) ++: acc
+					case None => common.thoughts(o).inferred.difference(state.trashSet).map(i => o -> Identity(i.suitIndex, i.rank + 1)) ++: acc
 
 def refPlay(prev: Reactor, game: Reactor, action: ClueAction) =
 	val hand = game.state.hands(action.target)
@@ -345,7 +354,6 @@ def refPlay(prev: Reactor, game: Reactor, action: ClueAction) =
 		(None, game)
 	else
 		targetPlay(game, action, target, urgent = false, stable = true)
-
 
 def targetPlay(game: Reactor, action: ClueAction, target: Int, urgent: Boolean = false, stable: Boolean = true) =
 	val state = game.state

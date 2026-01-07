@@ -142,8 +142,7 @@ case class State(
 
 	def hasConsistentInfs(thought: Thought) =
 		thought.possible.length == 1 ||
-		deck(thought.order).id().forall(thought.inferred.contains) ||
-		thought.matches(Identity(1, 1), infer = true)
+		deck(thought.order).id().forall(thought.inferred.contains)
 
 	def canClue = clueTokens > 0
 

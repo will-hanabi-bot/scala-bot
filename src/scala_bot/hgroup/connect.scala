@@ -271,7 +271,7 @@ def findSingleConn(ctx: ClueContext, reacting: Int, id: Identity, connCtx: Conne
 					None
 				else
 					val hypo = state.deck(conn.order).id().orElse(Option.when(conn.ids.length == 1)(conn.ids.head))
-						.fold(game)(id => game.withState(_.withPlay(id)).elim(goodTouch = true))
+						.fold(game)(id => game.withState(_.withPlay(id)).elim)
 
 					val newConnCtx = connCtx.copy(connected = conn.order +: connCtx.connected)
 					findSingleConn(ctx.copy(game = hypo), reacting, id, newConnCtx, opts, conn +: connections)
@@ -480,7 +480,7 @@ def connect(ctx: ClueContext, id: Identity, looksDirect: Boolean, thinksStall: S
 							// Resolve wcs after playing the card
 							val res = acc.onPlay(action)
 								.pipe(refreshWCs(acc, _, action))
-								.elim(goodTouch = true)
+								.elim
 
 							Logger.setLevel(level)
 							res

@@ -12,7 +12,7 @@ import scala_bot.logger._
 import scala_bot.refSieve.RefSieve
 import scala_bot.hgroup.HGroup
 
-val BOT_VERSION = "v0.4.12 (scala-bot)"
+val BOT_VERSION = "v0.4.13 (scala-bot)"
 
 case class ChatMessage(
 	msg: String,
@@ -42,7 +42,6 @@ case class Table(
 	name: String,
 	passwordProtected: Boolean,
 	joined: Boolean,
-	owned: Boolean,
 	running: Boolean,
 	variant: String,
 	options: TableOptions,

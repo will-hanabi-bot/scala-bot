@@ -495,7 +495,7 @@ object HGroup:
 							_.copy(inEarlyGame = false)
 						.copy(lastActions = g.lastActions.updated(playerIndex, Some(action)))
 
-					.elim(goodTouch = true))
+					.elim)
 
 		def interpretPlay(prev: HGroup, game: HGroup, action: PlayAction): HGroup =
 			val PlayAction(playerIndex, order, suitIndex, rank) = action

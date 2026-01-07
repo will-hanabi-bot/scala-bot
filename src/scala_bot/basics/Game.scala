@@ -183,8 +183,7 @@ extension[G <: Game](game: G)
 			regex.matches(game.state.variant.suits(i.suitIndex).name)
 
 	def handleClue(prev: G, clue: ClueAction)(using ops: GameOps[G]) =
-		ops.interpretClue(prev, game.onClue(clue).elim(goodTouch = true), clue)
-			.elim(goodTouch = true)
+		ops.interpretClue(prev, game.onClue(clue).elim, clue).elim
 
 	def takeAction(using ops: GameOps[G]) =
 		ops.takeAction(game)
@@ -234,6 +233,11 @@ extension[G <: Game](game: G)
 
 		Logger.setLevel(level)
 		hypoGame
+
+	def simulate(action: Action)(using ops: GameOps[G]): G =
+		action match
+			case clue: ClueAction => game.simulateClue(clue, log = true)
+			case _ => game.simulateAction(action, log = true)
 
 	def rewind(turn: Int, action: Action)(using ops: GameOps[G]): Either[String, G] =
 		val state = game.state

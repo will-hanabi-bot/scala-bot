@@ -109,7 +109,7 @@ def setup[G <: Game](
 					trashSet = s.allIds.filter(s.isBasicTrash)
 				)
 		.pipe(init)
-		.pipe(_.elim(goodTouch = true))
+		.elim
 		.pipe: g =>
 			ops.copyWith(g, GameUpdates(
 				base = Some(g.state, g.meta, g.players, g.common)

@@ -2,13 +2,6 @@ package scala_bot.utils
 
 import scala_bot.basics._
 
-@annotation.tailrec
-def reduce[A, B](list: Seq[A], initial: B, reducer: (acc: B, curr: A) => Either[B, B]): B =
-	if list.isEmpty then initial else
-		reducer(initial, list.head) match
-			case Left(res) => res
-			case Right(acc) => reduce(list.tail, acc, reducer)
-
 inline def loop(
 	inline start: Int,
 	inline cond: Int => Boolean,
@@ -69,6 +62,14 @@ extension[A](it: Iterator[A])
 				case Left(res) => res
 				case Right(acc) => it.reduce(acc)(reducer)
 
+	def findSome[B](f: A => Option[B]): Option[B] =
+		while it.hasNext do
+			val res = f(it.next)
+			if res.isDefined then
+				return res
+
+		return None
+
 	def summing[N](f: A => N)(using numeric: Numeric[N]) =
 		var res = numeric.zero
 		while it.hasNext do
@@ -99,6 +100,9 @@ extension [A](a: Iterable[A])
 
 	def reduce[B](initial: B)(reducer: (acc: B, curr: A) => Either[B, B]): B =
 		a.iterator.reduce(initial)(reducer)
+
+	def findSome[B](f: A => Option[B]): Option[B] =
+		a.iterator.findSome(f)
 
 	def summing[N](f: A => N)(using numeric: Numeric[N]) =
 		val it = a.iterator

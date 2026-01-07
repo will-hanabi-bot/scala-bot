@@ -130,11 +130,11 @@ case class Player(
 			thought.possible.forall: id =>
 				game.state.isBasicTrash(id) ||
 				game.state.hands(game.state.holderOf(order)).exists: o =>
-					o != order && game.state.deck(o).matches(id)
+					o != order && thoughts(o).matches(id)
 
 		(game.meta(order).trash && thought.possible.forall(id => !game.state.isCritical(id))) ||
-		sameHandDupe ||
-		(thought.inferred.isEmpty && thought.reset)
+		sameHandDupe
+		// (thought.inferred.isEmpty && thought.reset)
 
 	def orderKp(game: Game, order: Int, excludeTrash: Boolean = false) =
 		val state = game.state

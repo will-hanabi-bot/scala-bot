@@ -95,6 +95,11 @@ def interpretReactiveColour(prev: Reactor, game: Reactor, action: ClueAction, fo
 					else
 						1
 
+			val unknownDupes = state.hands(receiver).zipWithIndex
+				.filter: (o, _) =>
+					!prevKt.contains(o) &&
+					state.hands.flatten.exists(o2 => o2 != o && game.common.thoughts(o2).matches(state.deck(o), infer = true))
+
 			lazy val knownTrash = state.hands(receiver).zipWithIndex.filter: (o, _) =>
 				state.isBasicTrash(state.deck(o).id().get)
 
@@ -105,10 +110,10 @@ def interpretReactiveColour(prev: Reactor, game: Reactor, action: ClueAction, fo
 					val id = state.deck(o).id().get
 					-game.common.playableAway(id) * 10 + (5 - id.rank)
 
-			if unknownTrash.isEmpty then
-				if knownTrash.isEmpty then sacrifices else knownTrash
-			else
-				unknownTrash
+			unknownTrash
+				.when(_.isEmpty)(_ => unknownDupes)
+				.when(_.isEmpty)(_ => knownTrash)
+				.when(_.isEmpty)(_ => sacrifices)
 
 		if dcTargets.isEmpty then
 			Log.warn(s"reactive clue but receiver had no playable, trash or sacrifice targets!")
