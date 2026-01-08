@@ -8,7 +8,7 @@ import scala_bot.logger.{Logger, LogLevel}
 import scala.util.chaining.scalaUtilChainingOps
 
 class Stable extends munit.FunSuite:
-	// override def beforeAll() = Logger.setLevel(LogLevel.Off)
+	override def beforeAll() = Logger.setLevel(LogLevel.Off)
 
 	test("it understands a ref play"):
 		val game = setup(RefSieve.apply, Vector(
@@ -99,7 +99,7 @@ class Stable extends munit.FunSuite:
 
 		assert(game.common.thinksLocked(game, Bob.ordinal))
 
-	test("it doesn't focus the wrong card for the last id".only):
+	test("it doesn't focus the wrong card for the last id"):
 		val game = setup(RefSieve.apply, Vector(
 			Vector("xx", "xx", "xx", "xx", "xx"),
 			Vector("r1", "y1", "g1", "b1", "p1"),

@@ -6,6 +6,7 @@ import scala_bot.logger.{Log, Logger, LogLevel}
 import scala_bot.utils._
 
 import java.time.Instant
+import scala.collection.parallel.CollectionConverters._
 import scala.util.chaining.scalaUtilChainingOps
 import scala.util.boundary, boundary.break
 
@@ -433,7 +434,7 @@ case class EndgameSolver[G <: Game](
 		val (perform, winnableDraws) = action
 		val nextPlayerIndex = game.state.nextPlayerIndex(playerTurn)
 
-		arrs.summing:
+		arrs.par.map:
 			case GameArr(_, _, drew) if drew.exists(!winnableDraws.contains(_)) =>
 				Frac.zero
 
@@ -458,17 +459,16 @@ case class EndgameSolver[G <: Game](
 						case Right((performs, wr)) =>
 							Log.highlight(Console.YELLOW, s"} ${performs.map(_.fmtObj(game, nextPlayerIndex)).mkString(", ")} prob $prob winrate $wr")
 							prob * wr
+		.sum
 
 	def optimizeFull(game: G, arrs: (Seq[GameArr], Seq[GameArr]), actions: Seq[(PerformAction, Seq[Identity])], playerTurn: Int, deadline: Instant)(using ops: GameOps[G]): Seq[(PerformAction, Frac)] =
 		boundary:
 			val (undrawn, drawn) = arrs
 
-			actions.map: (perform, winnableDraws) =>
-				if Instant.now.isAfter(deadline) then
-					break(Seq.empty)
-
+			actions.par.map: (perform, winnableDraws) =>
 				val winrate = actionWinrate(game, if perform.isClue then undrawn else drawn, (perform, winnableDraws), playerTurn, deadline)
 				(perform, winrate)
+			.toList
 			.sortBy(-_._2)
 
 	def optimize(game: G, arrs: (Seq[GameArr], Seq[GameArr]), actions: Seq[(PerformAction, Seq[Identity])], playerTurn: Int, deadline: Instant, depth: Int = 0)(using ops: GameOps[G]): WinnableResult =

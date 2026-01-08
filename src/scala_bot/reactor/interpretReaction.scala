@@ -71,7 +71,7 @@ def elimPlayDc(state: State, common: Player, meta: Vector[ConvData], reacter: In
 					val newCommon = c.withThought(receiveOrder)(t => t.copy(
 						inferred = t.inferred.difference(state.trashSet)
 					))
-					Log.info(s"eliminated trash from slot ${i + 1} $receiveOrder - ${newCommon.strInfs(state, receiveOrder)} react slot $reactSlot $focusSlot $i")
+					Log.info(s"eliminated trash from slot ${i + 1} $receiveOrder - ${newCommon.strInfs(state, receiveOrder)}")
 					(newCommon, newMeta)
 				case _ => (c, m)
 	}
@@ -144,7 +144,8 @@ def targetIDiscard(prev: Reactor, game: Reactor, wc: ReactorWC, targetSlot: Int)
 		status = CardStatus.CalledToDiscard,
 		by = Some(wc.giver),
 		trash = newInferred.isEmpty
-	).reason(game.state.turnCount))
+	).reason(game.state.turnCount)
+	.signal(game.state.turnCount))
 
 	(newCommon, newMeta)
 
@@ -152,17 +153,24 @@ def targetIPlay(@annotation.unused _prev: Reactor, game: Reactor, wc: ReactorWC,
 	val state = game.state
 	val order = wc.receiverHand(targetSlot - 1)
 
+	val selfPlayables = game.common.obviousPlayables(game, state.holderOf(order))
+		.foldLeft(state.playableSet): (acc, o) =>
+			acc.union(game.common.thoughts(o).inferred.flatMap(_.next))
+
 	val newCommon = game.common.withThought(order)(t => t.copy(
 		oldInferred = t.inferred.toOpt,
-		inferred = t.inferred.intersect(state.playableSet),
-		infoLock = t.inferred.intersect(state.playableSet).toOpt
+		inferred = t.inferred.intersect(selfPlayables),
+		infoLock = t.inferred.intersect(selfPlayables).toOpt
 	))
+
+	Log.info(s"targeting play on $order ${newCommon.strInfs(state, order)}")
 
 	val newMeta = game.meta.updated(order, game.meta(order).copy(
 		status = CardStatus.CalledToPlay,
 		by = Some(wc.giver),
 		focused = true
-	).reason(state.turnCount))
+	).reason(state.turnCount)
+	.signal(state.turnCount))
 
 	(newCommon, newMeta)
 

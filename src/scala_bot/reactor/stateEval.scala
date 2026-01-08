@@ -83,16 +83,7 @@ def advance(orig: Reactor, game: Reactor, offset: Int): Double =
 
 	val trash = player.thinksTrash(game, playerIndex)
 	lazy val urgentDc = trash.find(meta(_).urgent)
-	lazy val allPlayables = player.obviousPlayables(game, playerIndex)
-
-	lazy val bobClue =
-		state.canClue &&
-		!state.hands(playerIndex).exists(meta(_).urgent) &&
-		offset == 1 &&
-		!common.obviousLoaded(game, bob) &&
-		bobChop.flatMap(state.deck(_).id()).exists: id =>
-			state.isCritical(id) ||
-			(state.isPlayable(id) && !game.me.isSieved(game, id, bobChop.get))
+	val allPlayables = player.obviousPlayables(game, playerIndex)
 
 	if playerIndex == state.ourPlayerIndex || state.endgameTurns.contains(0) then
 		evalGame(orig, game)
@@ -154,16 +145,24 @@ def advance(orig: Reactor, game: Reactor, offset: Int): Double =
 		else
 			_forceClue(orig, game, offset, only = Some(bob))
 
-	else if bobClue then
-		Log.info(s"forcing ${state.names(playerIndex)} to clue bob!")
-		if bob == state.ourPlayerIndex then
-			val nextGame = game.withState(s => s.copy(clueTokens = s.clueTokens - 1))
-			advance(orig, nextGame, offset + 1)
-		else
-			_forceClue(orig, game, offset, only = Some(bob))
+	else if urgentDc.isDefined then
+		val id = state.deck(urgentDc.get).id().get
+		val Identity(suitIndex, rank) = id
+		val action = DiscardAction(playerIndex, urgentDc.get, suitIndex, rank)
+
+		Log.info(s"${state.names(playerIndex)} urgently discarding ${state.logId(id)}")
+		advance(orig, game.simulate(action), offset + 1)
 
 	else
 		urgentDc.orElse(trash.headOption) match
+			case None if offset == 1 && !game.withState(_.copy(currentPlayerIndex = playerIndex)).hasPtd =>
+				Log.info(s"${state.names(playerIndex)} doesn't have ptd, must clue!")
+				if bob == state.ourPlayerIndex then
+					val nextGame = game.withState(s => s.copy(clueTokens = s.clueTokens - 1))
+					advance(orig, nextGame, offset + 1)
+				else
+					_forceClue(orig, game, offset, only = Some(bob))
+
 			case None =>
 				val chop = game.chop(playerIndex)
 					.orElse(game.zcsTurn.map(_ => game.players(playerIndex).lockedDiscard(game.state, playerIndex))) 	// In ZCS, a player may have no valid discard while not being "locked".
@@ -196,8 +195,8 @@ def advance(orig: Reactor, game: Reactor, offset: Int): Double =
 				val Identity(suitIndex, rank) = id
 				val action = DiscardAction(playerIndex, order, suitIndex, rank)
 
-				Log.info(s"${state.names(playerIndex)} discarding trash ${state.logId(id)}")
-				advance(orig, game.simulate(action), offset + 1)
+				Log.info(s"${state.names(playerIndex)} discarding ${state.logId(id)}")
+				advance(orig, game.simulate(action), offset + 1).max(_forceClue(orig, game, offset, only = Some(bob)))
 
 def evalAction(game: Reactor, action: Action): Double =
 	Log.highlight(Console.GREEN, s"===== Predicting value for ${action.fmt(game.state)} =====")
@@ -264,7 +263,7 @@ def evalState(state: State): Double =
 		case c 					 => c / 2.0
 
 	val scoreLoss = state.variant.suits.length * 5 - state.maxScore
-	val dcCritVal = -8 * scoreLoss
+	val dcCritVal = -20 * scoreLoss
 
 	val strikesVal = state.strikes match
 		case 1 => -1.5
@@ -341,6 +340,13 @@ def evalGame(orig: Reactor, game: Reactor): Double =
 				case 3 => -1.5
 				case _ => -0.5
 
+	val lockPenalty =
+		(0 until state.numPlayers).count(game.common.thinksLocked(game, _)) match
+			case 0 => 0
+			case 1 => -1
+			case 2 => -3
+			case _ => -10
+
 	val endgamePenalty = orig.state.endgameTurns.fold(0): turns =>
 		val finalScore = (0 until turns).foldLeft(orig.state.playStacks) { (stacks, i) =>
 			val playerIndex = (orig.state.currentPlayerIndex + i + 1) % state.numPlayers
@@ -351,5 +357,5 @@ def evalGame(orig: Reactor, game: Reactor): Double =
 
 		(finalScore - state.maxScore) * 5
 
-	Log.info(s"state: $stateVal, future: $futureVal, bdr: $bdrVal${if endgamePenalty != 0 then s" endgame penalty: ${endgamePenalty}" else ""}")
-	stateVal + futureVal + bdrVal + endgamePenalty
+	Log.info(s"state: $stateVal, future: $futureVal, bdr: $bdrVal${if lockPenalty != 0 then s" lock penalty: ${lockPenalty}" else ""}${if endgamePenalty != 0 then s" endgame penalty: ${endgamePenalty}" else ""}")
+	stateVal + futureVal + bdrVal + lockPenalty + endgamePenalty

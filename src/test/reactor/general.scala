@@ -10,25 +10,6 @@ import scala.util.chaining.scalaUtilChainingOps
 class General extends munit.FunSuite:
 	override def beforeAll() = Logger.setLevel(LogLevel.Off)
 
-	// test("it understands good touch"):
-	// 	val game = setup(Reactor.apply, Vector(
-	// 		Vector("xx", "xx", "xx", "xx", "xx"),
-	// 		Vector("r4", "g2", "r2", "r3", "g5"),
-	// 		Vector("p4", "b5", "p2", "b1", "g4"),
-	// 	),
-	// 		playStacks = Some(Vector(2, 0, 0, 0, 0)),
-	// 		starting = Cathy,
-	// 		init = fullyKnown(Bob, 1, "r4")
-	// 	)
-	// 	.pipe(takeTurn("Cathy clues red to Alice (slots 1,2)"))	// Targeting r3 in slot 1
-	// 	.pipe(takeTurn("Alice plays r3 (slot 1)"))
-
-	// 	// Alice's slot 2 should be r4,r5.
-	// 	hasInfs(game, None, Alice, 2, Vector("r4", "r5"))
-
-	// 	// Bob's slot 1 should be known r4.
-	// 	hasInfs(game, None, Bob, 1, Vector("r4"))
-
 	test("it elims from focus"):
 		val game = setup(Reactor.apply, Vector(
 			Vector("xx", "xx", "xx", "xx", "xx"),

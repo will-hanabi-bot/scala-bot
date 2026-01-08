@@ -175,6 +175,8 @@ case class Player(
 
 	def obviousPlayables(game: Game, playerIndex: Int) =
 		game.state.hands(playerIndex).filter(orderKp(game, _))
+			.pipe:
+				game.filterPlayables(this, playerIndex, _)
 
 	def thinksPlayables(game: Game, playerIndex: Int) =
 		game.state.hands(playerIndex).filter(orderPlayable(game, _))

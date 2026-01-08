@@ -32,6 +32,7 @@ case class GameUpdates(
 	deckIds: Option[Vector[Option[Identity]]] = None,
 	catchup: Option[Boolean] = None,
 	notes: Option[Map[Int, Note]] = None,
+	lastActions: Option[Vector[Option[Action]]] = None,
 	lastMove: Option[Option[Interp]] = None,
 	queuedCmds: Option[List[(String, String)]] = None,
 	nextInterp: Option[Option[Interp]] = None,
@@ -61,6 +62,7 @@ trait Game:
 	def future: Vector[IdentitySet]
 	def catchup: Boolean
 	def notes: Map[Int, Note]
+	def lastActions: Vector[Option[Action]]
 	def lastMove: Option[Interp]
 	def queuedCmds: List[(String, String)]
 	def nextInterp: Option[Interp]
@@ -123,15 +125,18 @@ extension[G <: Game](game: G)
 		action match
 			case clue: ClueAction =>
 				Log.highlight(Console.YELLOW, s"Turn ${state.turnCount}: ${action.fmt(state)}")
-				newGame.handleClue(game, clue)
+				newGame.handleClue(game, clue).pipe: g =>
+					ops.copyWith(g, GameUpdates(lastActions = Some(g.lastActions.updated(clue.playerIndex, Some(clue)))))
 
 			case discard: DiscardAction =>
 				Log.highlight(Console.YELLOW, s"Turn ${state.turnCount}: ${action.fmt(state)}")
-				ops.interpretDiscard(game, newGame.onDiscard(discard), discard)
+				ops.interpretDiscard(game, newGame.onDiscard(discard), discard).pipe: g =>
+					ops.copyWith(g, GameUpdates(lastActions = Some(g.lastActions.updated(discard.playerIndex, Some(discard)))))
 
 			case play: PlayAction =>
 				Log.highlight(Console.YELLOW, s"Turn ${state.turnCount}: ${action.fmt(state)}")
-				ops.interpretPlay(game, newGame.onPlay(play), play)
+				ops.interpretPlay(game, newGame.onPlay(play), play).pipe: g =>
+					ops.copyWith(g, GameUpdates(lastActions = Some(g.lastActions.updated(play.playerIndex, Some(play)))))
 
 			case draw @ DrawAction(playerIndex, order, suitIndex, rank) =>
 				newGame.onDraw(draw)
@@ -237,7 +242,7 @@ extension[G <: Game](game: G)
 	def simulate(action: Action)(using ops: GameOps[G]): G =
 		action match
 			case clue: ClueAction => game.simulateClue(clue, log = true)
-			case _ => game.simulateAction(action, log = true)
+			case _ => game.simulateAction(action)
 
 	def rewind(turn: Int, action: Action)(using ops: GameOps[G]): Either[String, G] =
 		val state = game.state

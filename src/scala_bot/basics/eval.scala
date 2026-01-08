@@ -7,7 +7,7 @@ def forceClue[G <: Game](game: G, giver: Int, advance: G => Double, only: Option
 	val state = game.state
 
 	if !state.canClue then
-		return -100.0
+		return -999.0
 
 	val allClues =
 		for
@@ -18,7 +18,7 @@ def forceClue[G <: Game](game: G, giver: Int, advance: G => Double, only: Option
 			ClueAction(giver, i, list, clue.toBase)
 
 	val level = Logger.level
-	allClues.maximizing(0.0): action =>
+	allClues.maximizing(-999.0): action =>
 		Logger.setLevel(LogLevel.Off)
 		val hypoGame = game.simulate(action)
 

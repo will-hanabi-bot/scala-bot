@@ -89,6 +89,19 @@ class Stable extends munit.FunSuite:
 
 		assert(game.common.obviousLocked(game, Bob.ordinal))
 
+	test("doesn't lock an already-locked player"):
+		val game = setup(Reactor.apply, Vector(
+			Vector("xx", "xx", "xx", "xx", "xx"),
+			Vector("p4", "p2", "p2", "b5", "g4"),
+			Vector("b1", "g2", "r2", "r3", "g5"),
+		))
+		.pipe(takeTurn("Alice clues 4 to Bob"))		// lock
+		.pipe(takeTurn("Bob clues green to Cathy"))
+		.pipe(takeTurn("Cathy plays b1", "y5"))
+		.pipe(takeTurn("Alice clues 5 to Bob"))		// lock again??
+
+		assertEquals(game.lastMove, Some(ClueInterp.Mistake))
+
 	test("it doesn't focus the wrong card for the last id"):
 		val game = setup(Reactor.apply, Vector(
 			Vector("xx", "xx", "xx", "xx", "xx"),
@@ -137,3 +150,34 @@ class Stable extends munit.FunSuite:
 		// We should play slot 4 as g1, instead of trying to play slot 3 to sacrifice b4.
 		hasStatus(game, Player.Alice, 3, CardStatus.None)
 		hasInfs(game, None, Alice, 4, Vector("g1"))
+
+	test("it interprets a 1-away reveal through an unknown card"):
+		val game = setup(Reactor.apply, Vector(
+			Vector("xx", "xx", "xx", "xx", "xx"),
+			Vector("g3", "y3", "g2", "b2", "b4"),
+			Vector("r4", "y4", "g4", "b4", "p4"),
+		),
+			init = preClue(Bob, 5, Seq("4"))
+		)
+		.pipe(takeTurn("Alice clues 2 to Bob"))					// locked
+		.pipe(takeTurn("Bob clues purple to Alice (slot 5)"))	// ref play on slot 4
+		.pipe(takeTurn("Cathy clues green to Bob"))
+
+		// We should play slot 4 as g1, instead of trying to play slot 3 to sacrifice b4.
+		hasStatus(game, Player.Alice, 3, CardStatus.None)
+		hasInfs(game, None, Alice, 4, Vector("g1"))
+
+	test("doesn't give a false 1-away reveal"):
+		val game = setup(Reactor.apply, Vector(
+			Vector("xx", "xx", "xx", "xx", "xx"),
+			Vector("r4", "y4", "g1", "b4", "p4"),
+			Vector("r4", "y4", "g4", "b4", "p2"),
+		),
+			starting = Bob
+		)
+		.pipe(takeTurn("Bob clues 2 to Cathy"))				// locked
+		.pipe(takeTurn("Cathy clues 1 to Bob"))				// direct 1
+		.pipe(takeTurn("Alice clues purple to Cathy"))
+
+		// Bob thinks they can connect by playing p1, but it's actually g1.
+		assertEquals(game.lastMove, Some(ClueInterp.Mistake))

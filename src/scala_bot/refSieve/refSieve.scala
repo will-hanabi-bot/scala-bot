@@ -11,6 +11,7 @@ case class RefSieve(
 	players: Vector[Player],
 	common: Player,
 	base: (State, Vector[ConvData], Vector[Player], Player),
+	lastActions: Vector[Option[Action]],
 
 	meta: Vector[ConvData] = Vector(),
 	deckIds: Vector[Option[Identity]] = Vector(),
@@ -72,6 +73,7 @@ object RefSieve:
 		players = t.players,
 		common = t.common,
 		base = (state, Vector(), t.players, t.common),
+		lastActions = Vector.fill(state.numPlayers)(None),
 		inProgress = inProgress
 	)
 
@@ -90,26 +92,26 @@ object RefSieve:
 				deckIds = updates.deckIds.getOrElse(game.deckIds),
 				catchup = updates.catchup.getOrElse(game.catchup),
 				notes = updates.notes.getOrElse(game.notes),
+				lastActions = updates.lastActions.getOrElse(game.lastActions),
 				lastMove = updates.lastMove.getOrElse(game.lastMove),
 				queuedCmds = updates.queuedCmds.getOrElse(game.queuedCmds),
 				nextInterp = updates.nextInterp.getOrElse(game.nextInterp),
 				rewindDepth = updates.rewindDepth.getOrElse(game.rewindDepth),
 				inProgress = updates.inProgress.getOrElse(game.inProgress),
-				noRecurse = updates.noRecurse.getOrElse(game.noRecurse),
-
-				waiting = game.waiting
+				noRecurse = updates.noRecurse.getOrElse(game.noRecurse)
 			)
 
 		def blank(game: RefSieve, keepDeck: Boolean) =
-			game.copy(
+			RefSieve(
 				tableID = game.tableID,
 				state = game.base._1,
+				players = game.base._3,
+				meta = game.base._2,
+				common = game.base._4,
+				base = game.base,
 				inProgress = game.inProgress,
 				deckIds = if keepDeck then game.deckIds else Vector(),
-				meta = game.base._2,
-				players = game.base._3,
-				common = game.base._4,
-				base = game.base
+				lastActions = Vector.fill(game.state.numPlayers)(None)
 			)
 
 		def interpretClue(prev: RefSieve, game: RefSieve, action: ClueAction): RefSieve =

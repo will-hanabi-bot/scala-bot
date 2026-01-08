@@ -475,7 +475,7 @@ def connect(ctx: ClueContext, id: Identity, looksDirect: Boolean, thinksStall: S
 							val action = PlayAction(state.holderOf(conn.order), conn.order, i.suitIndex, i.rank)
 							val level = Logger.level
 
-							Logger.setLevel(LogLevel.Error)
+							Logger.setLevel(LogLevel.Error.min(level))
 
 							// Resolve wcs after playing the card
 							val res = acc.onPlay(action)

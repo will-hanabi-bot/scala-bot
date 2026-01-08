@@ -45,6 +45,8 @@ case class HGroup(
 	players: Vector[Player],
 	common: Player,
 	base: (State, Vector[ConvData], Vector[Player], Player),
+	lastActions: Vector[Option[Action]],
+	importantAction: Vector[Boolean],
 
 	meta: Vector[ConvData] = Vector(),
 	deckIds: Vector[Option[Identity]] = Vector(),
@@ -67,8 +69,6 @@ case class HGroup(
 	dda: Option[Identity] = None,
 	inEarlyGame: Boolean = true,
 	stallInterp: Option[StallInterp] = None,
-	lastActions: Vector[Option[Action]],
-	importantAction: Vector[Boolean],
 	xmeta: Vector[XConvData] = Vector(),
 
 	allowFindOwn: Boolean = true
@@ -384,6 +384,7 @@ object HGroup:
 				deckIds = updates.deckIds.getOrElse(game.deckIds),
 				catchup = updates.catchup.getOrElse(game.catchup),
 				notes = updates.notes.getOrElse(game.notes),
+				lastActions = updates.lastActions.getOrElse(game.lastActions),
 				lastMove = updates.lastMove.getOrElse(game.lastMove),
 				queuedCmds = updates.queuedCmds.getOrElse(game.queuedCmds),
 				nextInterp = updates.nextInterp.getOrElse(game.nextInterp),
@@ -424,7 +425,7 @@ object HGroup:
 					importantAction = interpreted.importantAction
 				)
 
-				val secondRefresh = refreshWCs(prev, updatedPre, action)
+				refreshWCs(prev, updatedPre, action)
 					.cond(_.waiting != pre.waiting && !game.noRecurse) { g =>
 						Log.highlight(Console.GREEN, "----- REINTERPRETING CLUE -----")
 						val res = interpClue(ClueContext(prev, g, action))
@@ -433,8 +434,6 @@ object HGroup:
 					} {
 						_ => interpreted
 					}
-
-				secondRefresh.copy(lastActions = secondRefresh.lastActions.updated(action.playerIndex, Some(action)))
 
 		def interpretDiscard(prev: HGroup, game: HGroup, action: DiscardAction): HGroup =
 			val DiscardAction(playerIndex, order, suitIndex, rank, failed) = action
@@ -493,7 +492,6 @@ object HGroup:
 
 						g.when(_ => endEarlyGame):
 							_.copy(inEarlyGame = false)
-						.copy(lastActions = g.lastActions.updated(playerIndex, Some(action)))
 
 					.elim)
 
@@ -518,8 +516,6 @@ object HGroup:
 
 								performCM(g, orders).copy(lastMove =
 									if mistake then Some(PlayInterp.Mistake) else Some(PlayInterp.OrderCM))
-					.pipe: g =>
-						g.copy(lastActions = g.lastActions.updated(action.playerIndex, Some(action)))
 
 		def takeAction(game: HGroup): PerformAction =
 			val (state, me) = (game.state, game.me)

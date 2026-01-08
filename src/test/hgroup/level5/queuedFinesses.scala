@@ -3,11 +3,12 @@ package tests.hgroup.level5
 import scala_bot.basics._
 import scala_bot.test.{hasInfs, hasStatus, Player, setup, takeTurn}, Player._
 import scala_bot.hgroup.HGroup
+import scala_bot.logger.{Logger, LogLevel}
 
 import scala.util.chaining.scalaUtilChainingOps
 
 class QueuedFinesses extends munit.FunSuite:
-	// override def beforeAll() = Logger.setLevel(LogLevel.Off)
+	override def beforeAll() = Logger.setLevel(LogLevel.Off)
 
 	test("understands a queued finesse"):
 		val game = setup(HGroup.atLevel(5), Vector(

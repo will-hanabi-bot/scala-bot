@@ -132,12 +132,14 @@ extension[G <: Game](game: G)
 		.when(_ => suitIndex != -1 && rank != -1):
 			_.withState(_.withPlay(id))
 			.withId(order, id)
-			.withThought(order)(_.copy(
-				suitIndex,
-				rank,
-				inferred = IdentitySet.single(id),
-				possible = IdentitySet.single(id)
-			))
+			.withThought(order): t =>
+				t.copy(
+					suitIndex,
+					rank,
+					inferred = IdentitySet.single(id),
+					oldInferred = t.inferred.toOpt,
+					possible = IdentitySet.single(id)
+				)
 
 	def elim(using ops: GameOps[G]): G =
 		val state = game.state

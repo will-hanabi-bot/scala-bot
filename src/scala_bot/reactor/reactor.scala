@@ -23,6 +23,7 @@ case class Reactor(
 	players: Vector[Player],
 	common: Player,
 	base: (State, Vector[ConvData], Vector[Player], Player),
+	lastActions: Vector[Option[Action]],
 
 	waiting: Option[ReactorWC] = None,
 
@@ -41,6 +42,18 @@ case class Reactor(
 	goodTouch: Boolean = false,
 	zcsTurn: Option[Int] = None
 ) extends Game:
+	override def filterPlayables(player: Player, playerIndex: Int, orders: Seq[Int]) =
+		// if orders.nonEmpty then
+		// 	Log.info(s"$orders ${orders.map(player.thoughts(_).id(infer = true))} ${orders.map(meta(_).signalTurn)}")
+
+		orders.filterNot: o =>
+			player.thoughts(o).id(infer = true).isEmpty &&
+			// There's another unknown card that was queued before this
+			orders.exists: o2 =>
+				o != o2 &&
+				player.thoughts(o2).id(infer = true).isEmpty &&
+				meta(o2).signalTurn.exists(t2 => meta(o).signalTurn.exists(_ > t2))
+
 	def chop(playerIndex: Int) =
 		state.hands(playerIndex).find:
 			meta(_).status == CardStatus.CalledToDiscard
@@ -49,6 +62,37 @@ case class Reactor(
 				zcsTurn.forall(_ >= state.deck(order).drawnIndex) &&
 				!state.deck(order).clued &&
 				meta(order).status == CardStatus.None
+
+	def hasPtd: Boolean =
+		val playerIndex = state.currentPlayerIndex
+		val zelda = state.lastPlayerIndex(playerIndex)
+		val bob = state.nextPlayerIndex(playerIndex)
+		val bobChop = chop(bob)
+		val bobChopId = bobChop.flatMap(state.deck(_).id())
+
+		lazy val knownDupe = bobChopId.exists: id =>
+			state.hands(bob).exists: o =>
+				!bobChop.contains(o) &&
+				players(zelda).thoughts(o).matches(id) &&
+				this.me.thoughts(o).matches(id)
+
+		lazy val unknownPlay = lastActions(zelda).existsM:
+			case PlayAction(_, order, suitIndex, rank) =>
+				bobChopId.contains(Identity(suitIndex, rank)) &&
+				common.thoughts(order).oldInferred.get != IdentitySet.single(Identity(suitIndex, rank))
+
+		if common.obviousLoaded(this, bob) then
+			true
+		else if bobChopId.exists(state.isCritical) then
+			false
+		else if bobChopId.exists(state.isBasicTrash) then
+			!unknownPlay
+		else if knownDupe then
+			true
+		else if bobChopId.exists(id => state.isPlayable(id) || id.rank == 2) then
+			false
+		else
+			true
 
 object Reactor:
 	private def init(
@@ -63,6 +107,7 @@ object Reactor:
 			players = t.players,
 			common = t.common,
 			base = (state, Vector(), t.players, t.common),
+			lastActions = Vector.fill(state.numPlayers)(None),
 			inProgress = inProgress
 		)
 
@@ -98,6 +143,7 @@ object Reactor:
 				deckIds = updates.deckIds.getOrElse(game.deckIds),
 				catchup = updates.catchup.getOrElse(game.catchup),
 				notes = updates.notes.getOrElse(game.notes),
+				lastActions = updates.lastActions.getOrElse(game.lastActions),
 				lastMove = updates.lastMove.getOrElse(game.lastMove),
 				queuedCmds = updates.queuedCmds.getOrElse(game.queuedCmds),
 				nextInterp = updates.nextInterp.getOrElse(game.nextInterp),
@@ -107,15 +153,16 @@ object Reactor:
 			)
 
 		def blank(game: Reactor, keepDeck: Boolean) =
-			game.copy(
+			Reactor(
 				tableID = game.tableID,
 				state = game.base._1,
+				players = game.base._3,
+				meta = game.base._2,
+				common = game.base._4,
+				base = game.base,
 				inProgress = game.inProgress,
 				deckIds = if keepDeck then game.deckIds else Vector(),
-				meta = game.base._2,
-				players = game.base._3,
-				common = game.base._4,
-				base = game.base
+				lastActions = Vector.fill(game.state.numPlayers)(None)
 			)
 
 		def interpretClue(prev: Reactor, game: Reactor, action: ClueAction): Reactor =
@@ -281,43 +328,71 @@ object Reactor:
 			if currentPlayerIndex == -1 then
 				game
 			else
-				val waitedGame = game.waiting match
-					case Some(wc) if wc.reacter == state.lastPlayerIndex(currentPlayerIndex) =>
-						game.copy(waiting = None)
-					case _ => game
+				val nextQueuedPlayable =
+					state.hands(currentPlayerIndex).filter: o =>
+						game.meta(o).status == CardStatus.CalledToPlay &&
+						game.common.thoughts(o).id(infer = true).isEmpty
+					.minByOption: o =>
+						game.meta(o).signalTurn
 
-				val (newCommon, newMeta) = state.hands(currentPlayerIndex).foldLeft((game.common, game.meta)) { case ((c, m), order) =>
-					if m(order).status == CardStatus.CalledToPlay then
-						val newInferred = c.thoughts(order).inferred.intersect(state.playableSet)
+				game.when(_.waiting.exists(_.reacter == state.lastPlayerIndex(currentPlayerIndex))): g =>
+					g.copy(waiting = None)
+				.when(_ => nextQueuedPlayable.isDefined): g =>
+						val order = nextQueuedPlayable.get
+						val newInferred = g.common.thoughts(order).inferred.intersect(state.playableSet)
 
 						if newInferred.isEmpty then
-							val newCommon = c.withThought(order)(_.resetInferences())
-							val newMeta = m.updated(order, m(order).copy(
+							val newCommon = g.common.withThought(order)(_.resetInferences())
+							val newMeta = g.meta.updated(order, g.meta(order).copy(
 								status = CardStatus.None,
 								by = None,
 								trash = true
 							))
-							(newCommon, newMeta)
+							g.copy(common = newCommon, meta = newMeta)
 						else
-							(c.withThought(order)(_.copy(inferred = newInferred)), m)
-					else
-						(c, m)
-				}
-
-				waitedGame.copy(common = newCommon, meta = newMeta)
-					.elim
+							g.copy(common = game.common.withThought(order)(_.copy(inferred = newInferred)))
+				.elim
 
 		def takeAction(game: Reactor): PerformAction =
 			val (state, me) = (game.state, game.me)
+			val nextPlayerIndex = state.nextPlayerIndex(state.ourPlayerIndex)
 
 			state.ourHand.find(game.meta(_).urgent) match
-				case Some(urgent) => game.meta(urgent).status match
-					case CardStatus.CalledToPlay if !me.thoughts(urgent).possible.forall(state.isBasicTrash) =>
-						return PerformAction.Play(urgent)
-					case CardStatus.CalledToDiscard =>
-						return PerformAction.Discard(urgent)
-					case _ =>
-						Log.warn(s"Unexpected urgent card status ${game.meta(urgent).status}")
+				case Some(urgent) =>
+					val urgentBobSave =
+						state.canClue &&
+						game.waiting.exists: wc =>
+							wc.reacter == state.ourPlayerIndex &&
+							wc.receiver != nextPlayerIndex
+						&&
+						!game.common.obviousLoaded(game, nextPlayerIndex) &&
+						game.copy(zcsTurn = None).chop(nextPlayerIndex).flatMap(state.deck(_).id()).exists: id =>
+							state.isCritical(id)
+
+					if urgentBobSave then
+						Log.warn("ignoring urgent play/discard to save bob!")
+
+						val level = Logger.level
+						Logger.setLevel(LogLevel.Off)
+
+						val bobClues = if !state.canClue then Nil else
+							state.allValidClues(nextPlayerIndex).map: clue =>
+								val perform = clueToPerform(clue)
+								val action = performToAction(state, perform, state.ourPlayerIndex)
+								(perform, action)
+
+						val bestClue = bobClues.maxBy((_, action) => evalAction(game, action))._1
+
+						Logger.setLevel(level)
+						return bestClue
+					else
+						game.meta(urgent).status match
+							case CardStatus.CalledToPlay if !me.thoughts(urgent).possible.forall(state.isBasicTrash) =>
+								return PerformAction.Play(urgent)
+							case CardStatus.CalledToDiscard =>
+								return PerformAction.Discard(urgent)
+							case _ =>
+								Log.warn(s"Unexpected urgent card status ${game.meta(urgent).status}")
 				case _ => ()
 
 			if state.inEndgame && state.remScore <= state.variant.suits.length + 1 then
@@ -375,14 +450,12 @@ object Reactor:
 				val action = PlayAction(state.ourPlayerIndex, o, me.thoughts(o).id(infer = true))
 				(PerformAction.Play(o), action)
 
-			val potentialReacter = state.nextPlayerIndex(state.ourPlayerIndex)
-
 			// We have a play and the reacter might play on top of us
 			lazy val potentialForcedPlay = allPlays.nonEmpty &&
-				game.waiting.exists(_.reacter == potentialReacter) &&
+				game.waiting.exists(_.reacter == nextPlayerIndex) &&
 				playableOrders.exists:
 					game.me.thoughts(_).inferred.exists: id =>
-						state.hands(potentialReacter).exists: o =>
+						state.hands(nextPlayerIndex).exists: o =>
 							id.next.contains(state.deck(o).id().get)
 
 			val cantDiscard = state.clueTokens == 8 ||
@@ -392,14 +465,25 @@ object Reactor:
 
 			val allDiscards: Seq[(PerformAction, Action)] = if cantDiscard then Nil else
 				val trash = me.thinksTrash(game, state.ourPlayerIndex)
+
+				val zcsDiscardable = false
+					// !state.canClue &&
+					// !(allPlays.nonEmpty && game.waiting.exists(_.receiver == state.ourPlayerIndex))
+
 				val expectedDiscards =
 					if trash.nonEmpty then
 						trash
-					else if (!state.canClue || allPlays.isEmpty) && !me.obviousLocked(game, state.ourPlayerIndex) then
+					else if !me.obviousLocked(game, state.ourPlayerIndex) && (zcsDiscardable || allPlays.isEmpty) && game.hasPtd then
 						game.chop(state.ourPlayerIndex).toVector
 					else
 						Vector.empty
-				val discardOrders = (expectedDiscards ++ me.discardable(game, state.ourPlayerIndex)).distinct
+
+				val discardOrders =
+					// Someone needs to react to our hand: don't do anything weird
+					if game.waiting.exists(_.receiver == state.ourPlayerIndex) then
+						expectedDiscards
+					else
+						(expectedDiscards ++ me.discardable(game, state.ourPlayerIndex)).distinct
 
 				Log.info(s"discardable $discardOrders")
 				discardOrders.map: o =>

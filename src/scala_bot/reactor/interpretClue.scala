@@ -271,9 +271,6 @@ def badStable(prev: Reactor, game: Reactor, action: ClueAction, interp: ClueInte
 		Log.warn(s"bad discard on ${badDiscard.get}!")
 		true
 	// Check for bad lock
-	else if interp == ClueInterp.Lock && prev.common.obviousLocked(prev, target) then
-		Log.warn(s"gave lock clue to already-locked player?!")
-		true
 	else if interp == ClueInterp.Lock && alt.isDefined then
 		Log.warn(s"alternative clue ${alt.get.fmt(state)} was available!")
 		true
@@ -445,6 +442,11 @@ def refDiscard(prev: Reactor, game: Reactor, action: ClueAction, stall: Boolean)
 			if stall && state.nextPlayerIndex(receiver) == giver then
 				Log.info("stall to Cathy's lock card!")
 				(Some(ClueInterp.Stall), game)
+
+			else if prev.common.thinksLocked(prev, receiver) then
+				Log.info("player was already locked!")
+				(Some(ClueInterp.Mistake), game)
+
 			else
 				Log.info("locked!")
 
