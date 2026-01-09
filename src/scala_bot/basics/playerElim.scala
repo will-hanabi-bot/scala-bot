@@ -33,7 +33,7 @@ extension (p: Player)
 		var dirty = p.dirty
 		var resets = BitSet.empty
 
-		loop(0, _ < state.numPlayers, _ + 1, !exclude.contains(_)): playerIndex =>
+		loopIf(0, _ < state.numPlayers, _ + 1, !exclude.contains(_)): playerIndex =>
 			state.hands(playerIndex).fastForeach: order =>
 				val thought = thoughts(order)
 				val noElim =
@@ -298,7 +298,7 @@ extension (p: Player)
 					val newInferred = thought.inferred.difference(state.trashSet)
 					val reset = newInferred.isEmpty && !thought.reset
 
-					dirty = dirty + order
+					dirty = dirty.incl(order)
 
 					val newThought = if reset then
 						thought.resetInferences()

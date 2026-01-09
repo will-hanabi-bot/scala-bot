@@ -232,6 +232,19 @@ enum PerformAction:
 	case Rank(target: Int, value: Int)
 	case Terminate(target: Int, value: Int)
 
+	def hash: Int =
+		this match
+			case PerformAction.Play(target) =>
+				target
+			case PerformAction.Discard(target) =>
+				10 + target
+			case PerformAction.Colour(target, value) =>
+				20 + target + value * 100
+			case PerformAction.Rank(target, value) =>
+				30 + target + value * 100
+			case PerformAction.Terminate(target, value) =>
+				-1
+
 	def isClue: Boolean = this match
 		case Colour(_, _) | Rank(_, _) => true
 		case _ => false
@@ -263,7 +276,8 @@ enum PerformAction:
 
 		val actionType = this match
 			case PerformAction.Play(target) =>
-				s"play ${state.logId(deckIds(target))}, order $target"
+				val id = deckIds(target)
+				s"${if id.exists(!state.isPlayable(_)) then "bomb" else "play"} ${state.logId(id)}, order $target"
 
 			case PerformAction.Discard(target) =>
 				s"discard ${state.logId(deckIds(target))}, order $target"

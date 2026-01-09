@@ -1,5 +1,7 @@
 package scala_bot.basics
 
+import scala_bot.utils._
+
 enum FixResult:
 	case Normal(cluedResets: List[Int], duplicateReveals: List[Int])
 	case NoNewInfo(fixes: List[Int])
@@ -16,7 +18,9 @@ def checkFix(prev: Game, game: Game, action: ClueAction): FixResult =
 			game.state.deck(order).matches(game.state.deck(o)) &&
 			!prev.common.thoughts(order).matches(prev.common.thoughts(o), infer = true)
 
-		if prev.state.deck(order).clued && !prev.common.thoughts(order).reset && !prev.common.orderKt(prev, order) && game.common.thoughts(order).reset then
+		if prev.meta(order).status == CardStatus.CalledToPlay && prev.isBlindPlaying(order) && game.common.thoughts(order).infoLock.existsO(_.forall(game.state.isBasicTrash)) then
+			(order +: cluedResets, duplicateReveals)
+		else if prev.state.deck(order).clued && !prev.common.thoughts(order).reset && !prev.common.orderKt(prev, order) && game.common.thoughts(order).reset then
 			(order +: cluedResets, duplicateReveals)
 		else if duplicated then
 			(cluedResets, order +: duplicateReveals)
@@ -79,21 +83,18 @@ def distributionClue(prev: Game, game: Game, action: ClueAction, focus: Int): Op
 	else
 		thought.possible.filter(_.rank == clue.value).toList
 
-	def loop(poss: List[Identity], useful: IdentitySet): Option[IdentitySet] =
-		if poss.isEmpty then Some(useful) else
-			val p = poss.head
-			lazy val duplicated = state.hands.zipWithIndex.exists: (hand, i) =>
-				i != target && hand.exists(o => game.isTouched(o) && game.orderMatches(o, p, infer = true))
+	val useful = poss.foldLeftOpt(IdentitySet.empty): (acc, id) =>
+		lazy val duplicated = state.hands.zipWithIndex.exists: (hand, i) =>
+			i != target && hand.exists(o => game.isTouched(o) && game.orderMatches(o, id, infer = true))
 
-			if state.isBasicTrash(p) then
-				loop(poss.tail, useful)
-			else if duplicated then
-				loop(poss.tail, useful.union(p))
-			else
-				None
+		if state.isBasicTrash(id) then
+			Right(acc)
+		else if duplicated then
+			Right(acc.union(id))
+		else
+			Left(IdentitySet.empty)
 
-	val useful = loop(poss, IdentitySet.empty)
-	useful.filter(_.nonEmpty)
+	Option.when(useful.nonEmpty)(useful)
 
 def rainbowMismatch(game: Game, action: ClueAction, id: Identity, prompt: Int, focus: Int) =
 	val state = game.state

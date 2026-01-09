@@ -108,25 +108,23 @@ def elimPlayPlay(state: State, common: Player, meta: Vector[ConvData], reacter: 
 		if status == CardStatus.CalledToPlay || status == CardStatus.CalledToDiscard then
 			(c, m)
 		else
-			state.hands(reacter).lift(reactSlot - 1) match
-				case None => (c, m)
-				case Some(reactOrder) =>
-					common.thoughts(reactOrder).possible.intersect(state.playableSet) match
-						case IdentitySet() => (c, m)
+			state.hands(reacter).lift(reactSlot - 1).fold((c, m)): reactOrder =>
+				common.thoughts(reactOrder).possible.intersect(state.playableSet) match
+					case IdentitySet() => (c, m)
 
-						case IdentitySet(id) =>
-							val newCommon = c.withThought(receiveOrder)(t => t.copy(
-								inferred = t.inferred.filter(i => !state.isPlayable(i) || i == id)
-							))
-							Log.info(s"eliminated playables except ${state.logId(id)} from slot ${i + 1} $receiveOrder - ${newCommon.strInfs(state, receiveOrder)}")
-							(newCommon, updateMeta(meta, newCommon, receiveOrder))
+					case IdentitySet(id) =>
+						val newCommon = c.withThought(receiveOrder)(t => t.copy(
+							inferred = t.inferred.filter(i => !state.isPlayable(i) || i == id)
+						))
+						Log.info(s"eliminated playables except ${state.logId(id)} from slot ${i + 1} $receiveOrder - ${newCommon.strInfs(state, receiveOrder)}")
+						(newCommon, updateMeta(meta, newCommon, receiveOrder))
 
-						case IdentitySet(_ @ _*) =>
-							val newCommon = c.withThought(receiveOrder)(t => t.copy(
-								inferred = t.inferred.difference(state.playableSet)
-							))
-							Log.info(s"eliminated playables from slot ${i + 1} $receiveOrder - ${newCommon.strInfs(state, receiveOrder)}")
-							(newCommon, updateMeta(meta, newCommon, receiveOrder))
+					case IdentitySet(_ @ _*) =>
+						val newCommon = c.withThought(receiveOrder)(t => t.copy(
+							inferred = t.inferred.difference(state.playableSet)
+						))
+						Log.info(s"eliminated playables from slot ${i + 1} $receiveOrder - ${newCommon.strInfs(state, receiveOrder)}")
+						(newCommon, updateMeta(meta, newCommon, receiveOrder))
 	}
 
 def targetIDiscard(prev: Reactor, game: Reactor, wc: ReactorWC, targetSlot: Int) =
@@ -204,21 +202,18 @@ def reactDiscard(prev: Reactor, game: Reactor, playerIndex: Int, order: Int, wc:
 		else
 			game
 	else
-		calcTargetSlot(prev, game, order, wc) match
-			case Some((reactSlot, targetSlot)) =>
-				val (newCommon, newMeta) = clue.kind match
-					case ClueKind.Colour =>
-						val (newCommon, newMeta) = targetIPlay(prev, game, wc, targetSlot)
-						elimDcPlay(prev.state, newCommon, newMeta, reacter, receiverHand, focusSlot, targetSlot)
-					case ClueKind.Rank =>
-						val (newCommon, newMeta) = targetIDiscard(prev, game, wc, targetSlot)
-						elimDcDc(prev.state, newCommon, newMeta, reacter, receiverHand, focusSlot, targetSlot)
+		calcTargetSlot(prev, game, order, wc).fold(game): (reactSlot, targetSlot) =>
+			val (newCommon, newMeta) = clue.kind match
+				case ClueKind.Colour =>
+					val (newCommon, newMeta) = targetIPlay(prev, game, wc, targetSlot)
+					elimDcPlay(prev.state, newCommon, newMeta, reacter, receiverHand, focusSlot, targetSlot)
+				case ClueKind.Rank =>
+					val (newCommon, newMeta) = targetIDiscard(prev, game, wc, targetSlot)
+					elimDcDc(prev.state, newCommon, newMeta, reacter, receiverHand, focusSlot, targetSlot)
 
-				val action = if clue.kind == ClueKind.Colour then "play" else "dc"
-				Log.info(s"reactive dc+$action, reacter ${state.names(reacter)} (slot $reactSlot) receiver ${state.names(receiver)} (slot $targetSlot), focus slot $focusSlot (order ${state.hands(receiver)(targetSlot - 1)})")
-				game.copy(common = newCommon, meta = newMeta)
-			case None =>
-				game
+			val action = if clue.kind == ClueKind.Colour then "play" else "dc"
+			Log.info(s"reactive dc+$action, reacter ${state.names(reacter)} (slot $reactSlot) receiver ${state.names(receiver)} (slot $targetSlot), focus slot $focusSlot (order ${state.hands(receiver)(targetSlot - 1)})")
+			game.copy(common = newCommon, meta = newMeta)
 
 def reactPlay(prev: Reactor, game: Reactor, playerIndex: Int, order: Int, wc: ReactorWC) =
 	val state = game.state
@@ -241,17 +236,14 @@ def reactPlay(prev: Reactor, game: Reactor, playerIndex: Int, order: Int, wc: Re
 		else
 			game
 	else
-		calcTargetSlot(prev, game, order, wc) match
-			case None =>
-				game
-			case Some((reactSlot, targetSlot)) =>
-				val (newCommon, newMeta) = clue.kind match
-					case ClueKind.Rank =>
-						val (newCommon, newMeta) = targetIPlay(prev, game, wc, targetSlot)
-						elimPlayPlay(prev.state, newCommon, newMeta, reacter, receiverHand, focusSlot, targetSlot)
-					case ClueKind.Colour =>
-						val (newCommon, newMeta) = targetIDiscard(prev, game, wc, targetSlot)
-						elimPlayDc(prev.state, newCommon, newMeta, reacter, receiverHand, focusSlot, targetSlot)
-				val action = if clue.kind == ClueKind.Colour then "dc" else "play"
-				Log.info(s"reactive play+$action, reacter ${state.names(reacter)} (slot $reactSlot) receiver ${state.names(receiver)} (slot $targetSlot), focus slot $focusSlot (order ${state.hands(receiver)(targetSlot - 1)})")
-				game.copy(common = newCommon, meta = newMeta)
+		calcTargetSlot(prev, game, order, wc).fold(game): (reactSlot, targetSlot) =>
+			val (newCommon, newMeta) = clue.kind match
+				case ClueKind.Rank =>
+					val (newCommon, newMeta) = targetIPlay(prev, game, wc, targetSlot)
+					elimPlayPlay(prev.state, newCommon, newMeta, reacter, receiverHand, focusSlot, targetSlot)
+				case ClueKind.Colour =>
+					val (newCommon, newMeta) = targetIDiscard(prev, game, wc, targetSlot)
+					elimPlayDc(prev.state, newCommon, newMeta, reacter, receiverHand, focusSlot, targetSlot)
+			val action = if clue.kind == ClueKind.Colour then "dc" else "play"
+			Log.info(s"reactive play+$action, reacter ${state.names(reacter)} (slot $reactSlot) receiver ${state.names(receiver)} (slot $targetSlot), focus slot $focusSlot (order ${state.hands(receiver)(targetSlot - 1)})")
+			game.copy(common = newCommon, meta = newMeta)

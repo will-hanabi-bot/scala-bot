@@ -68,10 +68,17 @@ def getResult(game: Reactor, hypo: Reactor, action: ClueAction): Double =
 						// case Some(ClueInterp.Reactive) => value + 1
 						case _ => value
 
-def _forceClue(orig: Reactor, game: Reactor, offset: Int, only: Option[Int] = None): Double =
+def _forceClue(orig: Reactor, game: Reactor, offset: Int): Double =
 	val state = game.state
 	val giver = (state.ourPlayerIndex + offset) % state.numPlayers
-	forceClue(game, giver, advance(orig, _, offset + 1), only)
+	val bob = state.nextPlayerIndex(giver)
+
+	if bob == state.ourPlayerIndex then
+		val nextGame = game.withState(s => s.copy(clueTokens = s.clueTokens - 1))
+		advance(orig, nextGame, offset + 1)
+
+	else
+		forceClue(game, giver, advance(orig, _, offset + 1), only = Some(bob))
 
 def advance(orig: Reactor, game: Reactor, offset: Int): Double =
 	val (state, common, meta) = (game.state, game.common, game.meta)
@@ -120,7 +127,7 @@ def advance(orig: Reactor, game: Reactor, offset: Int): Double =
 		if strikes > 0 && strikes < playables.length then
 			playActions.min
 		else
-			playActions.max.max(_forceClue(orig, game, offset, only = Some(bob)))
+			playActions.max.max(_forceClue(orig, game, offset))
 
 	else if player.obviousLocked(game, playerIndex) then
 		if !state.canClue then
@@ -129,21 +136,12 @@ def advance(orig: Reactor, game: Reactor, offset: Int): Double =
 			val action = DiscardAction(playerIndex, lockedDc, suitIndex, rank)
 			Log.info(s"locked discard! $lockedDc")
 			advance(orig, game.simulate(action), offset + 1)
-
-		else if bob == state.ourPlayerIndex then
-			val nextGame = game.withState(s => s.copy(clueTokens = s.clueTokens - 1))
-			advance(orig, nextGame, offset + 1)
-
 		else
-			_forceClue(orig, game, offset, only = Some(bob))
+			_forceClue(orig, game, offset)
 
 	else if state.clueTokens == 8 then
 		Log.info("forced clue at 8 clues!")
-		if bob == state.ourPlayerIndex then
-			val nextGame = game.withState(s => s.copy(clueTokens = s.clueTokens - 1))
-			advance(orig, nextGame, offset + 1)
-		else
-			_forceClue(orig, game, offset, only = Some(bob))
+		_forceClue(orig, game, offset)
 
 	else if urgentDc.isDefined then
 		val id = state.deck(urgentDc.get).id().get
@@ -154,14 +152,26 @@ def advance(orig: Reactor, game: Reactor, offset: Int): Double =
 		advance(orig, game.simulate(action), offset + 1)
 
 	else
+		def tryDiscard(dcValue: Double) =
+			if state.clueTokens <= 2 then dcValue else
+				val clueValue = _forceClue(orig, game, offset)
+
+				val clueProb = if offset == 1 then
+					if common.obviousLoaded(game, bob) then
+						0.2
+					else if bobChop.isDefined then
+						if state.isBasicTrash(state.deck(bobChop.get).id().get) then 0.2 else 0.7
+					else
+						0.5
+				else
+					0.8
+
+				clueProb * clueValue + (1.0 - clueProb) * dcValue
+
 		urgentDc.orElse(trash.headOption) match
 			case None if offset == 1 && !game.withState(_.copy(currentPlayerIndex = playerIndex)).hasPtd =>
 				Log.info(s"${state.names(playerIndex)} doesn't have ptd, must clue!")
-				if bob == state.ourPlayerIndex then
-					val nextGame = game.withState(s => s.copy(clueTokens = s.clueTokens - 1))
-					advance(orig, nextGame, offset + 1)
-				else
-					_forceClue(orig, game, offset, only = Some(bob))
+				_forceClue(orig, game, offset)
 
 			case None =>
 				val chop = game.chop(playerIndex)
@@ -171,32 +181,16 @@ def advance(orig: Reactor, game: Reactor, offset: Int): Double =
 				val action = DiscardAction(playerIndex, chop, id.suitIndex, id.rank)
 				val dcGame = game.simulate(action)
 
-				if state.clueTokens > 2 then
-					val clueGame = game.withState(s => s.copy(clueTokens = s.clueTokens - 1))
-
-					val clueProb = if offset == 1 then
-						if common.obviousLoaded(game, bob) then
-							0.2
-						else if bobChop.isDefined then
-							if state.isBasicTrash(state.deck(bobChop.get).id().get) then 0.2 else 0.7
-						else
-							0.5
-					else
-						0.8
-
-					Log.info(s"${state.names(playerIndex)} discarding ${state.logId(id)} but might clue $clueProb")
-					clueProb * (advance(orig, clueGame, offset + 1) + 1.0) + (1.0 - clueProb) * advance(orig, dcGame, offset + 1)
-				else
-					Log.info(s"${state.names(playerIndex)} discarding ${state.logId(id)}")
-					advance(orig, dcGame, offset + 1)
+				Log.info(s"${state.names(playerIndex)} discarding ${state.logId(id)} but might clue")
+				tryDiscard(advance(orig, dcGame, offset + 1))
 
 			case Some(order) =>
 				val id = state.deck(order).id().get
 				val Identity(suitIndex, rank) = id
 				val action = DiscardAction(playerIndex, order, suitIndex, rank)
 
-				Log.info(s"${state.names(playerIndex)} discarding ${state.logId(id)}")
-				advance(orig, game.simulate(action), offset + 1).max(_forceClue(orig, game, offset, only = Some(bob)))
+				Log.info(s"${state.names(playerIndex)} discarding ${state.logId(id)} but might clue")
+				tryDiscard(advance(orig, game.simulate(action), offset + 1))
 
 def evalAction(game: Reactor, action: Action): Double =
 	Log.highlight(Console.GREEN, s"===== Predicting value for ${action.fmt(game.state)} =====")
@@ -326,8 +320,12 @@ def evalGame(orig: Reactor, game: Reactor): Double =
 
 		lazy val duplicated = duplicate.isDefined ||
 			// Trust others to discard stuff duplicated in our hand
-			discarded.forall(game.meta(_).by.exists(_ != state.ourPlayerIndex) &&
-				orig.state.ourHand.exists(game.me.thoughts(_).possible.contains(id)))
+			discarded.forall: o =>
+				val meta = game.meta(o)
+
+				meta.status == CardStatus.CalledToDiscard &&
+				meta.by.exists(_ != state.ourPlayerIndex) &&
+				orig.state.ourHand.exists(game.me.thoughts(_).possible.contains(id))
 
 		if state.isBasicTrash(id) || id.rank == 5 || discarded.isEmpty then
 			0

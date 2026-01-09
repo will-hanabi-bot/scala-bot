@@ -198,17 +198,17 @@ def urgentSave(ctx: ClueContext): Boolean =
 		if playerIndex == action.target then
 			return true
 
-		def getFinessedOrder(playerIndex: Int, includeHidden: Boolean) =
+		def getFinessedOrder(includeHidden: Boolean) =
 			state.hands(playerIndex).filter: o =>
 				game.isBlindPlaying(o) &&
 				(includeHidden || !game.meta(o).hidden) &&
 				game.copy(state = hypoState).common.orderPlayable(game, o, excludeTrash = true)
 			.minByOption(game.xmeta(_).turnFinessed.getOrElse(99))
 
-		getFinessedOrder(playerIndex, includeHidden = false) match
+		getFinessedOrder(includeHidden = false) match
 			case None => false
 			case Some(_) =>
-				val order = getFinessedOrder(playerIndex, includeHidden = true).get
+				val order = getFinessedOrder(includeHidden = true).get
 				game.common.thoughts(order).id(infer = true) match
 					case None => loop(hypoState, state.nextPlayerIndex(playerIndex))
 					case Some(id) => loop(hypoState.withPlay(id), state.nextPlayerIndex(playerIndex))
@@ -268,22 +268,24 @@ def resolveClue(ctx: ClueContext, fps: Seq[FocusPossibility], ambiguousOwn: Seq[
 			// If a non-finesse connection exists, the focus can't be a copy of it
 			.filter: i =>
 				!fps.filterNot(_.symmetric).flatMap(_.connections).exists:
-					case c: KnownConn => c.id == i
+					case c: KnownConn    => c.id == i
 					case c: PlayableConn => c.id == i
-					case c: PromptConn => c.id == i
-					case _: FinesseConn => false
+					case c: PromptConn   => c.id == i
+					case _: FinesseConn  => false
 		Log.highlight(Console.CYAN, s"final infs [${newInferred.fmt(state)}] $focus")
 		t.copy(inferred = newInferred, infoLock = newInferred.toOpt)
-	.pipe(assignConns(_, action, fpsToWrite, focus, ambiguousOwn))
+
+	.pipe:
+		assignConns(_, action, fpsToWrite, focus, ambiguousOwn)
+
 	.pipe:
 		allFps.foldLeft(_): (a, fp) =>
 			fp.connections.zipWithIndex.foldLeft(a) { case (acc, (conn, i)) => conn match
 				case PlayableConn(reacting, order, id, linked, layered) if linked.length > 1 =>
 					val playLinks = acc.common.playLinks
 					val target = fp.connections.lift(i + 1).map(_.order).getOrElse(focus)
-					val existingIndex = playLinks.indexWhere { l =>
+					val existingIndex = playLinks.indexWhere: l =>
 						l.orders == linked && l.target == target
-					}
 
 					if existingIndex == -1 then
 						val link = PlayLink(linked, IdentitySet.single(id), target)
@@ -299,7 +301,7 @@ def resolveClue(ctx: ClueContext, fps: Seq[FocusPossibility], ambiguousOwn: Seq[
 						)
 				case _ => acc
 			}
-	.pipe { g =>
+	.pipe: g =>
 		def requiresWc(fp: FocusPossibility) = fp.connections.exists: c =>
 			c.isInstanceOf[PlayableConn] ||
 			c.isInstanceOf[PromptConn] ||
@@ -329,7 +331,6 @@ def resolveClue(ctx: ClueContext, fps: Seq[FocusPossibility], ambiguousOwn: Seq[
 			lastMove = Some(interp),
 			cluedOnChop = if chop then g.cluedOnChop + focus else g.cluedOnChop
 		)
-	}
 	.when(_ => undoScream): g =>
 		// Must be leftmost chop moved
 		state.hands(giver).find(game.meta(_).cm).fold(g): oldChop =>

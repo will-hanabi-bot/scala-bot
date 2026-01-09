@@ -48,7 +48,7 @@ case class Player(
 	def withThought(order: Int)(f: Thought => Thought) =
 		copy(
 			thoughts = thoughts.updated(order, f(thoughts(order))),
-			dirty = dirty + order
+			dirty = dirty.incl(order)
 		)
 
 	def strInfs(state: State, order: Int) =
@@ -175,8 +175,7 @@ case class Player(
 
 	def obviousPlayables(game: Game, playerIndex: Int) =
 		game.state.hands(playerIndex).filter(orderKp(game, _))
-			.pipe:
-				game.filterPlayables(this, playerIndex, _)
+			.pipe(game.filterPlayables(this, playerIndex, _))
 
 	def thinksPlayables(game: Game, playerIndex: Int) =
 		game.state.hands(playerIndex).filter(orderPlayable(game, _))
@@ -274,7 +273,7 @@ case class Player(
 	def lockedDiscard(state: State, playerIndex: Int) =
 		val critPercents = state.hands(playerIndex).map { o =>
 			val poss = thoughts(o).possibilities
-			val percent = poss.intersect(state.criticalSet).length / poss.length
+			val percent = poss.intersect(state.criticalSet).length.toDouble / poss.length
 			(o, percent)
 		}.sortBy(_._2)
 
@@ -293,11 +292,13 @@ case class Player(
 	def linkedOrders(state: State) =
 		links.flatMap:
 			case Link.Promised(orders, id, _) =>
-				if orders.length > unknownIds(state, id) then orders else List()
+				if orders.length > unknownIds(state, id) then orders else Nil
+
 			case Link.Sarcastic(orders, id) =>
-				if orders.length > unknownIds(state, id) then orders else List()
+				if orders.length > unknownIds(state, id) then orders else Nil
+
 			case Link.Unpromised(orders, ids) =>
-				if orders.length > ids.summing(unknownIds(state, _)) then orders else List()
+				if orders.length > ids.summing(unknownIds(state, _)) then orders else Nil
 
 	def updateHypoStacks[G <: Game](game: G)(using ops: GameOps[G]): Player =
 		val state = game.state
@@ -329,13 +330,13 @@ case class Player(
 								else
 									hypo.withState(_.withPlay(id))
 
-					unknownPlays = unknownPlays + order
-					played = played + order
+					unknownPlays = unknownPlays.incl(order)
+					played = played.incl(order)
 
 				case Some(id) =>
 					if hypo.state.isPlayable(id) then
 						hypo = hypo.withState(_.withPlay(id))
-						played = played + order
+						played = played.incl(order)
 					else
 						Log.warn(s"tried to add ${state.logId(id)} ($order) onto hypo stacks, but they were at ${hypo.state.playStacks} $played ($name)")
 

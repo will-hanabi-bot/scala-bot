@@ -12,7 +12,7 @@ import scala_bot.logger._
 import scala_bot.refSieve.RefSieve
 import scala_bot.hgroup.HGroup
 
-val BOT_VERSION = "v0.4.14 (scala-bot)"
+val BOT_VERSION = "v0.4.15 (scala-bot)"
 
 case class ChatMessage(
 	msg: String,
@@ -260,9 +260,9 @@ class BotClient(queue: Queue[IO, String], gameRef: Ref[IO, Option[Game]]):
 		val state = State(playerNames, ourPlayerIndex, variant)
 
 		val game = settings.convention match
-			case Convention.Reactor => Reactor(tID, state, inProgress = true)
+			case Convention.Reactor  => Reactor(tID, state, inProgress = true)
 			case Convention.RefSieve => RefSieve(tID, state, inProgress = true)
-			case Convention.HGroup => HGroup(tID, state, inProgress = true, settings.level)
+			case Convention.HGroup   => HGroup(tID, state, inProgress = true, settings.level)
 
 		IO { tableID = Some(tID) } *>
 		gameRef.set(Some(game)) *>
@@ -327,9 +327,9 @@ class BotClient(queue: Queue[IO, String], gameRef: Ref[IO, Option[Game]]):
 			case Some(g) =>
 				IO:
 					g match
-						case r: Reactor => r.handleAction(action)
+						case r: Reactor  => r.handleAction(action)
 						case r: RefSieve => r.handleAction(action)
-						case h: HGroup => h.handleAction(action)
+						case h: HGroup   => h.handleAction(action)
 				.flatMap: newGame =>
 					val state = newGame.state
 					val queuedCmds = newGame.queuedCmds
@@ -349,9 +349,9 @@ class BotClient(queue: Queue[IO, String], gameRef: Ref[IO, Option[Game]]):
 
 					val actIO = IO.whenA(perform):
 						val suggestedAction = newGame match
-							case r: Reactor => r.takeAction
+							case r: Reactor  => r.takeAction
 							case r: RefSieve => r.takeAction
-							case h: HGroup => h.takeAction
+							case h: HGroup   => h.takeAction
 
 						Log.highlight(Console.BLUE, s"Suggested action: ${suggestedAction.fmt(newGame, accordingTo = Some(newGame.me))}")
 						val arg = suggestedAction.json(tableID.get)
@@ -360,9 +360,9 @@ class BotClient(queue: Queue[IO, String], gameRef: Ref[IO, Option[Game]]):
 							IO.sleep(2.seconds) *> sendCmd("action", ujson.write(arg))
 
 					val x = newGame match
-						case r: Reactor => r.copy(queuedCmds = Nil)
+						case r: Reactor  => r.copy(queuedCmds = Nil)
 						case r: RefSieve => r.copy(queuedCmds = Nil)
-						case h: HGroup => h.copy(queuedCmds = Nil)
+						case h: HGroup   => h.copy(queuedCmds = Nil)
 
 					gameRef.set(Some(x)) *>
 					turn1IO *>

@@ -89,6 +89,16 @@ case class HGroup(
 					wc.connections.tail.exists(c => c.order == o && c.hidden)
 			}
 
+	override def validArr(id: Identity, order: Int): Boolean =
+		val playables = this.me.thinksPlayables(this, state.ourPlayerIndex)
+
+		if playables.contains(order) then
+			state.isPlayable(id)
+		else if this.isTouched(order) then
+			!state.isBasicTrash(id)
+		else
+			true
+
 	def withXMeta(order: Int)(f: XConvData => XConvData) =
 		copy(xmeta = xmeta.updated(order, f(xmeta(order))))
 
@@ -589,18 +599,25 @@ object HGroup:
 			val level = Logger.level
 			Logger.setLevel(LogLevel.Off)
 
-			def validClue(clue: Clue, target: Int) =
-				val list = state.clueTouched(state.hands(target), clue)
+			def filterClues(clues: Seq[Clue]): Seq[Clue] =
+				val (nonTrashClues, trashClues) = clues.partition: clue =>
+					val list = state.clueTouched(state.hands(clue.target), clue)
 
-				// Do not simulate clues that touch only previously-clued trash
-				!(list.forall(o => state.deck(o).clued && state.isBasicTrash(state.deck(o).id().get)))
+					list.exists: o =>
+						state.deck(o).id().exists(!state.isBasicTrash(_))
+
+				if nonTrashClues.isEmpty then
+					trashClues.take(1)
+				else
+					nonTrashClues ++ trashClues.take(1)
 
 			val allClues =
 				(for
 					target <- (0 until state.numPlayers) if target != giver
-					clue   <- state.allValidClues(target) if validClue(clue, target)
+					clue   <- state.allValidClues(target)
 				yield
 					clue)
+				.pipe(filterClues)
 				.sortBy: clue =>
 					val list = state.clueTouched(state.hands(clue.target), clue)
 					// Prefer not cluing trash and not previously clued cards

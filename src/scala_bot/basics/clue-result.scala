@@ -13,12 +13,18 @@ def elimResult(prev: Game, game: Game, hand: IndexedSeq[Int], list: Seq[Int]) =
 		val status = game.meta(order).status
 
 		if card.clued && status != CardStatus.CalledToDiscard && thought.possible.length < prevThought.possible.length then
-			if !prev.state.deck(order).clued && !prev.isBlindPlaying(order) && !game.common.orderKt(game, order) then
+			if game.common.orderKt(game, order) || card.id().exists(state.isBasicTrash) then
+				(newTouched, fill, elim)
+
+			else if !prev.state.deck(order).clued && !prev.isBlindPlaying(order) then
 				(order +: newTouched, fill, elim)
+
 			else if list.contains(order) && state.hasConsistentInfs(thought) && status != CardStatus.CalledToPlay then
 				(newTouched, order +: fill, elim)
+
 			else if state.hasConsistentInfs(thought) then
 				(newTouched, fill, order +: elim)
+
 			else
 				(newTouched, fill, elim)
 		else

@@ -72,8 +72,11 @@ trait Game:
 
 	def goodTouch: Boolean
 
-	def filterPlayables(@annotation.unused _player: Player, @annotation.unused _playerIndex: Int, orders: Seq[Int]) =
+	def filterPlayables(@annotation.unused player: Player, @annotation.unused playerIndex: Int, orders: Seq[Int]) =
 		orders
+
+	def validArr(@annotation.unused id: Identity, @annotation.unused order: Int) =
+		true
 
 trait GameOps[G <: Game]:
 	def blank(game: G, keepDeck: Boolean): G
@@ -232,7 +235,7 @@ extension[G <: Game](game: G)
 
 					val action = g2.deckIds.lift(order).flatten.orElse(draw) match
 						case Some(id) => DrawAction(playerIndex, order, id.suitIndex, id.rank)
-						case None => DrawAction(playerIndex, order, -1, -1)
+						case None     => DrawAction(playerIndex, order, -1, -1)
 
 					g2.handleAction(action)
 
@@ -343,20 +346,16 @@ extension[G <: Game](game: G)
 					val level = Logger.level
 					Logger.setLevel(LogLevel.Off)
 
-					def loop(g: G, actions: Iterator[Action]): G =
+					actions.flatten.foldLeftOpt(_): (g, action) =>
 						if g.state.turnCount == turn - 1 then
 							Logger.setLevel(level)
 
 						if g.state.turnCount == turn || actions.isEmpty then
-							g
+							Left(g)
+						else if action.isInstanceOf[InterpAction] then
+							Right(g)
 						else
-							val action = actions.next()
-							if action.isInstanceOf[InterpAction] then
-								loop(g, actions)
-							else
-								loop(g.handleAction(action), actions)
-
-					loop(_, actions.flatten.iterator)
+							Right(g.handleAction(action))
 				}
 			.pipe(ops.copyWith(_, GameUpdates(catchup = Some(game.catchup))))
 			.when(g => !g.catchup && g.state.currentPlayerIndex == g.state.ourPlayerIndex): g =>

@@ -234,7 +234,8 @@ private def alternativeClue(game: Reactor, clueTarget: Int, playOnly: Boolean = 
 							val focusPos = hand.indexOf(focus)
 							val targetIndex = hand.zipWithIndex.indexWhere((o, i) => i > focusPos && !state.deck(o).clued)
 
-							state.isBasicTrash(state.deck(hand(targetIndex)).id().get)
+							state.isBasicTrash(state.deck(hand(targetIndex)).id().get) &&
+							newlyTouched.forall(o => !state.isBasicTrash(state.deck(o).id().get))
 						}
 			}
 

@@ -6,7 +6,6 @@ import scala_bot.logger.{Log, Logger, LogLevel}
 import scala_bot.utils._
 
 import java.time.Instant
-import scala.collection.parallel.CollectionConverters._
 import scala.util.chaining.scalaUtilChainingOps
 import scala.util.boundary, boundary.break
 
@@ -28,6 +27,12 @@ case class RemainingEntry(missing: Int, all: Boolean)
 type RemainingMap = Map[Identity, RemainingEntry]
 
 extension (remaining: RemainingMap)
+	def hash: Int =
+		remaining.foldLeft(0):
+			case (acc, (id, RemainingEntry(missing, _))) =>
+				val ord = id.toOrd
+				acc + (ord * ord * ord * ord) + missing
+
 	def rem(id: Identity) =
 		remaining(id).missing match
 			case 1 => remaining.removed(id)
@@ -100,7 +105,7 @@ case class EndgameSolver[G <: Game](
 	var simpleCache: Map[Int, WinnableResult] = Map(),
 	var simplerCache: Map[Int, Boolean] = Map(),
 	var cluelessCache: Map[Int, Option[PerformAction]] = Map(),
-	var ifCache: Map[String, SimpleResult] = Map(),
+	var ifCache: Map[Int, SimpleResult] = Map(),
 	var successRate: Map[Int, Map[PerformAction, (Frac, Int)]] = Map(),
 	monteCarlo: Boolean = true
 ):
@@ -152,7 +157,8 @@ case class EndgameSolver[G <: Game](
 			val thought = game.me.thoughts(order)
 
 			state.deck(order).id().exists(_ != id) ||
-			!thought.infoLock.getOrElse(thought.possible).contains(id) ||
+			!thought.possible.contains(id) ||
+			!game.validArr(id, order) ||
 			// We cannot assign a trash id if it is linked for a non-trash id and all other orders are already trash
 			(state.isBasicTrash(id) && linkedOrders.contains(order) && game.me.links.exists: l =>
 				val orders = l.getOrders
@@ -197,7 +203,7 @@ case class EndgameSolver[G <: Game](
 				a.flatMap:
 					case (_, arrs) =>
 						val totalWinrate = arrs.summing(_.prob)
-						val amt = arrs.length.min(3)
+						val amt = arrs.length.min(1)
 						arrs.take(amt).map(arr => arr.copy(prob = totalWinrate / amt))
 				.toList
 		.sortBy(a => -a.prob)
@@ -246,8 +252,10 @@ case class EndgameSolver[G <: Game](
 			return Left("couldn't find any winning actions")
 
 		@annotation.tailrec
-		def loop(actions: Seq[(PerformAction, Frac)], best: (PerformAction, Frac)): (PerformAction, Frac) =
-			if actions.isEmpty then best else
+		def loop2(actions: Seq[(PerformAction, Frac)], best: (PerformAction, Frac)): (PerformAction, Frac) =
+			if actions.isEmpty || Instant.now.isAfter(deadline) then
+				best
+			else
 				val (_, bestWinrate) = best
 				val (action, winrate) = actions.head
 
@@ -274,12 +282,12 @@ case class EndgameSolver[G <: Game](
 				if totalWinrate == Frac.one then
 					(action, totalWinrate)
 				else if totalWinrate > bestWinrate then
-					loop(actions.tail, (action, totalWinrate))
+					loop2(actions.tail, (action, totalWinrate))
 				else
-					loop(actions.tail, best)
+					loop2(actions.tail, best)
 
 		if hypos.length > 1 then
-			val (bestPerform, bestWinrate) = loop(initialActions, initialActions.head)
+			val (bestPerform, bestWinrate) = loop2(initialActions, initialActions.head)
 			Logger.setLevel(level)
 
 			if bestWinrate == Frac.zero then
@@ -434,7 +442,7 @@ case class EndgameSolver[G <: Game](
 		val (perform, winnableDraws) = action
 		val nextPlayerIndex = game.state.nextPlayerIndex(playerTurn)
 
-		arrs.par.map:
+		arrs.summing:
 			case GameArr(_, _, drew) if drew.exists(!winnableDraws.contains(_)) =>
 				Frac.zero
 
@@ -446,10 +454,10 @@ case class EndgameSolver[G <: Game](
 					val (cardsLeft, endgameTurns) = (newState.cardsLeft, newState.endgameTurns)
 
 					if perform.isClue then
-						Log.info(s"${perform.fmtObj(newGame, playerTurn)} cards left $cardsLeft endgame turns $endgameTurns")
+						Log.info(s"${perform.fmtObj(game, playerTurn)} cards left $cardsLeft endgame turns $endgameTurns")
 					else
 						val hand = newState.hands(playerTurn)
-						Log.info(s"drawing ${newState.logId(drew)} (${hand(0)}) after ${perform.fmtObj(newGame, playerTurn)} ${hand.map(newState.logId).mkString(",")} cards left $cardsLeft endgame turns $endgameTurns")
+						Log.info(s"drawing ${newState.logId(drew)} (${hand(0)}) after ${perform.fmtObj(game, playerTurn)} ${hand.map(newState.logId).mkString(",")} cards left $cardsLeft endgame turns $endgameTurns")
 
 					winnable(newGame, nextPlayerIndex, remaining, deadline, 1) match
 						case Left(msg) =>
@@ -459,16 +467,16 @@ case class EndgameSolver[G <: Game](
 						case Right((performs, wr)) =>
 							Log.highlight(Console.YELLOW, s"} ${performs.map(_.fmtObj(game, nextPlayerIndex)).mkString(", ")} prob $prob winrate $wr")
 							prob * wr
-		.sum
+
 
 	def optimizeFull(game: G, arrs: (Seq[GameArr], Seq[GameArr]), actions: Seq[(PerformAction, Seq[Identity])], playerTurn: Int, deadline: Instant)(using ops: GameOps[G]): Seq[(PerformAction, Frac)] =
 		boundary:
 			val (undrawn, drawn) = arrs
 
-			actions.par.map: (perform, winnableDraws) =>
+			actions.map: (perform, winnableDraws) =>
 				val winrate = actionWinrate(game, if perform.isClue then undrawn else drawn, (perform, winnableDraws), playerTurn, deadline)
 				(perform, winrate)
-			.toList
+
 			.sortBy(-_._2)
 
 	def optimize(game: G, arrs: (Seq[GameArr], Seq[GameArr]), actions: Seq[(PerformAction, Seq[Identity])], playerTurn: Int, deadline: Instant, depth: Int = 0)(using ops: GameOps[G]): WinnableResult =
@@ -485,7 +493,7 @@ case class EndgameSolver[G <: Game](
 				val (bestActions, bestWinrate) = acc
 
 				if Instant.now.isAfter(deadline) then
-					break(TIMEOUT)
+					break(Right(acc))
 
 				def calcWinrate(arrs: Seq[GameArr], winrate: Frac, remProb: Frac): Frac =
 					if arrs.isEmpty || winrate + remProb < bestWinrate then
@@ -503,10 +511,10 @@ case class EndgameSolver[G <: Game](
 						val (cardsLeft, endgameTurns) = (newState.cardsLeft, newState.endgameTurns)
 
 						if perform.isClue then
-							Log.info(s"${indent(depth)}${perform.fmtObj(newGame, playerTurn)} cards left $cardsLeft endgame turns $endgameTurns")
+							Log.info(s"${indent(depth)}${perform.fmtObj(game, playerTurn)} cards left $cardsLeft endgame turns $endgameTurns")
 						else
 							val hand = newState.hands(playerTurn)
-							Log.info(s"${indent(depth)}drawing ${newState.logId(drew)} (${hand(0)}) after ${perform.fmtObj(newGame, playerTurn)} ${hand.map(newState.logId).mkString(",")} cards left $cardsLeft endgame turns $endgameTurns")
+							Log.info(s"${indent(depth)}drawing ${newState.logId(drew)} (${hand(0)}) after ${perform.fmtObj(game, playerTurn)} ${hand.map(newState.logId).mkString(",")} cards left $cardsLeft endgame turns $endgameTurns")
 
 						val colour = if depth == 0 then Console.YELLOW else Console.WHITE
 						winnable(newGame, nextPlayerIndex, remaining, deadline, depth + 1) match

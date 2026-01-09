@@ -5,6 +5,16 @@ import scala_bot.basics._
 inline def loop(
 	inline start: Int,
 	inline cond: Int => Boolean,
+	inline advance: Int => Int
+)(inline body: Int => Unit) =
+	var i = start
+	while cond(i) do
+		body(i)
+		i = advance(i)
+
+inline def loopIf(
+	inline start: Int,
+	inline cond: Int => Boolean,
 	inline advance: Int => Int,
 	inline only: Int => Boolean = _ => true
 )(inline body: Int => Unit) =
@@ -18,7 +28,7 @@ extension [A](a: A)
 	def cond(condition: A => Boolean)(ifTrue: A => A)(ifFalse: A => A): A =
 		if condition(a) then ifTrue(a) else ifFalse(a)
 
-	def when(condition: A => Boolean)(f: A => A): A =
+	inline def when(inline condition: A => Boolean)(inline f: A => A): A =
 		if condition(a) then f(a) else a
 
 	def matches(cond: PartialFunction[A, Boolean]): Boolean =
@@ -54,13 +64,14 @@ extension[A](it: Iterator[A])
 				exists = true
 		exists
 
-	@annotation.tailrec
-	def reduce[B](initial: B)(reducer: (acc: B, curr: A) => Either[B, B]): B =
-		if it.isEmpty then initial else
-			val curr = it.next
-			reducer(initial, curr) match
-				case Left(res) => res
-				case Right(acc) => it.reduce(acc)(reducer)
+	def foldLeftOpt[B](initial: B)(reducer: (acc: B, curr: A) => Either[B, B]): B =
+		var acc = initial
+
+		while it.hasNext do
+			reducer(acc, it.next) match
+				case Left(res) =>   return res
+				case Right(next) => acc = next
+		acc
 
 	def findSome[B](f: A => Option[B]): Option[B] =
 		while it.hasNext do
@@ -98,8 +109,8 @@ extension [A](a: Iterable[A])
 	inline def fastExists(inline f: A => Boolean): Boolean =
 		a.iterator.fastExists(f)
 
-	def reduce[B](initial: B)(reducer: (acc: B, curr: A) => Either[B, B]): B =
-		a.iterator.reduce(initial)(reducer)
+	def foldLeftOpt[B](initial: B)(reducer: (acc: B, curr: A) => Either[B, B]): B =
+		a.iterator.foldLeftOpt(initial)(reducer)
 
 	def findSome[B](f: A => Option[B]): Option[B] =
 		a.iterator.findSome(f)

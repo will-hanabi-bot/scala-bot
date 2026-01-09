@@ -10,7 +10,7 @@ def findMustPlays(state: State, hand: Vector[Int]) =
 	val ids = hand.fastMap(state.deck(_).id())
 	var ret = List.empty[Identity]
 
-	loop(0, _ < hand.length, _ + 1, ids(_).isDefined): i =>
+	loopIf(0, _ < hand.length, _ + 1, ids(_).isDefined): i =>
 		val id = ids(i).get
 		if !state.isBasicTrash(id) then
 			var matches = 1
@@ -28,30 +28,47 @@ def unwinnableState(state: State, playerTurn: Int, depth: Int = 0): Boolean =
 	if state.ended || state.pace < 0 then
 		return true
 
-	val voidPlayers = (0 until state.numPlayers).fastFilter:
-		state.hands(_).fastForall(state.deck(_).id().forall(state.isBasicTrash))
+	var voidPlayers = List.empty[Int]
+	var mustPlays = List.empty[List[Identity]]
+	var mustStartEndgame = List.empty[Int]
+
+	loop(state.numPlayers - 1, _ >= 0, _ - 1): i =>
+		val hand = state.hands(i)
+		val void = hand.fastForall(state.deck(_).id().forall(state.isBasicTrash))
+
+		if void then
+			voidPlayers = i +: voidPlayers
+
+		val plays = findMustPlays(state, hand)
+		mustPlays = plays +: mustPlays
+
+		if (plays.length > 1)
+			mustStartEndgame = i +: mustStartEndgame
 
 	// println(s"${indent(depth)}void players: $voidPlayers, endgame_turns: ${state.endgameTurns}, current turn: ${state.names(playerTurn)}")
 
-	val mustPlays = state.hands.map(findMustPlays(state, _))
-	val mustStartEndgame = mustPlays.zipWithIndex.filter(_._1.size > 1).map(_._2)
+	val impossibleEndgame = state.endgameTurns.isDefined && {
+		var possiblePlayers = 0
+		var doublePlay = -1
 
-	val impossibleEndgame = state.endgameTurns.exists: endgameTurns =>
-		val possiblePlayers = (0 until endgameTurns).fastCount: i =>
-			!voidPlayers.contains((playerTurn + i) % state.numPlayers)
+		loop(0, _ < state.endgameTurns.get, _ + 1): i =>
+			val playerIndex = (playerTurn + i) % state.numPlayers
 
-		val doublePlay = (0 until endgameTurns)
-			.fastMap(i => (playerTurn + i) % state.numPlayers)
-			.find(mustPlays(_).size > 1)
+			if !voidPlayers.contains(playerIndex) then
+				possiblePlayers += 1
+
+				if mustPlays(playerIndex).length > 1 then
+					doublePlay = i
 
 		if possiblePlayers + state.score < state.maxScore then
 			// println(s"${indent(depth)}even if everyone (${possiblePlayers}) plays, can't reach max (${state.score}/${state.maxScore})")
 			true
-		else if doublePlay.isDefined then
+		else if doublePlay != -1 then
 			// println(s"${indent(depth)}final round has started, ${state.names(doublePlay.get)} still needs to play ${mustPlays(doublePlay.get)}")
 			true
 		else
 			false
+	}
 
 	if impossibleEndgame then
 		return true

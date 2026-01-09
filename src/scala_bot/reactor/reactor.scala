@@ -54,6 +54,10 @@ case class Reactor(
 				player.thoughts(o2).id(infer = true).isEmpty &&
 				meta(o2).signalTurn.exists(t2 => meta(o).signalTurn.exists(_ > t2))
 
+	override def validArr(id: Identity, order: Int): Boolean =
+		val infoLock = this.me.thoughts(order).infoLock
+		!infoLock.isDefined || infoLock.get.contains(id)
+
 	def chop(playerIndex: Int) =
 		state.hands(playerIndex).find:
 			meta(_).status == CardStatus.CalledToDiscard

@@ -34,11 +34,16 @@ case class State(
 	actionList: Vector[List[Action]] = Vector(),
 	currentPlayerIndex: Int = 0
 ):
-	lazy val hash =
+	val hash =
 		val deckInts = Array.ofDim[Int](deck.length)
 		loop(0, _ < deck.length, _ + 1): i =>
-			val id = deck(i).id()
-			deckInts(i) = if id.isDefined then id.get.toOrd else 0
+			val card = deck(i)
+
+			deckInts(i) =
+				if card.suitIndex != -1 && card.rank != -1 then
+					card.suitIndex * 5 + (card.rank - 1)
+				else
+					0
 
 		MurmurHash3.productHash((hands, deckInts, clueTokens, halfClueToken, endgameTurns))
 
@@ -95,8 +100,8 @@ case class State(
 		else
 			copy(clueTokens = 8.min(clueTokens + 1))
 
-	def ended =
-		strikes == 3 || score == maxScore || endgameTurns.contains(0)
+	inline def ended =
+		strikes == 3 || score == maxScore || (endgameTurns.isDefined && endgameTurns.get == 0)
 
 	inline def score = playStacks.fastSum
 	inline def maxScore = maxRanks.fastSum

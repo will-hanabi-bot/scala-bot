@@ -111,7 +111,7 @@ extension[G <: Game](game: G)
 						order,
 						player.allPossible
 					),
-					dirty = player.dirty + order
+					dirty = player.dirty.incl(order)
 				))),
 				common = Some(g.common.copy(
 					thoughts = g.common.thoughts :+ Thought(-1, -1, order, g.common.allPossible),
@@ -143,79 +143,82 @@ extension[G <: Game](game: G)
 
 	def elim(using ops: GameOps[G]): G =
 		val state = game.state
-		var newThoughts = game.common.thoughts
-		var newMeta = game.meta
 
-		for order <- state.hands.flatten do
-			var thought = game.common.thoughts(order)
-			if thought.inferred.isEmpty && !thought.reset then
-				newThoughts = newThoughts.updated(order, thought.resetInferences())
-				newMeta = newMeta.updated(order, newMeta(order).copy(
-					status = CardStatus.None,
-					by = None
-				))
+		game.pipe:
+			state.hands.flatten.foldLeft(_): (g, order) =>
+				val thought = g.common.thoughts(order)
 
-			thought = newThoughts(order)
+				g.when(_ => thought.inferred.isEmpty && !thought.reset):
+					_.withThought(order)(_.resetInferences())
+					.withMeta(order)(_.copy(
+						status = CardStatus.None,
+						by = None
+					))
+				.when(_.common.thoughts(order).infoLock.existsO(_.isEmpty)):
+					Log.warn(s"lost info lock on $order!")
+					_.withThought(order)(_.copy(infoLock = IdentitySetOpt.empty))
 
-			if thought.infoLock.existsO(_.isEmpty) then
-				Log.warn(s"lost info lock on $order!")
-				newThoughts = newThoughts.updated(order, thought.copy(infoLock = IdentitySetOpt.empty))
+		.pipe: g =>
+			val (resets, newCommon) = g.common.cardElim(state)
+				.when(_ => g.goodTouch): (r, c) =>
+					val (resets, newCommon) = c.goodTouchElim(g)
+					(resets.union(r), newCommon)
 
-		var (resets, newCommon) = game.common.copy(thoughts = newThoughts).cardElim(state)
-		if game.goodTouch then
-			val (resets2, newCommon2) = newCommon.goodTouchElim(game)
-			resets = resets.union(resets2)
-			newCommon = newCommon2
+			resets.foldLeft(ops.copyWith(g, GameUpdates(common = Some(newCommon)))): (acc, order) =>
+				val entry = acc.meta(order)
+				if entry.status != CardStatus.CalledToPlay then acc else
+					acc.withMeta(order)(_.copy(
+						status = CardStatus.None,
+						by = None
+					))
 
-		val (sarcastics, _newCommon) = newCommon.refreshLinks(game)
-		newCommon = _newCommon.refreshPlayLinks(game).updateHypoStacks(game)
+		.pipe: g =>
+			val (sarcastics, newCommon) = g.common.refreshLinks(g)
+			val newGame = ops.copyWith(g, GameUpdates(
+				common = Some(newCommon.refreshPlayLinks(g).updateHypoStacks(g))
+			))
 
-		val newPlayers = game.players.map: p =>
-			p.copy(
-				thoughts = p.thoughts.map: t =>
-					if !newCommon.dirty.contains(t.order) then t else
-						val thought = newCommon.thoughts(t.order)
-						val newInferred =
-							thought.inferred.intersect(t.possible)
-								.when(_.isEmpty)(_ => t.possible)
+			sarcastics.foldLeft(newGame): (acc, order) =>
+				acc.withMeta(order)(_.copy(status = CardStatus.Sarcastic))
 
-						val newInfoLock =
-							if !thought.infoLock.isDefined then
-								thought.infoLock
-							else
-								val ids = thought.infoLock.get.intersect(t.possible)
-								if ids.isEmpty then
-									IdentitySetOpt.empty
+		.pipe: g =>
+			val newPlayers = g.players.map: p =>
+				p.copy(
+					thoughts = p.thoughts.map: t =>
+						if !g.common.dirty.contains(t.order) then t else
+							val thought = g.common.thoughts(t.order)
+							val newInferred =
+								thought.inferred.intersect(t.possible)
+									.when(_.isEmpty)(_ => t.possible)
+
+							val newInfoLock =
+								if !thought.infoLock.isDefined then
+									thought.infoLock
 								else
-									ids.toOpt
-						t.copy(
-							possible = thought.possible,
-							inferred = newInferred,
-							infoLock = newInfoLock,
-							reset = thought.reset
-						),
-				links = newCommon.links,
-				playLinks = newCommon.playLinks,
-				dirty = newCommon.dirty
-			)
-			.cardElim(state)._2
-			.when(_ => game.goodTouch):
-				_.goodTouchElim(game)._2
-			.refreshLinks(game)._2
-			.refreshPlayLinks(game)
-			.updateHypoStacks(game)
-			.copy(dirty = BitSet.empty)
+									val ids = thought.infoLock.get.intersect(t.possible)
+									if ids.isEmpty then
+										IdentitySetOpt.empty
+									else
+										ids.toOpt
+							t.copy(
+								possible = thought.possible,
+								inferred = newInferred,
+								infoLock = newInfoLock,
+								reset = thought.reset
+							),
+					links = g.common.links,
+					playLinks = g.common.playLinks,
+					dirty = g.common.dirty
+				)
+				.cardElim(state)._2
+				.when(_ => g.goodTouch):
+					_.goodTouchElim(g)._2
+				.refreshLinks(g)._2
+				.refreshPlayLinks(g)
+				.updateHypoStacks(g)
+				.copy(dirty = BitSet.empty)
 
-		for order <- resets do
-			val entry = newMeta(order)
-			if entry.status == CardStatus.CalledToPlay then
-				newMeta = newMeta.updated(order, entry.copy(status = CardStatus.None, by = None))
-
-		for order <- sarcastics do
-			newMeta = newMeta.updated(order, newMeta(order).copy(status = CardStatus.Sarcastic))
-
-		ops.copyWith(game, GameUpdates(
-			common = Some(newCommon.copy(dirty = BitSet.empty)),
-			meta = Some(newMeta),
-			players = Some(newPlayers)
-		))
+			ops.copyWith(g, GameUpdates(
+				common = Some(g.common.copy(dirty = BitSet.empty)),
+				players = Some(newPlayers)
+			))

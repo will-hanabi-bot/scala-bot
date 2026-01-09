@@ -134,6 +134,7 @@ class Stable extends munit.FunSuite:
 		// Bob's slot 1 should be known trash.
 		assert(game.common.thinksTrash(game, Player.Bob.ordinal).contains(game.state.hands(Player.Bob.ordinal)(0)))
 		hasInfs(game, None, Bob, 1, Vector("r1"))
+		assertEquals(game.lastMove, Some(ClueInterp.Fix))
 
 	test("it interprets a reveal through an unknown card"):
 		val game = setup(Reactor.apply, Vector(

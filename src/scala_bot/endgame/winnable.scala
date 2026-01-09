@@ -87,7 +87,16 @@ extension[G <: Game] (solver: EndgameSolver[G])
 		winnable
 
 	def winnableIf(state: State, playerTurn: Int, perform: PerformAction, remaining: RemainingMap, deadline: Instant, depth: Int): SimpleResult =
-		// val hash = s"${state.hashCode()},$playerTurn,$perform,${remaining.toList.sortBy(_._1.toOrd)}"
+		// val hash =
+		// 	MurmurHash3.mix(state.hash, playerTurn)
+		// 		.pipe(MurmurHash3.mix(_, perform.hash))
+		// 		.pipe(MurmurHash3.mix(_, remaining.hash))
+
+		// if depth > 6 then
+		// 	if state.cardsLeft == 0 || perform.isClue then
+		// 		SimpleResult.AlwaysWinnable
+		// 	else
+		// 		SimpleResult.WinnableWithDraws(remaining.keys.toList)
 
 		// Log.highlight(Console.GREEN, s"${indent(depth)}checking if $perform is winning ${state.turnCount} ${solver.simplerCache.size}")
 
@@ -109,22 +118,29 @@ extension[G <: Game] (solver: EndgameSolver[G])
 			res
 
 		else
-			val winnableDraws = remaining.keys.filter: id =>
-				// TODO: Check whether this should be +1?
-				val draw = Card(id.suitIndex, id.rank, state.nextCardOrder + 1, state.turnCount)
+			val remIds = remaining.keys
+			val (trashIds, otherIds) = remIds.partition(state.isBasicTrash)
+
+			def isWinnable(drawId: Identity) =
+				val draw = Card(drawId.suitIndex, drawId.rank, state.nextCardOrder + 1, state.turnCount)
 				val newState = advanceState(state, perform, playerTurn, Some(draw))
 				// println(s"${indent(depth)}drew, stacks ${newState.playStacks}")
-				val newRemaining = remaining.rem(id)
+				val newRemaining = remaining.rem(drawId)
 
 				winnableSimpler(newState, state.nextPlayerIndex(playerTurn), newRemaining, deadline, depth + 1)
 
+			val trashWinnable = trashIds.isEmpty || isWinnable(trashIds.head)
+			val otherWinnable = otherIds.filter(isWinnable)
 			// println(s"${indent(depth)}remaining: $remaining, winnable draws: $winnableDraws")
 
 			val res =
-				if winnableDraws.isEmpty then
+				if !trashWinnable && otherWinnable.isEmpty then
 					SimpleResult.Unwinnable
+				else if trashWinnable then
+					SimpleResult.WinnableWithDraws((trashIds ++ otherWinnable).toList)
 				else
-					SimpleResult.WinnableWithDraws(winnableDraws.toList)
+					SimpleResult.WinnableWithDraws(otherWinnable.toList)
+
 			// solver.ifCache = solver.ifCache.updated(hash, res)
 			res
 
