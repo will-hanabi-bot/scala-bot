@@ -56,7 +56,7 @@ class General extends munit.FunSuite:
 		.pipe(takeTurn("Cathy clues red to Alice (slot 1)"))
 
 		// Bob's r1 is definitely finessed.
-		assert(!game.xmeta(game.state.hands(Bob.ordinal)(0)).maybeFinessed)
+		assertEquals(game.xmeta(game.state.hands(Bob.ordinal)(0)).fStatus, None)
 		hasStatus(game, Bob, 1, CardStatus.Finessed)
 
 		// Alice knows that her card is exactly r2.
@@ -127,7 +127,7 @@ class General extends munit.FunSuite:
 	test("prefers not starting with self, even with known playables before"):
 		val game = setup(HGroup.atLevel(2), Vector(
 			Vector("xx", "xx", "xx", "xx"),
-			Vector("y3", "b2", "y4", "r3"),
+			Vector("p5", "b2", "y4", "r3"),
 			Vector("g1", "y3", "r4", "p2"),
 			Vector("g2", "p4", "y5", "b4")
 		),

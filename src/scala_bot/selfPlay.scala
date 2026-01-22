@@ -127,7 +127,7 @@ def selfPlay(args: String*) =
 
 	val deck = variant.allIds.flatMap(id => List.fill(variant.cardCount(id))(id))
 
-	val results = (seed until seed + numGames).par.map: i =>
+	val results = (seed until seed + numGames).map: i =>
 		val rng = Random(i)
 		val shuffledDeck = rng.shuffle(deck).toVector
 		val states = (0 until numPlayers).map(State(NAMES.take(numPlayers), _, variant))

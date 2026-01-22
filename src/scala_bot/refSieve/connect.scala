@@ -5,7 +5,7 @@ import scala_bot.logger.Log
 
 import scala.annotation.tailrec
 
-def findConnecting(prev: RS, game: RS, id: Identity, playerIndex: Int, connected: List[Int], looksDirect: Boolean, ignore: Set[Int] = Set(), findOwn: Boolean = false): Option[Connection] =
+def findConnecting(prev: RS, game: RS, id: Identity, playerIndex: Int, connected: Set[Int], looksDirect: Boolean, ignore: Set[Int] = Set(), findOwn: Boolean = false): Option[Connection] =
 	val state = game.state
 	val player = if findOwn then game.players(playerIndex) else game.common
 	val hand = state.hands(playerIndex)
@@ -54,7 +54,7 @@ def connect(prev: RS, game: RS, targetOrder: Int, id: Identity, action: ClueActi
 			Some(connections.reverse)
 		else
 			val nextId = Identity(suitIndex, nextRank)
-			val connected = targetOrder +: connections.map(_.order)
+			val connected = connections.map(_.order).toSet + targetOrder
 			val looksDirect = unknown && playerIndex == action.target
 			val own = findOwn && playerIndex == state.ourPlayerIndex
 			val connecting = findConnecting(prev, game, nextId, playerIndex, connected, looksDirect, findOwn = own)

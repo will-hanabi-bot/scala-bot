@@ -54,7 +54,7 @@ def getResult(game: HGroup, hypo: HGroup, action: ClueAction): Double =
 			val untouchedPlays = playables.count(!hypo.state.deck(_).clued)
 
 			val playablesS = playables.map(state.logId(_)).mkString(", ")
-			Log.info(s"good touch: $goodTouch, playables: $playablesS, duped: $dupedPlayables, trash: ${trash.length}, fill: ${fill.length}, elim: ${elim.length}, bad touch: $badTouch, ${hypo.lastMove}")
+			Log.info(s"good touch: $goodTouch, playables: [$playablesS], duped: $dupedPlayables, trash: ${trash.length}, fill: ${fill.length}, elim: ${elim.length}, bad touch: $badTouch, ${hypo.lastMove}")
 
 			val value = goodTouch +
 				(playables.length - 2.0 * dupedPlayables) +
@@ -95,6 +95,8 @@ def advance(orig: HGroup, game: HGroup, offset: Int): Double =
 				// Only consider playing the leftmost of similarly-possible cards
 				!allPlayables.exists(p => p > o && common.thoughts(p).possible == common.thoughts(o).possible)
 
+		var strikes = 0
+
 		val (knownPlays, unknownPlays) = playables.partitionMap: order =>
 			val (id, action) = state.deck(order).id() match
 				case None => (None, PlayAction(playerIndex, order, -1, -1))
@@ -106,12 +108,21 @@ def advance(orig: HGroup, game: HGroup, offset: Int): Double =
 					(Some(id), action)
 
 			Log.info(s"${state.names(playerIndex)} ${if id.exists(state.isPlayable) then "playing" else "bombing"} ${state.logId(id)}")
-			val value = advance(orig, game.simulate(action), offset + 1)
+			val advancedGame = game.simulate(action)
+
+			if advancedGame.state.strikes > game.state.strikes then
+				strikes += 1
+
+			val value = advance(orig, advancedGame, offset + 1)
 
 			if player.thoughts(order).id(infer = true).isDefined then Left(value) else Right(value)
 
 		val maxPlay = math.min(knownPlays.maxOption.getOrElse(99.9), unknownPlays.minOption.getOrElse(99.9))
-		maxPlay.max(_forceClue(orig, game, offset))
+
+		if strikes > 0 then
+			(knownPlays ++ unknownPlays).min
+		else
+			maxPlay.max(_forceClue(orig, game, offset))
 
 	else if player.thinksLocked(game, playerIndex) then
 		if !state.canClue then
@@ -225,8 +236,8 @@ def evalState(state: State): Double =
 	val dcCritVal = -8 * scoreLoss
 
 	val strikesVal = state.strikes match
-		case 1 => -1.5
-		case 2 => -3.5
+		case 1 => -2.5
+		case 2 => -4.5
 		case 3 => -100
 		case _ => 0
 
@@ -268,8 +279,8 @@ def evalGame(orig: HGroup, game: HGroup): Double =
 			id.rank match
 				case 1 => -math.pow(discarded.length, 2)
 				case 2 => -3
-				case 3 => -1.5
-				case _ => -1
+				case 3 => -1
+				case _ => -0.1
 
 	val lockedPenalty = (0 until state.numPlayers).summing: playerIndex =>
 		if !game.players(playerIndex).thinksLocked(game, playerIndex) then 0 else

@@ -1,12 +1,11 @@
 package tests.hgroup.level5
 
 import scala_bot.basics._
-import scala_bot.test.{hasInfs, hasStatus, Player, preClue, setup, takeTurn}, Player._
+import scala_bot.test.{fullyKnown, hasInfs, hasStatus, Player, preClue, setup, takeTurn}, Player._
 import scala_bot.hgroup.HGroup
 import scala_bot.logger.{Logger, LogLevel}
 
 import scala.util.chaining.scalaUtilChainingOps
-import scala_bot.test.fullyKnown
 
 class LayeredFinesses extends munit.FunSuite:
 	override def beforeAll() = Logger.setLevel(LogLevel.Off)
@@ -73,6 +72,21 @@ class LayeredFinesses extends munit.FunSuite:
 		// Alice's slot 2 should be [y1] now.
 		hasInfs(game, None, Alice, 2, Vector("y1"))
 		hasStatus(game, Alice, 2, CardStatus.Finessed)
+
+	test("understands a connecting clue on a layered finesse"):
+		val game = setup(HGroup.atLevel(5), Vector(
+			Vector("xx", "xx", "xx", "xx"),
+			Vector("b1", "r1", "b1", "r3"),
+			Vector("y1", "y4", "g4", "b4"),
+			Vector("r2", "r4", "g4", "p4")
+		),
+			starting = Cathy
+		)
+		.pipe(takeTurn("Cathy clues 2 to Donald"))
+		.pipe(takeTurn("Donald clues yellow to Cathy"))
+		.pipe(takeTurn("Alice clues 3 to Bob"))
+
+		hasInfs(game, None, Bob, 4, Vector("r3", "g3", "b3", "p3"))
 
 	test("plays into a complex layered finesse"):
 		val game = setup(HGroup.atLevel(5), Vector(

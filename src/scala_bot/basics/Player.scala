@@ -136,25 +136,28 @@ case class Player(
 		sameHandDupe
 		// (thought.inferred.isEmpty && thought.reset)
 
-	def orderKp(game: Game, order: Int, excludeTrash: Boolean = false) =
+	def orderKp(game: Game, order: Int, excludeTrash: Boolean = false): Boolean =
 		val state = game.state
 		val thought = thoughts(order)
 
-		inline def possPlayable(poss: IdentitySet) =
-			val p = if excludeTrash then poss.difference(state.trashSet) else poss
-			p.intersect(state.playableSet) == p
+		if thought.possible.forall(!state.isPlayable(_)) then
+			false
+		else
+			inline def possPlayable(poss: IdentitySet) =
+				val p = if excludeTrash then poss.difference(state.trashSet) else poss
+				p.intersect(state.playableSet) == p
 
-		game.meta(order).status match
-			case CardStatus.CalledToPlay =>
-				thought.possible.intersect(state.playableSet).nonEmpty &&
-				thought.infoLock.forallO(_.intersect(state.playableSet).nonEmpty)
+			game.meta(order).status match
+				case CardStatus.CalledToPlay =>
+					thought.possible.intersect(state.playableSet).nonEmpty &&
+					thought.infoLock.forallO(_.intersect(state.playableSet).nonEmpty)
 
-			case CardStatus.Sarcastic | CardStatus.GentlemansDiscard =>
-				possPlayable(thought.inferred)
+				case CardStatus.Sarcastic | CardStatus.GentlemansDiscard =>
+					possPlayable(thought.inferred)
 
-			case _ =>
-				possPlayable(thought.possible) ||
-				thought.infoLock.existsO(possPlayable)
+				case _ =>
+					possPlayable(thought.possible) ||
+					thought.infoLock.existsO(possPlayable)
 
 	def orderPlayable(game: Game, order: Int, excludeTrash: Boolean = false) =
 		val state = game.state
@@ -218,7 +221,7 @@ case class Player(
 			game.state.deck(order).clued ||
 			(status != CardStatus.None && status != CardStatus.CalledToDiscard)
 
-	def findPrompt(prev: Game, playerIndex: Int, id: Identity, connected: List[Int] = Nil, ignore: Set[Int] = Set(), forcePink: Boolean = false, rightmost: Boolean = false) =
+	def findPrompt(prev: Game, playerIndex: Int, id: Identity, connected: Set[Int] = Set(), ignore: Set[Int] = Set(), forcePink: Boolean = false, rightmost: Boolean = false) =
 		val state = prev.state
 		val hand = state.hands(playerIndex).when(_ => rightmost)(_.reverse)
 		val order = hand.find: order =>

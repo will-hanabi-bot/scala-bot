@@ -1,6 +1,7 @@
 package scala_bot.hgroup
 
 import scala_bot.basics._
+import scala.util.chaining.scalaUtilChainingOps
 
 def fpSimplicity(fp: FocusPossibility, playerIndex: Int): Int =
 	val startsOther = fp.connections.find:
@@ -17,18 +18,26 @@ def fpSimplicity(fp: FocusPossibility, playerIndex: Int): Int =
 
 		10 * blindPlays + prompts
 
-def occamsRazor(state: State, fps: Seq[FocusPossibility], playerIndex: Int, actualId: Option[Identity] = None) =
-	val simplest = fps.foldRight((99, Seq.empty[FocusPossibility])) { case (fp, (min, acc)) =>
-		val simplicity = fpSimplicity(fp, playerIndex)
-		// println(s"${state.logId(fp.id)} $playerIndex simplicity: $simplicity")
+def occamsRazor(game: Game, fps: Seq[FocusPossibility], playerIndex: Int, focus: Int, actualId: Option[Identity] = None) =
+	val state = game.state
 
-		if simplicity < min && actualId.forall(_ == fp.id) then
-			(simplicity, List(fp))
-		else if simplicity == min then
-			(min, fp +: acc)
+	val initial = (99, Seq.empty[FocusPossibility], Seq.empty[FocusPossibility])
+	val simplest = fps.foldRight(initial) { case (fp, (min, acc, impossible)) =>
+		if !game.players(playerIndex).thoughts(focus).possible.contains(fp.id) then
+			(min, acc, fp +: impossible)
 		else
-			(min, acc)
-	}._2
+			val simplicity = fpSimplicity(fp, playerIndex)
+			// println(s"${state.logId(fp.id)} $playerIndex simplicity: $simplicity")
+
+			if simplicity < min && actualId.forall(_ == fp.id) then
+				(simplicity, List(fp), impossible)
+			else if simplicity == min then
+				(min, fp +: acc, impossible)
+			else
+				(min, acc, impossible)
+	}
+	.pipe: (min, acc, impossible) =>
+		acc ++ impossible.filter(fpSimplicity(_, playerIndex) <= min)
 
 	if playerIndex != state.ourPlayerIndex then
 		// No one else will play into it if they can fulfill it themselves.

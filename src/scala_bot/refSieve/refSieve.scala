@@ -51,7 +51,7 @@ case class RefSieve(
 		!common.thinksLoaded(this, bob) &&
 		chop(bob).flatMap(state.deck(_).id()).exists(id => state.isCritical(id) || state.isPlayable(id))
 
-	def findFinesse(playerIndex: Int, connected: List[Int] = Nil, ignore: Set[Int] = Set()) =
+	def findFinesse(playerIndex: Int, connected: Set[Int] = Set(), ignore: Set[Int] = Set()) =
 		val order = state.hands(playerIndex).find: o =>
 			!this.isTouched(o) && !connected.contains(o)
 

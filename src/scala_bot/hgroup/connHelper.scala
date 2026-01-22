@@ -18,8 +18,8 @@ def assignConns(game: HGroup, action: ClueAction, fps: Seq[FocusPossibility], fo
 		_.filter(p => bluffPlayables.forall(_.contains(p)))
 
 	fps.foldLeft((Set.empty[Int], game)) { case ((m, a), fp) =>
-		// Don't assign symmetric/save connections
-		if fp.symmetric || fp.save then
+		// Don't assign symmetric/ambiguous/save connections
+		if fp.symmetric || fp.ambiguous || fp.save then
 			(m, a)
 		else
 			fp.connections.zipWithIndex.foldLeft((m, a)) { case ((modified, acc), (conn, connI)) =>
@@ -46,7 +46,7 @@ def assignConns(game: HGroup, action: ClueAction, fps: Seq[FocusPossibility], fo
 					val thought = acc.common.thoughts(conn.order)
 
 					val newInferred =
-						if conn.matches { case f: FinesseConn => f.inserted } then
+						if conn.matches { case f: PlayableConn => f.insertingInto.isDefined } then
 							thought.inferred.union(conn.ids)
 
 						else if conn.hidden then
@@ -79,17 +79,15 @@ def assignConns(game: HGroup, action: ClueAction, fps: Seq[FocusPossibility], fo
 							thought.possible.exists: i =>
 								i.suitIndex != conn.ids.head.suitIndex && i.rank <= g.common.hypoStacks(i.suitIndex) + 1
 
-						val finesseIds = Option.when(idUncertain):
+						val finesseIds = // Option.when(idUncertain):
 							if isBluff then currPlayableIds else
-								// Allow connecting on own blind plays
-								state.ourHand.foldLeft(state.playStacks): (acc, order) =>
-									g.common.thoughts(order).id(infer = true) match
-										case Some(id) if game.isBlindPlaying(order) && acc(id.suitIndex) + 1 == id.rank =>
-											acc.updated(id.suitIndex, acc(id.suitIndex) + 1)
-										case _ => acc
-								.zipWithIndex.collect:
-									case (stack, i) if stack + 1 <= state.maxRanks(i) => Identity(i, stack + 1)
-						.map(IdentitySet.from)
+								// Allow connecting on self blind plays (except hidden ones)
+								state.hands(conn.reacting).foldLeft(state.playableSet.toList): (acc, order) =>
+									if !g.isBlindPlaying(order) || g.meta(order).hidden then acc else
+										acc.foldLeft(acc): (a, i) =>
+											i.next.fold(a)(_ +: a)
+								.filter(!state.isBasicTrash(_))
+						.pipe(IdentitySet.from)
 
 						val maybeFinessed =
 							giver != state.ourPlayerIndex &&
@@ -109,11 +107,17 @@ def assignConns(game: HGroup, action: ClueAction, fps: Seq[FocusPossibility], fo
 								(clue.kind == ClueKind.Colour && conn.ids.forall(!g.me.thoughts(focus).possible.contains(_)))
 							)
 
+						val fStatus = Option.when(maybeFinessed):
+							if target == state.ourPlayerIndex then FStatus.PossiblyOn else FStatus.PossiblyAmbiguous
+
+						if fStatus != None then
+							Log.highlight(Console.GREEN, s"setting finesse status to $fStatus on ${conn.order}! ${finesseIds.fmt(state)}")
+
 						g.copy(
 							xmeta = g.xmeta.updated(conn.order, g.xmeta(conn.order).copy(
 								idUncertain = idUncertain,
-								maybeFinessed = maybeFinessed,
-								finesseIds = finesseIds)))
+								fStatus = fStatus,
+								finesseIds = Some(finesseIds))))
 					.pipe: g =>
 						conn match
 							case f: FinesseConn =>
@@ -182,15 +186,15 @@ def urgentSave(ctx: ClueContext): Boolean =
 	val ClueContext(prev, game, action) = ctx
 	val state = game.state
 
-	// Log.info(s"checking if ${state.names(action.giver)} performed an urgent save ${game.earlyGameClue(action.target).isDefined}")
+	// Log.info(s"checking if ${state.names(action.giver)} performed an urgent save")
+
+	if !ctx.focusResult.chop then
+		return false
 
 	val earlyGameClue = game.earlyGameClue(action.target)
 
 	if earlyGameClue.isDefined then
 		// Log.info(s"${state.names(action.target)} could clue ${earlyGameClue.get.fmt(state)}, not urgent save")
-		return false
-
-	if !ctx.focusResult.chop then
 		return false
 
 	@annotation.tailrec
@@ -223,7 +227,7 @@ def resolveClue(ctx: ClueContext, fps: Seq[FocusPossibility], ambiguousOwn: Seq[
 
 	val symmetricFps =
 		if target == state.ourPlayerIndex || fps.exists(_.save) then
-			List.empty
+			Nil
 		else
 			Log.highlight(Console.YELLOW, "finding symmetric connections!")
 			val symmetricFps =
@@ -240,17 +244,54 @@ def resolveClue(ctx: ClueContext, fps: Seq[FocusPossibility], ambiguousOwn: Seq[
 				.flatMap:
 					connect(ctx, _, looksDirect, thinksStall = Set(), findOwn = Some(target))
 
-			occamsRazor(state, symmetricFps, target)
+			occamsRazor(game, symmetricFps, target, focus)
 
-	val allFps = fps ++ symmetricFps
-	val simplestFps = occamsRazor(state, allFps.filter(fp => game.players(target).thoughts(focus).possible.contains(fp.id)), target)
-	val fpsToWrite = if simplestFps.forall(_.symmetric) then simplestFps else allFps
+	val ambiguousFps = if game.level < Level.IntermediateFinesses || giver == state.ourPlayerIndex || fps.exists(_.save) then Nil else
+		Log.highlight(Console.YELLOW, "finding ambiguous connections!")
+
+		val ambiguousFps =
+			val looksDirect = game.common.thoughts(focus).id(symmetric = true).isEmpty &&
+				fps.exists: fp =>
+					game.players(target).thoughts(focus).possible.contains(fp.id) &&
+					fp.connections.forall: c =>
+						c.isInstanceOf[KnownConn] ||
+						(c.isInstanceOf[PlayableConn] && c.reacting != state.ourPlayerIndex)
+
+			val poss = game.me.thoughts(focus).id().toList
+				.when(_.isEmpty)(_ => game.me.thoughts(focus).inferred.toList)
+
+			poss.filter: inf =>
+				visibleFind(state, game.common, inf, infer = true, excludeOrder = focus).isEmpty &&
+				!(fps ++ ambiguousOwn).exists: fp =>
+					fp.id == inf && {
+						fp.connections.forall(_.matches { case _: KnownConn => true ; case _: PlayableConn => true }) ||
+						fp.connections.forall(_.reacting == state.ourPlayerIndex)
+					}
+			.flatMap:
+				connect(ctx, _, looksDirect, thinksStall = Set(), preferOwn = true)
+			.filter: fp =>
+				!(fps ++ ambiguousOwn).exists(_.connections == fp.connections)
+
+		occamsRazor(game, ambiguousFps, target, focus)
+
+	val allFps = fps ++ symmetricFps ++ ambiguousFps
+	val simplestFps = occamsRazor(game, allFps.filter(fp => !fp.ambiguous && game.players(target).thoughts(focus).possible.contains(fp.id)), target, focus)
+	val fpsToWrite = if simplestFps.forall(_.symmetric) then simplestFps else allFps.filter(!_.ambiguous)
+
+	val stompedWc = !state.inEndgame && game.waiting.exists: wc =>
+		!wc.symmetric && !wc.ambiguousSelf &&
+		wc.connections.exists: conn =>
+			conn.order == focus ||
+			(conn.ids.length == 1 && state.deck(focus).matches(conn.ids.head))
 
 	val interp = if state.deck(focus).id().exists(id => !simplestFps.exists(_.id == id)) then
 		Log.error(s"resolving clue but focus ${state.logId(focus)} doesn't match simplest fps [${simplestFps.map(fp => state.logId(fp.id)).mkString(",")}]!")
 		ClueInterp.Mistake
 	else if simplestFps.forall(_.symmetric) then
 		Log.error(s"resolving clue but all focus possibilities are symmetric!")
+		ClueInterp.Mistake
+	else if stompedWc then
+		Log.error("cluing a card part of a waiting connection!")
 		ClueInterp.Mistake
 	else if fps.exists(_.save) then
 		ClueInterp.Save
@@ -281,7 +322,7 @@ def resolveClue(ctx: ClueContext, fps: Seq[FocusPossibility], ambiguousOwn: Seq[
 	.pipe:
 		allFps.foldLeft(_): (a, fp) =>
 			fp.connections.zipWithIndex.foldLeft(a) { case (acc, (conn, i)) => conn match
-				case PlayableConn(reacting, order, id, linked, layered) if linked.length > 1 =>
+				case PlayableConn(reacting, order, id, linked, hidden, _) if linked.length > 1 =>
 					val playLinks = acc.common.playLinks
 					val target = fp.connections.lift(i + 1).map(_.order).getOrElse(focus)
 					val existingIndex = playLinks.indexWhere: l =>
@@ -308,7 +349,7 @@ def resolveClue(ctx: ClueContext, fps: Seq[FocusPossibility], ambiguousOwn: Seq[
 			c.isInstanceOf[FinesseConn]
 
 		g.copy(
-			waiting = g.waiting ++ allFps.collect {
+			waiting = g.waiting ++ allFps.filterNot(_.ambiguous).collect {
 				case fp if requiresWc(fp) => WaitingConnection(
 					fp.connections,
 					giver,
@@ -318,7 +359,7 @@ def resolveClue(ctx: ClueContext, fps: Seq[FocusPossibility], ambiguousOwn: Seq[
 					fp.id,
 					symmetric = fp.symmetric
 				)
-			} ++ ambiguousOwn.map: fp =>
+			} ++ (ambiguousOwn ++ allFps.filter(_.ambiguous)).filter(_.connections.nonEmpty).map: fp =>
 				WaitingConnection(
 					fp.connections,
 					giver,

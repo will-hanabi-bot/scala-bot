@@ -121,7 +121,7 @@ extension[G <: Game](game: G)
 		val state = game.state
 
 		if state.actionList.length < state.turnCount then
-			throw new IllegalStateException(s"Turn count ${state.turnCount}, actionList ${state.actionList}")
+			throw new IllegalStateException(s"Turn count ${state.turnCount}, actionList ${state.actionList.length} ${state.actionList}")
 
 		val newGame = withState(_.copy(actionList = addAction(state.actionList, action, state.turnCount)))
 
@@ -244,7 +244,7 @@ extension[G <: Game](game: G)
 
 	def simulate(action: Action)(using ops: GameOps[G]): G =
 		action match
-			case clue: ClueAction => game.simulateClue(clue, log = true)
+			case clue: ClueAction => game.simulateAction(clue, log = true)
 			case _ => game.simulateAction(action)
 
 	def rewind(turn: Int, action: Action)(using ops: GameOps[G]): Either[String, G] =
@@ -309,8 +309,8 @@ extension[G <: Game](game: G)
 		// Logger.setLevel(LogLevel.Off)
 
 		val newGame = ops.blank(game, keepDeck = true)
-			.pipe:
-				ops.copyWith(_, GameUpdates(
+			.pipe: g =>
+				ops.copyWith(g, GameUpdates(
 					catchup = Some(true),
 					rewindDepth = Some(game.rewindDepth + 1),
 				))

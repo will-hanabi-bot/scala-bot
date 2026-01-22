@@ -202,6 +202,7 @@ case class State(
 		val ids = conn.ids
 		val idStr = if ids.length == 1 then logId(ids.head) else s"[${ids.map(logId).mkString(",")}]"
 		val extra = conn match
+			case p: PlayableConn => if p.insertingInto.isDefined then " (inserted)" else ""
 			case f: FinesseConn => if f.certain then " (certain)" else if f.hidden then " (hidden)" else ""
 			case _ => ""
 
@@ -221,7 +222,6 @@ object State:
 		ourPlayerIndex: Int,
 		variant: Variant
 	): State =
-		var cardsLeft = 0
 		val cardCount = Array.ofDim[Int](variant.suits.length * 5)
 		var playableSet = IdentitySet.empty
 		var criticalSet = IdentitySet.empty
@@ -231,7 +231,6 @@ object State:
 				val id = Identity(suitIndex, rank)
 				val count = variant.cardCount(id)
 
-				cardsLeft += count
 				cardCount(id.toOrd) = count
 
 				if rank == 1 then
@@ -241,7 +240,7 @@ object State:
 					criticalSet = criticalSet.union(id)
 
 		State(
-			cardsLeft = cardsLeft,
+			cardsLeft = variant.totalCards,
 			cardCount = cardCount,
 
 			playStacks = Vector.fill(variant.suits.length)(0),

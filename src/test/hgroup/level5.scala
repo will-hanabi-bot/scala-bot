@@ -2,7 +2,7 @@ package tests.hgroup.level5
 
 import scala_bot.basics._
 import scala_bot.test.{hasInfs, hasStatus, Player, preClue, setup, takeTurn}, Player._
-import scala_bot.hgroup.HGroup
+import scala_bot.hgroup.{FStatus, HGroup}
 import scala_bot.logger.{Logger, LogLevel}
 
 import scala.util.chaining.scalaUtilChainingOps
@@ -242,7 +242,7 @@ class General extends munit.FunSuite:
 		.pipe(takeTurn("Donald clues 2 to Alice (slot 2)"))
 
 		// Bob might be finessed for r1, but we aren't sure.
-		assertEquals(game.xmeta(game.state.hands(Bob.ordinal)(0)).maybeFinessed, true)
+		assertEquals(game.xmeta(game.state.hands(Bob.ordinal)(0)).fStatus, Some(FStatus.PossiblyOn))
 
 	test("recognizes certainly finessed cards"):
 		val game = setup(HGroup.atLevel(5), Vector(
@@ -256,7 +256,7 @@ class General extends munit.FunSuite:
 		.pipe(takeTurn("Donald clues 3 to Alice (slots 1,2,3,4)"))
 
 		// Bob must be finessed for r1.
-		assertEquals(game.xmeta(game.state.hands(Bob.ordinal)(0)).maybeFinessed, false)
+		assertEquals(game.xmeta(game.state.hands(Bob.ordinal)(0)).fStatus, None)
 		hasInfs(game, None, Alice, 4, Vector("r3"))
 
 	test("cancels a prompt after the reacting player stalls"):
@@ -273,9 +273,9 @@ class General extends munit.FunSuite:
 		.pipe(takeTurn("Cathy clues yellow to Alice (slots 4,5)"))
 		.pipe(takeTurn("Alice plays y1 (slot 5)"))
 
-		.pipe(takeTurn("Bob clues 3 to Alice (slots 1,5)"))
+		.pipe(takeTurn("Bob clues 3 to Alice (slots 1,5)"))		// x3 xx xx xx y3
 		.tap: g =>
-			hasStatus(g, Alice, 1, CardStatus.None)
+			hasStatus(g, Alice, 2, CardStatus.None)
 		.pipe(takeTurn("Cathy clues 5 to Bob"))
 
 		// After Cathy stalls, Alice's slot 2 should be finessed.

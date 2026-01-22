@@ -32,9 +32,12 @@ object Level:
 	val Bluffs = 11
 	val Context = 12
 
+enum FStatus:
+	case PossiblyAmbiguous, PossiblyOn
+
 case class XConvData(
 	idUncertain: Boolean = false,
-	maybeFinessed: Boolean = false,
+	fStatus: Option[FStatus] = None,
 	turnFinessed: Option[Int] = None,
 	finesseIds: Option[IdentitySet] = None
 )
@@ -49,7 +52,7 @@ case class HGroup(
 	importantAction: Vector[Boolean],
 
 	meta: Vector[ConvData] = Vector(),
-	deckIds: Vector[Option[Identity]] = Vector(),
+	deckIds: Vector[Option[Identity]],
 	future: Vector[IdentitySet],
 	catchup: Boolean = false,
 	notes: Map[Int, Note] = Map(),
@@ -77,7 +80,7 @@ case class HGroup(
 		orders.filter: o =>
 			player.orderKp(this, o) ||
 			!{
-				xmeta(o).maybeFinessed ||
+				// xmeta(o).maybeFinessed ||
 				state.hands(playerIndex).exists: o2 =>
 					// An older finesse exists which could be swapped with this identity
 					xmeta(o2).idUncertain &&
@@ -85,8 +88,9 @@ case class HGroup(
 					xmeta(o2).finesseIds.exists(ids => player.thoughts(o).id(infer = true).exists(ids.contains))
 				||
 				waiting.exists: wc =>
+					!wc.symmetric && !wc.ambiguousSelf &&
 					// This is a hidden connection that is not currently revealed
-					wc.connections.tail.exists(c => c.order == o && c.hidden)
+					wc.connections.nonEmpty && wc.connections.tail.exists(c => c.order == o && c.hidden)
 			}
 
 	override def validArr(id: Identity, order: Int): Boolean =
@@ -95,7 +99,8 @@ case class HGroup(
 		if playables.contains(order) then
 			state.isPlayable(id)
 		else if this.isTouched(order) then
-			!state.isBasicTrash(id)
+			val good = this.me.thoughts(order).possible.difference(state.trashSet)
+			good.isEmpty || good.contains(id)
 		else
 			true
 
@@ -131,10 +136,31 @@ case class HGroup(
 		!common.thinksLoaded(this, bob) &&
 		chop(bob).flatMap(state.deck(_).id()).exists(id => state.isCritical(id))
 
-	def findFinesse(playerIndex: Int, connected: List[Int] = Nil, ignore: Set[Int] = Set()) =
+	def findFinesse(playerIndex: Int, connected: Set[Int] = Set(), ignore: Set[Int] = Set()): Option[Int] =
 		val order = state.hands(playerIndex).find: o =>
-			(!this.isTouched(o) || this.xmeta(o).maybeFinessed || this.xmeta(o).idUncertain) &&
-			!connected.contains(o)
+			val card = state.deck(o)
+			val status = this.meta(o).status
+
+			!card.clued &&
+			!this.meta(o).cm &&
+			!connected.contains(o) &&
+			(status != CardStatus.Finessed || this.xmeta(o).fStatus == Some(FStatus.PossiblyOn))
+
+		order.filter(!ignore.contains(_))
+
+	def findFinesseId(playerIndex: Int, id: Identity, connected: Set[Int] = Set(), ignore: Set[Int] = Set(), overrideLayer: Boolean = false): Option[Int] =
+		val order = state.hands(playerIndex).find: o =>
+			val card = state.deck(o)
+			val status = this.meta(o).status
+
+			!card.clued &&
+			!this.meta(o).cm &&
+			!connected.contains(o) && {
+				if level < Level.IntermediateFinesses then
+					status != CardStatus.Finessed || this.xmeta(o).fStatus == Some(FStatus.PossiblyOn)
+				else
+					(overrideLayer || !(status == CardStatus.Finessed && !this.xmeta(o).finesseIds.get.contains(id)))
+			}
 
 		order.filter(!ignore.contains(_))
 
@@ -325,6 +351,9 @@ case class HGroup(
 			case PlayAction(playerIndex, order, suitIndex, rank) => (order, suitIndex, rank)
 			case DiscardAction(playerIndex, order, suitIndex, rank, _) => (order, suitIndex, rank)
 
+		if suitIndex == -1 || rank == -1 then
+			return None
+
 		val needsReplay =
 			action.playerIndex == state.ourPlayerIndex &&
 			prev.me.thoughts(order).possible.length > 1 &&
@@ -332,15 +361,14 @@ case class HGroup(
 
 		Option.when(needsReplay) {
 			copy(
-				future = future.padTo(state.deck.length, state.allIds)
-					.updated(order, IdentitySet.single(Identity(suitIndex, rank)))
+				future = future.updated(order, IdentitySet.single(Identity(suitIndex, rank)))
 			)
 			.replay
 			.toOption
 		}.flatten
 
 	/** Removes the 'idUncertain' flag if no longer applicable. */
-	def updateUncertain =
+	def refreshUncertain =
 		val uncertain = (order: Int) =>
 			this.me.thoughts(order).possible.length > 1 &&
 			// There's an older card in our hand that allows for a swap
@@ -370,7 +398,8 @@ object HGroup:
 		players = t.players,
 		common = t.common,
 		base = (state, Vector(), t.players, t.common),
-		future = Vector.fill(state.cardsLeft)(state.allIds),
+		deckIds = Vector.fill(state.variant.totalCards)(None),
+		future = Vector.fill(state.variant.totalCards)(state.allIds),
 		inProgress = inProgress,
 		lastActions = Vector.fill(state.numPlayers)(None),
 		importantAction = Vector.fill(state.numPlayers)(false),
@@ -413,17 +442,18 @@ object HGroup:
 				players = game.base._3,
 				common = game.base._4,
 				base = game.base,
+				inProgress = game.inProgress,
 
 				level = game.level,
-				deckIds = if keepDeck then game.deckIds else Vector(),
-				future = if keepDeck then game.future else Vector.fill(game.state.deck.length)(game.state.allIds),
+				deckIds = if keepDeck then game.deckIds else Vector.fill(game.state.variant.totalCards)(None),
+				future = if keepDeck then game.future else Vector.fill(game.state.variant.totalCards)(game.state.allIds),
 				lastActions = Vector.fill(game.state.numPlayers)(None),
 				importantAction = Vector.fill(game.state.numPlayers)(false),
 				xmeta = Vector.fill(game.base._2.length)(XConvData())
 			)
 
 		def interpretClue(prev: HGroup, game: HGroup, action: ClueAction): HGroup =
-			val updatedGame = game.updateUncertain
+			val updatedGame = game.refreshUncertain
 
 			checkRevealLayer(prev, updatedGame, action).getOrElse:
 				val pre = refreshWCs(prev, updatedGame, action, beforeClueInterp = true)
@@ -436,7 +466,7 @@ object HGroup:
 				)
 
 				refreshWCs(prev, updatedPre, action)
-					.cond(_.waiting != pre.waiting && !game.noRecurse) { g =>
+					.cond(_.waiting.length < pre.waiting.length && !game.noRecurse) { g =>
 						Log.highlight(Console.GREEN, "----- REINTERPRETING CLUE -----")
 						val res = interpClue(ClueContext(prev, g, action))
 						Log.highlight(Console.GREEN, "----- DONE REINTERPRETING -----")
@@ -449,7 +479,7 @@ object HGroup:
 			val DiscardAction(playerIndex, order, suitIndex, rank, failed) = action
 			val id = Identity(suitIndex, rank)
 
-			val updatedGame = game.updateUncertain
+			val updatedGame = game.refreshUncertain
 
 			updatedGame.reinterpPlay(prev, action).getOrElse(
 				refreshWCs(prev, updatedGame, action)
@@ -508,7 +538,7 @@ object HGroup:
 		def interpretPlay(prev: HGroup, game: HGroup, action: PlayAction): HGroup =
 			val PlayAction(playerIndex, order, suitIndex, rank) = action
 
-			val updatedGame = game.updateUncertain
+			val updatedGame = game.refreshUncertain
 
 			updatedGame.reinterpPlay(prev, action).getOrElse:
 				refreshWCs(prev, updatedGame, action)

@@ -1,5 +1,6 @@
 package scala_bot.basics
 
+import scala_bot.utils._
 import upickle.default._
 
 val VARIANTS_URL = "https://raw.githubusercontent.com/Hanabi-Live/hanabi-live/main/packages/game/src/json/variants.json"
@@ -45,6 +46,8 @@ case class Variant(
 			1
 		else
 			Vector(3, 2, 2, 2, 1)(rank - 1)
+
+	def totalCards = allIds.summing(cardCount)
 
 	def idTouched(id: Identity, clue: ClueLike): Boolean =
 		val Identity(suitIndex, rank) = id
@@ -180,7 +183,6 @@ object Variant:
 						else
 							name.toLowerCase.find(c => !shortForms.contains(c))
 								.getOrElse:
-									println(Variant.colours.find(_.name == "Rainbow"))
 									throw new IllegalArgumentException(s"No unused character found for suit '$name' in $suitNames!")
 
 				val suit = colour.getOrElse:

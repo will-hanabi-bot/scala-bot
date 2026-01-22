@@ -158,15 +158,18 @@ def alternativeClue(prev: HGroup, game: HGroup, giver: Int, maxStall: Int, origC
 def stallingSituation(ctx: ClueContext): Option[(StallInterp, Set[Int])] =
 	val ClueContext(prev, game, action) = ctx
 	val ClueAction(giver, target, list, clue) = ctx.action
-	val severity = stallSeverity(ctx.prev, ctx.prev.common, giver, infoPlayer = Some(ctx.game.common))
 
-	Log.info(s"severity $severity")
+	val giverLoaded = prev.common.thinksPlayables(prev, giver).nonEmpty ||
+		(prev.common.thinksTrash(prev, giver).nonEmpty && prev.state.clueTokens < 8)
 
-	isStall(ctx, severity).flatMap: stall =>
-		val giverLoaded = prev.common.thinksPlayables(prev, giver).nonEmpty ||
-			(prev.common.thinksTrash(prev, giver).nonEmpty && prev.state.clueTokens < 8)
+	if giverLoaded then
+		Log.info("giver loaded, not stall!")
+		None
+	else
+		val severity = stallSeverity(ctx.prev, ctx.prev.common, giver, infoPlayer = Some(ctx.game.common))
+		Log.info(s"severity $severity")
 
-		Option.when(!giverLoaded):
+		isStall(ctx, severity).map: stall =>
 			if game.noRecurse then
 				(stall, (0 to game.state.numPlayers).toSet)
 			else

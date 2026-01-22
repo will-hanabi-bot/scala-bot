@@ -31,11 +31,11 @@ case class PlayableConn(
 	order: Int,
 	id: Identity,
 	linked: List[Int] = Nil,
-	layered: Boolean = false
+	hidden: Boolean = false,
+	insertingInto: Option[Seq[Int]] = None
 ) extends Connection:
 	def ids = List(id)
 	def kind = "playable"
-	def hidden = false
 
 case class PromptConn(
 	reacting: Int,
@@ -54,8 +54,7 @@ case class FinesseConn(
 	bluff: Boolean = false,
 	possiblyBluff: Boolean = false,
 	certain: Boolean = false,
-	ambiguousPassback: Boolean = false,
-	inserted: Boolean = false
+	ambiguousPassback: Boolean = false
 ) extends Connection:
 	def kind =
 		if possiblyBluff then "possiblyBluff"
@@ -75,6 +74,7 @@ case class FocusPossibility(
 	connections: List[Connection],
 	interp: Interp,
 	symmetric: Boolean = false,
+	ambiguous: Boolean = false,
 	save: Boolean = false,
 ):
 	def isBluff =

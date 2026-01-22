@@ -1,11 +1,11 @@
 //> using scala 3.7.2
 //> using jvm 25
 //> using options -Wall -Wconf:msg=toString:s -feature
-//> using dep com.softwaremill.sttp.client4::core:4.0.13
-//> using dep com.softwaremill.sttp.client4::cats:4.0.13
+//> using dep com.softwaremill.sttp.client4::core:4.0.14
+//> using dep com.softwaremill.sttp.client4::cats:4.0.14
 //> using dep org.typelevel::cats-effect:3.6.3
 //> using dep com.lihaoyi::upickle:4.4.2
-//> using dep com.lihaoyi::requests:0.9.0
+//> using dep com.lihaoyi::requests:0.9.2
 //> using dep org.scala-lang.modules::scala-parallel-collections:1.2.0
 //> using test.dep org.scalameta::munit:1.2.1
 

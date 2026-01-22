@@ -180,14 +180,14 @@ def interpClue(ctx: ClueContext): HGroup =
 		for
 			inf <- common.thoughts(focus).inferred if validSave(inf)
 		yield
-			FocusPossibility(inf, List(), ClueInterp.Save)
+			FocusPossibility(inf, List(), ClueInterp.Save, save = true)
 
 	if savePoss.nonEmpty then
 		Log.info(s"found saves: [${savePoss.map(fp => state.logId(fp.id)).mkString(",")}]")
 
 	val thinksStall = stall.map(_._2).getOrElse(Set.empty)
 	val focusPoss =
-		val looksDirect = common.thoughts(focus).id(symmetric = true).isEmpty &&
+		val looksDirect = common.thoughts(focus).id().isEmpty &&
 			(action.clue.kind == ClueKind.Colour || savePoss.nonEmpty || positional)
 
 		common.thoughts(focus).inferred.filter: inf =>
@@ -201,7 +201,7 @@ def interpClue(ctx: ClueContext): HGroup =
 		val possible = (savePoss ++ focusPoss)
 			.filter(fp => game.players(target).thoughts(focus).possible.contains(fp.id))
 
-		occamsRazor(state, possible, target)
+		occamsRazor(game, possible, target, focus)
 
 	val noSelf = !game.allowFindOwn ||
 		giver == state.ourPlayerIndex ||
@@ -211,14 +211,15 @@ def interpClue(ctx: ClueContext): HGroup =
 		Log.info(s"simplest focus possibilities [${simplest.map(fp => state.logId(fp.id)).mkString(",")}]")
 		resolveClue(ctx, simplest)
 	else
-		Log.highlight(Console.GREEN, s"finding own!")
+		Log.highlight(Console.YELLOW, s"finding own!")
 
 		val ownFps =
-			val looksDirect = common.thoughts(focus).id(symmetric = true).isEmpty && {
-				clue.kind == ClueKind.Colour ||
+			val looksDirect = game.players(target).thoughts(focus).id().isEmpty && {
+				// clue.kind == ClueKind.Colour ||
 				// Looks like an existing possibility
-				focusPoss.exists:
-					_.connections.forall: c =>
+				focusPoss.exists: fp =>
+					game.players(target).thoughts(focus).possible.contains(fp.id) &&
+					fp.connections.forall: c =>
 						c.isInstanceOf[KnownConn] ||
 						(c.isInstanceOf[PlayableConn] && c.reacting != state.ourPlayerIndex)
 			}
@@ -230,5 +231,5 @@ def interpClue(ctx: ClueContext): HGroup =
 			.flatMap:
 				connect(ctx, _, looksDirect, thinksStall, findOwn = Some(state.ourPlayerIndex))
 
-		val simplestOwn = occamsRazor(state, simplest ++ ownFps, state.ourPlayerIndex, game.me.thoughts(focus).id())
+		val simplestOwn = occamsRazor(game, simplest ++ ownFps, state.ourPlayerIndex, focus, actualId = game.me.thoughts(focus).id())
 		resolveClue(ctx, simplestOwn, ownFps.filterNot(simplestOwn.contains))

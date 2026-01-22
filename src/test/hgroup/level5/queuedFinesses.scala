@@ -55,6 +55,8 @@ class QueuedFinesses extends munit.FunSuite:
 		))
 		.pipe(takeTurn("Alice clues green to Bob"))
 		.pipe(takeTurn("Bob clues red to Alice (slot 2)"))		// r2 finesse
+		.tap:
+			hasInfs(_, None, Alice, 2, Vector("r1", "r2"))
 		.pipe(takeTurn("Cathy plays g1", "b1"))
 
 		// Alice should wait for Cathy.
