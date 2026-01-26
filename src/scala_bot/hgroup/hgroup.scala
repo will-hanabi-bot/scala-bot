@@ -98,7 +98,7 @@ case class HGroup(
 
 		if playables.contains(order) then
 			state.isPlayable(id)
-		else if this.isTouched(order) then
+		else if this.isTouched(order) && !this.common.thoughts(order).reset then
 			val good = this.me.thoughts(order).possible.difference(state.trashSet)
 			good.isEmpty || good.contains(id)
 		else
@@ -124,7 +124,7 @@ case class HGroup(
 					throw new IllegalArgumentException(s"order $order is right of chop $c!")
 
 				state.hands(playerIndex).count: o =>
-					o < order && o > c &&
+					o < order && o >= c &&
 					!state.deck(o).clued &&
 					meta(o).status == CardStatus.None
 

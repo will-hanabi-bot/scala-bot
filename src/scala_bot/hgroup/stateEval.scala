@@ -21,7 +21,8 @@ def getResult(game: HGroup, hypo: HGroup, action: ClueAction): Double =
 
 	val badTrash = state.hands.flatten.find: o =>
 		!meta(o).trash && hypo.meta(o).trash &&
-		state.deck(o).id().exists(visibleFind(game.state, game.players(giver), _, excludeOrder = o).isEmpty)
+		state.deck(o).id().exists: id =>
+			!state.isBasicTrash(id) && visibleFind(game.state, game.players(giver), id, excludeOrder = o).isEmpty
 
 	if badTrash.isDefined then
 		Log.warn(s"clue ${clue.fmt(state, target)} results in ${state.logId(badTrash.get)} ${badTrash.get} looking trash!")
@@ -69,10 +70,22 @@ def getResult(game: HGroup, hypo: HGroup, action: ClueAction): Double =
 				case Some(ClueInterp.Fix)      => value + 1
 				case _ => value
 
+private def clueFilter(game: HGroup, giver: Int) =
+	val state = game.state
+
+	(clue: Clue) =>
+		val Clue(kind, value, target) = clue
+		val list = state.clueTouched(state.hands(target), clue)
+		val focus = game.determineFocus(game, ClueAction(giver, target, list, clue.toBase)).focus
+
+		// Don't clue known duplicates
+		state.deck(focus).id().forall: id =>
+			visibleFind(state, game.common, id, infer = true, excludeOrder = focus).isEmpty
+
 def _forceClue(orig: HGroup, game: HGroup, offset: Int, only: Option[Int] = None): Double =
 	val state = game.state
 	val giver = (state.ourPlayerIndex + offset) % state.numPlayers
-	forceClue(game, giver, advance(orig, _, offset + 1), only)
+	forceClue(game.copy(allowFindOwn = false), giver, advance(orig, _, offset + 1), only, clueFilter = clueFilter(game, giver))
 
 def advance(orig: HGroup, game: HGroup, offset: Int): Double =
 	val (state, common, meta) = (game.state, game.common, game.meta)
@@ -151,9 +164,7 @@ def advance(orig: HGroup, game: HGroup, offset: Int): Double =
 				val action = DiscardAction(playerIndex, chop, id.suitIndex, id.rank)
 				val dcGame = game.simulate(action)
 
-				if state.clueTokens > 2 then
-					val clueGame = game.withState(s => s.copy(clueTokens = s.clueTokens - 1))
-
+				if state.clueTokens > 1 then
 					val clueProb = if offset == 1 then
 						if common.thinksLoaded(game, bob) then
 							0.2
@@ -165,7 +176,7 @@ def advance(orig: HGroup, game: HGroup, offset: Int): Double =
 						0.8
 
 					Log.info(s"${state.names(playerIndex)} discarding ${state.logId(id)} but might clue $clueProb")
-					clueProb * advance(orig, clueGame, offset + 1) + (1.0 - clueProb) * advance(orig, dcGame, offset + 1)
+					clueProb * _forceClue(orig, game, offset) + (1.0 - clueProb) * advance(orig, dcGame, offset + 1)
 				else
 					Log.info(s"${state.names(playerIndex)} discarding ${state.logId(id)}")
 					advance(orig, dcGame, offset + 1)
@@ -233,7 +244,7 @@ def evalState(state: State): Double =
 		case c 					 => c / 2.0
 
 	val scoreLoss = state.variant.suits.length * 5 - state.maxScore
-	val dcCritVal = -8 * scoreLoss
+	val dcCritVal = -10 * scoreLoss
 
 	val strikesVal = state.strikes match
 		case 1 => -2.5
@@ -259,7 +270,7 @@ def evalGame(orig: HGroup, game: HGroup): Double =
 				if state.isBasicTrash(id) then
 					-1.5
 				else if id.rank == 5 then
-					0.8
+					0.45
 				else
 					0.4
 

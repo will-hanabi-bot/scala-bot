@@ -138,7 +138,8 @@ extension[G <: Game](game: G)
 					rank,
 					inferred = IdentitySet.single(id),
 					oldInferred = t.inferred.toOpt,
-					possible = IdentitySet.single(id)
+					possible = IdentitySet.single(id),
+					oldPossible = t.possible.toOpt
 				)
 
 	def elim(using ops: GameOps[G]): G =

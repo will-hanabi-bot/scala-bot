@@ -268,3 +268,17 @@ class SelfFinesses extends munit.FunSuite:
 		// Bob needs to play r1 first to respect r3.
 		hasStatus(game, Bob, 2, CardStatus.Finessed)
 		hasInfs(game, None, Bob, 5, Vector("r3", "y3", "g3"))
+
+	test("knows when a self-finesse is never possible"):
+		val game = setup(HGroup.atLevel(2), Vector(
+			Vector("xx", "xx", "xx", "xx", "xx"),
+			Vector("y2", "y5", "b4", "y3", "r1"),
+			Vector("r4", "g5", "p4", "g3", "b5")
+		),
+			starting = Cathy,
+			discarded = Vector("y4")
+		)
+		.pipe(takeTurn("Cathy clues 4 to Alice (slot 5)"))
+
+		hasInfs(game, None, Alice, 5, Vector("y4"))
+		assert(game.waiting.isEmpty)

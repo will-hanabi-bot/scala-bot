@@ -76,6 +76,7 @@ case class Thought(
 	possible: IdentitySet,
 	inferred: IdentitySet,
 	oldInferred: IdentitySetOpt = IdentitySetOpt.empty,
+	oldPossible: IdentitySetOpt = IdentitySetOpt.empty,
 	infoLock: IdentitySetOpt = IdentitySetOpt.empty,
 	rewinded: Boolean = false,
 	reset: Boolean = false

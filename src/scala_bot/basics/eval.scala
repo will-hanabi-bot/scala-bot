@@ -3,7 +3,7 @@ package scala_bot.basics
 import scala_bot.utils._
 import scala_bot.logger.{Log, Logger, LogLevel}
 
-def forceClue[G <: Game](game: G, giver: Int, advance: G => Double, only: Option[Int] = None)(using ops: GameOps[G]): Double =
+def forceClue[G <: Game](game: G, giver: Int, advance: G => Double, only: Option[Int] = None, clueFilter: Clue => Boolean = _ => true)(using ops: GameOps[G]): Double =
 	val state = game.state
 
 	if !state.canClue then
@@ -12,7 +12,7 @@ def forceClue[G <: Game](game: G, giver: Int, advance: G => Double, only: Option
 	val allClues =
 		for
 			i    <- 0 until state.numPlayers if i != giver && i != state.ourPlayerIndex && only.forall(_ == i)
-			clue <- state.allValidClues(i)
+			clue <- state.allValidClues(i) if clueFilter(clue)
 		yield
 			val list = state.clueTouched(state.hands(i), clue)
 			ClueAction(giver, i, list, clue.toBase)

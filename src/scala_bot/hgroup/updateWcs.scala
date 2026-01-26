@@ -110,7 +110,7 @@ def refreshWCs(prev: HGroup, game: HGroup, action: Action, beforeClueInterp: Boo
 				)
 			case UpdateResult.Remove =>
 				struct.copy(
-					toRemove = PromptConn(-1, wc.focus, wc.inference) +: (if wc.symmetric then List() else conns) ++: struct.toRemove,
+					toRemove = PromptConn(-1, wc.focus, wc.inference) +: (if wc.symmetric || wc.ambiguousSelf then Nil else conns) ++: struct.toRemove,
 					remFocuses = struct.remFocuses + wc.focus,
 				)
 			case UpdateResult.Complete => struct
@@ -392,7 +392,7 @@ def resolvePlayed(game: HGroup, wc: WaitingConnection, play: Int): UpdateResult 
 		card.clued && card.clues.last.turn > wc.turn && (
 			game.meta(wc.currConn.order).focused || (
 				game.common.thinksPlayables(game, wc.currConn.reacting).isEmpty &&
-				game.common.thoughts(wc.currConn.order).possible.forall: i =>
+				game.common.thoughts(wc.currConn.order).oldPossible.get.forall: i =>
 					state.isPlayable(i) || card.matches(i, assume = true) || state.isBasicTrash(i)
 			)
 		)

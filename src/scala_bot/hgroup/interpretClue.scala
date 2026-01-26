@@ -176,11 +176,11 @@ def interpClue(ctx: ClueContext): HGroup =
 		else
 			rankSave(prev, action, inf, focus))
 
-	val savePoss = if !chop then List.empty else
+	val savePoss = if !chop then Nil else
 		for
 			inf <- common.thoughts(focus).inferred if validSave(inf)
 		yield
-			FocusPossibility(inf, List(), ClueInterp.Save, save = true)
+			FocusPossibility(inf, Nil, ClueInterp.Save, save = true)
 
 	if savePoss.nonEmpty then
 		Log.info(s"found saves: [${savePoss.map(fp => state.logId(fp.id)).mkString(",")}]")
@@ -193,6 +193,7 @@ def interpClue(ctx: ClueContext): HGroup =
 		common.thoughts(focus).inferred.filter: inf =>
 			!state.isBasicTrash(inf) &&
 			visibleFind(state, common, inf, infer = true, excludeOrder = focus).isEmpty &&
+			visibleFind(state, game.players(target), inf, excludeOrder = focus).filter(o => state.deck(o).clued && !state.hands(giver).contains(o)).isEmpty &&
 			!savePoss.exists(_.id == inf)
 		.flatMap:
 			connect(ctx, _, looksDirect, thinksStall)
@@ -208,8 +209,12 @@ def interpClue(ctx: ClueContext): HGroup =
 		simplest.exists(fp => state.deck(focus).matches(fp.id))
 
 	if noSelf then
-		Log.info(s"simplest focus possibilities [${simplest.map(fp => state.logId(fp.id)).mkString(",")}]")
-		resolveClue(ctx, simplest)
+		if simplest.isEmpty then
+			Log.warn("no inferences!")
+			game.copy(lastMove = Some(ClueInterp.Mistake))
+		else
+			Log.info(s"simplest focus possibilities [${simplest.map(fp => state.logId(fp.id)).mkString(",")}]")
+			resolveClue(ctx, simplest)
 	else
 		Log.highlight(Console.YELLOW, s"finding own!")
 
@@ -232,4 +237,9 @@ def interpClue(ctx: ClueContext): HGroup =
 				connect(ctx, _, looksDirect, thinksStall, findOwn = Some(state.ourPlayerIndex))
 
 		val simplestOwn = occamsRazor(game, simplest ++ ownFps, state.ourPlayerIndex, focus, actualId = game.me.thoughts(focus).id())
-		resolveClue(ctx, simplestOwn, ownFps.filterNot(simplestOwn.contains))
+
+		if simplestOwn.isEmpty then
+			Log.warn("no inferences!")
+			game.copy(lastMove = Some(ClueInterp.Mistake))
+		else
+			resolveClue(ctx, simplestOwn, if savePoss.nonEmpty then Nil else ownFps.filterNot(simplestOwn.contains))

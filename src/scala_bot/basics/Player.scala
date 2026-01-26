@@ -91,7 +91,7 @@ case class Player(
 
 	def isDuped(game: Game, id: Identity, order: Int) =
 		val candidates = if game.goodTouch then
-			game.state.hands.flatten
+			game.state.hands.flatten.filter(game.state.deck(_).clued)
 		else
 			game.state.hands(game.state.holderOf(order))
 
