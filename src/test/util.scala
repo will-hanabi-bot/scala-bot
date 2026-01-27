@@ -16,7 +16,8 @@ val VARIANTS = Map(
 	"Rainbow (5 Suits)" -> Variant(16, "Rainbow",   Vector("Red", "Yellow", "Green", "Blue", "Rainbow"), shorts = Vector('r', 'y', 'g', 'b', 'm')),
 	"Black (5 Suits)" 	-> Variant(2, "Black",      Vector("Red", "Yellow", "Green", "Blue", "Black"),   shorts = Vector('r', 'y', 'g', 'b', 'k')),
 	"Pink (5 Suits)" 	-> Variant(2, "Pink",       Vector("Red", "Yellow", "Green", "Blue", "Pink"),    shorts = Vector('r', 'y', 'g', 'b', 'i')),
-	"Brown (5 Suits)" 	-> Variant(2, "Brown",      Vector("Red", "Yellow", "Green", "Blue", "Brown"),   shorts = Vector('r', 'y', 'g', 'b', 'n'))
+	"Brown (5 Suits)" 	-> Variant(2, "Brown",      Vector("Red", "Yellow", "Green", "Blue", "Brown"),   shorts = Vector('r', 'y', 'g', 'b', 'n')),
+	"Prism (5 Suits)" 	-> Variant(1465, "Prism",   Vector("Red", "Yellow", "Green", "Blue", "Prism"),   shorts = Vector('r', 'y', 'g', 'b', 'i'))
 )
 
 val NAMES = Vector("Alice", "Bob", "Cathy", "Donald", "Emily")
@@ -324,7 +325,16 @@ def fullyKnown[G <: Game](playerIndex: Player, slot: Int, short: String)(game: G
 
 	val giver = if playerIndex == Player.Alice then Player.Bob else Player.Alice
 
-	_preClue(playerIndex, slot, Vector(
-		TestClue(ClueKind.Rank, id.rank, giver),
-		TestClue(ClueKind.Colour, id.suitIndex, giver)
-	))(game)
+	val clues =
+		if PRISM.matches(state.variant.suits(id.suitIndex).name) then
+			Vector(
+				TestClue(ClueKind.Rank, id.rank, giver),
+				TestClue(ClueKind.Colour,((id.rank - 1) % state.variant.colourableSuits.length), giver)
+			)
+		else
+			Vector(
+				TestClue(ClueKind.Rank, id.rank, giver),
+				TestClue(ClueKind.Colour, id.suitIndex, giver)
+			)
+
+	_preClue(playerIndex, slot, clues)(game)

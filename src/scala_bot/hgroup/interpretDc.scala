@@ -2,6 +2,7 @@ package scala_bot.hgroup
 
 import scala_bot.basics._
 import scala_bot.logger.Log
+import scala_bot.utils.visibleFind
 
 def interpretTransfer(game: HGroup, action: DiscardAction, holder: Int, dupe: Option[Int]): DiscardResult =
 	val state = game.state
@@ -72,3 +73,48 @@ def interpretUsefulDcH(game: HGroup, action: DiscardAction): DiscardResult =
 		case None =>
 			// Since we can't find it, we must be the target
 			interpretTransfer(game, action, state.ourPlayerIndex, None)
+
+def valid1ClueScream(game: HGroup, bob: Int) =
+	val bobChop = game.chop(bob)
+	bobChop.exists: o =>
+		val hypo = game.withMeta(o)(_.copy(status = CardStatus.ChopMoved))
+		hypo.common.thinksLocked(hypo, bob)
+
+def checkSdcm(prev: HGroup, action: DiscardAction): Option[DcStatus] =
+	val (common, state) = (prev.common, prev.state)
+	val DiscardAction(playerIndex, order, _, _, _) = action
+	val bob = state.nextPlayerIndex(playerIndex)
+	val cathy = state.nextPlayerIndex(bob)
+
+	if common.thinksLocked(prev, bob) && state.clueTokens == 0 then
+		return None
+
+	val chop = prev.chop(playerIndex)
+
+	val scream =
+		chop.contains(order) &&
+		common.thinksLoaded(prev, playerIndex) && {
+			state.clueTokens == 0 ||
+			(state.clueTokens == 1 && valid1ClueScream(prev, bob))
+		}
+
+	val shout = common.thinksPlayables(prev, playerIndex).nonEmpty &&
+		common.thinksTrash(prev, playerIndex).contains(order)
+
+	val result = if scream then DcStatus.Scream else DcStatus.Shout
+
+	Option.when(scream || shout):
+		if state.numPlayers == 2 then
+			result
+		else if state.clueTokens == 0 && common.thinksLoaded(prev, bob) then
+			Log.warn(s"${state.names(playerIndex)} discarded with a playable/kt but next player was safe! (echo?)")
+			DcStatus.Generation
+		else if cathy == state.ourPlayerIndex || common.thinksLoaded(prev, cathy) then
+			result
+		else
+			val generation = state.clueTokens == 0 && prev.chop(cathy).exists: o =>
+				state.deck(o).id().exists: id =>
+					(state.isCritical(id) || state.isPlayable(id)) &&
+					visibleFind(state, prev.players(playerIndex), id, infer = true, excludeOrder = o).isEmpty
+
+			if generation then DcStatus.Generation else result

@@ -373,6 +373,8 @@ def resolveClue(ctx: ClueContext, fps: Seq[FocusPossibility], ambiguousOwn: Seq[
 			cluedOnChop = if chop then g.cluedOnChop + focus else g.cluedOnChop
 		)
 	.when(_ => undoScream): g =>
+		Log.highlight(Console.CYAN, "undoing sdcm due to immediate save clue!")
+
 		// Must be leftmost chop moved
 		state.hands(giver).find(game.meta(_).cm).fold(g): oldChop =>
 			g.withMeta(oldChop)(_.copy(status = CardStatus.None))

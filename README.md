@@ -2,7 +2,7 @@
 
 A deterministic Scala bot that plays on the [hanab.live](https://hanab.live/) interface. Basic structure and ideas were taken from [Zamiell's example bot](https://github.com/Zamiell/hanabi-live-bot) (Python). Fork of my [more-developed bot](https://github.com/will-hanabi-bot/hanabi-bot) (JavaScript), successor of the [Rust rewrite](https://github.com/will-hanabi-bot/rust-bot).
 
-It can play with [Reactor 1.0](https://hanabi.wiki/en/conventions/reactor) (3p only), [Referential Sieve](https://hackmd.io/Ui6LXAK3TdC7AKSDcN20PQ?view), or [H-Group](https://hanabi.github.io/) (up to level 4) conventions. Just like my other bots, it does not do any "learning" during the game.
+It can play with [Reactor 1.0](https://hanabi.wiki/en/conventions/reactor) (3p only), [Referential Sieve](https://hackmd.io/Ui6LXAK3TdC7AKSDcN20PQ?view), or [H-Group](https://hanabi.github.io/) (up to level 7) conventions. Just like my other bots, it does not do any "learning" during the game.
 
 A demo game using Reactor 1.0 conventions with the Critical Fours variant:
 
@@ -32,7 +32,7 @@ Send a PM to the bot on hanab.live (`/pm <HANABI_USERNAME> <message>`) to intera
 - `/join [password]` to join your current lobby. The bot will remain in your table until it is kicked with `/leave`.
 - `/rejoin` to rejoin a game that has already started (e.g. if it crashed).
 - `/leave` to kick the bot from your table.
-- `/settings [convention=Reactor,RefSieve,HGroup] [level=1,2]` to modify the convention set.
+- `/settings [convention=Reactor,RefSieve,HGroup] [level=1-7]` to modify the convention set.
 - `/version` to get the current version of the bot.
 
 Some commands can be sent inside a room to affect all bots that have joined.

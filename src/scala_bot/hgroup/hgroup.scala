@@ -131,10 +131,12 @@ case class HGroup(
 	def mustClue(playerIndex: Int) =
 		val bob = state.nextPlayerIndex(playerIndex)
 
-		state.canClue &&
-		state.numPlayers > 2 &&
-		!common.thinksLoaded(this, bob) &&
-		chop(bob).flatMap(state.deck(_).id()).exists(id => state.isCritical(id))
+		dcStatus != DcStatus.None || {
+			state.canClue &&
+			state.numPlayers > 2 &&
+			!common.thinksLoaded(this, bob) &&
+			chop(bob).flatMap(state.deck(_).id()).exists(state.isCritical)
+		}
 
 	def findFinesse(playerIndex: Int, connected: Set[Int] = Set(), ignore: Set[Int] = Set()): Option[Int] =
 		val order = state.hands(playerIndex).find: o =>
@@ -344,9 +346,6 @@ case class HGroup(
 			}
 
 	def reinterpPlay(prev: HGroup, action: PlayAction | DiscardAction): Option[HGroup] =
-		if action.matches { case a: DiscardAction => !a.failed } then
-			return None
-
 		val (order, suitIndex, rank) = action match
 			case PlayAction(playerIndex, order, suitIndex, rank) => (order, suitIndex, rank)
 			case DiscardAction(playerIndex, order, suitIndex, rank, _) => (order, suitIndex, rank)
@@ -474,6 +473,7 @@ object HGroup:
 					} {
 						_ => interpreted
 					}
+					.copy(dcStatus = DcStatus.None)
 
 		def interpretDiscard(prev: HGroup, game: HGroup, action: DiscardAction): HGroup =
 			val DiscardAction(playerIndex, order, suitIndex, rank, failed) = action
@@ -481,49 +481,87 @@ object HGroup:
 
 			val updatedGame = game.refreshUncertain
 
-			updatedGame.reinterpPlay(prev, action).getOrElse(
-				refreshWCs(prev, updatedGame, action)
-					.pipe(_.resetImportant(action.playerIndex))
-					.when(_ => failed && rank == 1): g =>
+			if failed then
+				updatedGame.reinterpPlay(prev, action).getOrElse:
+					refreshWCs(prev, updatedGame, action)
+					.resetImportant(action.playerIndex)
+					.when(_ => rank == 1): g =>
 						interpretOcm(prev, action) match
 							case None =>
 								g.copy(lastMove = Some(PlayInterp.None))
 							case Some(orders) =>
 								val chop = orders.min
-								val mistake = game.state.deck(chop).id().exists(game.state.isBasicTrash)
+								val mistake = g.state.deck(chop).id().exists(g.state.isBasicTrash)
 
 								if mistake then
 									Log.warn("ocm on trash!")
 
 								performCM(g, orders).copy(lastMove =
 									if mistake then Some(PlayInterp.Mistake) else Some(PlayInterp.OrderCM))
+					.copy(dcStatus = DcStatus.None)
+			else
+				refreshWCs(prev, updatedGame, action)
+					.resetImportant(action.playerIndex)
+					.pipe: g =>
+						if suitIndex != -1 && rank != -1 && !g.state.isBasicTrash(id) && prev.isTouched(order) && prev.xmeta(order).fStatus.isEmpty then
+							(interpretUsefulDcH(updatedGame, action) match
+								case DiscardResult.None =>
+									g.copy(lastMove = Some(DiscardInterp.None))
 
-					.when(_ => suitIndex != -1 && rank != -1 && !prev.state.isBasicTrash(id) && !prev.chop(playerIndex).contains(order)): g =>
-						interpretUsefulDcH(updatedGame, action) match
-							case DiscardResult.None =>
-								g.copy(lastMove = Some(DiscardInterp.None))
+								case DiscardResult.Mistake =>
+									g.copy(lastMove = Some(DiscardInterp.Mistake))
 
-							case DiscardResult.Mistake =>
-								g.copy(lastMove = Some(DiscardInterp.Mistake))
+								case DiscardResult.GentlemansDiscard(target) =>
+									g.copy(
+										common = g.common.withThought(target)(_.copy(
+											inferred = IdentitySet.single(id)
+										)),
+										meta = g.meta.updated(target, g.meta(target).copy(
+											status = CardStatus.GentlemansDiscard
+										)),
+										lastMove = Some(DiscardInterp.GentlemansDiscard)
+									)
+								case DiscardResult.Sarcastic(orders) =>
+									g.copy(
+										common = g.common.copy(
+											links = Link.Sarcastic(orders, id) +: g.common.links
+										),
+										lastMove = Some(DiscardInterp.Sarcastic)
+									)
+							).copy(dcStatus = DcStatus.None)
 
-							case DiscardResult.GentlemansDiscard(target) =>
-								g.copy(
-									common = g.common.withThought(target)(_.copy(
-										inferred = IdentitySet.single(id)
-									)),
-									meta = g.meta.updated(target, g.meta(target).copy(
-										status = CardStatus.GentlemansDiscard
-									)),
-									lastMove = Some(DiscardInterp.GentlemansDiscard)
-								)
-							case DiscardResult.Sarcastic(orders) =>
-								g.copy(
-									common = g.common.copy(
-										links = Link.Sarcastic(orders, id) +: g.common.links
-									),
-									lastMove = Some(DiscardInterp.Sarcastic)
-								)
+						else if g.level >= Level.LastResorts && !g.state.inEndgame then
+							val bob = g.state.nextPlayerIndex(playerIndex)
+							val bobChop = g.chop(bob)
 
+							checkSdcm(prev, action) match
+								case None => g
+
+								case Some(DcStatus.Scream) | Some(DcStatus.Shout) if bobChop.isEmpty =>
+									Log.warn(s"interpreted scream/shout but ${g.state.names(bob)} has no chop! interpreting mistake")
+									g.copy(lastMove = Some(DiscardInterp.Mistake))
+
+								case Some(status) =>
+									val bobChopId = bobChop.flatMap(g.state.deck(_).id())
+									val mistake = status.matches:
+										case DcStatus.Scream =>
+											bobChopId.exists(i => !g.state.isPlayable(i) && !g.state.isCritical(i))
+										case DcStatus.Shout =>
+											bobChopId.exists(g.state.isBasicTrash)
+
+									if mistake then
+										Log.warn(s"interpreted ${status.toString().toLowerCase()} but ${g.state.names(bob)}'s chop isn't worth saving!")
+									else
+										Log.info(s"interpreting ${status.toString().toLowerCase()}!")
+
+									g.copy(
+										dcStatus = status,
+										lastMove = Some(if mistake then DiscardInterp.Mistake else DiscardInterp.Emergency)
+									)
+									.when(_ => status != DcStatus.Generation): h =>
+										h.withMeta(bobChop.get)(_.copy(status = CardStatus.ChopMoved))
+						else
+							g.copy(dcStatus = DcStatus.None)
 					.pipe: g =>
 						val endEarlyGame = g.inEarlyGame &&
 							!failed &&
@@ -532,8 +570,7 @@ object HGroup:
 
 						g.when(_ => endEarlyGame):
 							_.copy(inEarlyGame = false)
-
-					.elim)
+					.elim
 
 		def interpretPlay(prev: HGroup, game: HGroup, action: PlayAction): HGroup =
 			val PlayAction(playerIndex, order, suitIndex, rank) = action
@@ -584,9 +621,9 @@ object HGroup:
 					val action = performToAction(state, perform, state.ourPlayerIndex)
 					(perform, action)
 
-			val mustClue = game.earlyGameClue(state.ourPlayerIndex).isDefined
+			val hasEarlyGameClue = game.earlyGameClue(state.ourPlayerIndex).isDefined
 
-			if mustClue then
+			if hasEarlyGameClue then
 				Log.highlight(Console.YELLOW,"must give clue in early game!")
 
 			val allPlays = playableOrders.map: o =>
@@ -595,7 +632,12 @@ object HGroup:
 
 			val cantDiscard = state.clueTokens == 8 ||
 				(state.pace == 0 && (allClues.nonEmpty || allPlays.nonEmpty)) ||
-				mustClue
+				game.dcStatus != DcStatus.None || {
+					hasEarlyGameClue &&
+					discardOrders.isEmpty &&
+					!(state.clueTokens == 1 && valid1ClueScream(game, state.nextPlayerIndex(state.ourPlayerIndex)))
+				}
+
 			Log.info(s"can discard: ${!cantDiscard} ${state.clueTokens}")
 
 			val allDiscards = if cantDiscard then Nil else
@@ -603,13 +645,20 @@ object HGroup:
 					val action = DiscardAction(state.ourPlayerIndex, o, me.thoughts(o).id(infer = true))
 					(PerformAction.Discard(o), action)
 
-			val allActions =
-				val as = allClues.concat(allPlays).concat(allDiscards)
+			val chop = game.chop(state.ourPlayerIndex)
 
-				game.chop(state.ourPlayerIndex) match
-					case Some(chop) if !cantDiscard && (!state.canClue || allPlays.isEmpty) && allDiscards.isEmpty && !me.thinksLocked(game, state.ourPlayerIndex) =>
-						as :+ (PerformAction.Discard(chop), DiscardAction(state.ourPlayerIndex, chop, -1, -1, false))
-					case _ => as
+			val canDiscardChop =
+				chop.isDefined &&
+				!cantDiscard &&
+				!me.thinksLocked(game, state.ourPlayerIndex) && {
+					((!state.canClue || allPlays.isEmpty) && allDiscards.isEmpty) ||
+					state.clueTokens == 0 ||
+					(state.clueTokens == 1 && valid1ClueScream(game, state.nextPlayerIndex(state.ourPlayerIndex)))
+				}
+
+			val allActions = allClues.concat(allPlays).concat(allDiscards)
+				.when(_ => canDiscardChop): as =>
+					as :+ (PerformAction.Discard(chop.get), DiscardAction(state.ourPlayerIndex, chop.get, -1, -1, false))
 
 			if allActions.isEmpty then
 				if state.clueTokens == 8 then
