@@ -75,7 +75,7 @@ def distributionClue(prev: Game, game: Game, action: ClueAction, focus: Int): Op
 	if list.forall(prev.state.deck(_).clued) || (!state.inEndgame && state.remScore > state.variant.suits.length) then
 		return None
 
-	if thought.id(infer = true).exists(state.isBasicTrash) then
+	if state.deck(focus).id().exists(state.isBasicTrash) then
 		return None
 
 	val poss = if clue.kind == ClueKind.Colour then

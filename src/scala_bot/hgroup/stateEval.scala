@@ -176,7 +176,14 @@ def advance(orig: HGroup, game: HGroup, offset: Int): Double =
 						0.8
 
 					Log.info(s"${state.names(playerIndex)} discarding ${state.logId(id)} but might clue $clueProb")
-					clueProb * _forceClue(orig, game, offset) + (1.0 - clueProb) * advance(orig, dcGame, offset + 1)
+					val clueVal = _forceClue(orig, game, offset)
+					val dcVal = advance(orig, dcGame, offset + 1)
+
+					if clueVal < 0 then
+						Log.info(s"no visible clue available for ${state.names(playerIndex)}, lowering clue prob to 0")
+						dcVal
+					else
+						clueProb * clueVal + (1.0 - clueProb) * dcVal
 				else
 					Log.info(s"${state.names(playerIndex)} discarding ${state.logId(id)}")
 					advance(orig, dcGame, offset + 1)

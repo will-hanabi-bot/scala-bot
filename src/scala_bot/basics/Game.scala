@@ -332,7 +332,8 @@ extension[G <: Game](game: G)
 				deck = newGame.state.deck.map: c =>
 					if c.id().nonEmpty then c else
 						game.deckIds(c.order).fold(c): id =>
-							c.copy(suitIndex = id.suitIndex, rank = id.rank))))))
+							c.copy(suitIndex = id.suitIndex, rank = id.rank))),
+			rewindDepth = Some(game.rewindDepth))))
 
 	def navigate(turn: Int)(using ops: GameOps[G]) =
 		Log.highlight(Console.GREEN, s"------- NAVIGATING (turn $turn) -------")

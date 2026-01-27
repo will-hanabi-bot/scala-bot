@@ -12,6 +12,32 @@ case class ClueContext(prev: HGroup, game: HGroup, action: ClueAction):
 
 	lazy val focusResult = game.determineFocus(prev, action)
 
+def badCM(ctx: ClueContext, chopMoved: Seq[Int]) =
+	val ClueContext(prev, game, action) = ctx
+	val state = game.state
+	val ClueAction(giver, target, list, clue) = action
+
+	game.chop(target).exists: oldChop =>
+		state.deck(oldChop).id().exists: chopId =>
+			state.isBasicTrash(chopId) ||
+			chopMoved.exists(o => o != oldChop && state.deck(o).id().exists(_.matches(chopId))) ||
+			// Could be directly clued
+			state.allValidClues(target).exists: clue =>
+				val directList = state.clueTouched(state.hands(target), clue)
+
+				// Clue must touch all non-trash CM'd cards
+				chopMoved.forall: o =>
+					state.deck(o).id().exists(state.isBasicTrash) ||
+					directList.contains(o)
+				&&
+				// Must have no bad touch
+				!directList.exists: o =>
+					!prev.state.deck(o).clued &&
+					state.deck(o).id().exists(state.isBasicTrash)
+				&&
+				// Clue must be valid
+				prev.copy(noRecurse = true, allowFindOwn = false).simulateClue(clueToAction(prev.state, clue, giver)).lastMove != Some(ClueInterp.Mistake)
+
 def interpClue(ctx: ClueContext): HGroup =
 	val ClueContext(prev, game, action) = ctx
 	val (common, state) = (game.common, game.state)
@@ -64,7 +90,9 @@ def interpClue(ctx: ClueContext): HGroup =
 
 		if thinksStall.size > 0 && thinksStall.size < state.numPlayers then
 			Log.warn(s"asymmetric! only ${thinksStall.map(state.names)} think stall")
-			// return game.copy(lastMove = Some(ClueInterp.Mistake))
+
+			if giver == state.ourPlayerIndex then
+				return game.copy(lastMove = Some(ClueInterp.Mistake))
 
 		else if thinksStall.size == state.numPlayers then
 			Log.info(s"stalling situation $interp")
@@ -96,28 +124,6 @@ def interpClue(ctx: ClueContext): HGroup =
 			.copy(lastMove = Some(ClueInterp.Distribution))
 
 	if game.level >= Level.BasicCM && !state.inEndgame then
-		def badCM(chopMoved: Seq[Int]) =
-			game.chop(target).exists: oldChop =>
-				state.deck(oldChop).id().exists: chopId =>
-					state.isBasicTrash(chopId) ||
-					chopMoved.exists(o => o != oldChop && state.deck(o).id().exists(_.matches(chopId))) ||
-					// Could be directly clued
-					state.allValidClues(target).exists: clue =>
-						val directList = state.clueTouched(state.hands(target), clue)
-
-						// Clue must touch all non-trash CM'd cards
-						chopMoved.forall: o =>
-							state.deck(o).id().exists(state.isBasicTrash) ||
-							directList.contains(o)
-						&&
-						// Must have no bad touch
-						!directList.exists: o =>
-							!prev.state.deck(o).clued &&
-							state.deck(o).id().exists(state.isBasicTrash)
-						&&
-						// Clue must be valid
-						prev.copy(noRecurse = true).simulateClue(clueToAction(prev.state, clue, giver)).lastMove != Some(ClueInterp.Mistake)
-
 		val tcm = interpretTcm(ctx)
 
 		if tcm.isDefined then
@@ -132,17 +138,19 @@ def interpClue(ctx: ClueContext): HGroup =
 						)
 					.withMeta(order)(_.copy(trash = true))
 			.pipe(performCM(_, tcm.get))
-			.copy(lastMove = Some(
-				if badCM(tcm.get) then ClueInterp.Mistake else ClueInterp.Discard
-			))
+			.pipe: g =>
+				g.copy(lastMove = Some(
+					if badCM(ctx, tcm.get) then ClueInterp.Mistake else ClueInterp.Discard
+				))
 
 		val cm5 = interpret5cm(ctx)
 
 		if cm5.isDefined then
 			return performCM(game, cm5.get)
-				.copy(lastMove = Some(
-					if badCM(cm5.get) then ClueInterp.Mistake else ClueInterp.Discard
-				))
+				.pipe: g =>
+					g.copy(lastMove = Some(
+						if badCM(ctx, cm5.get) then ClueInterp.Mistake else ClueInterp.Discard
+					))
 
 	val pinkTrashFix = state.includesVariant(PINKISH) &&
 		!positional && clue.kind == ClueKind.Rank &&
@@ -208,38 +216,52 @@ def interpClue(ctx: ClueContext): HGroup =
 		giver == state.ourPlayerIndex ||
 		simplest.exists(fp => state.deck(focus).matches(fp.id))
 
-	if noSelf then
-		if simplest.isEmpty then
-			Log.warn("no inferences!")
-			game.copy(lastMove = Some(ClueInterp.Mistake))
+	{
+		if noSelf then
+			if simplest.isEmpty then
+				Log.warn("no inferences!")
+				game.copy(lastMove = Some(ClueInterp.Mistake))
+			else
+				Log.info(s"simplest focus possibilities [${simplest.map(fp => state.logId(fp.id)).mkString(",")}]")
+				resolveClue(ctx, simplest)
 		else
-			Log.info(s"simplest focus possibilities [${simplest.map(fp => state.logId(fp.id)).mkString(",")}]")
-			resolveClue(ctx, simplest)
-	else
-		Log.highlight(Console.YELLOW, s"finding own!")
+			Log.highlight(Console.YELLOW, s"finding own!")
 
-		val ownFps =
-			val looksDirect = game.players(target).thoughts(focus).id().isEmpty && {
-				// clue.kind == ClueKind.Colour ||
-				// Looks like an existing possibility
-				focusPoss.exists: fp =>
-					game.players(target).thoughts(focus).possible.contains(fp.id) &&
-					fp.connections.forall: c =>
-						c.isInstanceOf[KnownConn] ||
-						(c.isInstanceOf[PlayableConn] && c.reacting != state.ourPlayerIndex)
-			}
+			val ownFps =
+				val looksDirect = game.players(target).thoughts(focus).id().isEmpty && {
+					// clue.kind == ClueKind.Colour ||
+					// Looks like an existing possibility
+					focusPoss.exists: fp =>
+						game.players(target).thoughts(focus).possible.contains(fp.id) &&
+						fp.connections.forall: c =>
+							c.isInstanceOf[KnownConn] ||
+							(c.isInstanceOf[PlayableConn] && c.reacting != state.ourPlayerIndex)
+				}
 
-			common.thoughts(focus).inferred.filter: inf =>
-				!state.isBasicTrash(inf) &&
-				visibleFind(state, common, inf, infer = true, excludeOrder = focus).isEmpty &&
-				!(savePoss.exists(_.id == inf) || simplest.exists(_.id == inf))
-			.flatMap:
-				connect(ctx, _, looksDirect, thinksStall, findOwn = Some(state.ourPlayerIndex))
+				common.thoughts(focus).inferred.filter: inf =>
+					!state.isBasicTrash(inf) &&
+					visibleFind(state, common, inf, infer = true, excludeOrder = focus).isEmpty &&
+					!(savePoss.exists(_.id == inf) || simplest.exists(_.id == inf))
+				.flatMap:
+					connect(ctx, _, looksDirect, thinksStall, findOwn = Some(state.ourPlayerIndex))
 
-		val simplestOwn = occamsRazor(game, simplest ++ ownFps, state.ourPlayerIndex, focus, actualId = game.me.thoughts(focus).id())
+			val simplestOwn = occamsRazor(game, simplest ++ ownFps, state.ourPlayerIndex, focus, actualId = game.me.thoughts(focus).id())
 
-		if simplestOwn.isEmpty then
-			Log.warn("no inferences!")
-			game.copy(lastMove = Some(ClueInterp.Mistake))
-		else
-			resolveClue(ctx, simplestOwn, if savePoss.nonEmpty then Nil else ownFps.filterNot(simplestOwn.contains))
+			if simplestOwn.isEmpty then
+				Log.warn("no inferences!")
+				game.copy(lastMove = Some(ClueInterp.Mistake))
+			else
+				resolveClue(ctx, simplestOwn, if savePoss.nonEmpty then Nil else ownFps.filterNot(simplestOwn.contains))
+	}
+	.when(_.level >= Level.TempoClues && state.numPlayers > 2): g =>
+		interpretTccm(ctx) match
+			case Some(tccm) if stall.isEmpty || thinksStall.isEmpty =>
+				performCM(g, tccm)
+					.copy(lastMove = Some(
+						if badCM(ctx.copy(game = g), tccm) then ClueInterp.Mistake else ClueInterp.Discard
+					))
+			case Some(_)	=>
+				Log.info("stalling situation, tempo clue stall!")
+				g.copy(lastMove = Some(ClueInterp.Stall), stallInterp = Some(StallInterp.Tempo))
+			case _ =>
+				g

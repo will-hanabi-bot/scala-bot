@@ -303,6 +303,8 @@ case class Player(
 			case Link.Unpromised(orders, ids) =>
 				if orders.length > ids.summing(unknownIds(state, _)) then orders else Nil
 
+	def hypoScore = hypoStacks.sum + unknownPlays.size
+
 	def updateHypoStacks[G <: Game](game: G)(using ops: GameOps[G]): Player =
 		val state = game.state
 		var hypo = game

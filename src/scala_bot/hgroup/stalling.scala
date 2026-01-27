@@ -102,7 +102,12 @@ def isStall(ctx: ClueContext, severity: Int): Option[StallInterp] =
 
 
 /** Returns the set of player indices that see an alternative clue. */
-def alternativeClue(prev: HGroup, game: HGroup, giver: Int, maxStall: Int, origClue: Clue) =
+def alternativeClue(ctx: ClueContext, maxStall: Int) =
+	val ClueContext(prev, game, action) = ctx
+	val ClueAction(giver, target, list, clue) = action
+	val origClue = Clue(clue.kind, clue.value, target)
+	val origFocus = ctx.focusResult.focus
+
 	def satisfied(hypo: HGroup, action: ClueAction) =
 		val (badTouch, _, _) = badTouchResult(game, hypo, action)
 		val (_, playables) = playablesResult(game, hypo)
@@ -135,8 +140,8 @@ def alternativeClue(prev: HGroup, game: HGroup, giver: Int, maxStall: Int, origC
 			target <- 0 until state.numPlayers if target != giver && target != state.ourPlayerIndex
 			clue   <- state.allValidClues(target) if clue != origClue
 			list = state.clueTouched(state.hands(target), clue)
-			action = ClueAction(giver, target, list, clue.toBase) if
-				game.meta(game.determineFocus(game, action).focus).status != CardStatus.Finessed
+			action = ClueAction(giver, target, list, clue.toBase)
+			focus = game.determineFocus(game, action).focus if focus != origFocus && game.meta(focus).status != CardStatus.Finessed
 			hypo = prev.copy(allowFindOwn = false, noRecurse = true)
 				.simulateClue(action) if satisfied(hypo, action)
 		yield
@@ -173,6 +178,5 @@ def stallingSituation(ctx: ClueContext): Option[(StallInterp, Set[Int])] =
 			if game.noRecurse then
 				(stall, (0 until game.state.numPlayers).toSet)
 			else
-				val fullClue = Clue(clue.kind, clue.value, target)
-				val thinksStall = alternativeClue(prev, game, giver, STALL_TO_SEVERITY(stall), fullClue)
+				val thinksStall = alternativeClue(ctx, STALL_TO_SEVERITY(stall))
 				(stall, thinksStall)
