@@ -24,6 +24,9 @@ case class Identity(suitIndex: Int, rank: Int) extends Identifiable:
 	def next: Option[Identity] =
 		Option.when(rank < 5)(Identity(suitIndex, rank + 1))
 
+	def playedBefore(id: Identity) =
+		suitIndex == id.suitIndex && rank < id.rank
+
 object Identity:
 	inline def fromOrd(ord: Int): Identity =
 		if ord < 30 then

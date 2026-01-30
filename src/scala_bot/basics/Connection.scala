@@ -64,8 +64,9 @@ case class FinesseConn(
 case class PositionalConn(
 	reacting: Int,
 	order: Int,
-	ids: List[Identity]
-):
+	ids: List[Identity],
+	ambiguousOwn: Option[(Int, List[Identity])]
+) extends Connection:
 	def kind = "positional"
 	def hidden = false
 

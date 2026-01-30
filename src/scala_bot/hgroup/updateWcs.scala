@@ -157,14 +157,31 @@ def refreshWCs(prev: HGroup, game: HGroup, action: Action, beforeClueInterp: Boo
 	.pipe: g =>
 		val allRemove = toRemove ++ nonDemoedWCs.filterNot(wc => wc.symmetric || wc.ambiguousSelf).flatMap(_.connections)
 		allRemove.foldLeft(g): (acc, conn) =>
-			val shared = retainWCs.exists: wc =>
-				(wc.focus == conn.order && conn.ids.forall(_ == wc.inference)) ||
-				(wc.connections.exists(c => c.order == conn.order && c.ids.length == conn.ids.length && c.ids.forall(conn.ids.contains)))
+			conn match
+				case p: PositionalConn =>
+					p.ambiguousOwn match
+						case Some((order, poss)) if acc.meta(order).status != CardStatus.CalledToPlay && acc.common.thoughts(order).possible.intersect(acc.state.playableSet).nonEmpty =>
+							Log.highlight(Console.CYAN, s"rewriting onto us! $order")
+							acc.withThought(order): t =>
+								t.copy(
+									oldInferred = t.inferred.toOpt,
+									inferred = t.inferred.intersect(poss),
+								)
+							.withMeta(order): m =>
+								m.copy(
+									status = CardStatus.CalledToPlay,
+									focused = true
+								)
+						case _ => acc
+				case _ =>
+					val shared = retainWCs.exists: wc =>
+						(wc.focus == conn.order && conn.ids.forall(_ == wc.inference)) ||
+						(wc.connections.exists(c => c.order == conn.order && c.ids.length == conn.ids.length && c.ids.forall(conn.ids.contains)))
 
-			if shared || conn.isInstanceOf[KnownConn] || conn.isInstanceOf[PlayableConn] then
-				acc
-			else
-				revert(acc, conn.order, conn.ids)
+					if shared || conn.isInstanceOf[KnownConn] || conn.isInstanceOf[PlayableConn] then
+						acc
+					else
+						revert(acc, conn.order, conn.ids)
 	.copy(waiting = retainWCs)
 	.elim
 
@@ -291,6 +308,7 @@ def resolveRetained(prev: HGroup, game: HGroup, action: Action, wc: WaitingConne
 		wc.currConn.matches:
 			case _: FinesseConn => true
 			case _: PromptConn => true
+			case _: PositionalConn => true
 
 	if !missedReaction then
 		return UpdateResult.Keep

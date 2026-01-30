@@ -19,7 +19,7 @@ enum PlayInterp extends Interp:
 	case None, Mistake, OrderCM
 
 enum DiscardInterp extends Interp:
-	case None, Mistake, Sarcastic, GentlemansDiscard, Emergency, Sacrifice
+	case None, Mistake, Sarcastic, GentlemansDiscard, Emergency, Positional, Sacrifice
 
 case class GameUpdates(
 	tableID: Option[Int] = None,

@@ -308,11 +308,10 @@ def resolveClue(ctx: ClueContext, fps: Seq[FocusPossibility], ambiguousOwn: Seq[
 		val newInferred = t.inferred.intersect(IdentitySet.from(allFps.map(_.id)))
 			// If a non-finesse connection exists, the focus can't be a copy of it
 			.filter: i =>
-				!fps.filterNot(_.symmetric).flatMap(_.connections).exists:
+				!fps.filterNot(_.symmetric).flatMap(_.connections).existsM:
 					case c: KnownConn    => c.id == i
 					case c: PlayableConn => c.id == i
 					case c: PromptConn   => c.id == i
-					case _: FinesseConn  => false
 		Log.highlight(Console.CYAN, s"final infs [${newInferred.fmt(state)}] $focus")
 		t.copy(inferred = newInferred, infoLock = newInferred.toOpt)
 

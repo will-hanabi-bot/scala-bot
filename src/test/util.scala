@@ -188,7 +188,7 @@ def parseAction(state: State, action: String) =
 				val list = state.clueTouched(state.hands(target), clue)
 
 				if list.isEmpty then
-					throw new IllegalArgumentException(s"No cards touched by clue $valueS to $targetS")
+					throw new IllegalArgumentException(s"No cards touched by clue ($valueS to $targetS)!")
 
 				ClueAction(giver, target, list, clue)
 			else if slotsS == null then

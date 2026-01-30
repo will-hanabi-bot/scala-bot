@@ -498,6 +498,8 @@ object HGroup:
 
 								performCM(g, orders).copy(lastMove =
 									if mistake then Some(PlayInterp.Mistake) else Some(PlayInterp.OrderCM))
+					.pipe: g =>
+						interpretPosDc(DiscardContext(prev, g, action)).getOrElse(g)
 					.copy(dcStatus = DcStatus.None)
 			else
 				refreshWCs(prev, updatedGame, action)
@@ -529,39 +531,10 @@ object HGroup:
 										lastMove = Some(DiscardInterp.Sarcastic)
 									)
 							).copy(dcStatus = DcStatus.None)
-
-						else if g.level >= Level.LastResorts && !g.state.inEndgame then
-							val bob = g.state.nextPlayerIndex(playerIndex)
-							val bobChop = g.chop(bob)
-
-							checkSdcm(prev, action) match
-								case None => g
-
-								case Some(DcStatus.Scream) | Some(DcStatus.Shout) if bobChop.isEmpty =>
-									Log.warn(s"interpreted scream/shout but ${g.state.names(bob)} has no chop! interpreting mistake")
-									g.copy(lastMove = Some(DiscardInterp.Mistake))
-
-								case Some(status) =>
-									val bobChopId = bobChop.flatMap(g.state.deck(_).id())
-									val mistake = status.matches:
-										case DcStatus.Scream =>
-											bobChopId.exists(i => !g.state.isPlayable(i) && !g.state.isCritical(i))
-										case DcStatus.Shout =>
-											bobChopId.exists(g.state.isBasicTrash)
-
-									if mistake then
-										Log.warn(s"interpreted ${status.toString().toLowerCase()} but ${g.state.names(bob)}'s chop isn't worth saving!")
-									else
-										Log.info(s"interpreting ${status.toString().toLowerCase()}!")
-
-									g.copy(
-										dcStatus = status,
-										lastMove = Some(if mistake then DiscardInterp.Mistake else DiscardInterp.Emergency)
-									)
-									.when(_ => status != DcStatus.Generation): h =>
-										h.withMeta(bobChop.get)(_.copy(status = CardStatus.ChopMoved))
 						else
-							g.copy(dcStatus = DcStatus.None)
+							val ctx = DiscardContext(prev, g, action)
+							interpretSdcm(ctx).getOrElse:
+								interpretPosDc(ctx).getOrElse(g).copy(dcStatus = DcStatus.None)
 					.pipe: g =>
 						val endEarlyGame = g.inEarlyGame &&
 							!failed &&
@@ -708,11 +681,19 @@ object HGroup:
 
 		def findAllDiscards(game: HGroup, playerIndex: Int) =
 			val trash = game.common.thinksTrash(game, playerIndex)
-			val target = trash.headOption
+			val expectedDc = trash.headOption
 				.orElse(game.chop(playerIndex))
 				.getOrElse(game.players(playerIndex).lockedDiscard(game.state, playerIndex))
 
-			List(PerformAction.Discard(target))
+			val targets =
+				if game.level >= Level.Endgame && game.state.inEndgame then
+					// ALlow discarding any known trash
+					game.state.hands(playerIndex).filter(game.players(playerIndex).orderKt(game, _))
+						.when(_.isEmpty)(_ => Vector(expectedDc))
+				else
+					Seq(expectedDc)
+
+			targets.map(PerformAction.Discard(_))
 
 	def atLevel(level: Int) =
 		(tableID: Int, state: State, inProgress: Boolean) =>
