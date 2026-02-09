@@ -74,7 +74,7 @@ def interpret5cm(ctx: ClueContext): Option[Vector[Int]] =
 			Some(Vector(chop.get))
 	}
 
-def interpretOcm(prev: HGroup, action: PlayAction | DiscardAction) =
+def checkOcm(prev: HGroup, action: PlayAction | DiscardAction) =
 	val state = prev.state
 	val (playerIndex, order) = action match
 		case PlayAction(p, o, _, _) => (p, o)
@@ -104,9 +104,26 @@ def interpretOcm(prev: HGroup, action: PlayAction | DiscardAction) =
 				Log.highlight(Console.CYAN, s"ocm on ${state.names(target)}, distance $offset")
 				Some(List(chop))
 
+def interpretBombOcm(ctx: DiscardContext): Option[HGroup] =
+	val DiscardContext(prev, game, action) = ctx
+
+	if !(action.failed && action.rank == 1) then None else
+		checkOcm(prev, action).map: orders =>
+			val chop = orders.min
+			val mistake = game.state.deck(chop).id().exists(game.state.isBasicTrash)
+
+			if mistake then
+				Log.warn("ocm on trash!")
+
+			performCM(game, orders).copy(
+				lastMove = if mistake then Some(PlayInterp.Mistake) else Some(PlayInterp.OrderCM),
+				dcStatus = DcStatus.None,
+				dda = Some(Identity(action.suitIndex, action.rank))
+			)
+
 def interpretTccm(ctx: ClueContext): Option[List[Int]] =
 	val ClueContext(prev, game, action) = ctx
-	val (common, state) = (game.common, game.state)
+	val (common, state) = (game.common.updateHypoStacks(game), game.state)
 	val ClueAction(_, target, list, clue) = action
 	val focus = ctx.focusResult.focus
 

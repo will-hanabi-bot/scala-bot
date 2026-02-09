@@ -56,7 +56,7 @@ class General extends munit.FunSuite:
 		.pipe(takeTurn("Cathy clues red to Alice (slot 1)"))
 
 		// Bob's r1 is definitely finessed.
-		assertEquals(game.xmeta(game.state.hands(Bob.ordinal)(0)).fStatus, None)
+		assert(game.isDefinite(game.state.hands(Bob.ordinal)(0)))
 		hasStatus(game, Bob, 1, CardStatus.Finessed)
 
 		// Alice knows that her card is exactly r2.

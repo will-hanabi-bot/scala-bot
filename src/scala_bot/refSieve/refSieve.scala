@@ -328,7 +328,7 @@ object RefSieve:
 			}
 
 			game.copy(common = newCommon, meta = newMeta)
-				.elim
+				.elim()
 
 		def findAllClues(game: RefSieve, giver: Int) =
 			val state = game.state

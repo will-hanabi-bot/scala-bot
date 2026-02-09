@@ -24,16 +24,17 @@ case class ConnectOpts(
 	insertingInto: Option[Seq[Int]] = None
 )
 
-def findKnownConn(ctx: ClueContext, giver: Int, id: Identity, ignore: Set[Int], findOwn: Boolean) =
-	val game = ctx.game
+def findKnownConn(ctx: ClueContext, id: Identity, ignore: Set[Int], findOwn: Boolean) =
+	val ClueContext(prev, game, action) = ctx
 	val state = game.state
+	val giver = action.giver
 
 	def validKnown(order: Int) =
 		!ignore.contains(order) &&
 		game.state.deck(order).matches(id, assume = true) &&
 		game.common.thoughts(order).matches(id, infer = true) &&
 		!game.meta(order).hidden &&
-		game.xmeta(order).fStatus != Some(FStatus.PossiblyOn) &&
+		!game.xmeta(order).fStatus.contains(FStatus.PossiblyOn(giver)) &&
 		!game.common.linkedOrders(state).contains(order)
 
 	def validLink(link: Link, order: Int) =
@@ -44,7 +45,7 @@ def findKnownConn(ctx: ClueContext, giver: Int, id: Identity, ignore: Set[Int], 
 	def validPlayable(playerIndex: Int, order: Int) =
 		!ignore.contains(order) &&
 		game.common.thoughts(order).inferred.contains(id) &&
-		!(ctx.action.giver == state.ourPlayerIndex && game.xmeta(order).fStatus == Some(FStatus.PossiblyOn)) &&
+		!game.xmeta(order).fStatus.contains(FStatus.PossiblyOn(giver)) &&
 		game.common.orderPlayable(game, order, excludeTrash = true) &&
 		!(	// Don't connect on our unknown playables for an id matching the focus:
 			// giver would be bad touching
@@ -149,9 +150,9 @@ def findUnknownConnecting(ctx: ClueContext, reacting: Int, id: Identity, connect
 		// Log.warn(s"disallowed finesse, ${state.logId(id)} already clued")
 		return None
 
-	// We'll remove an information channel if we finesse a maybe-finessed card
-	val disallowFinesse = giver == state.ourPlayerIndex &&
-		potentialFinesse.exists(prev.xmeta(_).fStatus == Some(FStatus.PossiblyOn))
+	// Assumer giver is not finessing a maybe-finessed card
+	val disallowFinesse = potentialFinesse.exists:
+		prev.xmeta(_).fStatus.contains(FStatus.PossiblyOn(giver))
 
 	if disallowFinesse then
 		return None
@@ -278,7 +279,7 @@ def findUnknownConnecting(ctx: ClueContext, reacting: Int, id: Identity, connect
 					Some(FinesseConn(reacting, finesse.get, List(id), bluff = false, possiblyBluff = possiblyBluff))
 
 			else if !opts.noLayer && level >= Level.IntermediateFinesses && state.isPlayable(finesseId) then
-				if game.meta(finesse.get).status == CardStatus.Finessed && game.xmeta(finesse.get).fStatus.isEmpty then
+				if game.meta(finesse.get).status == CardStatus.Finessed && game.isDefinite(finesse.get) then
 					Some(PlayableConn(reacting, finesse.get, finesseId, hidden = true))
 				else
 					val bluff = validBluff(prev, action, finesseId, id, reacting, connected)
@@ -333,7 +334,7 @@ def findSingleConn(ctx: ClueContext, reacting: Int, id: Identity, connCtx: Conne
 					None
 				else
 					val hypo = state.deck(conn.order).id().orElse(Option.when(conn.ids.length == 1)(conn.ids.head))
-						.fold(game)(id => game.withState(_.withPlay(id)).elim)
+						.fold(game)(id => game.withState(_.withPlay(id)).elim())
 
 					val newConnCtx = connCtx.copy(connected = connCtx.connected + conn.order)
 					findSingleConn(ctx.copy(game = hypo), reacting, id, newConnCtx, opts, conn +: connections)
@@ -352,7 +353,7 @@ def findConnecting(ctx: ClueContext, id: Identity, connCtx: ConnectContext, opts
 		Log.info(s"all ${state.logId(id)} in trash!")
 		return None
 
-	val known = findKnownConn(ctx, giver, id, connCtx.ignore ++ connCtx.connected, opts.findOwn.isDefined)
+	val known = findKnownConn(ctx, id, connCtx.ignore ++ connCtx.connected, opts.findOwn.isDefined)
 
 	if known.isDefined then
 		return Some(known.toList)
@@ -396,15 +397,18 @@ def connect(ctx: ClueContext, id: Identity, looksDirect: Boolean, thinksStall: S
 		val newCtx = ctx.copy(game = hypo)
 
 		def seekOwn(playerIndex: Int) =
-			val known = findKnownConn(newCtx, giver, nextId, connCtx.ignore ++ connCtx.connected, findOwn = true)
+			val known = findKnownConn(newCtx, nextId, connCtx.ignore ++ connCtx.connected, findOwn = true)
 
 			// See if we need to correct based on future information
 			val actualKnown = known match
 				case Some(c @ PlayableConn(reacting, order, id, linked, hidden, _)) =>
 					if linked.forall(!game.future(_).contains(id)) then
-						Log.highlight(Console.CYAN, "playable conn is known to not match in the future, finding again")
-						val unknown = findSingleConn(newCtx, playerIndex, nextId, connCtx.copy(connected = connCtx.connected + order), opts.copy(findOwn = Some(playerIndex)))
-						unknown.map(c.copy(id = game.future(order).intersect(game.state.playableSet).head) +: _)
+						val playableIds = game.future(order).intersect(state.playableSet)
+
+						if playableIds.isEmpty then None else
+							Log.highlight(Console.CYAN, "playable conn is known to not match in the future, finding again")
+							val unknown = findSingleConn(newCtx, playerIndex, nextId, connCtx.copy(connected = connCtx.connected + order), opts.copy(findOwn = Some(playerIndex)))
+							unknown.map(c.copy(id = playableIds.head) +: _)
 					else
 						Some(List(c))
 				case k => k.map(List(_))
@@ -440,7 +444,7 @@ def connect(ctx: ClueContext, id: Identity, looksDirect: Boolean, thinksStall: S
 							// Resolve wcs after playing the card
 							val res = acc.onPlay(playAction)
 								.pipe(refreshWCs(acc, _, playAction))
-								.elim
+								.elim(except = Some(giver))
 
 							Logger.setLevel(level)
 							res

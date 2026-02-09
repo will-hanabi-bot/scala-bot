@@ -8,7 +8,7 @@ import scala_bot.logger.{Logger, LogLevel}
 import scala.util.chaining.scalaUtilChainingOps
 
 class ClandestineFinesses extends munit.FunSuite:
-	override def beforeAll() = Logger.setLevel(LogLevel.Off)
+	// override def beforeAll() = Logger.setLevel(LogLevel.Off)
 
 	test("understands a clandestine finesse"):
 		val game = setup(HGroup.atLevel(5), Vector(

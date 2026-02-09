@@ -8,7 +8,7 @@ import scala.util.chaining.scalaUtilChainingOps
 
 case class DiscardContext(prev: HGroup, game: HGroup, action: DiscardAction)
 
-def interpretTransfer(game: HGroup, action: DiscardAction, holder: Int, dupe: Option[Int]): DiscardResult =
+def interpretTransfer(game: HGroup, action: DiscardAction, holder: Int, dupe: Option[Int]): (DiscardResult, Boolean) =
 	val state = game.state
 	val DiscardAction(playerIndex, order, suitIndex, rank, _) = action
 	val id = Identity(suitIndex, rank)
@@ -18,18 +18,22 @@ def interpretTransfer(game: HGroup, action: DiscardAction, holder: Int, dupe: Op
 			Log.info("discarded dupe of own hand")
 		else
 			Log.warn(s"discarded useful ${state.logId(id)} but dupe was in their own hand!")
-		return DiscardResult.Mistake
+		return (DiscardResult.Mistake, false)
 
 	val cluedTargets = state.hands(holder).filter(o => game.isTouched(o) && validTransfer(game, id)(o))
 
 	if cluedTargets.isEmpty then
 		state.hands(holder).find(validTransfer(game, id)) match
 			case Some(uncluedTarget) if dupe.contains(uncluedTarget) =>
-				Log.info(s"${if state.isPlayable(id) then "gd" else "baton"} to ${state.names(holder)}'s ${uncluedTarget}")
-				DiscardResult.GentlemansDiscard(uncluedTarget)
+				if game.level <= Level.SpecialDiscards then
+					Log.warn(s"looked like out-of-level gd/baton! ignoring")
+					(DiscardResult.Mistake, true)
+				else
+					Log.info(s"${if state.isPlayable(id) then "gd" else "baton"} to ${state.names(holder)}'s ${uncluedTarget}")
+					(DiscardResult.GentlemansDiscard(uncluedTarget), false)
 
-			case _ if (holder == state.ourPlayerIndex) =>
-				DiscardResult.Mistake
+			case _ if holder == state.ourPlayerIndex =>
+				(DiscardResult.Mistake, false)
 
 			case _ =>
 				// Try looking for a third copy
@@ -42,20 +46,20 @@ def interpretTransfer(game: HGroup, action: DiscardAction, holder: Int, dupe: Op
 						interpretTransfer(game, action, otherHolder, Some(otherDupe))
 
 					case None if state.baseCount(id.toOrd) + 1 == state.cardCount(id.toOrd) =>
-						DiscardResult.Mistake
+						(DiscardResult.Mistake, true)
 
 					case None =>
 						interpretTransfer(game, action, state.ourPlayerIndex, None)
 
 	else if dupe.exists(!cluedTargets.contains(_)) then
 		Log.warn(s"looks like sarcastic discard to $cluedTargets, but should be $dupe!")
-		DiscardResult.Mistake
+		(DiscardResult.Mistake, false)
 
 	else
 		Log.info(s"sarcastic to ${state.names(holder)}'s $cluedTargets")
-		DiscardResult.Sarcastic(cluedTargets)
+		(DiscardResult.Sarcastic(cluedTargets), false)
 
-def interpretUsefulDcH(game: HGroup, action: DiscardAction): DiscardResult =
+def checkUsefulDcH(game: HGroup, action: DiscardAction): (DiscardResult, Boolean) =
 	val state = game.state
 	val DiscardAction(playerIndex, order, suitIndex, rank, _) = action
 	val id = Identity(suitIndex, rank)
@@ -72,11 +76,50 @@ def interpretUsefulDcH(game: HGroup, action: DiscardAction): DiscardResult =
 
 		case None if playerIndex == state.ourPlayerIndex =>
 			// We discarded a card that we don't see nor have the other copy of
-			DiscardResult.Mistake
+			(DiscardResult.Mistake, true)
 
 		case None =>
 			// Since we can't find it, we must be the target
 			interpretTransfer(game, action, state.ourPlayerIndex, None)
+
+def interpretUsefulDcH(ctx: DiscardContext): Option[HGroup] =
+	val DiscardContext(prev, game, action) = ctx
+	val DiscardAction(playerIndex, order, suitIndex, rank, failed) = action
+	val id = Identity(suitIndex, rank)
+
+	val valid = !failed &&
+		action.suitIndex != -1 && action.rank != -1 &&
+		!game.state.isBasicTrash(id) &&
+		prev.isTouched(action.order) && prev.isDefinite(order)
+
+	Option.when(valid):
+		(checkUsefulDcH(game, action) match
+			case (DiscardResult.None, _) =>
+				game.copy(lastMove = Some(DiscardInterp.None), dda = None)
+
+			case (DiscardResult.Mistake, dda) =>
+				game.copy(lastMove = Some(DiscardInterp.Mistake), dda = Option.when(dda)(id))
+
+			case (DiscardResult.GentlemansDiscard(target), _) =>
+				game.copy(
+					common = game.common.withThought(target)(_.copy(
+						inferred = IdentitySet.single(id)
+					)),
+					meta = game.meta.updated(target, game.meta(target).copy(
+						status = CardStatus.GentlemansDiscard
+					)),
+					lastMove = Some(DiscardInterp.GentlemansDiscard),
+					dda = None
+				)
+			case (DiscardResult.Sarcastic(orders), _) =>
+				game.copy(
+					common = if !orders.forall(game.state.deck(_).clued) then game.common else game.common.copy(
+						links = Link.Sarcastic(orders, id) +: game.common.links
+					),
+					lastMove = Some(DiscardInterp.Sarcastic),
+					dda = None
+				)
+		).copy(dcStatus = DcStatus.None)
 
 def valid1ClueScream(game: HGroup, bob: Int) =
 	val bobChop = game.chop(bob)
@@ -136,7 +179,11 @@ def interpretSdcm(ctx: DiscardContext): Option[HGroup] =
 	checkSdcm(prev, action).map: status =>
 		if (status == DcStatus.Scream || status == DcStatus.Shout) && bobChop.isEmpty then
 			Log.warn(s"interpreted scream/shout but ${state.names(bob)} has no chop! interpreting mistake")
-			game.copy(lastMove = Some(DiscardInterp.Mistake))
+			game.copy(
+				lastMove = Some(DiscardInterp.Mistake),
+				dcStatus = DcStatus.None,
+				dda = Some(Identity(action.suitIndex, action.rank))
+			)
 
 		else
 			val bobChopId = bobChop.flatMap(state.deck(_).id())
@@ -153,7 +200,8 @@ def interpretSdcm(ctx: DiscardContext): Option[HGroup] =
 
 			game.copy(
 				dcStatus = status,
-				lastMove = Some(if mistake then DiscardInterp.Mistake else DiscardInterp.Emergency)
+				lastMove = Some(if mistake then DiscardInterp.Mistake else DiscardInterp.Emergency),
+				dda = Some(Identity(action.suitIndex, action.rank))
 			)
 			.when(_ => status != DcStatus.Generation): h =>
 				h.withMeta(bobChop.get)(_.copy(status = CardStatus.ChopMoved))
@@ -167,7 +215,7 @@ private def playablePoss(game: HGroup, playerIndex: Int, discarder: Int) =
 		val holder = state.holderOf(o)
 		holder == playerIndex || holder == discarder
 
-	Log.info(s"slow plays $slowPlays")
+	Log.info(s"slow plays $slowPlays ${player.hypoPlays}")
 
 	for
 		(stack, suitIndex) <- player.hypoStacks.zipWithIndex
@@ -274,5 +322,7 @@ def interpretPosDc(ctx: DiscardContext): Option[HGroup] =
 					focus = focus,
 					inference = state.deck(focus).id().getOrElse(Identity(0, 1))
 				) +: g.waiting,
-				lastMove = Some(DiscardInterp.Positional)
+				lastMove = Some(DiscardInterp.Positional),
+				dcStatus = DcStatus.None,
+				dda = None
 			)

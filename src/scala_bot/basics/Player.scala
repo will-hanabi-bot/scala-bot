@@ -180,7 +180,7 @@ case class Player(
 		game.state.hands(playerIndex).filter(orderKp(game, _))
 			.pipe(game.filterPlayables(this, playerIndex, _))
 
-	def thinksPlayables(game: Game, playerIndex: Int) =
+	def thinksPlayables(game: Game, playerIndex: Int, excludeTrash: Boolean = false) =
 		game.state.hands(playerIndex).filter(orderPlayable(game, _))
 			.pipe: playables =>
 				// Exclude unknown cards if there is a duplicate that is fully known.
@@ -288,6 +288,22 @@ case class Player(
 				if critDistance < 0 then 5 else critDistance
 		}._1
 
+	/**
+	* Returns the card most likely to be playable, breaking ties by leftmost.
+	* If all cards are known unplayble, returns None.
+	*/
+	def anxietyPlay(state: State, playerIndex: Int): Option[Int] =
+		val hand = state.hands(playerIndex)
+		val playableExists = hand.exists: o =>
+			thoughts(o).possibilities.intersect(state.playableSet).nonEmpty
+
+		Option.when(playableExists):
+			hand.zipWithIndex.maxBy: (o, i) =>
+				val poss = thoughts(o).possibilities
+				val percent = poss.intersect(state.playableSet).length.toDouble / poss.length
+				percent * 1000 - i
+			._1
+
 	def unknownIds(state: State, id: Identity) =
 		val visibleCount = state.hands.flatten.filter(thoughts(_).matches(id)).length
 		state.cardCount(id.toOrd) - state.baseCount(id.toOrd) - visibleCount
@@ -310,17 +326,7 @@ case class Player(
 		var hypo = game
 		var unknownPlays = BitSet.empty
 		var played = BitSet.empty
-
-		var endIndex = 0
-		val viableOrders = Array.ofDim[Int](state.numPlayers * HAND_SIZE(state.numPlayers))
-
-		state.hands.fastForeach: hand =>
-			hand.fastForeach: order =>
-				val id = state.deck(order).id()
-
-				if id.isEmpty || !state.isBasicTrash(id.get) then
-					viableOrders(endIndex) = order
-					endIndex += 1
+		var attempted = BitSet.empty
 
 		def play(order: Int) =
 			thoughts(order).id(infer = true, symmetric = true) match
@@ -344,29 +350,21 @@ case class Player(
 						played = played.incl(order)
 					else
 						Log.warn(s"tried to add ${state.logId(id)} ($order) onto hypo stacks, but they were at ${hypo.state.playStacks} $played ($name)")
+						attempted = attempted.incl(order)
 
 		var changed = true
 
 		while changed do
 			changed = false
-			var viableIndex = 0
 
-			loop(0, _ < endIndex, _ + 1): i =>
-				val order = viableOrders(i)
-				val thought = thoughts(order)
+			loop(0, _ < state.numPlayers, _ + 1): i =>
+				val playables = if game.goodTouch then thinksPlayables(hypo, i, excludeTrash = true) else obviousPlayables(hypo, i)
 
-				val playable = hypo.state.hasConsistentInfs(thought) &&
-					(if game.goodTouch then orderPlayable(hypo, order) else orderKp(hypo, order))
+				playables.fastForeach: o =>
+					if !played.contains(o) && !attempted.contains(o) && hypo.state.hasConsistentInfs(thoughts(o)) then
+						play(o)
+						changed = true
 
-				// Should this be symmetric? Checking whether a playable or not should be, but another player can know what id it is
-				if playable && !played.contains(order) then
-					play(order)
-					changed = true
-				else
-					viableOrders(viableIndex) = order
-					viableIndex += 1
-
-			endIndex = viableIndex
 
 			playLinks.fastForeach: link =>
 				val allPlayed = link.orders.fastForall(played.contains)

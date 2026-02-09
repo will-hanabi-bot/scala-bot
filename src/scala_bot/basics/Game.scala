@@ -191,7 +191,7 @@ extension[G <: Game](game: G)
 			regex.matches(game.state.variant.suits(i.suitIndex).name)
 
 	def handleClue(prev: G, clue: ClueAction)(using ops: GameOps[G]) =
-		ops.interpretClue(prev, game.onClue(clue).elim, clue).elim
+		ops.interpretClue(prev, game.onClue(clue).elim(), clue).elim()
 
 	def takeAction(using ops: GameOps[G]) =
 		ops.takeAction(game)

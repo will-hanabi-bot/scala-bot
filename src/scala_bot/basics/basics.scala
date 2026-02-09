@@ -142,7 +142,7 @@ extension[G <: Game](game: G)
 					oldPossible = t.possible.toOpt
 				)
 
-	def elim(using ops: GameOps[G]): G =
+	def elim(except: Option[Int] = None)(using ops: GameOps[G]): G =
 		val state = game.state
 
 		game.pipe:
@@ -162,7 +162,7 @@ extension[G <: Game](game: G)
 		.pipe: g =>
 			val (resets, newCommon) = g.common.cardElim(state)
 				.when(_ => g.goodTouch): (r, c) =>
-					val (resets, newCommon) = c.goodTouchElim(g)
+					val (resets, newCommon) = c.goodTouchElim(g, except)
 					(resets.union(r), newCommon)
 
 			resets.foldLeft(ops.copyWith(g, GameUpdates(common = Some(newCommon)))): (acc, order) =>
@@ -213,7 +213,7 @@ extension[G <: Game](game: G)
 				)
 				.cardElim(state)._2
 				.when(_ => g.goodTouch):
-					_.goodTouchElim(g)._2
+					_.goodTouchElim(g, except)._2
 				.refreshLinks(g)._2
 				.refreshPlayLinks(g)
 				.updateHypoStacks(g)

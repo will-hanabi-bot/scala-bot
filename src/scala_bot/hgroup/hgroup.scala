@@ -14,7 +14,7 @@ case class FocusResult(
 )
 
 enum StallInterp:
-	case Stall5, Tempo, Locked, FillIn, Clues8, Burn
+	case Stall5, Tempo, Locked, SaveLHS, FillIn, Clues8, Burn
 
 enum DcStatus:
 	case None, Scream, Shout, Generation
@@ -33,11 +33,12 @@ object Level:
 	val Context = 12
 
 enum FStatus:
-	case PossiblyAmbiguous, PossiblyOn
+	case PossiblyAmbiguous(to: Int)
+	case PossiblyOn(to: Int)
 
 case class XConvData(
 	idUncertain: Boolean = false,
-	fStatus: Option[FStatus] = None,
+	fStatus: Seq[FStatus] = Nil,
 	turnFinessed: Option[Int] = None,
 	finesseIds: Option[IdentitySet] = None
 )
@@ -110,6 +111,11 @@ case class HGroup(
 	def isCM(order: Int) =
 		meta(order).cm && !state.deck(order).clued
 
+	def isDefinite(order: Int) =
+		xmeta(order).fStatus.forall: f =>
+			f != FStatus.PossiblyAmbiguous(state.ourPlayerIndex) &&
+			f != FStatus.PossiblyOn(state.ourPlayerIndex)
+
 	def chop(playerIndex: Int) =
 		state.hands(playerIndex).findLast: o =>
 			!state.deck(o).clued && meta(o).status == CardStatus.None
@@ -131,12 +137,19 @@ case class HGroup(
 	def mustClue(playerIndex: Int) =
 		val bob = state.nextPlayerIndex(playerIndex)
 
-		dcStatus != DcStatus.None || {
-			state.canClue &&
-			state.numPlayers > 2 &&
-			!common.thinksLoaded(this, bob) &&
-			chop(bob).flatMap(state.deck(_).id()).exists(state.isCritical)
-		}
+		state.canClue &&
+		state.numPlayers > 2 &&
+		!common.thinksLoaded(this, bob) &&
+		chop(bob).flatMap(state.deck(_).id()).exists(state.isCritical)
+
+	def invalidFocus(giver: Int, id: Identity, focus: Int) =
+		state.isBasicTrash(id) ||
+		visibleFind(state, common, id, infer = true, excludeOrder = focus).nonEmpty ||
+		waiting.exists: wc =>
+			!wc.symmetric && !wc.ambiguousSelf && wc.target == giver &&
+			common.thoughts(wc.focus).inferred.contains(id) &&
+			wc.connections.exists: conn =>
+				xmeta(conn.order).fStatus.contains(FStatus.PossiblyOn(giver))
 
 	def findFinesse(playerIndex: Int, connected: Set[Int] = Set(), ignore: Set[Int] = Set()): Option[Int] =
 		val order = state.hands(playerIndex).find: o =>
@@ -146,7 +159,7 @@ case class HGroup(
 			!card.clued &&
 			!this.meta(o).cm &&
 			!connected.contains(o) &&
-			(status != CardStatus.Finessed || this.xmeta(o).fStatus == Some(FStatus.PossiblyOn))
+			(status != CardStatus.Finessed || this.xmeta(o).fStatus.contains(FStatus.PossiblyOn(state.ourPlayerIndex)))
 
 		order.filter(!ignore.contains(_))
 
@@ -159,7 +172,7 @@ case class HGroup(
 			!this.meta(o).cm &&
 			!connected.contains(o) && {
 				if level < Level.IntermediateFinesses then
-					status != CardStatus.Finessed || this.xmeta(o).fStatus == Some(FStatus.PossiblyOn)
+					status != CardStatus.Finessed || this.xmeta(o).fStatus.contains(FStatus.PossiblyOn(state.ourPlayerIndex))
 				else
 					(overrideLayer || !(status == CardStatus.Finessed && !this.xmeta(o).finesseIds.get.contains(id)))
 			}
@@ -334,7 +347,8 @@ case class HGroup(
 
 				hypo.lastMove.matches:
 					case Some(ClueInterp.Save) =>
-						true
+						// Can't guarantee they'll give a 2 save
+						!state.deck(focus).id().exists(id => id.rank == 2 && !state.isCritical(id))
 
 					case Some(ClueInterp.Stall) =>
 						hypo.stallInterp == Some(StallInterp.Stall5) &&
@@ -458,92 +472,68 @@ object HGroup:
 				val pre = refreshWCs(prev, updatedGame, action, beforeClueInterp = true)
 					.resetImportant(action.playerIndex)
 
-				val interpreted = interpClue(ClueContext(prev, pre, action))
-				val updatedPre = pre.copy(
-					lastMove = interpreted.lastMove,
-					importantAction = interpreted.importantAction
-				)
+				def lostWcs(p: HGroup, g: HGroup) =
+					p.waiting.exists: wc =>
+						!wc.symmetric && !wc.ambiguousSelf &&
+						!g.waiting.exists(w => w.inference == wc.inference && w.turn == wc.turn)
 
-				refreshWCs(prev, updatedPre, action)
-					.cond(_.waiting.length < pre.waiting.length && !game.noRecurse) { g =>
-						Log.highlight(Console.GREEN, "----- REINTERPRETING CLUE -----")
-						val res = interpClue(ClueContext(prev, g, action))
-						Log.highlight(Console.GREEN, "----- DONE REINTERPRETING -----")
-						res
-					} {
-						_ => interpreted
-					}
-					.copy(dcStatus = DcStatus.None)
+				if !game.allowFindOwn && lostWcs(prev, pre) then
+					Log.warn("removed wc! mistake")
+					pre.copy(lastMove = Some(ClueInterp.Mistake))
+				else
+					val interpreted = interpClue(ClueContext(prev, pre, action))
+					val updatedPre = pre.copy(
+						lastMove = interpreted.lastMove,
+						importantAction = interpreted.importantAction
+					)
+
+					refreshWCs(prev, updatedPre, action)
+						.cond(_.waiting.length < pre.waiting.length && !game.noRecurse) { g =>
+							Log.highlight(Console.GREEN, "----- REINTERPRETING CLUE -----")
+							val res = interpClue(ClueContext(prev, g, action))
+							Log.highlight(Console.GREEN, "----- DONE REINTERPRETING -----")
+							res
+						} {
+							_ => interpreted
+						}
+						.pipe: g =>
+							g.copy(
+								dcStatus = DcStatus.None,
+								dda = None,
+								stallInterp = if g.lastMove == Some(ClueInterp.Stall) then g.stallInterp else None
+							)
 
 		def interpretDiscard(prev: HGroup, game: HGroup, action: DiscardAction): HGroup =
 			val DiscardAction(playerIndex, order, suitIndex, rank, failed) = action
-			val id = Identity(suitIndex, rank)
 
 			val updatedGame = game.refreshUncertain
+			val reinterpGame = if !failed then None else updatedGame.reinterpPlay(prev, action)
 
-			if failed then
-				updatedGame.reinterpPlay(prev, action).getOrElse:
-					refreshWCs(prev, updatedGame, action)
-					.resetImportant(action.playerIndex)
-					.when(_ => rank == 1): g =>
-						interpretOcm(prev, action) match
-							case None =>
-								g.copy(lastMove = Some(PlayInterp.None))
-							case Some(orders) =>
-								val chop = orders.min
-								val mistake = g.state.deck(chop).id().exists(g.state.isBasicTrash)
+			if reinterpGame.isDefined then
+				return reinterpGame.get
 
-								if mistake then
-									Log.warn("ocm on trash!")
+			val refreshedGame = refreshWCs(prev, updatedGame, action)
+				.resetImportant(action.playerIndex)
 
-								performCM(g, orders).copy(lastMove =
-									if mistake then Some(PlayInterp.Mistake) else Some(PlayInterp.OrderCM))
-					.pipe: g =>
-						interpretPosDc(DiscardContext(prev, g, action)).getOrElse(g)
-					.copy(dcStatus = DcStatus.None)
-			else
-				refreshWCs(prev, updatedGame, action)
-					.resetImportant(action.playerIndex)
-					.pipe: g =>
-						if suitIndex != -1 && rank != -1 && !g.state.isBasicTrash(id) && prev.isTouched(order) && prev.xmeta(order).fStatus.isEmpty then
-							(interpretUsefulDcH(updatedGame, action) match
-								case DiscardResult.None =>
-									g.copy(lastMove = Some(DiscardInterp.None))
+			val ctx = DiscardContext(prev, refreshedGame, action)
 
-								case DiscardResult.Mistake =>
-									g.copy(lastMove = Some(DiscardInterp.Mistake))
+			interpretBombOcm(ctx)
+			.orElse(interpretUsefulDcH(ctx))
+			.orElse(interpretSdcm(ctx))
+			.orElse(interpretPosDc(ctx))
+			.getOrElse:
+				val endEarlyGame = !failed &&
+					!game.state.deck(order).clued &&
+					game.meta(order).status == CardStatus.None
 
-								case DiscardResult.GentlemansDiscard(target) =>
-									g.copy(
-										common = g.common.withThought(target)(_.copy(
-											inferred = IdentitySet.single(id)
-										)),
-										meta = g.meta.updated(target, g.meta(target).copy(
-											status = CardStatus.GentlemansDiscard
-										)),
-										lastMove = Some(DiscardInterp.GentlemansDiscard)
-									)
-								case DiscardResult.Sarcastic(orders) =>
-									g.copy(
-										common = g.common.copy(
-											links = Link.Sarcastic(orders, id) +: g.common.links
-										),
-										lastMove = Some(DiscardInterp.Sarcastic)
-									)
-							).copy(dcStatus = DcStatus.None)
-						else
-							val ctx = DiscardContext(prev, g, action)
-							interpretSdcm(ctx).getOrElse:
-								interpretPosDc(ctx).getOrElse(g).copy(dcStatus = DcStatus.None)
-					.pipe: g =>
-						val endEarlyGame = g.inEarlyGame &&
-							!failed &&
-							!g.state.deck(order).clued &&
-							g.meta(order).status == CardStatus.None
-
-						g.when(_ => endEarlyGame):
-							_.copy(inEarlyGame = false)
-					.elim
+				refreshedGame.copy(
+					inEarlyGame = game.inEarlyGame && !endEarlyGame,
+					dcStatus = DcStatus.None,
+					dda = Some(Identity(suitIndex, rank))
+				)
+			.elim()
+			.when(g => g.level < Level.Stalling || g.dda.exists(id => id.suitIndex == -1 || id.rank == -1 || g.state.isBasicTrash(id))):
+				_.copy(dda = None)
 
 		def interpretPlay(prev: HGroup, game: HGroup, action: PlayAction): HGroup =
 			val PlayAction(playerIndex, order, suitIndex, rank) = action
@@ -554,7 +544,7 @@ object HGroup:
 				refreshWCs(prev, updatedGame, action)
 					.resetImportant(action.playerIndex)
 					.when(_.level >= Level.BasicCM && rank == 1): g =>
-						interpretOcm(prev, action) match
+						checkOcm(prev, action) match
 							case None =>
 								g.copy(lastMove = Some(PlayInterp.None))
 							case Some(orders) =>
@@ -566,6 +556,10 @@ object HGroup:
 
 								performCM(g, orders).copy(lastMove =
 									if mistake then Some(PlayInterp.Mistake) else Some(PlayInterp.OrderCM))
+					.copy(
+						dcStatus = DcStatus.None,
+						dda = None
+					)
 
 		def takeAction(game: HGroup): PerformAction =
 			val (state, me) = (game.state, game.me)
@@ -594,7 +588,9 @@ object HGroup:
 					val action = performToAction(state, perform, state.ourPlayerIndex)
 					(perform, action)
 
-			val hasEarlyGameClue = game.earlyGameClue(state.ourPlayerIndex).isDefined
+			val hasEarlyGameClue = game.earlyGameClue(state.ourPlayerIndex).isDefined &&
+				discardOrders.isEmpty &&
+				!(state.clueTokens == 1 && valid1ClueScream(game, state.nextPlayerIndex(state.ourPlayerIndex)))
 
 			if hasEarlyGameClue then
 				Log.highlight(Console.YELLOW,"must give clue in early game!")
@@ -605,11 +601,8 @@ object HGroup:
 
 			val cantDiscard = state.clueTokens == 8 ||
 				(state.pace == 0 && (allClues.nonEmpty || allPlays.nonEmpty)) ||
-				game.dcStatus != DcStatus.None || {
-					hasEarlyGameClue &&
-					discardOrders.isEmpty &&
-					!(state.clueTokens == 1 && valid1ClueScream(game, state.nextPlayerIndex(state.ourPlayerIndex)))
-				}
+				game.dcStatus != DcStatus.None ||
+				hasEarlyGameClue
 
 			Log.info(s"can discard: ${!cantDiscard} ${state.clueTokens}")
 
@@ -623,18 +616,26 @@ object HGroup:
 			val canDiscardChop =
 				chop.isDefined &&
 				!cantDiscard &&
-				!me.thinksLocked(game, state.ourPlayerIndex) && {
+				!me.thinksLocked(game, state.ourPlayerIndex) &&
+				!hasEarlyGameClue &&
+				!game.dda.exists(id => game.chop(state.ourPlayerIndex).exists(me.thoughts(_).possible.contains(id))) &&
+				{
 					((!state.canClue || allPlays.isEmpty) && allDiscards.isEmpty) ||
 					state.clueTokens == 0 ||
 					(state.clueTokens == 1 && valid1ClueScream(game, state.nextPlayerIndex(state.ourPlayerIndex)))
 				}
 
-			val allActions = allClues.concat(allPlays).concat(allDiscards)
-				.when(_ => canDiscardChop): as =>
+			val allActions =
+				allClues.concat(allPlays).concat(allDiscards).when(_ => canDiscardChop): as =>
 					as :+ (PerformAction.Discard(chop.get), DiscardAction(state.ourPlayerIndex, chop.get, -1, -1, false))
 
 			if allActions.isEmpty then
-				if state.clueTokens == 8 then
+				val anxietyPlay = me.anxietyPlay(state, state.ourPlayerIndex)
+
+				if game.level >= Level.Stalling && anxietyPlay.isDefined then
+					Log.info("anxiety play!")
+					return PerformAction.Play(anxietyPlay.get)
+				else if state.clueTokens == 8 then
 					Log.error("No actions available at 8 clues! Playing slot 1")
 					return PerformAction.Play(state.ourHand.head)
 				else

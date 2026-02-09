@@ -6,6 +6,7 @@ import scala_bot.logger.Log
 
 val STALL_INDICES = Map(
 	StallInterp.Stall5 -> 0,
+	StallInterp.SaveLHS -> 0,
 	StallInterp.Tempo -> 1,
 	StallInterp.FillIn -> 2,
 	StallInterp.Locked -> 3,
@@ -18,6 +19,7 @@ val STALL_TO_SEVERITY = Map(
 	StallInterp.Tempo -> 1,
 	StallInterp.FillIn -> 2,
 	StallInterp.Locked -> 2,
+	StallInterp.SaveLHS -> 2,
 	StallInterp.Clues8 -> 2,
 	StallInterp.Burn -> 5
 )
@@ -48,7 +50,7 @@ def stallSeverity(game: HGroup, player: Player, giver: Int, infoPlayer: Option[P
 def isStall(ctx: ClueContext, severity: Int): Option[StallInterp] =
 	val ClueContext(prev, game, action) = ctx
 	val state = ctx.state
-	val ClueAction(_, target, list, clue) = action
+	val ClueAction(giver, target, list, clue) = action
 	val FocusResult(focus, chop, _) = ctx.focusResult
 
 	val focusNew = !prev.state.deck(focus).clued
@@ -57,10 +59,15 @@ def isStall(ctx: ClueContext, severity: Int): Option[StallInterp] =
 	lazy val trash = state.deck(focus).id().exists(state.isBasicTrash) ||
 		game.me.orderKt(game, focus)
 
+	def isSave(id: Identity) =
+		if clue.kind == ClueKind.Colour then
+			colourSave(prev, action, id, focus)
+		else
+			rankSave(prev, action, id, focus)
+
 	val notStall = severity == 0 ||
-		(chop && game.common.thoughts(focus).possible.exists(state.isCritical)) ||	// Save clue
-		game.common.orderKp(game, focus) || 	// Play clue
-		(focusNew && trash)
+		(chop && game.players(target).thoughts(focus).possible.forall(isSave)) ||
+		(focusNew && (game.common.orderKp(game, focus) || trash))
 
 	if notStall then
 		return None
@@ -87,6 +94,10 @@ def isStall(ctx: ClueContext, severity: Int): Option[StallInterp] =
 			return Some(StallInterp.FillIn)
 
 	if severity >= 3 && chop && !game.common.thinksLocked(game, target) then
+		if state.deck(focus).id().exists(isSave) then
+			Log.info("save that could look like lhs!")
+			return Some(StallInterp.SaveLHS)
+
 		Log.info(s"locked hand stall!")
 		return Some(StallInterp.Locked)
 
@@ -139,9 +150,9 @@ def alternativeClue(ctx: ClueContext, maxStall: Int) =
 		for
 			target <- 0 until state.numPlayers if target != giver && target != state.ourPlayerIndex
 			clue   <- state.allValidClues(target) if clue != origClue
-			list = state.clueTouched(state.hands(target), clue)
+			list = prev.state.clueTouched(prev.state.hands(target), clue)
 			action = ClueAction(giver, target, list, clue.toBase)
-			focus = game.determineFocus(game, action).focus if focus != origFocus && game.meta(focus).status != CardStatus.Finessed
+			focus = prev.determineFocus(prev, action).focus if focus != origFocus && prev.meta(focus).status != CardStatus.Finessed
 			hypo = prev.copy(allowFindOwn = false, noRecurse = true)
 				.simulateClue(action) if satisfied(hypo, action)
 		yield

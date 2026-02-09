@@ -237,7 +237,7 @@ object Reactor:
 			val signalledPlays = interpretedGame.state.hands.flatten.filter: o =>
 				prev.meta(o).status != CardStatus.CalledToPlay && interpretedGame.meta(o).status == CardStatus.CalledToPlay
 
-			val eliminatedGame = interpretedGame.elim
+			val eliminatedGame = interpretedGame.elim()
 			val playsAfterElim = eliminatedGame.state.hands.flatten.filter(eliminatedGame.meta(_).status == CardStatus.CalledToPlay)
 
 			eliminatedGame
@@ -311,7 +311,7 @@ object Reactor:
 										lastMove = Some(DiscardInterp.Sarcastic)
 									)
 						case None => g
-				.elim
+				.elim()
 				.when(_ => prev.state.canClue)(resetZcs)
 
 		def interpretPlay(prev: Reactor, game: Reactor, action: PlayAction): Reactor =
@@ -322,7 +322,7 @@ object Reactor:
 					g.waiting match
 						case Some(wc) => reactPlay(prev, g, playerIndex, order, wc)
 						case None => g
-				.elim
+				.elim()
 				.when(_ => prev.state.canClue)(resetZcs)
 
 		def updateTurn(game: Reactor, action: TurnAction): Reactor =
@@ -355,7 +355,7 @@ object Reactor:
 							g.copy(common = newCommon, meta = newMeta)
 						else
 							g.copy(common = game.common.withThought(order)(_.copy(inferred = newInferred)))
-				.elim
+				.elim()
 
 		def takeAction(game: Reactor): PerformAction =
 			val (state, me) = (game.state, game.me)

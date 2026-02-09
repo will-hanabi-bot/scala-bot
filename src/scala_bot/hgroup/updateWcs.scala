@@ -131,7 +131,7 @@ def refreshWCs(prev: HGroup, game: HGroup, action: Action, beforeClueInterp: Boo
 				inferred = newInferred,
 				infoLock = newInferred.toOpt
 			)
-		.withXMeta(order)(_.copy(fStatus = None))
+		.withXMeta(order)(_.copy(fStatus = Nil))
 	}
 	.pipe: g =>
 		demos.foldLeft(g): (acc, wc) =>
@@ -139,7 +139,7 @@ def refreshWCs(prev: HGroup, game: HGroup, action: Action, beforeClueInterp: Boo
 			if wc.connections(0).hidden then
 				val nonHiddenIndex = wc.connections.indexWhere(!_.hidden)
 				(1 to nonHiddenIndex).foldLeft(acc) { (a, i) =>
-					a.withXMeta(wc.connections(i).order)(_.copy(fStatus = None))
+					a.withXMeta(wc.connections(i).order)(_.copy(fStatus = Nil))
 				}
 			else
 				acc
@@ -183,7 +183,7 @@ def refreshWCs(prev: HGroup, game: HGroup, action: Action, beforeClueInterp: Boo
 					else
 						revert(acc, conn.order, conn.ids)
 	.copy(waiting = retainWCs)
-	.elim
+	.elim()
 
 def updateWc(prev: HGroup, game: HGroup, action: Action, wc: WaitingConnection, beforeClueInterp: Boolean): UpdateResult =
 	if wc.connections.isEmpty then
@@ -195,8 +195,11 @@ def updateWc(prev: HGroup, game: HGroup, action: Action, wc: WaitingConnection, 
 	if !beforeClueInterp then
 		Log.info(s"waiting for connecting ${wc.currConn.ids.map(state.logId).mkString(",")} (${wc.currConn.order}) ${wc.currConn.kind} for ${state.logId(wc.inference)}${if wc.ambiguousSelf then " (ambiguous self)" else ""}")
 
-	val impossibleConn = wc.connections.find: conn =>
-		game.common.thoughts(conn.order).possible.intersect(conn.ids).isEmpty
+	val impossibleConn = wc.connections.find:
+		case p: PlayableConn if p.linked.nonEmpty =>	// For playable conns, all linked cards must be impossible
+			p.linked.forall(game.common.thoughts(_).possible.intersect(p.ids).isEmpty)
+		case conn =>
+			game.common.thoughts(conn.order).possible.intersect(conn.ids).isEmpty
 
 	lazy val impossibleFocus = wc.connections.headOption.forall(!_.isInstanceOf[PositionalConn]) &&
 		!game.common.thoughts(wc.focus).possible.contains(wc.inference)
@@ -323,7 +326,7 @@ def resolveRetained(prev: HGroup, game: HGroup, action: Action, wc: WaitingConne
 				state.hands(reacting).drop(i).forall(state.deck(_).clued)
 			} &&
 			game.isBlindPlaying(o) &&
-			game.xmeta(o).turnFinessed.get < wc.turn &&
+			game.xmeta(o).turnFinessed.exists(_ < wc.turn) &&
 			game.common.thoughts(o).inferred.exists: i =>
 				!state.isBasicTrash(i) && !state.isPlayable(i)
 

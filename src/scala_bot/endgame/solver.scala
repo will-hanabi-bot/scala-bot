@@ -153,12 +153,12 @@ case class EndgameSolver[G <: Game](
 
 		Log.info(s"remaining ids: ${remainingIds.fmt2(state)}")
 
-		def impossibleArr(ids: Vector[Identity], id: Identity, order: Int) =
+		def impossibleArr(ids: Vector[Identity], id: Identity, order: Int, tryFilter: Boolean) =
 			val thought = game.me.thoughts(order)
 
 			state.deck(order).id().exists(_ != id) ||
 			!thought.possible.contains(id) ||
-			!game.validArr(id, order) ||
+			(tryFilter && !game.validArr(id, order)) ||
 			// We cannot assign a trash id if it is linked for a non-trash id and all other orders are already trash
 			(state.isBasicTrash(id) && linkedOrders.contains(order) && game.me.links.exists: l =>
 				val orders = l.getOrders
@@ -166,7 +166,7 @@ case class EndgameSolver[G <: Game](
 					o == order ||
 					ids.zipWithIndex.exists((id2, i) => o == unknownOwn(i) && state.isBasicTrash(id2)))
 
-		def expandArr(arrangement: Arrangement): Iterable[Arrangement] =
+		def expandArr(arrangement: Arrangement, tryFilter: Boolean): Iterable[Arrangement] =
 			if Instant.now.isAfter(deadline) then
 				return Seq(arrangement)
 
@@ -174,14 +174,16 @@ case class EndgameSolver[G <: Game](
 			val totalCards = remaining.values.summing(_.missing)
 
 			remaining.collect:
-				case (id, RemainingEntry(missing, _)) if !impossibleArr(ids, id, unknownOwn(ids.length)) =>
+				case (id, RemainingEntry(missing, _)) if !impossibleArr(ids, id, unknownOwn(ids.length), tryFilter) =>
 					val newRemaining = remaining.rem(id)
 					val newIds = ids :+ id
 					val newProb = prob * missing / totalCards
 					Arrangement(newIds, newProb, newRemaining)
 
 		val initialArr = List(Arrangement(Vector.empty, Frac.one, remainingIds))
-		val allArrs = Iterator.iterate(initialArr)(_.flatMap(expandArr)).drop(unknownOwn.length).next()
+		val allArrs = Iterator.iterate(initialArr)(_.flatMap(expandArr(_, true))).drop(unknownOwn.length).next()
+			.when(_.isEmpty): _ =>
+				Iterator.iterate(initialArr)(_.flatMap(expandArr(_, false))).drop(unknownOwn.length).next()
 
 		if Instant.now.isAfter(deadline) then
 			Logger.setLevel(level)

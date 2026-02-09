@@ -282,3 +282,20 @@ class SelfFinesses extends munit.FunSuite:
 
 		hasInfs(game, None, Alice, 5, Vector("y4"))
 		assert(game.waiting.isEmpty)
+
+	test("self-finesses rather than assuming asymmetric information"):
+		val game = setup(HGroup.atLevel(2), Vector(
+			Vector("xx", "xx", "xx", "xx", "xx"),
+			Vector("p2", "r4", "y4", "g4", "b4"),
+			Vector("p1", "r4", "y4", "g4", "b4")
+		),
+			playStacks = Some(Vector(1, 0, 0, 0, 0))
+		)
+		.pipe(takeTurn("Alice clues 2 to Bob"))
+		.pipe(takeTurn("Bob clues 3 to Alice (slot 5)"))
+		.tap: g =>
+			// Alice should be finessed, rather than assuming Bob knows p2.
+			hasStatus(g, Alice, 1, CardStatus.Finessed)
+		.pipe(takeTurn("Cathy plays p1", "y3"))
+
+		assertEquals(game.takeAction, PerformAction.Play(game.state.hands(Alice.ordinal)(0)))

@@ -12,17 +12,19 @@ class QueuedFinesses extends munit.FunSuite:
 
 	test("understands a queued finesse"):
 		val game = setup(HGroup.atLevel(5), Vector(
-			Vector("xx", "xx", "xx", "xx", "xx"),
-			Vector("r4", "r2", "g4", "r5", "b4"),
-			Vector("g2", "b3", "r2", "y3", "p3")
+			Vector("xx", "xx", "xx", "xx"),
+			Vector("r2", "y4", "b4", "b4"),
+			Vector("y3", "y3", "p4", "p4"),
+			Vector("g2", "y4", "b3", "b3")
 		),
 			starting = Bob
 		)
-		.pipe(takeTurn("Bob clues green to Cathy"))
+		.pipe(takeTurn("Bob clues green to Donald"))
 		.tap: g =>
 			hasInfs(g, None, Alice, 1, Vector("g1"))
 			hasStatus(g, Alice, 1, CardStatus.Finessed)
-		.pipe(takeTurn("Cathy clues 2 to Bob"))
+		.pipe(takeTurn("Cathy clues red to Bob"))
+		.pipe(takeTurn("Donald clues 5 to Alice (slot 4)"))
 		.tap: g =>
 			// Only Alice's slot 1 is playable.
 			assertEquals(g.common.thinksPlayables(g, Alice.ordinal), List(g.state.hands(Alice.ordinal)(0)))
@@ -49,17 +51,19 @@ class QueuedFinesses extends munit.FunSuite:
 
 	test("waits for a queued finesse to resolve"):
 		val game = setup(HGroup.atLevel(5), Vector(
-			Vector("xx", "xx", "xx", "xx", "xx"),
-			Vector("g2", "b3", "r2", "y3", "p3"),
-			Vector("g1", "r1", "r4", "g4", "b4")
+			Vector("xx", "xx", "xx", "xx"),
+			Vector("r4", "r4", "y4", "y4"),
+			Vector("g2", "p4", "b4", "b4"),
+			Vector("g1", "r1", "p4", "y5")
 		))
-		.pipe(takeTurn("Alice clues green to Bob"))
+		.pipe(takeTurn("Alice clues green to Cathy"))
 		.pipe(takeTurn("Bob clues red to Alice (slot 2)"))		// r2 finesse
 		.tap:
 			hasInfs(_, None, Alice, 2, Vector("r1", "r2"))
-		.pipe(takeTurn("Cathy plays g1", "b1"))
+		.pipe(takeTurn("Cathy clues 5 to Donald"))
+		.pipe(takeTurn("Donald plays g1", "b1"))
 
-		// Alice should wait for Cathy.
+		// Alice should wait for Donald.
 		hasInfs(game, None, Alice, 2, Vector("r1", "r2"))
 
 	test("plays queued finesses in the right order"):

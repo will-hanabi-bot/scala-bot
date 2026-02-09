@@ -242,7 +242,7 @@ class General extends munit.FunSuite:
 		.pipe(takeTurn("Donald clues 2 to Alice (slot 2)"))
 
 		// Bob might be finessed for r1, but we aren't sure.
-		assertEquals(game.xmeta(game.state.hands(Bob.ordinal)(0)).fStatus, Some(FStatus.PossiblyOn))
+		assert(game.xmeta(game.state.hands(Bob.ordinal)(0)).fStatus.contains(FStatus.PossiblyOn(game.state.ourPlayerIndex)))
 
 	test("recognizes certainly finessed cards"):
 		val game = setup(HGroup.atLevel(5), Vector(
@@ -256,7 +256,7 @@ class General extends munit.FunSuite:
 		.pipe(takeTurn("Donald clues 3 to Alice (slots 1,2,3,4)"))
 
 		// Bob must be finessed for r1.
-		assertEquals(game.xmeta(game.state.hands(Bob.ordinal)(0)).fStatus, None)
+		assert(game.isDefinite(game.state.hands(Bob.ordinal)(0)))
 		hasInfs(game, None, Alice, 4, Vector("r3"))
 
 	test("cancels a prompt after the reacting player stalls"):

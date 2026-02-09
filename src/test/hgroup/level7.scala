@@ -78,7 +78,7 @@ class ScreamDiscards extends munit.FunSuite:
 		val game = setup(HGroup.atLevel(7), Vector(
 			Vector("xx", "xx", "xx", "xx", "xx"),
 			Vector("r4", "y5", "g5", "b5", "r5"),
-			Vector("g3", "b3", "r2", "y3", "p3")
+			Vector("g3", "b3", "r3", "y3", "p3")
 		),
 			starting = Bob,
 			clueTokens = 3,
@@ -115,7 +115,7 @@ class ShoutDiscards extends munit.FunSuite:
 		val game = setup(HGroup.atLevel(7), Vector(
 			Vector("xx", "xx", "xx", "xx", "xx"),
 			Vector("r4", "r2", "g4", "p1", "g3"),
-			Vector("g1", "b3", "r2", "y3", "p3")
+			Vector("g1", "b3", "r3", "y3", "p3")
 		),
 			starting = Cathy,
 			clueTokens = 2,

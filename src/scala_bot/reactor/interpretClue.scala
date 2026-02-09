@@ -29,7 +29,7 @@ def interpretStable(prev: Reactor, game: Reactor, action: ClueAction, stall: Boo
 			actionList = addAction(s.actionList, action, s.turnCount)
 		))
 		.onClue(action)
-		.elim
+		.elim()
 
 		interpretReactive(prev, hypoGame, action, bob, inverted = true)
 	else

@@ -90,8 +90,6 @@ def assignConns(game: HGroup, action: ClueAction, fps: Seq[FocusPossibility], fo
 						.pipe(IdentitySet.from)
 
 						val maybeFinessed =
-							giver != state.ourPlayerIndex &&
-							conn.reacting != state.ourPlayerIndex &&
 							conn.matches:
 								case _: FinesseConn =>
 									// Finesse that could be ambiguous
@@ -107,10 +105,21 @@ def assignConns(game: HGroup, action: ClueAction, fps: Seq[FocusPossibility], fo
 								(clue.kind == ClueKind.Colour && conn.ids.forall(!g.me.thoughts(focus).possible.contains(_)))
 							)
 
-						val fStatus = Option.when(maybeFinessed):
-							if target == state.ourPlayerIndex then FStatus.PossiblyOn else FStatus.PossiblyAmbiguous
+						val fStatus =
+							if !maybeFinessed then
+								Nil
+							else if target == state.ourPlayerIndex then
+								if conn.reacting == state.ourPlayerIndex then Nil else
+									List(FStatus.PossiblyOn(state.ourPlayerIndex))
+							else
+								List(
+									Option.when(giver != state.ourPlayerIndex && conn.reacting != state.ourPlayerIndex)
+										(FStatus.PossiblyAmbiguous(state.ourPlayerIndex)),
+									Option.when(conn.reacting != target)
+										(FStatus.PossiblyOn(target))
+								).flatten
 
-						if fStatus != None then
+						if fStatus.nonEmpty then
 							Log.highlight(Console.GREEN, s"setting finesse status to $fStatus on ${conn.order}! ${finesseIds.fmt(state)}")
 
 						g.copy(
@@ -239,7 +248,7 @@ def resolveClue(ctx: ClueContext, fps: Seq[FocusPossibility], ambiguousOwn: Seq[
 							(c.isInstanceOf[PlayableConn] && c.reacting != state.ourPlayerIndex)
 
 				game.common.thoughts(focus).inferred.filter: inf =>
-					visibleFind(state, game.common, inf, infer = true, excludeOrder = focus).isEmpty &&
+					!game.invalidFocus(giver, inf, focus) &&
 					!fps.exists(_.id == inf)
 				.flatMap:
 					connect(ctx, _, looksDirect, thinksStall = Set(), findOwn = Some(target))
@@ -284,11 +293,21 @@ def resolveClue(ctx: ClueContext, fps: Seq[FocusPossibility], ambiguousOwn: Seq[
 			conn.order == focus ||
 			(conn.ids.length == 1 && state.deck(focus).matches(conn.ids.head))
 
+	val badSave = fps.forall: fp =>
+		fp.save && state.deck(focus).id().exists: id =>
+			val dupes = visibleFind(state, game.me, id, excludeOrder = focus)
+			dupes.exists: d =>
+				val holder = state.holderOf(d)
+				holder != giver && !game.chop(holder).contains(d)
+
 	val interp = if state.deck(focus).id().exists(id => !simplestFps.exists(_.id == id)) then
 		Log.error(s"resolving clue but focus ${state.logId(focus)} doesn't match simplest fps [${simplestFps.map(fp => state.logId(fp.id)).mkString(",")}]!")
 		ClueInterp.Mistake
 	else if simplestFps.forall(_.symmetric) then
 		Log.error(s"resolving clue but all focus possibilities are symmetric!")
+		ClueInterp.Mistake
+	else if badSave then
+		Log.warn("appears to be save clue but copy visible and not on chop!")
 		ClueInterp.Mistake
 	else if stompedWc then
 		Log.error("cluing a card part of a waiting connection!")
@@ -318,7 +337,7 @@ def resolveClue(ctx: ClueContext, fps: Seq[FocusPossibility], ambiguousOwn: Seq[
 	.pipe:
 		assignConns(_, action, fpsToWrite, focus, ambiguousOwn)
 
-	.pipe:
+	.when(_ => action.clue.kind == ClueKind.Rank):		// with a colour clue, there shouldn't be ambiguity about ids (maybe in rainbow?)
 		allFps.foldLeft(_): (a, fp) =>
 			fp.connections.zipWithIndex.foldLeft(a) { case (acc, (conn, i)) => conn match
 				case PlayableConn(reacting, order, id, linked, hidden, _) if linked.length > 1 =>

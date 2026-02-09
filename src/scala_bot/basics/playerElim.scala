@@ -274,7 +274,7 @@ extension (p: Player)
 
 		(resets, newPlayer)
 
-	def goodTouchElim(game: Game) =
+	def goodTouchElim(game: Game, except: Option[Int] = None) =
 		val state = game.state
 
 		def canElim(order: Int) =
@@ -291,23 +291,25 @@ extension (p: Player)
 		var resets = BitSet.empty
 		var newThoughts = p.thoughts
 
-		state.hands.fastForeach: hand =>
-			hand.fastForeach: order =>
-				if canElim(order) then
-					val thought = newThoughts(order)
-					val newInferred = thought.inferred.difference(state.trashSet)
-					val reset = newInferred.isEmpty && !thought.reset
+		loop(0, _ < state.numPlayers, _ + 1): i =>
+			if !except.contains(i) then
+				val hand = state.hands(i)
+				hand.fastForeach: order =>
+					if canElim(order) then
+						val thought = newThoughts(order)
+						val newInferred = thought.inferred.difference(state.trashSet)
+						val reset = newInferred.isEmpty && !thought.reset
 
-					dirty = dirty.incl(order)
+						dirty = dirty.incl(order)
 
-					val newThought = if reset then
-						thought.resetInferences()
-					else
-						thought.copy(inferred = newInferred)
-					newThoughts = newThoughts.updated(order, newThought)
+						val newThought = if reset then
+							thought.resetInferences()
+						else
+							thought.copy(inferred = newInferred)
+						newThoughts = newThoughts.updated(order, newThought)
 
-					if reset then
-						resets = resets.incl(order)
+						if reset then
+							resets = resets.incl(order)
 
 		(resets, p.copy(thoughts = newThoughts, dirty = dirty))
 
@@ -403,9 +405,10 @@ extension (p: Player)
 						Log.warn(s"promised sarcastic ${state.logId(id)} not found among cards $orders, rewind?")
 						acc
 					else if viableOrders.length == 1 then
-						Log.info(s"resolving sarcastic link for ${state.logId(id)} from $orders to ${viableOrders.head} (${p.name})")
-						(player.withThought(viableOrders.head)(_.copy(inferred = IdentitySet.single(id))),
-							viableOrders.head +: sarcastics)
+						val order = viableOrders.head
+						Log.info(s"resolving sarcastic link for ${state.logId(id)} from $orders to $order (${p.name})")
+						(player.withThought(order)(_.copy(inferred = IdentitySet.single(id))),
+							order +: sarcastics)
 					else
 						if viableOrders.length < orders.length then
 							Log.info(s"updating sarcastic link for ${state.logId(id)} to $viableOrders (${p.name})")
@@ -440,7 +443,7 @@ extension (p: Player)
 			case (PlayLink(orders, prereqs, target), acc) =>
 				val remOrders = orders.filter(o => game.state.hands.exists(h => h.contains(o)))
 				if remOrders.isEmpty then
-					// The target must be playable now.
+					Log.highlight(Console.CYAN, s"all orders in play link (${orders.mkString}) played, target ${target} must be playable now!")
 					acc.withThought(target): t =>
 						t.copy(inferred = t.inferred.intersect(game.state.playableSet))
 				else
