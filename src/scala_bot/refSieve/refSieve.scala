@@ -150,7 +150,7 @@ object RefSieve:
 			val stalling = prev.common.thinksLocked(prev, giver) || prev.state.clueTokens == 8
 
 			lazy val focus = determineFocus(prev, game, action, push = trashPush || clue.kind == ClueKind.Colour)
-			lazy val cluedGame = game.withMeta(focus)(_.copy(focused = true))
+			lazy val cluedGame = game.withMeta(focus)(_.copy(focused = true)).elim()
 
 			lazy val newPlayables = cluedGame.common.thinksPlayables(cluedGame, target).filter(!prevPlayables.contains(_))
 			lazy val loaded = cluedGame.common.thinksLoaded(cluedGame, target)
@@ -241,9 +241,10 @@ object RefSieve:
 						)
 			else
 				game
+			.elim()
 
 		def interpretPlay(prev: RefSieve, game: RefSieve, action: PlayAction): RefSieve =
-			game
+			game.elim()
 
 		def takeAction(game: RefSieve): PerformAction =
 			val (state, me) = (game.state, game.me)

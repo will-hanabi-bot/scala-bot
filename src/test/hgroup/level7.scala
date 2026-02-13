@@ -119,7 +119,8 @@ class ShoutDiscards extends munit.FunSuite:
 		),
 			starting = Cathy,
 			clueTokens = 2,
-			playStacks = Some(Vector(1, 1, 1, 1, 0))
+			playStacks = Some(Vector(1, 1, 1, 1, 0)),
+			init = _.copy(inEarlyGame = false)
 		)
 		.pipe(takeTurn("Cathy clues 1 to Alice (slots 4,5)"))
 		.tap: g =>

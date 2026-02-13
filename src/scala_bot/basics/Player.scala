@@ -5,6 +5,7 @@ import scala_bot.logger.Log
 
 import scala.collection.immutable.BitSet
 import scala.util.chaining.scalaUtilChainingOps
+import scala_bot.logger.{Logger, LogLevel}
 
 enum Link:
 	case Promised(orders: Seq[Int], id: Identity, target: Int)
@@ -41,6 +42,7 @@ case class Player(
 	playLinks: List[PlayLink] = Nil,
 	unknownPlays: BitSet = BitSet.empty,
 	hypoPlays: BitSet = BitSet.empty,
+	linkedPlays: Int = 0,
 
 	dirty: BitSet = BitSet.empty,
 	certainMap: Vector[List[MatchEntry]]
@@ -145,7 +147,7 @@ case class Player(
 		else
 			inline def possPlayable(poss: IdentitySet) =
 				val p = if excludeTrash then poss.difference(state.trashSet) else poss
-				p.intersect(state.playableSet) == p
+				p.nonEmpty && p.intersect(state.playableSet) == p
 
 			game.meta(order).status match
 				case CardStatus.CalledToPlay =>
@@ -174,14 +176,14 @@ case class Player(
 			val poss = if infer then thoughts(order).possibilities else thoughts(order).possible
 			val p = if excludeTrash then poss.difference(state.trashSet) else poss
 
-			p.intersect(state.playableSet) == p
+			p.nonEmpty && p.intersect(state.playableSet) == p
 
 	def obviousPlayables(game: Game, playerIndex: Int) =
 		game.state.hands(playerIndex).filter(orderKp(game, _))
 			.pipe(game.filterPlayables(this, playerIndex, _))
 
 	def thinksPlayables(game: Game, playerIndex: Int, excludeTrash: Boolean = false) =
-		game.state.hands(playerIndex).filter(orderPlayable(game, _))
+		game.state.hands(playerIndex).filter(o => orderPlayable(game, o, excludeTrash = excludeTrash && game.isTouched(o)))
 			.pipe: playables =>
 				// Exclude unknown cards if there is a duplicate that is fully known.
 				playables.filterNot: p1 =>
@@ -319,17 +321,26 @@ case class Player(
 			case Link.Unpromised(orders, ids) =>
 				if orders.length > ids.summing(unknownIds(state, _)) then orders else Nil
 
-	def hypoScore = hypoStacks.sum + unknownPlays.size
+	def hypoScore = hypoStacks.sum + unknownPlays.size - linkedPlays
 
 	def updateHypoStacks[G <: Game](game: G)(using ops: GameOps[G]): Player =
-		val state = game.state
-		var hypo = game
+
+		var hypo =
+			if isCommon then
+				ops.copyWith(game, GameUpdates(noRecurse = Some(true), common = Some(this)))
+			else
+				ops.copyWith(game, GameUpdates(noRecurse = Some(true), players = Some(game.players.updated(playerIndex, this))))
+
 		var unknownPlays = BitSet.empty
 		var played = BitSet.empty
 		var attempted = BitSet.empty
+		var linkedPlays = 0
+
+		def player = if isCommon then hypo.common else hypo.players(playerIndex)
+		def state = hypo.state
 
 		def play(order: Int) =
-			thoughts(order).id(infer = true, symmetric = true) match
+			player.thoughts(order).id(infer = true, symmetric = true) match
 				case None =>
 					links.fastForeach: link =>
 						val orders = link.getOrders
@@ -339,6 +350,7 @@ case class Player(
 									Log.warn(s"tried to add linked ${state.logId(id)} ($order) onto hypo stacks, but they were at ${hypo.state.playStacks} $played ($name)")
 									hypo
 								else
+									linkedPlays += 1
 									hypo.withState(_.withPlay(id))
 
 					unknownPlays = unknownPlays.incl(order)
@@ -346,7 +358,15 @@ case class Player(
 
 				case Some(id) =>
 					if hypo.state.isPlayable(id) then
-						hypo = hypo.withState(_.withPlay(id))
+						val playAction = PlayAction(state.holderOf(order), order, id.suitIndex, id.rank)
+
+						val level = Logger.level
+						Logger.setLevel(LogLevel.Error.min(level))
+
+						hypo = hypo.onPlay(playAction)
+							.pipe(ops.refreshAfterPlay(hypo, _, playAction))
+
+						Logger.setLevel(level)
 						played = played.incl(order)
 					else
 						Log.warn(s"tried to add ${state.logId(id)} ($order) onto hypo stacks, but they were at ${hypo.state.playStacks} $played ($name)")
@@ -358,18 +378,25 @@ case class Player(
 			changed = false
 
 			loop(0, _ < state.numPlayers, _ + 1): i =>
-				val playables = if game.goodTouch then thinksPlayables(hypo, i, excludeTrash = true) else obviousPlayables(hypo, i)
+				val playables =
+					if game.goodTouch then
+						player.thinksPlayables(hypo, i, excludeTrash = true)
+					else
+						player.obviousPlayables(hypo, i)
 
-				playables.fastForeach: o =>
+				val it = playables.iterator
+
+				while (it.hasNext && !changed) {
+					val o = it.next()
 					if !played.contains(o) && !attempted.contains(o) && hypo.state.hasConsistentInfs(thoughts(o)) then
 						play(o)
 						changed = true
+				}
 
-
-			playLinks.fastForeach: link =>
+			player.playLinks.fastForeach: link =>
 				val allPlayed = link.orders.fastForall(played.contains)
 
-				if allPlayed && !played.contains(link.target) then
+				if allPlayed && !played.contains(link.target) && state.hands.exists(_.contains(link.target)) then
 					val order = link.target
 					val id = state.deck(order).id()
 
@@ -379,7 +406,8 @@ case class Player(
 		this.copy(
 			hypoStacks = hypo.state.playStacks,
 			unknownPlays = unknownPlays,
-			hypoPlays = played
+			hypoPlays = played,
+			linkedPlays = linkedPlays
 		)
 
 object Player:

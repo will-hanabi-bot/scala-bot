@@ -169,6 +169,9 @@ extension(ids: IdentitySetOpt)
 	inline def getOrElse(a: => IdentitySet): IdentitySet =
 		if ids != -1L then ids else a
 
+	inline def orElse(a: => IdentitySetOpt): IdentitySetOpt =
+		if ids != -1L then ids else a
+
 	inline def existsO(inline f: IdentitySet => Boolean) =
 		ids != -1L && f(ids)
 

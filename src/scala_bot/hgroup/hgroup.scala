@@ -4,6 +4,7 @@ import scala_bot.basics._
 import scala_bot.endgame.EndgameSolver
 import scala_bot.utils._
 import scala_bot.logger.{Log, Logger, LogLevel}
+import scala_bot.fraction.Frac
 
 import scala.util.chaining.scalaUtilChainingOps
 
@@ -145,6 +146,9 @@ case class HGroup(
 	def invalidFocus(giver: Int, id: Identity, focus: Int) =
 		state.isBasicTrash(id) ||
 		visibleFind(state, common, id, infer = true, excludeOrder = focus).nonEmpty ||
+		common.links.existsM:
+			case Link.Promised(_, i, target) => target != focus && id.matches(i)
+		||
 		waiting.exists: wc =>
 			!wc.symmetric && !wc.ambiguousSelf && wc.target == giver &&
 			common.thoughts(wc.focus).inferred.contains(id) &&
@@ -347,8 +351,8 @@ case class HGroup(
 
 				hypo.lastMove.matches:
 					case Some(ClueInterp.Save) =>
-						// Can't guarantee they'll give a 2 save
-						!state.deck(focus).id().exists(id => id.rank == 2 && !state.isCritical(id))
+						// Can't guarantee others will give a 2 save
+						giver == state.ourPlayerIndex || !state.deck(focus).id().exists(id => id.rank == 2 && !state.isCritical(id))
 
 					case Some(ClueInterp.Stall) =>
 						hypo.stallInterp == Some(StallInterp.Stall5) &&
@@ -466,7 +470,7 @@ object HGroup:
 			)
 
 		def interpretClue(prev: HGroup, game: HGroup, action: ClueAction): HGroup =
-			val updatedGame = game.refreshUncertain
+			val updatedGame = game.refreshUncertain.elim()
 
 			checkRevealLayer(prev, updatedGame, action).getOrElse:
 				val pre = refreshWCs(prev, updatedGame, action, beforeClueInterp = true)
@@ -502,11 +506,12 @@ object HGroup:
 								dda = None,
 								stallInterp = if g.lastMove == Some(ClueInterp.Stall) then g.stallInterp else None
 							)
+			.elim()
 
 		def interpretDiscard(prev: HGroup, game: HGroup, action: DiscardAction): HGroup =
 			val DiscardAction(playerIndex, order, suitIndex, rank, failed) = action
 
-			val updatedGame = game.refreshUncertain
+			val updatedGame = game.refreshUncertain.elim()
 			val reinterpGame = if !failed then None else updatedGame.reinterpPlay(prev, action)
 
 			if reinterpGame.isDefined then
@@ -549,10 +554,12 @@ object HGroup:
 								g.copy(lastMove = Some(PlayInterp.None))
 							case Some(orders) =>
 								val chop = orders.min
-								val mistake = game.state.deck(chop).id().exists(game.state.isBasicTrash)
+								val mistake = game.state.deck(chop).id().exists: id =>
+									game.state.isBasicTrash(id) ||
+									id.rank <= 2
 
 								if mistake then
-									Log.warn("ocm on trash!")
+									Log.warn("bad ocm!")
 
 								performCM(g, orders).copy(lastMove =
 									if mistake then Some(PlayInterp.Mistake) else Some(PlayInterp.OrderCM))
@@ -560,6 +567,7 @@ object HGroup:
 						dcStatus = DcStatus.None,
 						dda = None
 					)
+			.elim()
 
 		def takeAction(game: HGroup): PerformAction =
 			val (state, me) = (game.state, game.me)
@@ -569,9 +577,12 @@ object HGroup:
 
 				EndgameSolver(monteCarlo = true).solve(game) match
 					case Left(err) => Log.info(s"couldn't solve endgame: $err")
-					case Right((perform, _)) =>
-						Log.info(s"endgame solved!")
-						return perform
+					case Right((perform, winrate)) =>
+						if winrate < Frac(1, 100) then
+							Log.info("winrate below 1%, skipping")
+						else
+							Log.info(s"endgame solved!")
+							return perform
 
 			val discardOrders = me.thinksTrash(game, state.ourPlayerIndex)
 			val playableOrders = me.thinksPlayables(game, state.ourPlayerIndex)
@@ -588,7 +599,11 @@ object HGroup:
 					val action = performToAction(state, perform, state.ourPlayerIndex)
 					(perform, action)
 
-			val hasEarlyGameClue = game.earlyGameClue(state.ourPlayerIndex).isDefined &&
+			val earlyGameClue = game.earlyGameClue(state.ourPlayerIndex)
+
+			// Log.info(s"early game clue? ${earlyGameClue.map(_.fmt(state))}")
+
+			val hasEarlyGameClue = earlyGameClue.isDefined &&
 				discardOrders.isEmpty &&
 				!(state.clueTokens == 1 && valid1ClueScream(game, state.nextPlayerIndex(state.ourPlayerIndex)))
 
@@ -596,15 +611,16 @@ object HGroup:
 				Log.highlight(Console.YELLOW,"must give clue in early game!")
 
 			val allPlays = playableOrders.map: o =>
-				val action = PlayAction(state.ourPlayerIndex, o, me.thoughts(o).id(infer = true))
+				val action = PlayAction(state.ourPlayerIndex, o, me.thoughts(o).id(infer = true, partial = true))
 				(PerformAction.Play(o), action)
 
 			val cantDiscard = state.clueTokens == 8 ||
+				playableOrders.exists(game.meta(_).status == CardStatus.Finessed) ||
 				(state.pace == 0 && (allClues.nonEmpty || allPlays.nonEmpty)) ||
 				game.dcStatus != DcStatus.None ||
 				hasEarlyGameClue
 
-			Log.info(s"can discard: ${!cantDiscard} ${state.clueTokens}")
+			Log.info(s"can discard: ${!cantDiscard}")
 
 			val allDiscards = if cantDiscard then Nil else
 				discardOrders.map: o =>
@@ -618,7 +634,7 @@ object HGroup:
 				!cantDiscard &&
 				!me.thinksLocked(game, state.ourPlayerIndex) &&
 				!hasEarlyGameClue &&
-				!game.dda.exists(id => game.chop(state.ourPlayerIndex).exists(me.thoughts(_).possible.contains(id))) &&
+				!game.dda.exists(id => state.isCritical(id) && game.chop(state.ourPlayerIndex).exists(me.thoughts(_).possible.contains(id))) &&
 				{
 					((!state.canClue || allPlays.isEmpty) && allDiscards.isEmpty) ||
 					state.clueTokens == 0 ||
@@ -646,6 +662,9 @@ object HGroup:
 		def updateTurn(game: HGroup, action: TurnAction) =
 			game
 
+		override def refreshAfterPlay(prev: HGroup, game: HGroup, action: PlayAction) =
+			refreshWCs(prev, game, action, elim = false)
+
 		def findAllClues(game: HGroup, giver: Int) =
 			val state = game.state
 
@@ -662,7 +681,11 @@ object HGroup:
 				if nonTrashClues.isEmpty then
 					trashClues.take(1)
 				else
-					nonTrashClues ++ trashClues.take(1)
+					val validClues = nonTrashClues.filter: clue =>
+						val hypo = game.simulate(ClueAction(giver, clue.target, state.clueTouched(state.hands(clue.target), clue), clue.toBase))
+						hypo.lastMove != Some(ClueInterp.Mistake)
+
+					validClues ++ trashClues.take(1)
 
 			val allClues =
 				(for

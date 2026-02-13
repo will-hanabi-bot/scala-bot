@@ -52,6 +52,10 @@ def getResult(game: HGroup, hypo: HGroup, action: ClueAction): Double =
 	val (badTouch, trash, _) = badTouchResult(game, hypo, action)
 	val (_, playables) = playablesResult(game, hypo)
 
+	if playables.isEmpty && hypo.lastMove == Some(ClueInterp.Play) then
+		Log.warn("play clue with no new playables! (duped existing playable?)")
+		return -100
+
 	val revealedTrash = hypo.common.thinksTrash(hypo, target).count: o =>
 		hypo.state.deck(o).clued && !common.thinksTrash(game, target).contains(o)
 
@@ -220,7 +224,7 @@ def advance(orig: HGroup, game: HGroup, offset: Int): Double =
 				val action = DiscardAction(playerIndex, chop, id.suitIndex, id.rank)
 				val dcGame = game.simulate(action)
 
-				if state.clueTokens > 1 then
+				if state.canClue then
 					val clueProb = if offset == 1 then
 						if common.thinksLoaded(game, bob) then
 							0.2
@@ -235,7 +239,7 @@ def advance(orig: HGroup, game: HGroup, offset: Int): Double =
 					val clueVal = _forceClue(orig, game, offset)
 					val dcVal = advance(orig, dcGame, offset + 1)
 
-					if clueVal < 0 then
+					if clueVal < evalGame(orig, game) then
 						Log.info(s"no visible clue available for ${state.names(playerIndex)}, lowering clue prob to 0")
 						dcVal
 					else
@@ -259,6 +263,7 @@ def evalAction(game: HGroup, action: Action): (HGroup, Double) =
 
 	val mistake = hypoGame.lastMove.matches:
 		case Some(ClueInterp.Mistake) if action.isInstanceOf[ClueAction] => true
+		case Some(PlayInterp.Mistake) if action.isInstanceOf[PlayAction] => true
 		case Some(DiscardInterp.Mistake) if action.isInstanceOf[DiscardAction] => true
 
 	val value = action match
@@ -333,13 +338,16 @@ def evalGame(orig: HGroup, game: HGroup): Double =
 			case None => 0.4
 			case Some(id) =>
 				if state.isBasicTrash(id) then
-					-1.5
+					if state.holderOf(order) == state.ourPlayerIndex then
+						0.0
+					else
+						-1.5
 				else if id.rank == 5 then
 					0.45
 				else
 					0.4
 
-	val bdrVal = 2 * state.variant.allIds.summing: id =>
+	val bdrVal = state.variant.allIds.summing: id =>
 		val prevDiscarded = orig.state.discardStacks(id.suitIndex)(id.rank - 1)
 		val discarded = state.discardStacks(id.suitIndex)(id.rank - 1).filterNot(prevDiscarded.contains)
 
@@ -350,13 +358,13 @@ def evalGame(orig: HGroup, game: HGroup): Double =
 		if state.isBasicTrash(id) || id.rank == 5 || discarded.isEmpty then
 			0
 		else if duplicated then
-			-0.1
+			-0.01
 		else
 			id.rank match
 				case 1 => -math.pow(discarded.length, 2)
-				case 2 => -3
-				case 3 => -1
-				case _ => -0.1
+				case 2 => -6
+				case 3 => -1.75
+				case _ => -0.5
 
 	val lockedPenalty = (0 until state.numPlayers).summing: playerIndex =>
 		if !game.players(playerIndex).thinksLocked(game, playerIndex) then 0 else

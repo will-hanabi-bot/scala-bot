@@ -212,7 +212,9 @@ extension (p: Player)
 
 	def cardElim(state: State): (BitSet, Player) =
 		var certainMap = p.certainMap
-		// var dirtyIds = IdentitySet.empty
+
+		if p.dirty.isEmpty then
+			return (BitSet.empty, p)
 
 		p.dirty.toArray.fastForeach: order =>
 			val thought = p.thoughts(order)
@@ -231,7 +233,6 @@ extension (p: Player)
 							certainMap
 					else
 						certainMap.updated(id.get.toOrd, MatchEntry(order, unknownTo) +: certains)
-				// dirtyIds = dirtyIds.union(id.get)
 
 		var newPlayer = p.copy(certainMap = certainMap)
 		var crossElimCandidates = List.empty[Int]

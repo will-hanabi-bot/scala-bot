@@ -330,7 +330,7 @@ def findSingleConn(ctx: ClueContext, reacting: Int, id: Identity, connCtx: Conne
 					!opts.nonTargetFinessed
 
 				if selfClandestine then
-					Log.warn("illegal clandestine self-finesse!")
+					// Log.warn("illegal clandestine self-finesse!")
 					None
 				else
 					val hypo = state.deck(conn.order).id().orElse(Option.when(conn.ids.length == 1)(conn.ids.head))
@@ -477,7 +477,14 @@ def connect(ctx: ClueContext, id: Identity, looksDirect: Boolean, thinksStall: S
 		case (Some(conns), _) =>
 			val symmetric = !state.deck(focus).matches(id, assume = true) ||
 				!game.players(target).thoughts(focus).possible.contains(id) ||
-				conns.exists(c => state.deck(c.order).id().exists(!c.ids.contains(_)))
+				conns.exists:
+					case conn: PlayableConn =>
+						if conn.linked.isEmpty then
+							state.deck(conn.order).id().exists(!conn.ids.contains(_))
+						else
+							conn.linked.forall(state.deck(_).id().exists(!conn.ids.contains(_)))
+					case conn =>
+						state.deck(conn.order).id().exists(!conn.ids.contains(_))
 
 			Log.info(s"found connections: ${state.logConns(conns, id)}${if symmetric then " (symmetric)" else ""}${if preferOwn then " (ambiguous)" else ""}")
 			Some(FocusPossibility(id, conns, ClueInterp.Play, symmetric, ambiguous = preferOwn))

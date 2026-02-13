@@ -262,17 +262,16 @@ def interpClue(ctx: ClueContext): HGroup =
 				Log.warn("no inferences!")
 				game.copy(lastMove = Some(ClueInterp.Mistake))
 			else
-				resolveClue(ctx, simplestOwn, if savePoss.nonEmpty then Nil else ownFps.filterNot(simplestOwn.contains))
+				resolveClue(ctx, simplestOwn, if savePoss.nonEmpty then Nil else ownFps.filter(fp => !simplestOwn.contains(fp) && !fp.symmetric))
 	}
 	.when(_.level >= Level.TempoClues && state.numPlayers > 2): g =>
 		val newCtx = ctx.copy(game = g)
 		interpretTccm(newCtx) match
 			case Some(tccm) if stall.isEmpty || thinksStall.isEmpty =>
-				performCM(g, tccm)
-					.copy(lastMove = Some(
-						if badCM(newCtx, tccm) then ClueInterp.Mistake else ClueInterp.Discard
-					))
-			case Some(_)	=>
+				performCM(g, tccm).copy(
+					lastMove = Some(if badCM(newCtx, tccm) then ClueInterp.Mistake else ClueInterp.Discard)
+				)
+			case Some(_) =>
 				Log.info("stalling situation, tempo clue stall!")
 				g.copy(lastMove = Some(ClueInterp.Stall), stallInterp = Some(StallInterp.Tempo))
 			case _ =>

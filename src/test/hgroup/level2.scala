@@ -276,3 +276,36 @@ class General extends munit.FunSuite:
 		.pipe(takeTurn("Donald clues 4 to Alice (slot 2)"))
 
 		hasInfs(game, None, Alice, 2, Vector("g4"))
+
+	test("updates hypo stacks correctly"):
+		val game = setup(HGroup.atLevel(2), Vector(
+			Vector("xx", "xx", "xx", "xx"),
+			Vector("b1", "p4", "g3", "g3"),
+			Vector("p2", "y3", "y3", "b3"),
+			Vector("g4", "g4", "r4", "r4")
+		),
+			starting = Donald,
+			playStacks = Some(Vector(0, 0, 0, 1, 1))
+		)
+		.pipe(takeTurn("Donald clues 4 to Bob"))
+
+		assertEquals(game.common.hypoStacks, Vector(0, 0, 0, 1, 4))
+
+	test("restores inferences after a fake finesse"):
+		val game = setup(HGroup.atLevel(2), Vector(
+			Vector("xx", "xx", "xx", "xx"),
+			Vector("b1", "p4", "g3", "g3"),
+			Vector("p4", "y3", "y3", "b3"),
+			Vector("g4", "g4", "r4", "r5")
+		),
+			starting = Cathy,
+			playStacks = Some(Vector(1, 1, 0, 0, 0))
+		)
+		.pipe(takeTurn("Cathy clues 1 to Alice (slots 3,4)"))
+		.pipe(takeTurn("Donald clues 2 to Alice (slot 1)"))		// could be finessing Bob's b1
+		.tap: g =>
+			hasInfs(g, None, Alice, 1, Vector("r2", "y2", "g2", "b2", "p2"))
+		.pipe(takeTurn("Alice plays g1 (slot 4)"))			// remaining 1 is [p1] if Bob finesses
+		.pipe(takeTurn("Bob clues 5 to Donald"))			// Bob doesn't play
+
+		hasInfs(game, None, Alice, 4, Vector("b1", "p1"))

@@ -146,16 +146,16 @@ private def checkSdcm(prev: HGroup, action: DiscardAction): Option[DcStatus] =
 		}
 
 	val shout = common.thinksPlayables(prev, playerIndex).nonEmpty &&
-		common.thinksTrash(prev, playerIndex).contains(order)
+		prev.players(playerIndex).thinksTrash(prev, playerIndex).contains(order)
 
 	val result = if scream then DcStatus.Scream else DcStatus.Shout
 
 	Option.when(scream || shout):
 		if state.numPlayers == 2 then
 			result
-		else if state.clueTokens == 0 && common.thinksLoaded(prev, bob) then
-			Log.warn(s"${state.names(playerIndex)} discarded with a playable/kt but next player was safe! (echo?)")
-			DcStatus.Generation
+		// else if state.clueTokens == 0 && common.thinksLoaded(prev, bob) then
+		// 	Log.warn(s"${state.names(playerIndex)} discarded with a playable/kt but next player was safe! (echo?)")
+		// 	DcStatus.Generation
 		else if cathy == state.ourPlayerIndex || common.thinksLoaded(prev, cathy) then
 			result
 		else

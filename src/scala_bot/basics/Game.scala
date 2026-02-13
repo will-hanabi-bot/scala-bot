@@ -88,6 +88,9 @@ trait GameOps[G <: Game]:
 	def takeAction(game: G): PerformAction
 	def updateTurn(game: G, action: TurnAction): G
 
+	def refreshAfterPlay(@annotation.unused prev: G, game: G, @annotation.unused action: PlayAction): G =
+		game
+
 	def findAllClues(game: G, giver: Int): Seq[PerformAction]
 	def findAllDiscards(game: G, playerIndex: Int): Seq[PerformAction]
 
@@ -191,7 +194,7 @@ extension[G <: Game](game: G)
 			regex.matches(game.state.variant.suits(i.suitIndex).name)
 
 	def handleClue(prev: G, clue: ClueAction)(using ops: GameOps[G]) =
-		ops.interpretClue(prev, game.onClue(clue).elim(), clue).elim()
+		ops.interpretClue(prev, game.onClue(clue), clue)
 
 	def takeAction(using ops: GameOps[G]) =
 		ops.takeAction(game)

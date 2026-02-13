@@ -30,11 +30,10 @@ def stallSeverity(game: HGroup, player: Player, giver: Int, infoPlayer: Option[P
 	lazy val severity2 =
 		game.dcStatus == DcStatus.Scream ||
 		game.dcStatus == DcStatus.Shout ||
-		game.dda.exists { id =>
-			game.chop(giver).exists { chop =>
+		game.dda.exists: id =>
+			state.isCritical(id) &&
+			game.chop(giver).exists: chop =>
 				infoPlayer.getOrElse(player).thoughts(chop).possible.contains(id)
-			}
-		}
 
 	if state.clueTokens == 8 && state.turnCount != 1 then
 		4
@@ -86,7 +85,7 @@ def isStall(ctx: ClueContext, severity: Int): Option[StallInterp] =
 
 	if severity >= 2 && reclue then
 		if playables.nonEmpty then
-			Log.info(s"tempo clue stall!")
+			Log.info(s"tempo clue stall! new playables: $playables")
 			return Some(StallInterp.Tempo)
 
 		if fill.nonEmpty then

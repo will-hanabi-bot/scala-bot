@@ -82,7 +82,13 @@ def badTouchResult(prev: Game, game: Game, action: ClueAction) =
 
 def playablesResult(prev: Game, game: Game) =
 	game.me.hypoPlays.foldRight((List[Int](), List[Int]())) { case (order, (blindPlays, playables)) =>
-		if prev.me.hypoPlays.contains(order) then
+		val badPlayable = prev.me.hypoPlays.contains(order) ||
+			game.me.thoughts(order).id(infer = true).exists: id =>
+				prev.me.hypoStacks(id.suitIndex) >= id.rank ||
+				prev.me.hypoPlays.exists: o =>
+					game.me.thoughts(o).matches(id, infer = true)
+
+		if badPlayable then
 			(blindPlays, playables)
 		else if game.isBlindPlaying(order) && !prev.isBlindPlaying(order) then
 			(order +: blindPlays, order +: playables)

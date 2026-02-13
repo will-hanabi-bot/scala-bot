@@ -4,7 +4,7 @@ trait Identifiable:
 	def suitIndex: Int
 	def rank: Int
 
-	def id(infer: Boolean = false, symmetric: Boolean = false): Option[Identity]
+	def id(infer: Boolean = false, symmetric: Boolean = false, partial: Boolean = false): Option[Identity]
 
 	def matches(other: Identifiable, infer: Boolean = false, symmetric: Boolean = false, assume: Boolean = false): Boolean =
 		id(infer, symmetric).fold(assume): a =>
@@ -12,7 +12,7 @@ trait Identifiable:
 				a.suitIndex == b.suitIndex && a.rank == b.rank
 
 case class Identity(suitIndex: Int, rank: Int) extends Identifiable:
-	def id(infer: Boolean = false, symmetric: Boolean = false) =
+	def id(infer: Boolean = false, symmetric: Boolean = false, partial: Boolean = false) =
 		Some(this)
 
 	inline def toOrd: Int =
@@ -69,7 +69,7 @@ case class Card(
 	clued: Boolean = false,
 	clues: List[CardClue] = Nil
 ) extends Identifiable:
-	def id(infer: Boolean = false, symmetric: Boolean = false) =
+	def id(infer: Boolean = false, symmetric: Boolean = false, partial: Boolean = false) =
 		Option.when(suitIndex != -1 && rank != -1)(Identity(suitIndex, rank))
 
 case class Thought(
@@ -84,13 +84,23 @@ case class Thought(
 	rewinded: Boolean = false,
 	reset: Boolean = false
 ) extends Identifiable:
-	def id(infer: Boolean = false, symmetric: Boolean = false) =
+	def id(infer: Boolean = false, symmetric: Boolean = false, partial: Boolean = false) =
 		if possible.length == 1 then
 			Some(possible.head)
 		else if !symmetric && suitIndex != -1 then
 			Some(Identity(suitIndex, rank))
+		else if infer && inferred.length == 1 then
+			Some(inferred.head)
+		else if partial then
+			val Identity(suitIndex, rank) = possible.head
+			if possible.forall(_.suitIndex == suitIndex) then
+				Some(Identity(suitIndex, -1))
+			else if possible.forall(_.rank == rank) then
+				Some(Identity(-1, rank))
+			else
+				None
 		else
-			Option.when(infer && inferred.length == 1)(inferred.head)
+			None
 
 	inline def possibilities: IdentitySet =
 		if inferred.isEmpty then possible else inferred

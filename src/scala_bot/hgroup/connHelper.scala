@@ -65,7 +65,7 @@ def assignConns(game: HGroup, action: ClueAction, fps: Seq[FocusPossibility], fo
 							thought.inferred
 
 					val newGame = acc.withThought(conn.order): t =>
-						t.copy(inferred = newInferred, oldInferred = t.inferred.toOpt)
+						t.copy(inferred = newInferred, oldInferred = t.oldInferred.orElse(t.inferred.toOpt))
 					.pipe: g =>
 						val idUncertain =
 							conn.reacting == state.ourPlayerIndex &&
@@ -146,7 +146,7 @@ def assignConns(game: HGroup, action: ClueAction, fps: Seq[FocusPossibility], fo
 								.withXMeta(conn.order): x =>
 									x.copy(turnFinessed = x.turnFinessed.orElse(Some(state.turnCount)))
 
-							case c: PlayableConn if isUnknownPlayable =>
+							case c: PlayableConn if isUnknownPlayable && state.deck(focus).id().isDefined =>
 								val target = fp.connections.lift(connI + 1).map(_.order).getOrElse(focus)
 								val existingLink = g.common.links.existsM:
 									case Link.Promised(orders, id, target) =>
@@ -255,7 +255,7 @@ def resolveClue(ctx: ClueContext, fps: Seq[FocusPossibility], ambiguousOwn: Seq[
 
 			occamsRazor(game, symmetricFps, target, focus)
 
-	val ambiguousFps = if game.level < Level.IntermediateFinesses || giver == state.ourPlayerIndex || fps.exists(_.save) then Nil else
+	val ambiguousFps = if !game.allowFindOwn || giver == state.ourPlayerIndex || fps.exists(_.save) then Nil else
 		Log.highlight(Console.YELLOW, "finding ambiguous connections!")
 
 		val ambiguousFps =
@@ -270,7 +270,7 @@ def resolveClue(ctx: ClueContext, fps: Seq[FocusPossibility], ambiguousOwn: Seq[
 				.when(_.isEmpty)(_ => game.me.thoughts(focus).inferred.toList)
 
 			poss.filter: inf =>
-				visibleFind(state, game.common, inf, infer = true, excludeOrder = focus).isEmpty &&
+				!game.invalidFocus(giver, inf, focus) &&
 				!(fps ++ ambiguousOwn).exists: fp =>
 					fp.id == inf && {
 						fp.connections.forall(_.matches { case _: KnownConn => true ; case _: PlayableConn => true }) ||
@@ -284,7 +284,7 @@ def resolveClue(ctx: ClueContext, fps: Seq[FocusPossibility], ambiguousOwn: Seq[
 		occamsRazor(game, ambiguousFps, target, focus)
 
 	val allFps = fps ++ symmetricFps ++ ambiguousFps
-	val simplestFps = occamsRazor(game, allFps.filter(fp => !fp.ambiguous && game.players(target).thoughts(focus).possible.contains(fp.id)), target, focus)
+	val simplestFps = occamsRazor(game, allFps.filter(fp => game.players(target).thoughts(focus).possible.contains(fp.id)), target, focus)
 	val fpsToWrite = if simplestFps.forall(_.symmetric) then simplestFps else allFps.filter(!_.ambiguous)
 
 	val stompedWc = !state.inEndgame && game.waiting.exists: wc =>
