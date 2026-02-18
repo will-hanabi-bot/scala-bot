@@ -93,7 +93,7 @@ def assignConns(game: HGroup, action: ClueAction, fps: Seq[FocusPossibility], fo
 							conn.matches:
 								case _: FinesseConn =>
 									// Finesse that could be ambiguous
-									fps.length > 1 || ambiguousOwn.length > 1
+									fps.length + ambiguousOwn.length > 1
 
 								case _: PromptConn => g.me.thoughts(focus).possible.exists: i =>
 									// Could be hidden? (TODO: Investigate why this is here.)
@@ -335,7 +335,7 @@ def resolveClue(ctx: ClueContext, fps: Seq[FocusPossibility], ambiguousOwn: Seq[
 		t.copy(inferred = newInferred, infoLock = newInferred.toOpt)
 
 	.pipe:
-		assignConns(_, action, fpsToWrite, focus, ambiguousOwn)
+		assignConns(_, action, fpsToWrite, focus, ambiguousOwn ++ ambiguousFps)
 
 	.when(_ => action.clue.kind == ClueKind.Rank):		// with a colour clue, there shouldn't be ambiguity about ids (maybe in rainbow?)
 		allFps.foldLeft(_): (a, fp) =>

@@ -8,7 +8,8 @@ import scala.util.chaining.scalaUtilChainingOps
 
 case class DiscardContext(prev: HGroup, game: HGroup, action: DiscardAction)
 
-def interpretTransfer(game: HGroup, action: DiscardAction, holder: Int, dupe: Option[Int]): (DiscardResult, Boolean) =
+def interpretTransfer(ctx: DiscardContext, holder: Int, dupe: Option[Int]): (DiscardResult, Boolean) =
+	val DiscardContext(prev, game, action) = ctx
 	val state = game.state
 	val DiscardAction(playerIndex, order, suitIndex, rank, _) = action
 	val id = Identity(suitIndex, rank)
@@ -23,33 +24,71 @@ def interpretTransfer(game: HGroup, action: DiscardAction, holder: Int, dupe: Op
 	val cluedTargets = state.hands(holder).filter(o => game.isTouched(o) && validTransfer(game, id)(o))
 
 	if cluedTargets.isEmpty then
-		state.hands(holder).find(validTransfer(game, id)) match
-			case Some(uncluedTarget) if dupe.contains(uncluedTarget) =>
-				if game.level <= Level.SpecialDiscards then
-					Log.warn(s"looked like out-of-level gd/baton! ignoring")
+		if game.level < Level.SpecialDiscards then
+			Log.info("looked like out-of-level gd/baton! ignoring")
+			(DiscardResult.Mistake, true)
+
+		else if state.isPlayable(id) || prev.common.hypoPlays.contains(order) then
+			def findGD(hypoState: State, connected: Set[Int]): Option[List[Int]] =
+				game.findFinesse(holder, connected) match
+					case None => None
+					case Some(f) =>
+						val finesseId =
+							if game.future(f).length == 1 then
+								Some(game.future(f).head)
+							else
+								game.me.thoughts(f).id()
+
+						finesseId match
+							case None => Some(List(f))
+							case Some(i) if i.matches(id) => Some(List(f))
+							case Some(i) if hypoState.isPlayable(i) =>
+								findGD(hypoState.withPlay(i), connected + f).map: rest =>
+									f +: rest
+							case _ => None
+
+			findGD(state, Set.empty) match
+				case None =>
+					// Try looking for a third copy
+					val other = ((holder + 1) until state.numPlayers).view.flatMap { i =>
+						state.hands(i).find(state.deck(_).matches(id)).map(i -> _)
+					}.headOption
+
+					other match
+						case Some((otherHolder, otherDupe)) =>
+							interpretTransfer(ctx, otherHolder, Some(otherDupe))
+
+						case None if state.baseCount(id.toOrd) + 1 == state.cardCount(id.toOrd) =>
+							Log.warn(s"couldn't gd to ${state.names(holder)}")
+							(DiscardResult.Mistake, true)
+
+						case None if holder != state.ourPlayerIndex =>
+							interpretTransfer(ctx, state.ourPlayerIndex, None)
+
+						case _ =>
+							Log.warn(s"couldn't gd to ${state.names(holder)}")
+							(DiscardResult.Mistake, true)
+
+				case Some(orders) =>
+					Log.info(s"gd to ${state.names(holder)}'s $orders")
+					(DiscardResult.GentlemansDiscard(orders), false)
+
+		else
+			val baton = game.findFinesse(holder, Set.empty) match
+				case None => None
+				case Some(f) =>
+					game.me.thoughts(f).id() match
+						case None => Some(f)
+						case Some(i) if i.matches(id) => Some(f)
+						case _ => None
+
+			baton match
+				case None =>
+					Log.warn(s"couldn't baton to ${state.names(holder)}")
 					(DiscardResult.Mistake, true)
-				else
-					Log.info(s"${if state.isPlayable(id) then "gd" else "baton"} to ${state.names(holder)}'s ${uncluedTarget}")
-					(DiscardResult.GentlemansDiscard(uncluedTarget), false)
-
-			case _ if holder == state.ourPlayerIndex =>
-				(DiscardResult.Mistake, false)
-
-			case _ =>
-				// Try looking for a third copy
-				val other = ((holder + 1) until state.numPlayers).view.flatMap { i =>
-					state.hands(i).find(state.deck(_).matches(id)).map(i -> _)
-				}.headOption
-
-				other match
-					case Some((otherHolder, otherDupe)) =>
-						interpretTransfer(game, action, otherHolder, Some(otherDupe))
-
-					case None if state.baseCount(id.toOrd) + 1 == state.cardCount(id.toOrd) =>
-						(DiscardResult.Mistake, true)
-
-					case None =>
-						interpretTransfer(game, action, state.ourPlayerIndex, None)
+				case Some(order) =>
+					Log.info(s"baton to ${state.names(holder)}'s $order")
+					(DiscardResult.Baton(order), false)
 
 	else if dupe.exists(!cluedTargets.contains(_)) then
 		Log.warn(s"looks like sarcastic discard to $cluedTargets, but should be $dupe!")
@@ -59,7 +98,8 @@ def interpretTransfer(game: HGroup, action: DiscardAction, holder: Int, dupe: Op
 		Log.info(s"sarcastic to ${state.names(holder)}'s $cluedTargets")
 		(DiscardResult.Sarcastic(cluedTargets), false)
 
-def checkUsefulDcH(game: HGroup, action: DiscardAction): (DiscardResult, Boolean) =
+def checkUsefulDcH(ctx: DiscardContext): (DiscardResult, Boolean) =
+	val DiscardContext(prev, game, action) = ctx
 	val state = game.state
 	val DiscardAction(playerIndex, order, suitIndex, rank, _) = action
 	val id = Identity(suitIndex, rank)
@@ -72,7 +112,7 @@ def checkUsefulDcH(game: HGroup, action: DiscardAction): (DiscardResult, Boolean
 
 	dupe match
 		case Some((dupeHolder, dupeOrder)) =>
-			interpretTransfer(game, action, dupeHolder, Some(dupeOrder))
+			interpretTransfer(ctx, dupeHolder, Some(dupeOrder))
 
 		case None if playerIndex == state.ourPlayerIndex =>
 			// We discarded a card that we don't see nor have the other copy of
@@ -80,7 +120,59 @@ def checkUsefulDcH(game: HGroup, action: DiscardAction): (DiscardResult, Boolean
 
 		case None =>
 			// Since we can't find it, we must be the target
-			interpretTransfer(game, action, state.ourPlayerIndex, None)
+			interpretTransfer(ctx, state.ourPlayerIndex, None)
+
+def transferWCs(ctx: DiscardContext, result: DiscardResult): HGroup =
+	val DiscardContext(prev, game, action) = ctx
+	val state = game.state
+	val DiscardAction(playerIndex, order, suitIndex, rank, failed) = action
+	val id = Identity(suitIndex, rank)
+
+	result match
+		case DiscardResult.Sarcastic(orders) if orders.length == 1 =>
+			val sarcastic = orders.head
+			game.copy(
+				waiting = game.waiting.map: wc =>
+					val connIndex = wc.connections.indexWhere(_.order == order)
+
+					wc.when(_ => connIndex != -1): _ =>
+						Log.info(s"rewriting wc ${state.logConns(wc.connections)}")
+						wc.copy(connections = wc.connections.updated(connIndex, KnownConn(
+							reacting = state.holderOf(sarcastic),
+							order = sarcastic,
+							id = id
+						)))
+			)
+		case DiscardResult.Sarcastic(orders) =>
+			game.copy(
+				waiting = game.waiting.map: wc =>
+					val connIndex = wc.connections.indexWhere(_.order == order)
+
+					wc.when(_ => connIndex != -1): _ =>
+						Log.info(s"rewriting wc ${state.logConns(wc.connections)}")
+						wc.copy(connections = wc.connections.updated(connIndex, PlayableConn(
+							reacting = state.holderOf(orders.head),
+							order = orders.head,
+							linked = orders,
+							id = id
+						)))
+			)
+		case DiscardResult.GentlemansDiscard(orders) =>
+			game.copy(
+				waiting = game.waiting.map: wc =>
+					val connIndex = wc.connections.indexWhere(_.order == order)
+
+					wc.when(_ => connIndex != -1): _ =>
+						Log.info(s"rewriting wc ${state.logConns(wc.connections)}")
+						wc.copy(connections = wc.connections.updated(connIndex, PlayableConn(
+							reacting = state.holderOf(orders.head),
+							order = orders.head,
+							linked = orders,
+							id = id
+						)))
+			)
+		case _ =>
+			game
 
 def interpretUsefulDcH(ctx: DiscardContext): Option[HGroup] =
 	val DiscardContext(prev, game, action) = ctx
@@ -93,24 +185,52 @@ def interpretUsefulDcH(ctx: DiscardContext): Option[HGroup] =
 		prev.isTouched(action.order) && prev.isDefinite(order)
 
 	Option.when(valid):
-		(checkUsefulDcH(game, action) match
+		(checkUsefulDcH(ctx) match
 			case (DiscardResult.None, _) =>
 				game.copy(lastMove = Some(DiscardInterp.None), dda = None)
 
 			case (DiscardResult.Mistake, dda) =>
-				game.copy(lastMove = Some(DiscardInterp.Mistake), dda = Option.when(dda)(id))
-
-			case (DiscardResult.GentlemansDiscard(target), _) =>
 				game.copy(
-					common = game.common.withThought(target)(_.copy(
-						inferred = IdentitySet.single(id)
-					)),
-					meta = game.meta.updated(target, game.meta(target).copy(
-						status = CardStatus.GentlemansDiscard
-					)),
+					waiting = game.waiting.filterNot: wc =>
+						wc.connections.exists(_.order == order) ||
+						wc.focus == order
+					,
+					lastMove = Some(DiscardInterp.Mistake),
+					dda = Option.when(dda)(id)
+				)
+
+			case (DiscardResult.GentlemansDiscard(targets), _) =>
+				targets.foldLeft((game, game.state)):
+					case ((acc, hypoState), o) =>
+						val hidden = o != targets.last
+						val inferred = if hidden then hypoState.playableSet else IdentitySet.single(id)
+						val newState = game.me.thoughts(o).id().fold(hypoState): i =>
+							hypoState.withPlay(i)
+
+						acc.copy(
+							common = acc.common.withThought(o)(_.copy(inferred = inferred)),
+							meta = acc.meta.updated(o, game.meta(o).copy(
+								status = CardStatus.GentlemansDiscard,
+								hidden = hidden
+							))
+						) -> newState
+				._1
+				.pipe: g =>
+					val newCtx = ctx.copy(game = g)
+					transferWCs(newCtx, DiscardResult.GentlemansDiscard(targets))
+				.copy(
 					lastMove = Some(DiscardInterp.GentlemansDiscard),
 					dda = None
 				)
+
+			case (DiscardResult.Baton(order), _) =>
+				game.withThought(order)(_.copy(inferred = IdentitySet.single(id)))
+					.withMeta(order)(_.copy(status = CardStatus.Sarcastic))
+					.copy(
+						lastMove = Some(DiscardInterp.Sarcastic),
+						dda = None
+					)
+
 			case (DiscardResult.Sarcastic(orders), _) =>
 				game.copy(
 					common = if !orders.forall(game.state.deck(_).clued) then game.common else game.common.copy(
@@ -119,6 +239,9 @@ def interpretUsefulDcH(ctx: DiscardContext): Option[HGroup] =
 					lastMove = Some(DiscardInterp.Sarcastic),
 					dda = None
 				)
+				.pipe: g =>
+					val newCtx = ctx.copy(game = g)
+					transferWCs(newCtx, DiscardResult.Sarcastic(orders))
 		).copy(dcStatus = DcStatus.None)
 
 def valid1ClueScream(game: HGroup, bob: Int) =

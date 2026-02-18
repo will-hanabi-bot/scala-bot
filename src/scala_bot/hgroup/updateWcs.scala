@@ -169,8 +169,6 @@ def refreshWCs(prev: HGroup, game: HGroup, action: Action, beforeClueInterp: Boo
 						(wc.focus == conn.order && conn.ids.forall(_ == wc.inference)) ||
 						(wc.connections.exists(c => c.order == conn.order && c.ids.length == conn.ids.length && c.ids.forall(conn.ids.contains)))
 
-					Log.info(s"conn $conn is shared")
-
 					if shared || conn.isInstanceOf[KnownConn] || conn.isInstanceOf[PlayableConn] then
 						acc
 					else
@@ -211,7 +209,12 @@ def updateWc(prev: HGroup, game: HGroup, action: Action, wc: WaitingConnection, 
 	lazy val impossibleFocus = wc.connections.headOption.forall(!_.isInstanceOf[PositionalConn]) &&
 		!game.common.thoughts(wc.focus).possible.contains(wc.inference)
 
-	if impossibleConn.isDefined then
+	if !prev.state.hands(reacting).contains(wc.currConn.order) then
+		// Extra wc that wasn't removed
+		Log.warn(s"removing extra wc ${state.logId(wc.inference)} (${wc.currConn.order}) ${prev.state.hands(reacting)} ${state.names(reacting)}")
+		UpdateResult.Remove
+
+	else if impossibleConn.isDefined then
 		val c = impossibleConn.get
 		Log.warn(s"future connection depends on ${c.order} having ids ${c.ids.map(state.logId).mkString(",")}, removing")
 		UpdateResult.Remove
@@ -245,12 +248,21 @@ def updateWc(prev: HGroup, game: HGroup, action: Action, wc: WaitingConnection, 
 			action match
 				case PlayAction(_, order, _, _) =>
 					resolvePlayed(game, wc, order)
+
 				case d: DiscardAction if d.failed =>
 					resolvePlayed(game, wc, d.order)
-				case _ =>
-					Log.highlight(Console.YELLOW, s"waiting card ${state.logId(wc.currConn.order)} discarded??")
-					UpdateResult.Remove
 
+				case DiscardAction(playerIndex, order, _, _, failed) =>
+					Log.highlight(Console.YELLOW, s"waiting card ${state.logId(wc.currConn.order)} discarded?? ${prev.chop(playerIndex)}")
+
+					if prev.chop(playerIndex).contains(order) then
+						UpdateResult.Remove
+					else
+						// Will be updated when the dc is interpreted
+						UpdateResult.Keep
+
+				case _ =>
+					throw new Error("impossible")
 	else
 		UpdateResult.Keep
 

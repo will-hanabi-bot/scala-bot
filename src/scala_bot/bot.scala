@@ -1,10 +1,10 @@
 //> using scala 3.7.2
 //> using jvm 25
 //> using options -Wall -Wconf:msg=toString:s -feature
-//> using dep com.softwaremill.sttp.client4::core:4.0.15
-//> using dep com.softwaremill.sttp.client4::cats:4.0.15
+//> using dep com.softwaremill.sttp.client4::core:4.0.18
+//> using dep com.softwaremill.sttp.client4::cats:4.0.18
 //> using dep org.typelevel::cats-effect:3.6.3
-//> using dep com.lihaoyi::upickle:4.4.2
+//> using dep com.lihaoyi::upickle:4.4.3
 //> using dep com.lihaoyi::requests:0.9.3
 //> using dep org.scala-lang.modules::scala-parallel-collections:1.2.0
 //> using test.dep org.scalameta::munit:1.2.2
@@ -22,8 +22,7 @@ import sttp.ws.{WebSocket, WebSocketFrame}
 
 import scala.io.Source._
 import scala.concurrent.duration._
-import scala_bot.basics.Variant
-import scala_bot.basics.Game
+import scala_bot.basics.{Game,Variant}
 import scala_bot.console.{ConsoleCmd, spawnConsole}
 import scala.util.Try
 

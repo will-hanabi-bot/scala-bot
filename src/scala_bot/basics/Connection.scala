@@ -30,7 +30,7 @@ case class PlayableConn(
 	reacting: Int,
 	order: Int,
 	id: Identity,
-	linked: List[Int] = Nil,
+	linked: Seq[Int] = Nil,
 	hidden: Boolean = false,
 	insertingInto: Option[Seq[Int]] = None
 ) extends Connection:

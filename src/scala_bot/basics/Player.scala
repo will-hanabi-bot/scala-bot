@@ -23,7 +23,7 @@ enum Link:
 		case _ => None
 
 case class PlayLink(
-	orders: List[Int],
+	orders: Seq[Int],
 	prereqs: IdentitySet,
 	target: Int
 )
@@ -324,7 +324,6 @@ case class Player(
 	def hypoScore = hypoStacks.sum + unknownPlays.size - linkedPlays
 
 	def updateHypoStacks[G <: Game](game: G)(using ops: GameOps[G]): Player =
-
 		var hypo =
 			if isCommon then
 				ops.copyWith(game, GameUpdates(noRecurse = Some(true), common = Some(this)))

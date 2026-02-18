@@ -293,7 +293,8 @@ object Reactor:
 								case DiscardResult.Mistake =>
 									g.copy(lastMove = Some(DiscardInterp.Mistake))
 
-								case DiscardResult.GentlemansDiscard(target) =>
+								case DiscardResult.GentlemansDiscard(targets) =>
+									val target = targets.head
 									g.copy(
 										common = g.common.withThought(target)(_.copy(
 											inferred = IdentitySet.single(id)
@@ -310,6 +311,8 @@ object Reactor:
 										),
 										lastMove = Some(DiscardInterp.Sarcastic)
 									)
+								case DiscardResult.Baton(_) =>
+									throw new Error("baton unsupported!")
 						case None => g
 				.elim()
 				.when(_ => prev.state.canClue)(resetZcs)

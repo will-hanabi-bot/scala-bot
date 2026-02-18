@@ -264,7 +264,7 @@ def interpClue(ctx: ClueContext): HGroup =
 			else
 				resolveClue(ctx, simplestOwn, if savePoss.nonEmpty then Nil else ownFps.filter(fp => !simplestOwn.contains(fp) && !fp.symmetric))
 	}
-	.when(_.level >= Level.TempoClues && state.numPlayers > 2): g =>
+	.when(g => g.lastMove != Some(ClueInterp.Mistake) && g.level >= Level.TempoClues && state.numPlayers > 2): g =>
 		val newCtx = ctx.copy(game = g)
 		interpretTccm(newCtx) match
 			case Some(tccm) if stall.isEmpty || thinksStall.isEmpty =>

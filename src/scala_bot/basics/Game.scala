@@ -171,9 +171,12 @@ extension[G <: Game](game: G)
 	inline def me = game.players(game.state.ourPlayerIndex)
 
 	def isTouched(order: Int) =
+		val status = game.meta(order).status
+
 		game.state.deck(order).clued ||
-		game.meta(order).status == CardStatus.CalledToPlay ||
-		game.meta(order).status == CardStatus.Finessed
+		status == CardStatus.CalledToPlay ||
+		status == CardStatus.GentlemansDiscard ||
+		status == CardStatus.Finessed
 
 	def isBlindPlaying(order: Int) =
 		!game.state.deck(order).clued && (

@@ -145,7 +145,7 @@ def advance(orig: HGroup, game: HGroup, offset: Int): Double =
 						DiscardAction(playerIndex, order, id.suitIndex, id.rank, failed = true)
 					(Some(id), action)
 
-			Log.info(s"${state.names(playerIndex)} ${if id.exists(state.isPlayable) then "playing" else "bombing"} ${state.logId(id)}")
+			Log.info(s"${state.names(playerIndex)} ${if id.exists(state.isPlayable) then "playing" else "bombing"} ${state.logId(id)} (f)")
 			advance(orig, game.simulate(action), offset + 1)
 		else
 			var strikes = 0
@@ -277,12 +277,14 @@ def evalAction(game: HGroup, action: Action): (HGroup, Double) =
 			getResult(game, hypoGame, clue) * mult - 0.5
 
 		case PlayAction(_, order, suitIndex, rank) =>
-			val finesse = if game.meta(order).status == CardStatus.Finessed then 3 else 0
+			val finesse = if game.meta(order).status == CardStatus.Finessed then 1.5 else 0
 
 			finesse + (if suitIndex == -1 || rank == -1 then 1.5 else 0.02 * (5 - rank))
 
 		case DiscardAction(playerIndex, order, suitIndex, rank, failed) =>
-			if game.me.orderTrash(game, order) then
+			if hypoGame.lastMove == Some(DiscardInterp.Sarcastic) then
+				0.5
+			else if game.me.orderTrash(game, order) then
 				0.0
 			else if suitIndex == -1 || rank == -1 then
 				-0.5

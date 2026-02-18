@@ -5,8 +5,9 @@ import scala_bot.logger.Log
 enum DiscardResult:
 	case None
 	case Mistake
-	case Sarcastic(orders: Vector[Int])
-	case GentlemansDiscard(order: Int)
+	case Sarcastic(orders: Seq[Int])
+	case GentlemansDiscard(orders: Seq[Int])
+	case Baton(order: Int)
 
 def validTransfer(game: Game, id: Identity)(order: Int) =
 	val thought = game.common.thoughts(order)
@@ -41,7 +42,7 @@ def interpretUsefulDc(game: Game, action: DiscardAction): DiscardResult =
 					DiscardResult.Mistake
 				else
 					Log.info(s"gd to ${state.names(holder)}'s $target")
-					DiscardResult.GentlemansDiscard(target)
+					DiscardResult.GentlemansDiscard(Seq(target))
 			else
 				val orders = state.hands(holder).filter(validTransfer(game, id))
 				Log.info(s"sarcastic to ${state.names(holder)}'s $orders")
@@ -60,7 +61,7 @@ def interpretUsefulDc(game: Game, action: DiscardAction): DiscardResult =
 			state.ourHand.findLast(game.me.thoughts(_).possible.contains(id)) match
 				case Some(target) =>
 					Log.info(s"gd to our $target")
-					DiscardResult.GentlemansDiscard(target)
+					DiscardResult.GentlemansDiscard(Seq(target))
 
 				case None =>
 					Log.warn("looked like gd but we don't see it and impossible for us to have!")

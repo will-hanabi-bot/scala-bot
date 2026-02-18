@@ -151,7 +151,7 @@ def alternativeClue(ctx: ClueContext, maxStall: Int) =
 			clue   <- state.allValidClues(target) if clue != origClue
 			list = prev.state.clueTouched(prev.state.hands(target), clue)
 			action = ClueAction(giver, target, list, clue.toBase)
-			focus = prev.determineFocus(prev, action).focus if focus != origFocus && prev.meta(focus).status != CardStatus.Finessed
+			focus = prev.determineFocus(prev, action).focus if focus != origFocus && !prev.isTouched(focus)
 			hypo = prev.copy(allowFindOwn = false, noRecurse = true)
 				.simulateClue(action) if satisfied(hypo, action)
 		yield

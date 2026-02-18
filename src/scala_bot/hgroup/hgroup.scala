@@ -91,8 +91,8 @@ case class HGroup(
 				||
 				waiting.exists: wc =>
 					!wc.symmetric && !wc.ambiguousSelf &&
-					// This is a hidden connection that is not currently revealed
-					wc.connections.nonEmpty && wc.connections.tail.exists(c => c.order == o && c.hidden)
+					// This is part of a hidden (?) connection that is not currently revealed
+					wc.connections.nonEmpty && wc.currConn.hidden && wc.connections.tail.exists(_.order == o)
 			}
 
 	override def validArr(id: Identity, order: Int): Boolean =
@@ -119,7 +119,8 @@ case class HGroup(
 
 	def chop(playerIndex: Int) =
 		state.hands(playerIndex).findLast: o =>
-			!state.deck(o).clued && meta(o).status == CardStatus.None
+			!state.deck(o).clued &&
+			(meta(o).status == CardStatus.None || !isDefinite(o))
 
 	/** Returns how far a card is from chop. A card on chop is 0-away. */
 	def chopDistance(playerIndex: Int, order: Int) =
@@ -363,6 +364,12 @@ case class HGroup(
 						badTouch.isEmpty
 			}
 
+	def findDiscardable(playerIndex: Int) =
+		state.hands(playerIndex).filter: o =>
+			this.me.orderTrash(this, o) ||
+			this.isTouched(o) && this.me.thoughts(o).inferred.forall: id =>
+				visibleFind(state, this.me, id, excludeOrder = o).nonEmpty
+
 	def reinterpPlay(prev: HGroup, action: PlayAction | DiscardAction): Option[HGroup] =
 		val (order, suitIndex, rank) = action match
 			case PlayAction(playerIndex, order, suitIndex, rank) => (order, suitIndex, rank)
@@ -584,7 +591,7 @@ object HGroup:
 							Log.info(s"endgame solved!")
 							return perform
 
-			val discardOrders = me.thinksTrash(game, state.ourPlayerIndex)
+			val discardOrders = game.findDiscardable(state.ourPlayerIndex)
 			val playableOrders = me.thinksPlayables(game, state.ourPlayerIndex)
 
 			Log.info(s"playables $playableOrders")
@@ -615,7 +622,7 @@ object HGroup:
 				(PerformAction.Play(o), action)
 
 			val cantDiscard = state.clueTokens == 8 ||
-				playableOrders.exists(game.meta(_).status == CardStatus.Finessed) ||
+				// playableOrders.exists(game.meta(_).status == CardStatus.Finessed) ||
 				(state.pace == 0 && (allClues.nonEmpty || allPlays.nonEmpty)) ||
 				game.dcStatus != DcStatus.None ||
 				hasEarlyGameClue

@@ -222,7 +222,8 @@ object RefSieve:
 					case DiscardResult.Mistake =>
 						game.copy(lastMove = Some(DiscardInterp.Mistake))
 
-					case DiscardResult.GentlemansDiscard(target) =>
+					case DiscardResult.GentlemansDiscard(targets) =>
+						val target = targets.head
 						game.copy(
 							common = game.common.withThought(target)(_.copy(
 								inferred = IdentitySet.single(id)
@@ -239,6 +240,8 @@ object RefSieve:
 							),
 							lastMove = Some(DiscardInterp.Sarcastic)
 						)
+					case DiscardResult.Baton(_) =>
+						throw new Error("baton unsupported!")
 			else
 				game
 			.elim()

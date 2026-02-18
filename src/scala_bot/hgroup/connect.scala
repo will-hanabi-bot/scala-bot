@@ -279,7 +279,10 @@ def findUnknownConnecting(ctx: ClueContext, reacting: Int, id: Identity, connect
 					Some(FinesseConn(reacting, finesse.get, List(id), bluff = false, possiblyBluff = possiblyBluff))
 
 			else if !opts.noLayer && level >= Level.IntermediateFinesses && state.isPlayable(finesseId) then
-				if game.meta(finesse.get).status == CardStatus.Finessed && game.isDefinite(finesse.get) then
+				if state.hands(giver).exists(o => state.deck(o).clued && game.players(giver).thoughts(o).inferred.contains(id)) then
+					Log.warn(s"disallowed hidden finesse on ${state.names(reacting)}, ${state.logId(id)} could be duplicated in giver's hand")
+					None
+				else if game.meta(finesse.get).status == CardStatus.Finessed && game.isDefinite(finesse.get) then
 					Some(PlayableConn(reacting, finesse.get, finesseId, hidden = true))
 				else
 					val bluff = validBluff(prev, action, finesseId, id, reacting, connected)
