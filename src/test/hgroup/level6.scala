@@ -97,6 +97,20 @@ class General extends munit.FunSuite:
 
 		hasStatus(game, Cathy, 4, CardStatus.None)
 
+	test("tccms if a card was already playing but unknown"):
+		val game = setup(HGroup.atLevel(6), Vector(
+			Vector("xx", "xx", "xx", "xx", "xx"),
+			Vector("r1", "y1", "r4", "r4", "y4"),
+			Vector("g4", "g4", "b4", "b4", "y2")
+		),
+			starting = Bob
+		)
+		.pipe(takeTurn("Bob clues 2 to Cathy"))
+		.pipe(takeTurn("Cathy clues 1 to Bob"))
+		.pipe(takeTurn("Alice clues yellow to Cathy"))
+
+		hasStatus(game, Cathy, 4, CardStatus.ChopMoved)
+
 	// test("doesn't tccm if the card was already playing asymmetrically 1"):
 	// 	val game = setup(HGroup.atLevel(6), Vector(
 	// 		Vector("xx", "xx", "xx", "xx"),

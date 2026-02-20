@@ -150,13 +150,6 @@ def findUnknownConnecting(ctx: ClueContext, reacting: Int, id: Identity, connect
 		// Log.warn(s"disallowed finesse, ${state.logId(id)} already clued")
 		return None
 
-	// Assumer giver is not finessing a maybe-finessed card
-	val disallowFinesse = potentialFinesse.exists:
-		prev.xmeta(_).fStatus.contains(FStatus.PossiblyOn(giver))
-
-	if disallowFinesse then
-		return None
-
 	// Try to insert into an earlier finesse
 	val insertingInto = if game.level < Level.IntermediateFinesses || !opts.findOwn.contains(reacting) then None else
 		val prevHand = state.hands(reacting).dropWhile: f =>
@@ -207,22 +200,23 @@ def findUnknownConnecting(ctx: ClueContext, reacting: Int, id: Identity, connect
 		Option.when(!future.contains(id) && playableIds.nonEmpty)(playableIds)
 
 	// We previously inserted, but we can't insert any more: leave a spot for the replacements
-	val finesse = if opts.insertingInto.isDefined && insertingInto.isEmpty then
-		val insertOrders = opts.insertingInto.get
-		val prevHand = state.hands(reacting).dropWhile(_ > insertOrders.head)
-		val hypo = prev.withState(s => s.copy(hands = s.hands.updated(reacting, prevHand)))
+	val finesse =
+		if opts.insertingInto.isDefined && insertingInto.isEmpty then
+			val insertOrders = opts.insertingInto.get
+			val prevHand = state.hands(reacting).dropWhile(_ > insertOrders.head)
+			val hypo = prev.withState(s => s.copy(hands = s.hands.updated(reacting, prevHand)))
 
-		val newConnected = (0 until insertOrders.length).foldLeftOpt(connected): (newConnected, _) =>
-			hypo.findFinesse(reacting, newConnected, ignore) match
-				case None => Left(Set.empty)
-				case Some(f) => Right(newConnected + f)
+			val newConnected = (0 until insertOrders.length).foldLeftOpt(connected): (newConnected, _) =>
+				hypo.findFinesse(reacting, newConnected, ignore) match
+					case None => Left(Set.empty)
+					case Some(f) => Right(newConnected + f)
 
-		if newConnected.isEmpty then
-			None
+			if newConnected.isEmpty then
+				None
+			else
+				game.findFinesseId(reacting, id, newConnected, ignore, overrideLayer = opts.insertingInto.exists(prev.state.hands(reacting).contains))
 		else
-			game.findFinesseId(reacting, id, newConnected, ignore, overrideLayer = opts.insertingInto.exists(prev.state.hands(reacting).contains))
-	else
-		potentialFinesse
+			potentialFinesse
 
 	finesse.flatMap(state.deck(_).id()) match
 		case None if finesse.exists(game.future(_).length == 1) =>
@@ -288,8 +282,9 @@ def findUnknownConnecting(ctx: ClueContext, reacting: Int, id: Identity, connect
 					val bluff = validBluff(prev, action, finesseId, id, reacting, connected)
 
 					// TODO: Check in resolver that we don't give uncertain finesses or likely dupes
+					// Giver cannot give a layered finesse when they have a card matching the desired id
 					val uncertainFinesse = !bluff &&
-						state.hands(giver).exists(o => state.deck(o).clued && state.deck(o).matches(finesseId))
+						state.hands(giver).exists(o => state.deck(o).clued && state.deck(o).matches(id))
 
 					Option.when(!uncertainFinesse)
 						(FinesseConn(reacting, finesse.get, List(finesseId), hidden = !bluff, bluff = bluff, possiblyBluff = possiblyBluff))
@@ -315,7 +310,11 @@ def findSingleConn(ctx: ClueContext, reacting: Int, id: Identity, connCtx: Conne
 	val skip = reacting == giver ||
 		opts.knownOnly.contains(reacting) ||
 		(reacting == target && connCtx.looksDirect && !allVisible) ||
-		connCtx.thinksStall.contains(reacting)
+		(connCtx.thinksStall.contains(reacting) && {	// might not think stall if a clue exists in our hand
+			giver == state.ourPlayerIndex ||
+			state.ourHand.forall: o =>
+				state.deck(o).clued || game.me.orderKt(game, o)
+		})
 
 	// TODO: When resolving, disallow prompting/finessing a player that may need to prove sth to us
 	if skip then
@@ -383,7 +382,7 @@ def findConnecting(ctx: ClueContext, id: Identity, connCtx: ConnectContext, opts
 	.find(_.isDefined)
 	.flatten
 
-def connect(ctx: ClueContext, id: Identity, looksDirect: Boolean, thinksStall: Set[Int], assumeTruth: Boolean = false, findOwn: Option[Int] = None, preferOwn: Boolean = false): Option[FocusPossibility] =
+def connect(ctx: ClueContext, id: Identity, looksDirect: Boolean, thinksStall: Set[Int], assumeTruth: Boolean = false, ignoreKnown: Set[Int] = Set.empty, findOwn: Option[Int] = None, preferOwn: Boolean = false): Option[FocusPossibility] =
 	val ClueContext(prev, game, action) = ctx
 	val ClueAction(giver, target, _, clue) = action
 	val state = game.state
@@ -392,9 +391,9 @@ def connect(ctx: ClueContext, id: Identity, looksDirect: Boolean, thinksStall: S
 	// Log.highlight(Console.MAGENTA, s"trying to connect ${state.logId(id)}${if (looksDirect) " (looks direct)" else ""} $findOwn")
 
 	@annotation.tailrec
-	def loop(hypo: HGroup, nextRank: Int, connections: List[Connection], connCtx: ConnectContext, opts: ConnectOpts): (Option[List[Connection]], Boolean) =
+	def loop(hypo: HGroup, nextRank: Int, connections: List[Connection], connCtx: ConnectContext, opts: ConnectOpts): (Either[List[Connection], List[Connection]], Boolean) =
 		if nextRank >= id.rank then
-			return (Some(connections), opts.bluff)
+			return (Right(connections), opts.bluff)
 
 		val nextId = Identity(id.suitIndex, nextRank)
 		val newCtx = ctx.copy(game = hypo)
@@ -430,7 +429,7 @@ def connect(ctx: ClueContext, id: Identity, looksDirect: Boolean, thinksStall: S
 		conn match
 			case None =>
 				// Log.info(s"failed connection to ${state.logId(id)}: ${state.logConns(connections, nextId)} $findOwn")
-				(None, opts.bluff)
+				(Left(connections), opts.bluff)
 
 			case Some(conns) =>
 				// Log.info(s"found conns ${state.logConns(conns)} $findOwn")
@@ -446,8 +445,7 @@ def connect(ctx: ClueContext, id: Identity, looksDirect: Boolean, thinksStall: S
 
 							// Resolve wcs after playing the card
 							val res = acc.onPlay(playAction)
-								.pipe(refreshWCs(acc, _, playAction))
-								.elim(except = Some(giver))
+								.pipe(refreshWCs(acc, _, playAction, hypo = Some(giver)))
 
 							Logger.setLevel(level)
 							res
@@ -468,16 +466,20 @@ def connect(ctx: ClueContext, id: Identity, looksDirect: Boolean, thinksStall: S
 
 				loop(newGame, nextRank + 1, connections ++ conns, newConnCtx, newOpts)
 
-	val initialConnCtx = ConnectContext(looksDirect = looksDirect, thinksStall = thinksStall, connected = Set(focus))
+	val initialConnCtx = ConnectContext(looksDirect = looksDirect, thinksStall = thinksStall, connected = Set(focus), ignore = ignoreKnown)
 	val initialOpts = ConnectOpts(assumeTruth = assumeTruth)
 
 	loop(game, state.playStacks(id.suitIndex) + 1, Nil, initialConnCtx, initialOpts) match
-		case (None, bluffed) if game.level > Level.Bluffs && !assumeTruth && bluffed =>
-			Log.highlight(Console.YELLOW, "bluff connection failed, retrying true finesse")
+		case (Left(conns), _) if conns.existsM { case _: KnownConn => true } =>
+			val newIgnore = ignoreKnown + conns.collectFirst { case c: KnownConn => c.order }.get
+			connect(ctx, id, looksDirect, thinksStall, ignoreKnown = newIgnore, findOwn = findOwn)
 
-			connect(ctx, id, looksDirect, thinksStall, assumeTruth = true, findOwn)
+		case (Left(_), bluffed) if game.level > Level.Bluffs && !assumeTruth && bluffed =>
+			Log.highlight(Console.MAGENTA, "bluff connection failed, retrying true finesse")
 
-		case (Some(conns), _) =>
+			connect(ctx, id, looksDirect, thinksStall, assumeTruth = true, findOwn = findOwn)
+
+		case (Right(conns), _) =>
 			val symmetric = !state.deck(focus).matches(id, assume = true) ||
 				!game.players(target).thoughts(focus).possible.contains(id) ||
 				conns.exists:

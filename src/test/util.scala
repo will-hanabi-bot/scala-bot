@@ -180,6 +180,9 @@ def parseAction(state: State, action: String) =
 			if !state.canClue then
 				throw new IllegalArgumentException(s"Tried to clue with 0 clue tokens")
 
+			if giverS == targetS then
+				throw new IllegalArgumentException(s"${giverS} cannot clue themselves!")
+
 			val giver = parsePlayer(giverS)
 			val target = parsePlayer(targetS)
 			val clue = strToClue(state, valueS)

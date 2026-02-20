@@ -92,7 +92,10 @@ case class HGroup(
 				waiting.exists: wc =>
 					!wc.symmetric && !wc.ambiguousSelf &&
 					// This is part of a hidden (?) connection that is not currently revealed
-					wc.connections.nonEmpty && wc.currConn.hidden && wc.connections.tail.exists(_.order == o)
+					wc.connections.nonEmpty && {
+						wc.currConn.hidden && wc.connections.tail.exists(_.order == o) ||
+						wc.connections.tail.exists(c => c.order == o && c.hidden)
+					}
 			}
 
 	override def validArr(id: Identity, order: Int): Boolean =
@@ -670,7 +673,7 @@ object HGroup:
 			game
 
 		override def refreshAfterPlay(prev: HGroup, game: HGroup, action: PlayAction) =
-			refreshWCs(prev, game, action, elim = false)
+			refreshWCs(prev, game, action, elim = false, hypo = Some(-1))
 
 		def findAllClues(game: HGroup, giver: Int) =
 			val state = game.state

@@ -368,7 +368,7 @@ case class Player(
 						Logger.setLevel(level)
 						played = played.incl(order)
 					else
-						Log.warn(s"tried to add ${state.logId(id)} ($order) onto hypo stacks, but they were at ${hypo.state.playStacks} $played ($name)")
+						// Log.warn(s"tried to add ${state.logId(id)} ($order) onto hypo stacks, but they were at ${hypo.state.playStacks} $played ($name)")
 						attempted = attempted.incl(order)
 
 		var changed = true

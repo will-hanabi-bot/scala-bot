@@ -73,7 +73,7 @@ private def revert(g: HGroup, order: Int, ids: List[Identity]) =
 	else
 		g.withThought(order)(_.copy(inferred = newInferred))
 
-def refreshWCs(prev: HGroup, game: HGroup, action: Action, beforeClueInterp: Boolean = false, elim: Boolean = true): HGroup =
+def refreshWCs(prev: HGroup, game: HGroup, action: Action, beforeClueInterp: Boolean = false, elim: Boolean = true, hypo: Option[Int] = None): HGroup =
 	case class Struct(
 		newGame: HGroup = game.copy(waiting = Nil),
 		wcs: List[WaitingConnection] = Nil,
@@ -87,7 +87,12 @@ def refreshWCs(prev: HGroup, game: HGroup, action: Action, beforeClueInterp: Boo
 
 	val Struct(newGame, newWCs, toRemove, remFocuses, demos) = game.waiting.foldRight(Struct()) { case (wc, struct) =>
 		val conns = wc.connections
-		val res = updateWc(prev, game, action, wc, beforeClueInterp)
+		val res =
+			// Do not allow the hypo'ing player to resolve wcs on themselves
+			if hypo.contains(wc.target) then
+				UpdateResult.Keep
+			else
+				updateWc(prev, game, action, wc, beforeClueInterp)
 
 		res match
 			case UpdateResult.Keep =>
@@ -112,10 +117,11 @@ def refreshWCs(prev: HGroup, game: HGroup, action: Action, beforeClueInterp: Boo
 					demos = nextIndex.fold(wc)(i => wc.copy(connections = conns.drop(i))) +: struct.demos
 				)
 			case UpdateResult.Remove =>
-				struct.copy(
-					toRemove = PromptConn(-1, wc.focus, wc.inference) +: (if wc.symmetric || wc.ambiguousSelf then Nil else conns) ++: struct.toRemove,
-					remFocuses = struct.remFocuses + wc.focus,
-				)
+				if hypo.isDefined then struct else
+					struct.copy(
+						toRemove = PromptConn(-1, wc.focus, wc.inference) +: (if wc.symmetric || wc.ambiguousSelf then Nil else conns) ++: struct.toRemove,
+						remFocuses = struct.remFocuses + wc.focus,
+					)
 			case UpdateResult.Complete => struct
 	}
 
@@ -182,13 +188,15 @@ def refreshWCs(prev: HGroup, game: HGroup, action: Action, beforeClueInterp: Boo
 				val action = acc.state.actionList(turn).collectFirst { case a: ClueAction => a }.get
 				val ambiguousWcs = sameFocusWcs.filter(_.ambiguousSelf)
 
-				Log.info(s"assigning previously-ambiguous connections to ${ambiguousWcs.map(w => g.state.logId(w.inference))}")
+				Log.error(s"assigning previously-ambiguous connections on $focus to ${ambiguousWcs.map(w => g.state.logId(w.inference))}")
 				assignConns(acc, action, ambiguousWcs.map(wc => FocusPossibility(wc.inference, wc.connections, ClueInterp.Play)), focus)
+					.withThought(focus): t =>
+						t.copy(inferred = t.possible.intersect(ambiguousWcs.map(_.inference)))
 			else
 				acc
 	.copy(waiting = retainWCs)
 	.when(_ => elim):
-		_.elim()
+		_.elim(except = hypo)
 
 def updateWc(prev: HGroup, game: HGroup, action: Action, wc: WaitingConnection, beforeClueInterp: Boolean): UpdateResult =
 	if wc.connections.isEmpty then
@@ -389,6 +397,7 @@ def resolveRetained(prev: HGroup, game: HGroup, action: Action, wc: WaitingConne
 			reacting != state.ourPlayerIndex &&		// can't pass back to ourselves
 			nonHiddenConns > 1 &&					// they need to play more than 1 card
 			nonHiddenConns == wc.inference.rank - state.playStacks(wc.inference.suitIndex) - 1 &&	// they have all required cards
+			!f.ids.forall(state.isCritical) &&		// the id is not critical
 			!f.ambiguousPassback
 
 	if passback then

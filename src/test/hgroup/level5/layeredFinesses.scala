@@ -285,3 +285,28 @@ class LayeredFinesses extends munit.FunSuite:
 
 		// r3 layered finesse in slot 3 (previously slot 2) is confirmed, not r2.
 		hasInfs(game, None, Alice, 3, Vector("r3"))
+
+	test("doesn't allow a reveal to undo a previous stall"):
+		val game = setup(HGroup.atLevel(5), Vector(
+			Vector("xx", "xx", "xx", "xx", "xx"),
+			Vector("b5", "r1", "r1", "b1", "p2"),
+			Vector("g4", "b1", "g1", "g1", "p1")
+		),
+			starting = Bob,
+			playStacks = Some(Vector(5, 5, 3, 1, 1)),
+			init =
+				fullyKnown[HGroup](Bob, 5, "p2") andThen
+				fullyKnown[HGroup](Cathy, 1, "g4")
+		)
+		.pipe(takeTurn("Bob clues 4 to Alice (slot 3)"))	// b4 (self-double), p4 (selfish)
+		.pipe(takeTurn("Cathy plays g4", "y1"))
+		.pipe(takeTurn("Alice clues 5 to Bob"))				// 5 Stall
+
+		.pipe(takeTurn("Bob plays p2", "y1"))
+		.pipe(takeTurn("Cathy discards p1", "p1"))
+		.pipe(takeTurn("Alice plays b2 (slot 1)"))
+
+		// Bob's 5 can be [g5,b5,p5].
+		// If Alice rewinded and thought she had a playable b2 when she 5 Stalled,
+		// the 5 would be considered a play clue on [g5,b5].
+		hasInfs(game, None, Bob, 2, Vector("g5", "b5", "p5"))

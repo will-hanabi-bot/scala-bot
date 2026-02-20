@@ -67,7 +67,7 @@ def getResult(game: HGroup, hypo: HGroup, action: ClueAction): Double =
 
 	val goodTouch: Double =
 		if badTouch.length > 0 then
-			-badTouch.length
+			-badTouch.length * 4
 		else
 			3 * List(0.0, 0.125, 0.25, 0.35, 0.45, 0.55)(newTouched.length)
 
@@ -89,7 +89,7 @@ def getResult(game: HGroup, hypo: HGroup, action: ClueAction): Double =
 
 	hypo.lastMove match
 		case Some(ClueInterp.Mistake)  => value - 10
-		case Some(ClueInterp.Fix)      => value + 1
+		case Some(ClueInterp.Fix)      => value + 3
 		case _ => value
 
 private def clueFilter(game: HGroup, giver: Int) =
@@ -384,5 +384,10 @@ def evalGame(orig: HGroup, game: HGroup): Double =
 
 		(finalScore - state.maxScore) * 5
 
-	Log.info(s"state: $stateVal, future: $futureVal, bdr: $bdrVal locked: $lockedPenalty${if endgamePenalty != 0 then s" endgame penalty: ${endgamePenalty}" else ""}")
-	stateVal + futureVal + bdrVal + lockedPenalty + endgamePenalty
+	val badCM = -1 * game.state.hands.flatten.count: o =>
+		game.isCM(o) &&
+		game.state.deck(o).id().exists(state.isBasicTrash) &&
+		!game.common.orderKt(game, o)
+
+	Log.info(s"state: $stateVal, future: $futureVal, bdr: $bdrVal badCM: $badCM locked: $lockedPenalty${if endgamePenalty != 0 then s" endgame penalty: ${endgamePenalty}" else ""}")
+	stateVal + futureVal + bdrVal + badCM + lockedPenalty + endgamePenalty

@@ -178,7 +178,7 @@ def stallingSituation(ctx: ClueContext): Option[(StallInterp, Set[Int])] =
 		(prev.common.thinksTrash(prev, giver).nonEmpty && prev.state.clueTokens < 8)
 
 	if giverLoaded then
-		Log.info("giver loaded, not stall!")
+		Log.info(s"giver loaded ${prev.common.thinksPlayables(prev, giver)}, not stall!")
 		None
 	else
 		val severity = stallSeverity(ctx.prev, ctx.prev.common, giver, infoPlayer = Some(ctx.game.common))

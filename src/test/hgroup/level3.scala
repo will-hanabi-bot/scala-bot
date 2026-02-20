@@ -182,3 +182,28 @@ class Sarcastic extends munit.FunSuite:
 		.pipe(takeTurn("Bob clues green to Alice (slot 3)"))
 
 		hasInfs(game, None, Alice, 4, Vector("r2"))
+
+class FixClues extends munit.FunSuite:
+	override def beforeAll() = Logger.setLevel(LogLevel.Off)
+
+	test("correctly connects to a play clue after a fix"):
+		val game = setup(HGroup.atLevel(3), Vector(
+			Vector("xx", "xx", "xx", "xx", "xx"),
+			Vector("y4", "b4", "g4", "r4", "p4"),
+			Vector("y2", "b4", "g4", "r4", "p4")
+		),
+			starting = Cathy
+		)
+		.pipe(takeTurn("Cathy clues 1 to Alice (slots 3,4,5)"))
+		.pipe(takeTurn("Alice plays r1 (slot 5)"))
+		.pipe(takeTurn("Bob clues yellow to Cathy"))		// y2 play, promising Alice y1
+
+		.pipe(takeTurn("Cathy clues 2 to Alice (slot 2)"))	// Alice: xx x2 xx x1 x1
+		.tap: g =>
+			hasInfs(g, None, Alice, 2, Vector("r2", "g2", "b2", "p2"))
+
+		.pipe(takeTurn("Alice plays y1 (slot 5)"))
+		.pipe(takeTurn("Bob clues yellow to Alice (slot 5)"))	// Fix on dupe y1
+
+		// Alice's 2 must have connected to r1.
+		hasInfs(game, None, Alice, 3, Vector("r2"))
