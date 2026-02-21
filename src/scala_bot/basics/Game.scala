@@ -3,7 +3,6 @@ package scala_bot.basics
 import scala_bot.utils._
 import scala_bot.logger._
 
-import scala.util.chaining.scalaUtilChainingOps
 import scala.util.matching.Regex
 
 val HAND_SIZE = Vector(0, 0, 5, 5, 4, 4, 3)
@@ -327,7 +326,6 @@ extension[G <: Game](game: G)
 							if acc.state.hands(playerIndex).contains(order) => acc
 						case _ =>
 							acc.handleAction(action)
-
 
 		Log.highlight(Console.GREEN, s"------- REPLAY COMPLETE -------")
 

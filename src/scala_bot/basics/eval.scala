@@ -15,7 +15,7 @@ def forceClue[G <: Game](game: G, giver: Int, advance: G => Double, only: Option
 			clue <- state.allValidClues(i) if clueFilter(clue)
 		yield
 			val list = state.clueTouched(state.hands(i), clue)
-			ClueAction(giver, i, list, clue.toBase)
+			ClueAction(giver, i, list, clue.base)
 
 	val level = Logger.level
 	allClues.maximizing(-999.0): action =>

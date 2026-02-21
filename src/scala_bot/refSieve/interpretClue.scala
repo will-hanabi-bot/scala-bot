@@ -4,8 +4,6 @@ import scala_bot.basics._
 import scala_bot.utils._
 import scala_bot.logger.Log
 
-import scala.util.chaining.scalaUtilChainingOps
-
 def determineFocus(prev: RefSieve, game: RefSieve, action: ClueAction, push: Boolean, right: Boolean = false) =
 	val state = game.state
 	val newlyTouched = action.list.filter(o => state.deck(o).clued && !prev.state.deck(o).clued)

@@ -4,7 +4,6 @@ import scala_bot.basics._
 import scala_bot.endgame.EndgameSolver
 import scala_bot.logger._
 import scala_bot.utils._
-import scala.util.chaining.scalaUtilChainingOps
 
 case class ReactorWC(
 	giver: Int,
@@ -516,7 +515,7 @@ object Reactor:
 
 			def validClue(clue: Clue, target: Int) =
 				val list = state.clueTouched(state.hands(target), clue)
-				val action = ClueAction(giver, target, list, clue.toBase)
+				val action = ClueAction(giver, target, list, clue.base)
 
 				// Do not simulate clues that touch only previously-clued trash
 				if list.forall(o => state.deck(o).clued && state.isBasicTrash(state.deck(o).id().get)) then

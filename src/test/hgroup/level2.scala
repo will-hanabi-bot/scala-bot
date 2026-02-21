@@ -1,11 +1,11 @@
 package tests.hgroup.level2
 
 import scala_bot.basics._
-import scala_bot.test.{Colour, hasInfs, hasStatus, Player, setup, takeTurn}, Player._
+import scala_bot.test.{Colour, hasInfs, hasStatus, Player, setup, takeTurn, TestVariant}, Player._
 import scala_bot.hgroup.HGroup
-import scala_bot.logger.{Logger, LogLevel}
 
-import scala.util.chaining.scalaUtilChainingOps
+import scala_bot.utils.{pipe, tap}
+import scala_bot.logger.{Logger, LogLevel}
 
 class General extends munit.FunSuite:
 	override def beforeAll() = Logger.setLevel(LogLevel.Off)
@@ -33,7 +33,7 @@ class General extends munit.FunSuite:
 		),
 			starting = Cathy,
 			playStacks = Some(Vector(0, 0, 1, 0, 0)),
-			variant = "Rainbow (5 Suits)"
+			variant = TestVariant.Rainbow5
 		)
 		.pipe(takeTurn("Cathy clues 2 to Alice (slots 1,2)"))
 		.pipe(takeTurn("Alice plays g2 (slot 1)"))

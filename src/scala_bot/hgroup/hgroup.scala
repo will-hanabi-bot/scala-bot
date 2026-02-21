@@ -6,8 +6,6 @@ import scala_bot.utils._
 import scala_bot.logger.{Log, Logger, LogLevel}
 import scala_bot.fraction.Frac
 
-import scala.util.chaining.scalaUtilChainingOps
-
 case class FocusResult(
 	focus: Int,
 	chop: Boolean = false,
@@ -692,7 +690,7 @@ object HGroup:
 					trashClues.take(1)
 				else
 					val validClues = nonTrashClues.filter: clue =>
-						val hypo = game.simulate(ClueAction(giver, clue.target, state.clueTouched(state.hands(clue.target), clue), clue.toBase))
+						val hypo = game.simulate(ClueAction(giver, clue.target, state.clueTouched(state.hands(clue.target), clue), clue.base))
 						hypo.lastMove != Some(ClueInterp.Mistake)
 
 					validClues ++ trashClues.take(1)

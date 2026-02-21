@@ -3,7 +3,6 @@ package scala_bot.hgroup
 import scala_bot.basics._
 import scala_bot.utils._
 
-import scala.util.chaining.scalaUtilChainingOps
 import scala_bot.logger.{Log, Logger, LogLevel}
 
 case class ConnectContext(
@@ -105,31 +104,30 @@ def findUnknownConnecting(ctx: ClueContext, reacting: Int, id: Identity, connect
 			return Some(PlayableConn(matched.get, reacting, id, linked = clued.toList))
 
 	def tryPrompt(order: Int) =
-		if rainbowMismatch(prev, action, id, order, focus) then None else
-			opts.findOwn.map(game.players(_).thoughts(order).id()).getOrElse(state.deck(order).id()) match
-				case None =>
-					Option.when(opts.findOwn.exists(game.players(_).thoughts(order).possible.contains(id)))
-						(PromptConn(reacting, order, id))
+		opts.findOwn.map(game.players(_).thoughts(order).id()).getOrElse(state.deck(order).id()) match
+			case None =>
+				Option.when(opts.findOwn.exists(game.players(_).thoughts(order).possible.contains(id)))
+					(PromptConn(reacting, order, id))
 
-				case Some(promptId) =>
-					if promptId == id then
-						Some(PromptConn(reacting, order, id))
+			case Some(promptId) =>
+				if promptId == id then
+					Some(PromptConn(reacting, order, id))
 
-					else if level >= Level.IntermediateFinesses && state.isPlayable(promptId) then
-						if game.common.orderPlayable(game, order, excludeTrash = true) then
-							Some(PlayableConn(reacting, order, promptId, hidden = true))
-						else
-							Some(PromptConn(reacting, order, promptId, hidden = true))
-
+				else if level >= Level.IntermediateFinesses && state.isPlayable(promptId) then
+					if game.common.orderPlayable(game, order, excludeTrash = true) then
+						Some(PlayableConn(reacting, order, promptId, hidden = true))
 					else
-						// Log.warn(s"wrong prompt on ${state.logId(order)} $order, stacks ${state.playStacks}")
-						None
+						Some(PromptConn(reacting, order, promptId, hidden = true))
+
+				else
+					// Log.warn(s"wrong prompt on ${state.logId(order)} $order, stacks ${state.playStacks}")
+					None
 
 	val prompt = prev.common.findPrompt(prev, reacting, id, connected, ignore)
 	// Need to use 'game' to exclude newly clued cards
 	val potentialFinesse = game.findFinesseId(reacting, id, connected, ignore, overrideLayer = opts.insertingInto.exists(prev.state.hands(reacting).contains))
 
-	if prompt.isDefined then
+	if prompt.exists(!rainbowMismatch(prev, action, id, _)) then
 		return tryPrompt(prompt.get)
 
 	// Try prompting a wrongly-ranked pink card

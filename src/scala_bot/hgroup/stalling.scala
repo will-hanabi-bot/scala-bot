@@ -110,7 +110,6 @@ def isStall(ctx: ClueContext, severity: Int): Option[StallInterp] =
 
 	None
 
-
 /** Returns the set of player indices that see an alternative clue. */
 def alternativeClue(ctx: ClueContext, maxStall: Int) =
 	val ClueContext(prev, game, action) = ctx
@@ -150,7 +149,7 @@ def alternativeClue(ctx: ClueContext, maxStall: Int) =
 			target <- 0 until state.numPlayers if target != giver && target != state.ourPlayerIndex
 			clue   <- state.allValidClues(target) if clue != origClue
 			list = prev.state.clueTouched(prev.state.hands(target), clue)
-			action = ClueAction(giver, target, list, clue.toBase)
+			action = ClueAction(giver, target, list, clue.base)
 			focus = prev.determineFocus(prev, action).focus if focus != origFocus && !prev.isTouched(focus)
 			hypo = prev.copy(allowFindOwn = false, noRecurse = true)
 				.simulateClue(action) if satisfied(hypo, action)

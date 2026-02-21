@@ -98,7 +98,7 @@ private def clueFilter(game: HGroup, giver: Int) =
 	(clue: Clue) =>
 		val Clue(kind, value, target) = clue
 		val list = state.clueTouched(state.hands(target), clue)
-		val focus = game.determineFocus(game, ClueAction(giver, target, list, clue.toBase)).focus
+		val focus = game.determineFocus(game, ClueAction(giver, target, list, clue.base)).focus
 
 		// Don't clue known duplicates
 		state.deck(focus).id().forall: id =>

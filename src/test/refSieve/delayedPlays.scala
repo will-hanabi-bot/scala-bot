@@ -1,11 +1,11 @@
-package tests.refSieve.delayedPlays
+package tests.refSieve
 
 import scala_bot.refSieve.RefSieve
 import scala_bot.basics._
 import scala_bot.test.{hasInfs, Player, setup, takeTurn}, Player._
-import scala_bot.logger.{Logger, LogLevel}
 
-import scala.util.chaining.scalaUtilChainingOps
+import scala_bot.utils.pipe
+import scala_bot.logger.{Logger, LogLevel}
 
 class DelayedPlays extends munit.FunSuite:
 	override def beforeAll() = Logger.setLevel(LogLevel.Off)

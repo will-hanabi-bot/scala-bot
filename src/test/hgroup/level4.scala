@@ -1,11 +1,11 @@
 package tests.hgroup.level4
 
 import scala_bot.basics._
-import scala_bot.test.{hasInfs, hasStatus, Player, setup, takeTurn}, Player._
+import scala_bot.test.{hasInfs, hasStatus, Player, preClue, setup, takeTurn}, Player._
 import scala_bot.hgroup.HGroup
-import scala_bot.logger.{Logger, LogLevel}
 
-import scala.util.chaining.scalaUtilChainingOps
+import scala_bot.utils.{pipe, tap}
+import scala_bot.logger.{Logger, LogLevel}
 
 class TrashCM extends munit.FunSuite:
 	override def beforeAll() = Logger.setLevel(LogLevel.Off)
@@ -96,6 +96,24 @@ class TrashCM extends munit.FunSuite:
 		hasStatus(game, Alice, 5, CardStatus.ChopMoved)
 		assert(game.meta(game.state.hands(Alice.ordinal)(3)).trash)
 		assertEquals(game.common.thinksPlayables(game, Alice.ordinal).length, 0)
+
+	test("prefers interpreting a tempo clue over tcm"):
+		val game = setup(HGroup.atLevel(4), Vector(
+			Vector("xx", "xx", "xx", "xx", "xx"),
+			Vector("b4", "b4", "g4", "r5", "r4"),
+			Vector("g3", "y4", "y1", "y5", "b3"),
+		),
+			starting = Cathy,
+			playStacks = Some(Vector(3, 0, 0, 0, 0)),
+			init =
+				preClue[HGroup](Alice, 5, Vector("5")) andThen
+				preClue[HGroup](Alice, 4, Vector("4"))
+		)
+		.pipe(takeTurn("Cathy clues red to Alice (slots 1,4,5)"))
+
+		// Slots 2 and 3 should not be chop moved.
+		hasStatus(game, Alice, 2, CardStatus.None)
+		hasStatus(game, Alice, 3, CardStatus.None)
 
 class CM5 extends munit.FunSuite:
 	override def beforeAll() = Logger.setLevel(LogLevel.Off)

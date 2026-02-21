@@ -6,7 +6,6 @@ import scala_bot.logger.{Log, Logger, LogLevel}
 import scala_bot.utils._
 
 import java.time.Instant
-import scala.util.chaining.scalaUtilChainingOps
 import scala.util.boundary, boundary.break
 
 type WinnableResult = Either[String, (List[PerformAction], Frac)]
@@ -469,7 +468,6 @@ case class EndgameSolver[G <: Game](
 						case Right((performs, wr)) =>
 							Log.highlight(Console.YELLOW, s"} ${performs.map(_.fmtObj(game, nextPlayerIndex)).mkString(", ")} prob $prob winrate $wr")
 							prob * wr
-
 
 	def optimizeFull(game: G, arrs: (Seq[GameArr], Seq[GameArr]), actions: Seq[(PerformAction, Seq[Identity])], playerTurn: Int, deadline: Instant)(using ops: GameOps[G]): Seq[(PerformAction, Frac)] =
 		boundary:

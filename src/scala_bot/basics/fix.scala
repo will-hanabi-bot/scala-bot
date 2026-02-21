@@ -96,24 +96,30 @@ def distributionClue(prev: Game, game: Game, action: ClueAction, focus: Int): Op
 
 	Option.when(useful.nonEmpty)(useful)
 
-def rainbowMismatch(game: Game, action: ClueAction, id: Identity, prompt: Int, focus: Int) =
+def rainbowMismatch(game: Game, action: ClueAction, id: Identity, prompt: Int): Boolean =
 	val state = game.state
 	val ClueAction(_, target, list, clue) = action
 
-	lazy val rainbowFocus =
-		if target == state.ourPlayerIndex then
-			game.me.thoughts(focus).possible.forall: c =>
-				state.variant.suits(c.suitIndex).suitType.rainbowish
-		else
-			state.variant.suits(state.deck(focus).suitIndex).suitType.rainbowish
+	val skip =
+		clue.kind != ClueKind.Colour ||
+		!state.variant.suits(id.suitIndex).suitType.rainbowish ||
+		game.knownAs(prompt, RAINBOWISH) ||
+		state.deck(prompt).clues.exists(_.isEq(clue))
 
-	lazy val matchingClues = state.allColourClues(target).filter: c =>
-		state.clueTouched(state.hands(target), c).sorted == list.sorted &&	// touches the same cards
-		state.deck(prompt).clues.contains(c)								// prompt was clued with this
+	if skip then
+		return false
 
-	clue.kind == ClueKind.Colour &&
-	state.variant.suits(id.suitIndex).suitType.rainbowish &&
-	!game.knownAs(prompt, RAINBOWISH) &&
-	rainbowFocus &&
-	// There was free choice to clue a matching colour, but didn't
-	matchingClues.nonEmpty && !matchingClues.exists(_.isEq(clue))
+	val allRainbow =
+		list.forall: o =>
+			if target == state.ourPlayerIndex then
+				game.me.thoughts(o).possible.forall: c =>
+					state.variant.suits(c.suitIndex).suitType.rainbowish
+			else
+				state.variant.suits(state.deck(o).suitIndex).suitType.rainbowish
+
+	if !allRainbow then
+		return false
+
+	// A matching colour would have touched the same cards.
+	state.deck(prompt).clues.exists: c =>
+		state.clueTouched(state.hands(target), c).sorted == list.sorted

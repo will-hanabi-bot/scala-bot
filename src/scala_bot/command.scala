@@ -12,7 +12,7 @@ import scala_bot.logger._
 import scala_bot.refSieve.RefSieve
 import scala_bot.hgroup.HGroup
 
-val BOT_VERSION = "v0.7.1 (scala-bot)"
+val BOT_VERSION = "v0.7.2 (scala-bot)"
 
 case class ChatMessage(
 	msg: String,
@@ -386,12 +386,17 @@ class BotClient(queue: Queue[IO, String], gameRef: Ref[IO, Option[Game]]):
 
 			case Array(_, conv, level) => Convention.from(conv) match
 				case None => reply(s"Unrecognized convention $conv.")
-				case Some(c) =>
+				case Some(c) if conv == "HGroup" =>
 					level.toIntOption match
-						case None => reply(s"Unrecognized convention $conv.")
+						case None => reply(s"Unrecognized level $level.")
+						case Some(l) if l < 1 || l > 10 =>
+							reply(s"scala-bot can only play HGroup between levels 1-10.")
 						case Some(l) =>
 							settings = settings.copy(convention = c, level = l)
 							reply(s"Currently playing with ${settings.str} conventions.")
+				case Some(c) =>
+					settings = settings.copy(convention = c)
+					reply(s"Currently playing with ${settings.str} conventions ($conv doesn't support levels).")
 
 	def sendPM(recipient: String, msg: String) =
 		queue.offer(s"chatPM ${ujson.Obj(

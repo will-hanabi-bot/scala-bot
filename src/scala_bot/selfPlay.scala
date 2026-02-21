@@ -9,8 +9,7 @@ import scala_bot.utils._
 
 import java.nio.file.{Files, Paths}
 import scala.collection.parallel.CollectionConverters._
-import scala.util.Random
-import scala.util.{Try, chaining}, chaining.scalaUtilChainingOps
+import scala.util.{Random, Try}
 import java.nio.charset.StandardCharsets
 
 enum GameResult:
@@ -135,7 +134,6 @@ def selfPlay(args: String*) =
 			case Convention.Reactor  => simulateGame(states.map(Reactor(0, _, false)), shuffledDeck)
 			case Convention.RefSieve => simulateGame(states.map(RefSieve(0, _, false)), shuffledDeck)
 			case Convention.HGroup   => simulateGame(states.map(HGroup(0, _, false, level)), shuffledDeck)
-
 
 		val actionsJSON = actions.map(_.json(tableID = 0))
 		val data = ujson.Obj(

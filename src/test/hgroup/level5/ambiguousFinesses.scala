@@ -1,12 +1,11 @@
 package tests.hgroup.level5
 
 import scala_bot.basics._
-import scala_bot.test.{hasInfs, hasStatus, Player, setup, takeTurn}, Player._
+import scala_bot.test.{hasInfs, hasStatus, Player, preClue, setup, takeTurn}, Player._
 import scala_bot.hgroup.HGroup
-import scala_bot.logger.{Logger, LogLevel}
 
-import scala.util.chaining.scalaUtilChainingOps
-import scala_bot.test.preClue
+import scala_bot.utils.{pipe, tap}
+import scala_bot.logger.{Logger, LogLevel}
 
 class AmbiguousFinesses extends munit.FunSuite:
 	override def beforeAll() = Logger.setLevel(LogLevel.Off)

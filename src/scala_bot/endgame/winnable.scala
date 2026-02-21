@@ -2,7 +2,6 @@ package scala_bot.endgame
 
 import scala_bot.basics._
 import scala_bot.utils._
-import scala.util.chaining.scalaUtilChainingOps
 import java.time.Instant
 // import scala_bot.logger.Log
 

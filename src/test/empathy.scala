@@ -2,9 +2,10 @@ package tests.empathy
 
 import scala_bot.reactor.Reactor
 import scala_bot.basics._
-import scala_bot.test.{hasPoss, Player, preClue, setup, takeTurn}, Player._
+import scala_bot.test.{hasPoss, Player, preClue, setup, takeTurn, TestVariant}, Player._
+
+import scala_bot.utils.pipe
 import scala_bot.logger.{Logger, LogLevel}
-import scala.util.chaining.scalaUtilChainingOps
 
 class Empathy extends munit.FunSuite:
 	override def beforeAll() = Logger.setLevel(LogLevel.Off)
@@ -36,7 +37,7 @@ class Empathy extends munit.FunSuite:
 		),
 			starting = Donald,
 			playStacks = Some(Vector(5, 0, 0, 0, 0, 0)),
-			variant = "6 Suits"
+			variant = TestVariant.NoVar6
 		)
 		.pipe(takeTurn("Donald clues green to Alice (slot 1)"))
 		.pipe(takeTurn("Alice clues 5 to Bob"))

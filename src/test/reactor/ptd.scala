@@ -3,9 +3,9 @@ package tests.reactor.ptd
 import scala_bot.basics._
 import scala_bot.test.{Player, setup, takeTurn}, Player._
 import scala_bot.reactor.Reactor
-import scala_bot.logger.{Logger,LogLevel}
 
-import scala.util.chaining.scalaUtilChainingOps
+import scala_bot.utils.pipe
+import scala_bot.logger.{Logger,LogLevel}
 
 class Ptd extends munit.FunSuite:
 	override def beforeAll() = Logger.setLevel(LogLevel.Off)

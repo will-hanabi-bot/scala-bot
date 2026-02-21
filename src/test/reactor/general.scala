@@ -3,9 +3,9 @@ package tests.reactor.general
 import scala_bot.basics._
 import scala_bot.test.{Colour, fullyKnown, hasInfs, hasStatus, Player, preClue, setup, takeTurn}, Player._
 import scala_bot.reactor.{evalAction, Reactor}
-import scala_bot.logger.{Logger,LogLevel}
 
-import scala.util.chaining.scalaUtilChainingOps
+import scala_bot.utils.{pipe, tap}
+import scala_bot.logger.{Logger,LogLevel}
 
 class General extends munit.FunSuite:
 	override def beforeAll() = Logger.setLevel(LogLevel.Off)

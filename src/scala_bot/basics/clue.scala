@@ -45,8 +45,5 @@ case class Clue(
 	value: Int,
 	target: Int
 ) extends ClueLike:
-	def toBase: BaseClue =
-		BaseClue(kind, value)
-
 	def fmt(state: State) =
-		toBase.fmt(state, target)
+		base.fmt(state, target)

@@ -1,7 +1,7 @@
 package scala_bot.hgroup
 
 import scala_bot.basics._
-import scala.util.chaining.scalaUtilChainingOps
+import scala_bot.utils._
 
 def fpSimplicity(fp: FocusPossibility, playerIndex: Int): Int =
 	val startsOther = fp.connections.find:
@@ -56,6 +56,5 @@ def occamsRazor(game: Game, fps: Seq[FocusPossibility], playerIndex: Int, focus:
 						case _: PlayableConn => false
 						case _ => true
 					.exists(_.order == c.order)
-
 
 		simplest ++ sameSelfStart

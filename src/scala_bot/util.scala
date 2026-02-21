@@ -34,6 +34,10 @@ extension [A](a: A)
 	def matches(cond: PartialFunction[A, Boolean]): Boolean =
 		cond.applyOrElse(a, _ => false)
 
+	inline def pipe[B](inline f: A => B): B = f(a)
+
+	inline def tap(inline f: A => Unit): A = { f(a); a }
+
 extension[A](it: Iterator[A])
 	def existsM(cond: PartialFunction[A, Boolean]): Boolean =
 		it.fastExists(_.matches(cond))
@@ -235,7 +239,7 @@ def performToAction(state: State, perform: PerformAction, playerIndex: Int, deck
 
 def clueToAction(state: State, clue: Clue, giver: Int): ClueAction =
 	val list = state.clueTouched(state.hands(clue.target), clue)
-	ClueAction(giver, clue.target, list, clue.toBase)
+	ClueAction(giver, clue.target, list, clue.base)
 
 /** Returns all player indices between the start (inclusive) and end (exclusive) in play order. */
 def playersUntil(numPlayers: Int, start: Int, `end`: Int) =

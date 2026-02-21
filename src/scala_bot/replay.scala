@@ -8,7 +8,7 @@ import scala_bot.hgroup.HGroup
 import scala_bot.utils._
 
 import scala.io.Source._
-import scala.util.{Try, chaining}, chaining.scalaUtilChainingOps
+import scala.util.Try
 import cats.effect.std.Queue
 import cats.effect.{IO, IOApp, ExitCode}
 import cats.effect.kernel.Ref

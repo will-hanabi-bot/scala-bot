@@ -1,11 +1,11 @@
-package tests.refSieve.safeActions
+package tests.refSieve
 
 import scala_bot.refSieve.RefSieve
 import scala_bot.basics._
 import scala_bot.test.{fullyKnown, hasInfs, hasStatus, Player, setup, takeTurn}, Player._
-import scala_bot.logger.{Logger, LogLevel}
 
-import scala.util.chaining.scalaUtilChainingOps
+import scala_bot.utils.pipe
+import scala_bot.logger.{Logger, LogLevel}
 
 class SafeActions extends munit.FunSuite:
 	override def beforeAll() = Logger.setLevel(LogLevel.Off)

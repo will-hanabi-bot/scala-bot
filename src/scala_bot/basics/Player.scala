@@ -4,7 +4,6 @@ import scala_bot.utils._
 import scala_bot.logger.Log
 
 import scala.collection.immutable.BitSet
-import scala.util.chaining.scalaUtilChainingOps
 import scala_bot.logger.{Logger, LogLevel}
 
 enum Link:
@@ -226,7 +225,7 @@ case class Player(
 	def findPrompt(prev: Game, playerIndex: Int, id: Identity, connected: Set[Int] = Set(), ignore: Set[Int] = Set(), forcePink: Boolean = false, rightmost: Boolean = false) =
 		val state = prev.state
 		val hand = state.hands(playerIndex).when(_ => rightmost)(_.reverse)
-		val order = hand.find: order =>
+		val validPrompts = hand.filter: order =>
 			val card = state.deck(order)
 			val thought = thoughts(order)
 
@@ -254,8 +253,9 @@ case class Player(
 					!misranked && colourMatch
 			)
 
-		order.filter(!ignore.contains(_))
-
+		// Prompt the card with the most positive information
+		validPrompts.maxByOption(state.deck(_).clues.map(_.base).distinct.length)
+			.filter(!ignore.contains(_))
 
 	def findClued(prev: Game, playerIndex: Int, id: Identity, ignore: Set[Int] = Set()) =
 		val state = prev.state

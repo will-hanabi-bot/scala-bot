@@ -2,9 +2,10 @@ package tests.reactor.variants
 
 import scala_bot.reactor.Reactor
 import scala_bot.basics._
-import scala_bot.test.{hasInfs, hasStatus, Player, setup, takeTurn}, Player._
+import scala_bot.test.{hasInfs, hasStatus, Player, setup, takeTurn, TestVariant}, Player._
+
+import scala_bot.utils.pipe
 import scala_bot.logger.{Logger, LogLevel}
-import scala.util.chaining.scalaUtilChainingOps
 
 class Variants extends munit.FunSuite:
 	override def beforeAll() = Logger.setLevel(LogLevel.Off)
@@ -16,7 +17,7 @@ class Variants extends munit.FunSuite:
 			Vector("g4", "g1", "g4", "b4", "b4")
 		),
 			playStacks = Some(Vector(1, 2, 1, 1, 2)),
-			variant = "Pink (5 Suits)",
+			variant = TestVariant.Pink5,
 			starting = Cathy
 		)
 		.pipe(takeTurn("Cathy clues 2 to Alice (slots 2,4)"))
@@ -36,7 +37,7 @@ class Variants extends munit.FunSuite:
 			Vector("g4", "g1", "g4", "b4", "b4")
 		),
 			playStacks = Some(Vector(1, 2, 1, 1, 2)),
-			variant = "Brown (5 Suits)",
+			variant = TestVariant.Brown5,
 			starting = Cathy
 		)
 		.pipe(takeTurn("Cathy clues 1 to Alice (slots 2,4)"))

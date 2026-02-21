@@ -4,8 +4,6 @@ import scala_bot.basics._
 import scala_bot.utils._
 import scala_bot.logger.Log
 
-import scala.util.chaining.scalaUtilChainingOps
-
 case class ClueContext(prev: HGroup, game: HGroup, action: ClueAction):
 	inline def common = game.common
 	inline def state = game.state
@@ -87,6 +85,7 @@ def interpClue(ctx: ClueContext): HGroup =
 		case _ => ()
 
 	val stall = stallingSituation(ctx)
+	val thinksStall = stall.map(_._2).getOrElse(Set.empty)
 
 	if stall.isDefined then
 		val (interp, thinksStall) = stall.get
@@ -130,21 +129,41 @@ def interpClue(ctx: ClueContext): HGroup =
 		val tcm = interpretTcm(ctx)
 
 		if tcm.isDefined then
-			// All newly cards are trash
-			return list.foldLeft(game): (acc, order) =>
-				if prev.state.deck(order).clued then acc else
-					acc.withThought(order): t =>
-						val newInferred = t.possible.intersect(state.trashSet)
-						t.copy(
-							inferred = newInferred,
-							infoLock = newInferred.toOpt
-						)
-					.withMeta(order)(_.copy(trash = true))
-			.pipe(performCM(_, tcm.get))
-			.pipe: g =>
-				g.copy(lastMove = Some(
-					if badCM(ctx, tcm.get) then ClueInterp.Mistake else ClueInterp.Discard
-				))
+			val newGame =
+				// Prefer TCCM over TCM
+				if common.obviousPlayables(game, target).exists(!prev.common.obviousPlayables(game, target).contains(_)) then
+					if game.level < Level.TempoClues then
+						Log.info("preferring tempo clue that provides trash!")
+						game.copy(lastMove = Some(ClueInterp.Reveal))
+					else
+						interpretTccm(ctx) match
+							case Some(tccm) if stall.isEmpty || thinksStall.isEmpty =>
+								Log.info("preferring TCCM over TCM!")
+								performCM(game, tccm).copy(
+									lastMove = Some(if badCM(ctx, tccm) then ClueInterp.Mistake else ClueInterp.Discard)
+								)
+							case Some(_) =>
+								Log.info("stalling situation, tempo clue stall!")
+								game.copy(lastMove = Some(ClueInterp.Stall), stallInterp = Some(StallInterp.Tempo))
+							case _ =>
+								game.copy(lastMove = Some(ClueInterp.Reveal))
+				else
+					// All newly cards are trash
+					list.foldLeft(game): (acc, order) =>
+						if prev.state.deck(order).clued then acc else
+							acc.withThought(order): t =>
+								val newInferred = t.possible.intersect(state.trashSet)
+								t.copy(
+									inferred = newInferred,
+									infoLock = newInferred.toOpt
+								)
+							.withMeta(order)(_.copy(trash = true))
+					.pipe(performCM(_, tcm.get))
+					.pipe: g =>
+						g.copy(lastMove = Some(
+							if badCM(ctx, tcm.get) then ClueInterp.Mistake else ClueInterp.Discard
+						))
+			return newGame
 
 		val cm5 = interpret5cm(ctx)
 
@@ -206,7 +225,6 @@ def interpClue(ctx: ClueContext): HGroup =
 	if savePoss.nonEmpty then
 		Log.info(s"found saves: [${savePoss.map(fp => state.logId(fp.id)).mkString(",")}]")
 
-	val thinksStall = stall.map(_._2).getOrElse(Set.empty)
 	val focusPoss =
 		val looksDirect = common.thoughts(focus).id().isEmpty &&
 			(action.clue.kind == ClueKind.Colour || savePoss.nonEmpty || positional)

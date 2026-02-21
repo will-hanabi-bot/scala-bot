@@ -135,7 +135,7 @@ def interpretTccm(ctx: ClueContext): Option[List[Int]] =
 		Log.info("target was locked, not tccm")
 		return None
 
-	if list.exists(!prev.state.deck(_).clued) then
+	if list.exists(o => !prev.state.deck(o).clued && !common.orderKt(game, o)) then
 		Log.info("touched at least 1 new card, not tccm")
 		return None
 

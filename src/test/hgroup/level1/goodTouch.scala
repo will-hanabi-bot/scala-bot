@@ -2,9 +2,9 @@ package tests.hgroup.level1
 
 import scala_bot.test.{hasInfs, Player, setup, takeTurn}, Player._
 import scala_bot.hgroup.HGroup
-import scala_bot.logger.{Logger,LogLevel}
 
-import scala.util.chaining.scalaUtilChainingOps
+import scala_bot.utils.pipe
+import scala_bot.logger.{Logger,LogLevel}
 
 class GoodTouch extends munit.FunSuite:
 	override def beforeAll() = Logger.setLevel(LogLevel.Off)

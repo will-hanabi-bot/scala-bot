@@ -4,8 +4,6 @@ import scala_bot.basics._
 import scala_bot.utils._
 import scala_bot.logger.Log
 
-import scala.util.chaining.scalaUtilChainingOps
-
 def assignConns(game: HGroup, action: ClueAction, fps: Seq[FocusPossibility], focus: Int, ambiguousOwn: Seq[FocusPossibility] = Nil) =
 	val state = game.state
 	val ClueAction(giver, target, _, clue) = action

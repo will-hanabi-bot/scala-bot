@@ -1,7 +1,6 @@
 package scala_bot.basics
 
 import scala.collection.immutable.BitSet
-import scala.util.chaining.scalaUtilChainingOps
 import scala_bot.utils._
 import scala_bot.logger.Log
 

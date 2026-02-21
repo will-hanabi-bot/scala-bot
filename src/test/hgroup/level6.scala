@@ -1,11 +1,11 @@
 package tests.hgroup.level6
 
 import scala_bot.basics._
-import scala_bot.test.{hasStatus, Player, setup, takeTurn}, Player._
+import scala_bot.test.{hasStatus, Player, preClue, setup, takeTurn}, Player._
 import scala_bot.hgroup.HGroup
-import scala_bot.logger.{Logger, LogLevel}
 
-import scala.util.chaining.scalaUtilChainingOps
+import scala_bot.utils.pipe
+import scala_bot.logger.{Logger, LogLevel}
 
 class General extends munit.FunSuite:
 	override def beforeAll() = Logger.setLevel(LogLevel.Off)
@@ -126,3 +126,19 @@ class General extends munit.FunSuite:
 	// 	.pipe(takeTurn("Alice clues 4 to Bob"))
 
 	// 	hasStatus(game, Bob, 2, CardStatus.None)
+
+	test("prefers interpreting a tccm over tcm"):
+		val game = setup(HGroup.atLevel(6), Vector(
+			Vector("xx", "xx", "xx", "xx", "xx"),
+			Vector("b4", "b4", "g4", "r5", "r4"),
+			Vector("g3", "y4", "y1", "y5", "b3"),
+		),
+			starting = Cathy,
+			playStacks = Some(Vector(4, 0, 0, 0, 0)),
+			init = preClue[HGroup](Alice, 5, Vector("5"))
+		)
+		.pipe(takeTurn("Cathy clues red to Alice (slots 2,5)"))
+
+		// Slot 4 should be chop moved, but not slot 3.
+		hasStatus(game, Alice, 4, CardStatus.ChopMoved)
+		hasStatus(game, Alice, 3, CardStatus.None)

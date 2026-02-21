@@ -1,11 +1,11 @@
 package tests.hgroup.level5
 
 import scala_bot.basics._
-import scala_bot.test.{hasInfs, hasStatus, Player, preClue, setup, takeTurn}, Player._
+import scala_bot.test.{hasInfs, hasStatus, Player, preClue, setup, takeTurn, TestVariant}, Player._
 import scala_bot.hgroup.{FStatus, HGroup}
-import scala_bot.logger.{Logger, LogLevel}
 
-import scala.util.chaining.scalaUtilChainingOps
+import scala_bot.utils.{pipe, tap}
+import scala_bot.logger.{Logger, LogLevel}
 
 class General extends munit.FunSuite:
 	override def beforeAll() = Logger.setLevel(LogLevel.Off)
@@ -194,7 +194,7 @@ class General extends munit.FunSuite:
 			starting = Donald,
 			clueTokens = 7,
 			playStacks = Some(Vector(0, 2, 0, 0, 1)),
-			variant = "Rainbow (5 Suits)"
+			variant = TestVariant.Rainbow5
 		)
 		.pipe(takeTurn("Donald clues green to Alice (slots 2,3,4)"))
 		.pipe(takeTurn("Alice plays m2 (slot 4)"))
@@ -221,7 +221,7 @@ class General extends munit.FunSuite:
 			Vector("m4", "m2", "r4", "g1")
 		),
 			playStacks = Some(Vector(0, 0, 0, 0, 1)),
-			variant = "Rainbow (5 Suits)"
+			variant = TestVariant.Rainbow5
 		)
 		.pipe(takeTurn("Alice clues 2 to Donald"))		// m2
 		.pipe(takeTurn("Bob clues green to Donald"))	// g1, could be m3
@@ -390,7 +390,7 @@ class Rainbow extends munit.FunSuite:
 			Vector("b1", "y2", "r3", "r4")
 		),
 			playStacks = Some(Vector(0, 0, 0, 2, 0)),
-			variant = "Rainbow (5 Suits)",
+			variant = TestVariant.Rainbow5,
 			init = preClue(Bob, 2, Seq("blue"))
 		)
 		.pipe(takeTurn("Alice clues 2 to Bob"))

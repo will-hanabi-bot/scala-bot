@@ -35,7 +35,6 @@ def interpretStable(prev: Reactor, game: Reactor, action: ClueAction, stall: Boo
 	else
 		(interp, newGame)
 
-
 private def tryStable(prev: Reactor, game: Reactor, action: ClueAction, stall: Boolean): (Option[ClueInterp], Reactor) =
 	Log.info(s"interpreting stable clue!")
 	val state = game.state
@@ -214,7 +213,7 @@ private def alternativeClue(game: Reactor, clueTarget: Int, playOnly: Boolean = 
 		val (common, state) = (game.common, game.state)
 
 		state.allValidClues(clueTarget).find: clue =>
-			val list = state.clueTouched(state.hands(clueTarget), clue.toBase)
+			val list = state.clueTouched(state.hands(clueTarget), clue.base)
 			val hand = state.hands(clueTarget)
 			val newlyTouched = list.filter(!state.deck(_).clued)
 
@@ -222,7 +221,7 @@ private def alternativeClue(game: Reactor, clueTarget: Int, playOnly: Boolean = 
 				clue.kind match
 					case ClueKind.Colour =>
 						val playTarget = newlyTouched.map(common.refer(game, hand, _, left = true)).max
-						val poss = IdentitySet.from(state.variant.touchPossibilities(clue.toBase))
+						val poss = IdentitySet.from(state.variant.touchPossibilities(clue.base))
 
 						state.isPlayable(state.deck(playTarget).id().get) &&
 							(newlyTouched.forall(o => !state.isBasicTrash(state.deck(o).id().get)) ||

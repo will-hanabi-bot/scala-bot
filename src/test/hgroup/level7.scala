@@ -1,11 +1,11 @@
 package tests.hgroup.level7
 
 import scala_bot.basics._
-import scala_bot.test.{fullyKnown, hasStatus, Player, setup, takeTurn}, Player._
+import scala_bot.test.{fullyKnown, hasStatus, Player, setup, takeTurn, TestVariant}, Player._
 import scala_bot.hgroup.{DcStatus, HGroup}
-import scala_bot.logger.{Logger, LogLevel}
 
-import scala.util.chaining.scalaUtilChainingOps
+import scala_bot.utils.{pipe, tap}
+import scala_bot.logger.{Logger, LogLevel}
 
 class ScreamDiscards extends munit.FunSuite:
 	override def beforeAll() = Logger.setLevel(LogLevel.Off)
@@ -217,7 +217,7 @@ class GenDiscards extends munit.FunSuite:
 			starting = Donald,
 			clueTokens = 1,
 			playStacks = Some(Vector(0, 0, 1, 0, 0)),
-			variant = "Prism (5 Suits)",
+			variant = TestVariant.Prism5,
 			init = fullyKnown[HGroup](Alice, 4, "g2") andThen
 				fullyKnown[HGroup](Bob, 3, "i1")
 		)

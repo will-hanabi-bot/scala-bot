@@ -1,11 +1,11 @@
 package tests.hgroup.level8
 
 import scala_bot.basics._
-import scala_bot.test.{fullyKnown, hasInfs, hasStatus, Player, preClue, setup, takeTurn}, Player._
+import scala_bot.test.{fullyKnown, hasInfs, hasStatus, Player, preClue, setup, takeTurn, TestVariant}, Player._
 import scala_bot.hgroup.HGroup
-import scala_bot.logger.{Logger, LogLevel}
 
-import scala.util.chaining.scalaUtilChainingOps
+import scala_bot.utils.{pipe, tap}
+import scala_bot.logger.{Logger, LogLevel}
 
 class PositionalDiscards extends munit.FunSuite:
 	override def beforeAll() = Logger.setLevel(LogLevel.Off)
@@ -226,7 +226,7 @@ class PositionalDiscards extends munit.FunSuite:
 				"i2", "i3"
 			),	// Missing: r3, r4, y5, g3, b2, i4
 			clueTokens = 2,
-			variant = "Pink (5 Suits)",
+			variant = TestVariant.Pink5,
 			init = _.copy(inEarlyGame = false)
 		)
 		.tap: g =>

@@ -143,7 +143,7 @@ case class State(
 		val rankClues = (1 to 5).view.map(Clue(ClueKind.Rank, _, target))
 		val colourClues = (0 until variant.colourableSuits.length).view.map(Clue(ClueKind.Colour, _, target))
 
-		rankClues.concat(colourClues).filter(clue => !clueTouched(hands(target), clue.toBase).isEmpty)
+		rankClues.concat(colourClues).filter(clue => !clueTouched(hands(target), clue.base).isEmpty)
 
 	def hasConsistentInfs(thought: Thought) =
 		thought.possible.length == 1 ||

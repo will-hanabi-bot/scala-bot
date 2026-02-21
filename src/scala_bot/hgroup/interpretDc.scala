@@ -4,8 +4,6 @@ import scala_bot.basics._
 import scala_bot.utils._
 import scala_bot.logger.Log
 
-import scala.util.chaining.scalaUtilChainingOps
-
 case class DiscardContext(prev: HGroup, game: HGroup, action: DiscardAction)
 
 def interpretTransfer(ctx: DiscardContext, holder: Int, dupe: Option[Int]): (DiscardResult, Boolean) =

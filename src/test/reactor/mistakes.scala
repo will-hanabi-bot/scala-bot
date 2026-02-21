@@ -3,8 +3,9 @@ package tests.reactor.mistakes
 import scala_bot.reactor.Reactor
 import scala_bot.basics._
 import scala_bot.test.{hasStatus, Player, setup, takeTurn}, Player._
+
+import scala_bot.utils.{pipe, tap}
 import scala_bot.logger.{Logger, LogLevel}
-import scala.util.chaining.scalaUtilChainingOps
 
 class Mistakes extends munit.FunSuite:
 	override def beforeAll() = Logger.setLevel(LogLevel.Off)
