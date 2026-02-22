@@ -34,6 +34,7 @@ Send a PM to the bot on hanab.live (`/pm <HANABI_USERNAME> <message>`) to intera
 - `/leave` to kick the bot from your table.
 - `/settings [convention=Reactor,RefSieve,HGroup] [level=1-10]` to modify the convention set.
 - `/version` to get the current version of the bot.
+- `/help` to get a link back to this page.
 
 Some commands can be sent inside a room to affect all bots that have joined.
 - `/leaveall` to kick all bots from the table.
@@ -45,7 +46,7 @@ A replay from hanab.live or from a file (in JSON) can be simulated using `scala-
 - `id=<id>` indicates the ID of the hanab.live replay to load.
 - `file=<filePath>` indicates the path to the JSON replay to load (relative from the root directory).
 - `index=<index>` sets the index of the player the bot will simulate as (defaults to 0).
-- `convention=<conventionName>` sets the convention set.
+- `convention=<conventionName>` sets the convention set (defaults to Reactor 1.0).
 	- `level=<level>` sets the level of the convention set (defaults to 1, if applicable).
 
 In a replay, the following commands are also supported (in addition to `hand`):
@@ -54,12 +55,12 @@ In a replay, the following commands are also supported (in addition to `hand`):
     - Instead of a turn number, `+` (next turn), `++` (next turn of the same player), `-`, and `--` can also be used.
 
 ## Self-play
-The bot can play games with copies of itself using `cargo run --release --bin self_play [-- <options>]`. Possible options:
+The bot can play games with copies of itself using `scala-cli . --main-class scala_bot.selfPlay [-- <options>]`. Possible options:
 - `games=<numGames>` sets the number of games to play (defaults to 1).
 - `seed=<seed>` sets the seed of the first game to be played (defaults to 0).
     - The seeding algorithm is different from the one used on hanab.live.
 - `players=<numPlayers>` sets the number of players.
-- `convention=<conventionName>` sets the convention set.
+- `convention=<conventionName>` sets the convention set (defaults to Reactor 1.0).
 	- `level=<level>` sets the level of the convention set (defaults to 1, if applicable).
 
 The final score for each seed as well as how each game terminated are logged to the console. JSON replays of each game are saved to a `seeds` folder, which can be loaded into hanab.live for viewing.

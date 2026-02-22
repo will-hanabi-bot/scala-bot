@@ -12,7 +12,7 @@ import scala_bot.logger._
 import scala_bot.refSieve.RefSieve
 import scala_bot.hgroup.HGroup
 
-val BOT_VERSION = "v0.7.2 (scala-bot)"
+val BOT_VERSION = "v0.7.3 (scala-bot)"
 
 case class ChatMessage(
 	msg: String,
@@ -223,6 +223,15 @@ class BotClient(queue: Queue[IO, String], gameRef: Ref[IO, Option[Game]]):
 
 			case "table" =>
 				val table = upickle.read[Table](args)
+
+				gameRef.get.flatMap:
+					// Only bots left in the replay
+					case Some(g) if table.id == g.tableID &&
+						table.sharedReplay &&
+						table.spectators.forall(_.name.startsWith("will-bot")) =>
+						leaveRoom()
+					case _ => IO.unit
+				*>
 				IO { tables = tables + (table.id -> table) }
 
 			case "tableGone" =>
@@ -235,6 +244,8 @@ class BotClient(queue: Queue[IO, String], gameRef: Ref[IO, Option[Game]]):
 
 			case "tableStart" =>
 				val id = ujson.read(args)("tableID").num.toInt
+
+				IO { gameStarted = true } *>
 				sendCmd("getGameInfo1", ujson.write(ujson.Obj("tableID" -> id)))
 
 			case "warning" =>
@@ -277,6 +288,8 @@ class BotClient(queue: Queue[IO, String], gameRef: Ref[IO, Option[Game]]):
 				assignSettings(data, false)
 			else if msg.startsWith("/leaveall") then
 				leaveRoom()
+			else if msg.startsWith("/help") then
+				sendPM(data.who, "See https://github.com/will-hanabi-bot/scala-bot?tab=readme-ov-file#supported-commands for help.")
 			else
 				IO.unit
 
@@ -317,6 +330,9 @@ class BotClient(queue: Queue[IO, String], gameRef: Ref[IO, Option[Game]]):
 		else if msg.startsWith("/version") then
 			sendPM(who, BOT_VERSION)
 
+		else if msg.startsWith("/help") then
+			sendPM(data.who, "See https://github.com/will-hanabi-bot/scala-bot?tab=readme-ov-file#supported-commands for help.")
+
 		else
 			IO.unit
 
@@ -341,14 +357,20 @@ class BotClient(queue: Queue[IO, String], gameRef: Ref[IO, Option[Game]]):
 							case _: DrawAction => state.turnCount == 1
 							case _ => false)
 
-					val turn1IO = action match
-						case TurnAction(num, _) if num == 1 && newGame.notes.contains(0) =>
-							val note = s"[INFO: v$BOT_VERSION]"
-							sendCmd("note", ujson.write(ujson.Obj("order" -> 0, "note" -> note)))
-						case _ => IO.unit
+					val (turn1IO, nextGame) = action match
+						case TurnAction(num, _) if num == 1 && !newGame.notes.contains(0) =>
+							val note = s"[INFO: $BOT_VERSION, ${settings.str}]"
+							val noteIO = sendCmd("note", ujson.write(ujson.Obj("tableID" -> newGame.tableID, "order" -> 0, "note" -> note)))
+							val nextGame = newGame match
+								case r: Reactor  => r.copy(notes = r.notes + (0 -> Note(0, note, note)))
+								case r: RefSieve => r.copy(notes = r.notes + (0 -> Note(0, note, note)))
+								case h: HGroup   => h.copy(notes = h.notes + (0 -> Note(0, note, note)))
+							(noteIO, nextGame)
+
+						case _ => (IO.unit, newGame)
 
 					val actIO = IO.whenA(perform):
-						val suggestedAction = newGame match
+						val suggestedAction = nextGame match
 							case r: Reactor  => r.takeAction
 							case r: RefSieve => r.takeAction
 							case h: HGroup   => h.takeAction
@@ -356,10 +378,10 @@ class BotClient(queue: Queue[IO, String], gameRef: Ref[IO, Option[Game]]):
 						Log.highlight(Console.BLUE, s"Suggested action: ${suggestedAction.fmt(newGame, accordingTo = Some(newGame.me))}")
 						val arg = suggestedAction.json(tableID.get)
 
-						IO.whenA(newGame.inProgress):
+						IO.whenA(nextGame.inProgress):
 							IO.sleep(2.seconds) *> sendCmd("action", ujson.write(arg))
 
-					val x = newGame match
+					val x = nextGame match
 						case r: Reactor  => r.copy(queuedCmds = Nil)
 						case r: RefSieve => r.copy(queuedCmds = Nil)
 						case h: HGroup   => h.copy(queuedCmds = Nil)
@@ -378,14 +400,23 @@ class BotClient(queue: Queue[IO, String], gameRef: Ref[IO, Option[Game]]):
 			case Array(_) =>
 				reply(s"Currently playing with ${settings.str} conventions.")
 
+			case Array(_, level) if level.toIntOption.isDefined =>
+				level.toIntOption match
+					case None => reply(s"Unrecognized level $level.")
+					case Some(l) if l < 1 || l > 10 =>
+						reply(s"scala-bot can only play HGroup between levels 1-10.")
+					case Some(l) =>
+						settings = settings.copy(convention = Convention.HGroup, level = l)
+						reply(s"Currently playing with ${settings.str} conventions.")
+
 			case Array(_, conv) => Convention.from(conv) match
-				case None => reply(s"Unrecognized convention $conv.")
+				case None => reply(s"Unrecognized convention $conv. Supported: HGroup, RefSieve, Reactor.")
 				case Some(c) =>
 					settings = settings.copy(convention = c)
 					reply(s"Currently playing with ${settings.str} conventions.")
 
 			case Array(_, conv, level) => Convention.from(conv) match
-				case None => reply(s"Unrecognized convention $conv.")
+				case None => reply(s"Unrecognized convention $conv. Supported: HGroup, RefSieve, Reactor.")
 				case Some(c) if conv == "HGroup" =>
 					level.toIntOption match
 						case None => reply(s"Unrecognized level $level.")
