@@ -131,7 +131,7 @@ object RefSieve:
 			// 	return game.rewind()
 			// }
 
-			val fix = checkFix(prev, game, action).matches:
+			val fix = checkFix(prev, game, action).matchesP:
 				case _: FixResult.Normal => true
 			val trashPush = !fix && newlyTouched.forall(game.common.orderKt(game, _))
 

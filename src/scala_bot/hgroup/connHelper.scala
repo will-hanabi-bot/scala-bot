@@ -25,7 +25,7 @@ def assignConns(game: HGroup, action: ClueAction, fps: Seq[FocusPossibility], fo
 					(modified, acc)
 				else
 					// Log.info(s"assigning connection ${state.logConn(conn)}")
-					val isBluff = conn.matches { case f: FinesseConn => f.bluff }
+					val isBluff = conn.matchesP { case f: FinesseConn => f.bluff }
 
 					// val playableIds = for
 					// 	(stack, i) <- acc.common.hypoStacks.zipWithIndex
@@ -40,11 +40,11 @@ def assignConns(game: HGroup, action: ClueAction, fps: Seq[FocusPossibility], fo
 						yield
 							id
 
-					val isUnknownPlayable = conn.matches { case c: PlayableConn => c.linked.length > 1 }
+					val isUnknownPlayable = conn.matchesP { case c: PlayableConn => c.linked.length > 1 }
 					val thought = acc.common.thoughts(conn.order)
 
 					val newInferred =
-						if conn.matches { case f: PlayableConn => f.insertingInto.isDefined } then
+						if conn.matchesP { case f: PlayableConn => f.insertingInto.isDefined } then
 							thought.inferred.union(conn.ids)
 
 						else if conn.hidden then
@@ -88,7 +88,7 @@ def assignConns(game: HGroup, action: ClueAction, fps: Seq[FocusPossibility], fo
 						.pipe(IdentitySet.from)
 
 						val maybeFinessed =
-							conn.matches:
+							conn.matchesP:
 								case _: FinesseConn =>
 									// Finesse that could be ambiguous
 									fps.length + ambiguousOwn.length > 1
@@ -229,8 +229,8 @@ def urgentSave(ctx: ClueContext): Boolean =
 def resolveClue(ctx: ClueContext, fps: Seq[FocusPossibility], ambiguousOwn: Seq[FocusPossibility] = Nil) =
 	val ClueContext(prev, game, action) = ctx
 	val state = game.state
-	val ClueAction(giver, target, _, _) = action
-	val FocusResult(focus, chop, _) = ctx.focusResult
+	val ClueAction(giver, target, _, clue) = action
+	val FocusResult(focus, chop, positional) = ctx.focusResult
 
 	val symmetricFps =
 		if target == state.ourPlayerIndex || fps.exists(_.save) then
@@ -238,15 +238,17 @@ def resolveClue(ctx: ClueContext, fps: Seq[FocusPossibility], ambiguousOwn: Seq[
 		else
 			Log.highlight(Console.YELLOW, "finding symmetric connections!")
 			val symmetricFps =
-				val looksDirect = game.common.thoughts(focus).id(symmetric = true).isEmpty &&
+				val looksDirect = game.common.thoughts(focus).id(symmetric = true).isEmpty && {
+					positional ||
 					fps.exists: fp =>
 						game.players(target).thoughts(focus).possible.contains(fp.id) &&
 						fp.connections.forall: c =>
 							c.isInstanceOf[KnownConn] ||
 							(c.isInstanceOf[PlayableConn] && c.reacting != state.ourPlayerIndex)
+				}
 
 				game.common.thoughts(focus).inferred.filter: inf =>
-					!game.invalidFocus(giver, inf, focus) &&
+					!game.invalidFocus(giver, clue, inf, ctx.focusResult) &&
 					!fps.exists(_.id == inf)
 				.flatMap:
 					connect(ctx, _, looksDirect, thinksStall = Set(), findOwn = Some(target))
@@ -257,21 +259,23 @@ def resolveClue(ctx: ClueContext, fps: Seq[FocusPossibility], ambiguousOwn: Seq[
 		Log.highlight(Console.YELLOW, "finding ambiguous connections!")
 
 		val ambiguousFps =
-			val looksDirect = game.common.thoughts(focus).id(symmetric = true).isEmpty &&
+			val looksDirect = game.common.thoughts(focus).id(symmetric = true).isEmpty && {
+				positional ||
 				fps.exists: fp =>
 					game.players(target).thoughts(focus).possible.contains(fp.id) &&
 					fp.connections.forall: c =>
 						c.isInstanceOf[KnownConn] ||
 						(c.isInstanceOf[PlayableConn] && c.reacting != state.ourPlayerIndex)
+			}
 
 			val poss = game.me.thoughts(focus).id().toList
 				.when(_.isEmpty)(_ => game.me.thoughts(focus).inferred.toList)
 
 			poss.filter: inf =>
-				!game.invalidFocus(giver, inf, focus) &&
+				!game.invalidFocus(giver, clue, inf, ctx.focusResult) &&
 				!(fps ++ ambiguousOwn).exists: fp =>
 					fp.id == inf && {
-						fp.connections.forall(_.matches { case _: KnownConn => true ; case _: PlayableConn => true }) ||
+						fp.connections.forall(_.matchesP { case _: KnownConn => true ; case _: PlayableConn => true }) ||
 						fp.connections.forall(_.reacting == state.ourPlayerIndex)
 					}
 			.flatMap:

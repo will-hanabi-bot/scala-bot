@@ -6,14 +6,14 @@ import upickle.default._
 val VARIANTS_URL = "https://raw.githubusercontent.com/Hanabi-Live/hanabi-live/main/packages/game/src/json/variants.json"
 val COLOURS_URL = "https://raw.githubusercontent.com/Hanabi-Live/hanabi-live/main/packages/game/src/json/suits.json"
 
-val WHITISH = "White|Gray|Light|Null".r
-val RAINBOWISH = "Rainbow|Omni".r
-val PINKISH = "Pink|Omni".r
-val BROWNISH = "Brown|Muddy|Cocoa|Null".r
-val DARK = "Black|Dark|Gray|Cocoa".r
-val PRISM = "Prism".r
-val MUDDY = "Muddy|Cocoa".r
-val NO_COLOUR = "White|Gray|Light|Null|Rainbow|Omni|Prism".r
+val WHITISH = "White|Gray|Light|Null".r.unanchored
+val RAINBOWISH = "Rainbow|Omni".r.unanchored
+val PINKISH = "Pink|Omni".r.unanchored
+val BROWNISH = "Brown|Muddy|Cocoa|Null".r.unanchored
+val DARK = "Black|Dark|Gray|Cocoa".r.unanchored
+val PRISM = "Prism".r.unanchored
+val MUDDY = "Muddy|Cocoa".r.unanchored
+val NO_COLOUR = "White|Gray|Light|Null|Rainbow|Omni|Prism".r.unanchored
 
 case class Variant(
 	id: Int,
@@ -61,7 +61,11 @@ case class Variant(
 				return true
 
 			if specialRank.contains(rank) then
-				return rainbowS || !whiteS
+				if rainbowS then
+					return true
+
+				if whiteS then
+					return false
 
 			if suit.suitType.prism then
 				return ((rank - 1) % colourableSuits.length) == clue.value

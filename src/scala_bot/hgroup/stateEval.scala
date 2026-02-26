@@ -261,7 +261,7 @@ def evalAction(game: HGroup, action: Action): (HGroup, Double) =
 	val state = game.state
 	val hypoGame = game.copy(allowFindOwn = false).simulate(action)
 
-	val mistake = hypoGame.lastMove.matches:
+	val mistake = hypoGame.lastMove.matchesP:
 		case Some(ClueInterp.Mistake) if action.isInstanceOf[ClueAction] => true
 		case Some(PlayInterp.Mistake) if action.isInstanceOf[PlayAction] => true
 		case Some(DiscardInterp.Mistake) if action.isInstanceOf[DiscardAction] => true

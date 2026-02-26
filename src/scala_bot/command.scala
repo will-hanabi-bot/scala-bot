@@ -12,7 +12,7 @@ import scala_bot.logger._
 import scala_bot.refSieve.RefSieve
 import scala_bot.hgroup.HGroup
 
-val BOT_VERSION = "v0.7.3 (scala-bot)"
+val BOT_VERSION = "v0.8.0 (scala-bot)"
 
 case class ChatMessage(
 	msg: String,
@@ -258,7 +258,10 @@ class BotClient(queue: Queue[IO, String], gameRef: Ref[IO, Option[Game]]):
 
 	def leaveRoom(): IO[Unit] =
 		val cmd = if gameStarted then "tableUnattend" else "tableLeave"
-		sendCmd(cmd, ujson.write(ujson.Obj("tableID" -> tableID.get))) *>
+
+		IO.whenA(tableID.isDefined):
+			sendCmd(cmd, ujson.write(ujson.Obj("tableID" -> tableID.get)))
+		*>
 		IO:
 			tableID = None
 			gameStarted = false

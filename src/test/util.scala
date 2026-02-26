@@ -10,16 +10,20 @@ enum Player:
 	case Alice, Bob, Cathy, Donald, Emily
 
 enum TestVariant:
-	case NoVariant, NoVar6, Rainbow5, Black5, Pink5, Brown5, Prism5
+	case NoVariant, NoVar6, Rainbow5, Black5, White5, Pink5, Brown5, Prism5, Muddy5, Cocoa5, Omni5
 
 val VARIANTS = Map(
-	TestVariant.NoVariant	-> Variant(0, "No Variant", Vector("Red", "Yellow", "Green", "Blue", "Purple"),  shorts = Vector('r', 'y', 'g', 'b', 'p')),
-	TestVariant.NoVar6		-> Variant(0, "6 Suits",    Vector("Red", "Yellow", "Green", "Blue", "Purple", "Teal"), shorts = Vector('r', 'y', 'g', 'b', 'p', 't')),
-	TestVariant.Rainbow5	-> Variant(16, "Rainbow",   Vector("Red", "Yellow", "Green", "Blue", "Rainbow"), shorts = Vector('r', 'y', 'g', 'b', 'm')),
-	TestVariant.Black5		-> Variant(2, "Black",      Vector("Red", "Yellow", "Green", "Blue", "Black"),   shorts = Vector('r', 'y', 'g', 'b', 'k')),
-	TestVariant.Pink5		-> Variant(2, "Pink",       Vector("Red", "Yellow", "Green", "Blue", "Pink"),    shorts = Vector('r', 'y', 'g', 'b', 'i')),
-	TestVariant.Brown5		-> Variant(2, "Brown",      Vector("Red", "Yellow", "Green", "Blue", "Brown"),   shorts = Vector('r', 'y', 'g', 'b', 'n')),
-	TestVariant.Prism5		-> Variant(1465, "Prism",   Vector("Red", "Yellow", "Green", "Blue", "Prism"),   shorts = Vector('r', 'y', 'g', 'b', 'i'))
+	TestVariant.NoVariant	-> Variant(0, "No Variant",           Vector("Red", "Yellow", "Green", "Blue", "Purple"),  shorts = Vector('r', 'y', 'g', 'b', 'p')),
+	TestVariant.NoVar6		-> Variant(1, "6 Suits",              Vector("Red", "Yellow", "Green", "Blue", "Purple", "Teal"), shorts = Vector('r', 'y', 'g', 'b', 'p', 't')),
+	TestVariant.Rainbow5	-> Variant(16, "Rainbow (5 Suits)",   Vector("Red", "Yellow", "Green", "Blue", "Rainbow"), shorts = Vector('r', 'y', 'g', 'b', 'm')),
+	TestVariant.Black5		-> Variant(21, "Black (5 Suits)",     Vector("Red", "Yellow", "Green", "Blue", "Black"),   shorts = Vector('r', 'y', 'g', 'b', 'k')),
+	TestVariant.White5		-> Variant(22, "White (5 Suits)",     Vector("Red", "Yellow", "Green", "Blue", "White"),   shorts = Vector('r', 'y', 'g', 'b', 'w')),
+	TestVariant.Pink5		-> Variant(107, "Pink (5 Suits)",     Vector("Red", "Yellow", "Green", "Blue", "Pink"),    shorts = Vector('r', 'y', 'g', 'b', 'i')),
+	TestVariant.Brown5		-> Variant(70, "Brown (5 Suits)",     Vector("Red", "Yellow", "Green", "Blue", "Brown"),   shorts = Vector('r', 'y', 'g', 'b', 'n')),
+	TestVariant.Prism5		-> Variant(1465, "Prism (5 Suits)",   Vector("Red", "Yellow", "Green", "Blue", "Prism"),   shorts = Vector('r', 'y', 'g', 'b', 'i')),
+	TestVariant.Muddy5		-> Variant(161, "Muddy Rainbow (5 Suits)", Vector("Red", "Yellow", "Green", "Blue", "Muddy Rainbow"),   shorts = Vector('r', 'y', 'g', 'b', 'm')),
+	TestVariant.Cocoa5		-> Variant(291, "Cocoa Rainbow (5 Suits)", Vector("Red", "Yellow", "Green", "Blue", "Cocoa Rainbow"),   shorts = Vector('r', 'y', 'g', 'b', 'm')),
+	TestVariant.Omni5		-> Variant(177, "Omni (5 Suits)",     Vector("Red", "Yellow", "Green", "Blue", "Omni"),    shorts = Vector('r', 'y', 'g', 'b', 'o'))
 )
 
 val NAMES = Vector("Alice", "Bob", "Cathy", "Donald", "Emily")

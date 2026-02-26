@@ -308,7 +308,7 @@ def interpretSdcm(ctx: DiscardContext): Option[HGroup] =
 
 		else
 			val bobChopId = bobChop.flatMap(state.deck(_).id())
-			val mistake = status.matches:
+			val mistake = status.matchesP:
 				case DcStatus.Scream =>
 					bobChopId.exists(i => !state.isPlayable(i) && !state.isCritical(i))
 				case DcStatus.Shout =>

@@ -3,8 +3,8 @@ package scala_bot.basics
 import scala_bot.utils._
 
 enum FixResult:
-	case Normal(cluedResets: List[Int], duplicateReveals: List[Int])
-	case NoNewInfo(fixes: List[Int])
+	case Normal(cluedResets: Seq[Int], duplicateReveals: Seq[Int])
+	case NoNewInfo(fixes: Seq[Int])
 	case None
 
 def checkFix(prev: Game, game: Game, action: ClueAction): FixResult =
@@ -34,10 +34,11 @@ def checkFix(prev: Game, game: Game, action: ClueAction): FixResult =
 	val noNewInfoFixes = list.filter: o =>
 		prevPlayables.contains(o) &&
 		list.forall(prev.state.deck(_).clued) &&
-		prev.common.thoughts(o).possible == game.common.thoughts(o).possible
+		prev.common.thoughts(o).possible == game.common.thoughts(o).possible &&
+		game.common.thoughts(o).possible.exists(game.state.isBasicTrash)
 
 	if noNewInfoFixes.nonEmpty then
-		FixResult.NoNewInfo(noNewInfoFixes.toList)
+		FixResult.NoNewInfo(noNewInfoFixes)
 	else
 		FixResult.None
 

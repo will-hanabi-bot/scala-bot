@@ -74,13 +74,16 @@ case class HGroup(
 	stallInterp: Option[StallInterp] = None,
 	xmeta: Vector[XConvData] = Vector(),
 
-	allowFindOwn: Boolean = true
+	allowFindOwn: Boolean = true,
+	assumePlays: Boolean = true
 ) extends Game:
-	override def filterPlayables(player: Player, playerIndex: Int, orders: Seq[Int]) =
+	override def filterPlayables(player: Player, playerIndex: Int, orders: Seq[Int], assume: Boolean = true) =
+		val ordered1s = this.order1s(orders.filter(this.unknown1), noFilter = true)
+
 		orders.filter: o =>
 			player.orderKp(this, o) ||
 			!{
-				// xmeta(o).maybeFinessed ||
+				(!assume && !isDefinite(o)) ||
 				state.hands(playerIndex).exists: o2 =>
 					// An older finesse exists which could be swapped with this identity
 					xmeta(o2).idUncertain &&
@@ -94,6 +97,8 @@ case class HGroup(
 						wc.currConn.hidden && wc.connections.tail.exists(_.order == o) ||
 						wc.connections.tail.exists(c => c.order == o && c.hidden)
 					}
+				||
+				state.includesVariant(PINKISH) && ordered1s.nonEmpty && ordered1s.tail.contains(o)
 			}
 
 	override def validArr(id: Identity, order: Int): Boolean =
@@ -145,8 +150,11 @@ case class HGroup(
 		!common.thinksLoaded(this, bob) &&
 		chop(bob).flatMap(state.deck(_).id()).exists(state.isCritical)
 
-	def invalidFocus(giver: Int, id: Identity, focus: Int) =
+	def invalidFocus(giver: Int, clue: ClueLike, id: Identity, focusResult: FocusResult) =
+		val FocusResult(focus, _, positional) = focusResult
+
 		state.isBasicTrash(id) ||
+		(state.includesVariant(PINKISH) && !positional && clue.kind == ClueKind.Rank && clue.value != id.rank) ||
 		visibleFind(state, common, id, infer = true, excludeOrder = focus).nonEmpty ||
 		common.links.existsM:
 			case Link.Promised(_, i, target) => target != focus && id.matches(i)
@@ -287,9 +295,13 @@ case class HGroup(
 			// Mud clues should only work if the leftmost card is muddy.
 			common.thoughts(list.max).possible.exists(_.suitIndex == muddySuitIndex)
 
-		lazy val pinkStall5 = clue.isEq(BaseClue(ClueKind.Rank, 5)) &&
-			state.includesVariant(PINKISH) &&
-			stallSeverity(prev, prev.common, giver) > 0
+		lazy val pinkStall5 =
+			val valid = clue.isEq(BaseClue(ClueKind.Rank, 5)) &&
+				state.includesVariant(PINKISH) &&
+				stallSeverity(prev, prev.common, giver) > 0
+
+			if !valid then None else
+				list.filter(o => !prev.state.deck(o).clued && !prev.isCM(o)).minOption
 
 		if chop.exists(list.contains) then
 			FocusResult(chop.get, chop = true)
@@ -317,8 +329,8 @@ case class HGroup(
 			val focusIndex = (clue.value - coloursAvailable + 6*muddyCards.length) % muddyCards.length
 			FocusResult(muddyCards(focusIndex), positional = true)
 
-		else if pinkStall5 then
-			FocusResult(list.filter(!prev.state.deck(_).clued).min)
+		else if pinkStall5.isDefined then
+			FocusResult(pinkStall5.get)
 
 		else
 			val sortedList = list.sortBy(o => -o)
@@ -351,7 +363,7 @@ case class HGroup(
 			focusCard.id().exists(!state.isBasicTrash(_)) && {
 				val hypo = this.copy(noRecurse = true, allowFindOwn = false).simulateClue(action)
 
-				hypo.lastMove.matches:
+				hypo.lastMove.matchesP:
 					case Some(ClueInterp.Save) =>
 						// Can't guarantee others will give a 2 save
 						giver == state.ourPlayerIndex || !state.deck(focus).id().exists(id => id.rank == 2 && !state.isCritical(id))

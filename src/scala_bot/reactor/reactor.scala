@@ -41,7 +41,7 @@ case class Reactor(
 	goodTouch: Boolean = false,
 	zcsTurn: Option[Int] = None
 ) extends Game:
-	override def filterPlayables(player: Player, playerIndex: Int, orders: Seq[Int]) =
+	override def filterPlayables(player: Player, playerIndex: Int, orders: Seq[Int], assume: Boolean = true) =
 		// if orders.nonEmpty then
 		// 	Log.info(s"$orders ${orders.map(player.thoughts(_).id(infer = true))} ${orders.map(meta(_).signalTurn)}")
 

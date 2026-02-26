@@ -175,7 +175,7 @@ def evalAction(game: RefSieve, action: Action): Double =
 	val state = game.state
 	val hypoGame = game.simulate(action)
 
-	val mistake = hypoGame.lastMove.matches:
+	val mistake = hypoGame.lastMove.matchesP:
 		case Some(ClueInterp.Mistake) if action.isInstanceOf[ClueAction] => true
 		case Some(DiscardInterp.Mistake) if action.isInstanceOf[DiscardAction] => true
 

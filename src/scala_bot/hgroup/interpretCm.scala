@@ -65,6 +65,10 @@ def interpret5cm(ctx: ClueContext): Option[Vector[Int]] =
 			Log.info(s"rightmost 5 was clued $distance-away from chop, not 5cm!")
 			None
 
+		else if state.deck(oldest5).id().exists(_.rank != 5) then
+			Log.info(s"not a 5, not 5cm!")
+			None
+
 		else if game.common.orderKt(game, chop.get) then
 			Log.info(s"saved card $chop has only trash possibilities!")
 			None
@@ -125,10 +129,14 @@ def interpretTccm(ctx: ClueContext): Option[List[Int]] =
 	val ClueContext(prev, game, action) = ctx
 	val (common, state) = (game.common.updateHypoStacks(game), game.state)
 	val ClueAction(_, target, list, clue) = action
-	val focus = ctx.focusResult.focus
+	val FocusResult(focus, _, positional) = ctx.focusResult
 
 	if state.inEndgame then
 		Log.info("in endgame, not tccm")
+		return None
+
+	else if positional then
+		Log.info("positional, not tccm")
 		return None
 
 	if prev.common.thinksLocked(prev, target) then

@@ -25,27 +25,29 @@ case class ConnectOpts(
 
 def findKnownConn(ctx: ClueContext, id: Identity, ignore: Set[Int], findOwn: Boolean) =
 	val ClueContext(prev, game, action) = ctx
-	val state = game.state
+	val (common, state) = (game.common, game.state)
 	val giver = action.giver
 
 	def validKnown(order: Int) =
 		!ignore.contains(order) &&
 		game.state.deck(order).matches(id, assume = true) &&
-		game.common.thoughts(order).matches(id, infer = true) &&
+		common.thoughts(order).matches(id, infer = true) &&
 		!game.meta(order).hidden &&
 		!game.xmeta(order).fStatus.contains(FStatus.PossiblyOn(giver)) &&
-		!game.common.linkedOrders(state).contains(order)
+		(game.assumePlays || !game.xmeta(order).fStatus.contains(FStatus.PossiblyOn(state.ourPlayerIndex))) &&
+		!common.linkedOrders(state).contains(order)
 
 	def validLink(link: Link, order: Int) =
-		link.matches:
+		link.matchesP:
 			case Link.Promised(orders, i, _) => i == id && orders.contains(order)
 			case Link.Sarcastic(orders, i) => i == id && orders.contains(order)
 
 	def validPlayable(playerIndex: Int, order: Int) =
 		!ignore.contains(order) &&
-		game.common.thoughts(order).inferred.contains(id) &&
+		common.thoughts(order).inferred.contains(id) &&
 		!game.xmeta(order).fStatus.contains(FStatus.PossiblyOn(giver)) &&
-		game.common.orderPlayable(game, order, excludeTrash = true) &&
+		(game.assumePlays || !game.xmeta(order).fStatus.contains(FStatus.PossiblyOn(state.ourPlayerIndex))) &&
+		common.orderPlayable(game, order, excludeTrash = true) &&
 		!(	// Don't connect on our unknown playables for an id matching the focus:
 			// giver would be bad touching
 			playerIndex == state.ourPlayerIndex &&
@@ -63,17 +65,17 @@ def findKnownConn(ctx: ClueContext, id: Identity, ignore: Set[Int], findOwn: Boo
 	val linkedConns = for
 		playerIndex <- (0 until state.numPlayers).view
 		order <- state.hands(playerIndex)
-		link <- game.common.links if validLink(link, order)
+		link <- common.links if validLink(link, order)
 	yield
 		PlayableConn(playerIndex, order, id, linked = link.getOrders.toList)
 
-	// Log.info(s"finding known ${state.logId(id)} $ignore ${game.common.linkedOrders(state)} $findOwn")
+	// Log.info(s"finding known ${state.logId(id)} $ignore ${common.linkedOrders(state)} $findOwn")
 
 	// Visible and going to be played (excludes giver)
 	val playableConns = for
 		playerIndex <- (0 until state.numPlayers) if playerIndex != giver
 		playables = state.hands(playerIndex).filter(validPlayable(playerIndex, _))
-		order <- playables if game.state.deck(order).matches(id, assume = game.allowFindOwn && findOwn) && game.isTouched(order)
+		order <- playables if state.deck(order).matches(id, assume = game.allowFindOwn && findOwn) && game.isTouched(order)
 	yield
 		val insertingInto = if !game.meta(order).hidden then None else
 			val orders = state.hands(playerIndex)
@@ -132,7 +134,13 @@ def findUnknownConnecting(ctx: ClueContext, reacting: Int, id: Identity, connect
 
 	// Try prompting a wrongly-ranked pink card
 	val tryPinkPrompt = state.includesVariant(PINKISH) &&
-		(level < Level.Bluffs || potentialFinesse.forall(game.common.thoughts(_).possible.forall(!state.isPlayable(_))))
+		potentialFinesse.forall: f =>
+			if level < Level.Bluffs then
+				!game.common.thoughts(f).possible.exists: i =>
+					state.variant.suits(i.suitIndex).suitType.pinkish &&
+					state.isPlayable(i)
+			else
+				!game.common.thoughts(f).possible.exists(state.isPlayable)
 
 	if tryPinkPrompt then
 		val pinkPrompt = prev.common.findPrompt(prev, reacting, id, connected, ignore, forcePink = true)
@@ -300,7 +308,7 @@ def findSingleConn(ctx: ClueContext, reacting: Int, id: Identity, connCtx: Conne
 
 		// Everyone between giver and reacting must be able to see them,
 		// otherwise they will try to react
-		val visible = playersUntil(state.numPlayers, reacting, giver)
+		val visible = playersUntil(state.numPlayers, state.nextPlayerIndex(reacting), giver)
 			.summing(state.hands(_).count(state.deck(_).matches(id)))
 
 		remaining == visible
@@ -451,6 +459,7 @@ def connect(ctx: ClueContext, id: Identity, looksDirect: Boolean, thinksStall: S
 				val newConnCtx = connCtx.copy(
 					looksDirect = connCtx.looksDirect && {
 						(clue.kind == ClueKind.Colour && nextId.next.exists(game.common.thoughts(focus).possible.contains)) ||
+						positional ||
 						!conns.existsM { case f: FinesseConn => f.reacting != target && !f.hidden }
 					},
 					connected = connCtx.connected ++ conns.map(_.order)

@@ -10,10 +10,10 @@ sealed trait Connection:
 	def kind: String
 	def hidden: Boolean
 
-	def isBluff = this.matches:
+	def isBluff = this.matchesP:
 		case f: FinesseConn => f.bluff
 
-	def isPossiblyBluff = this.matches:
+	def isPossiblyBluff = this.matchesP:
 		case f: FinesseConn => f.bluff || f.possiblyBluff
 
 case class KnownConn(

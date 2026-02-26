@@ -92,11 +92,15 @@ def rankSave(prev: HGroup, action: ClueAction, id: Identity, focus: Int): Boolea
 	if "Black|Dark Pink".r.matches(state.variant.suits(suitIndex).name) && (rank == 3 || rank == 4) then
 		return false
 
-	val loaded34 = prev.common.thinksLoaded(prev, giver) &&
+	val loaded34 = prev.common.thinksLoaded(prev, target) &&
 		(state.includesVariant(WHITISH) || state.includesVariant("Dark Rainbow|Dark Prism".r)) &&
 		(rank == 3 || rank == 4)
 
 	if loaded34 then
+		return false
+
+	// Breaks pink promise
+	if state.includesVariant(PINKISH) && clue.kind == ClueKind.Rank && rank != clue.value then
 		return false
 
 	state.isCritical(id) || rank == 2

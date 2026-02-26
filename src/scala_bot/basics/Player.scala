@@ -181,7 +181,7 @@ case class Player(
 		game.state.hands(playerIndex).filter(orderKp(game, _))
 			.pipe(game.filterPlayables(this, playerIndex, _))
 
-	def thinksPlayables(game: Game, playerIndex: Int, excludeTrash: Boolean = false) =
+	def thinksPlayables(game: Game, playerIndex: Int, excludeTrash: Boolean = false, assume: Boolean = true) =
 		game.state.hands(playerIndex).filter(o => orderPlayable(game, o, excludeTrash = excludeTrash && game.isTouched(o)))
 			.pipe: playables =>
 				// Exclude unknown cards if there is a duplicate that is fully known.
@@ -191,7 +191,7 @@ case class Player(
 						p1 != p2 &&
 						thoughts(p2).id().exists(thoughts(p1).matches(_, infer = true))
 			.pipe:
-				game.filterPlayables(this, playerIndex, _)
+				game.filterPlayables(this, playerIndex, _, assume)
 
 	def thinksTrash(game: Game, playerIndex: Int) =
 		game.state.hands(playerIndex).filter(orderTrash(game, _))
@@ -246,11 +246,7 @@ case class Player(
 						clues.head.kind == ClueKind.Rank &&
 						clues.head.value != id.rank
 
-					lazy val colourMatch = card.clues.exists: c =>
-						c.kind == ClueKind.Colour &&
-						state.variant.colourableSuits(c.value).suitType.pinkish
-
-					!misranked && colourMatch
+					!misranked && prev.knownAs(order, PINKISH)
 			)
 
 		// Prompt the card with the most positive information

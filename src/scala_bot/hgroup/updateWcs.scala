@@ -34,7 +34,7 @@ def checkRevealLayer(prev: HGroup, game: HGroup, action: ClueAction) =
 		.toOption
 
 def stompedWc(prev: HGroup, game: HGroup, action: Action, wc: WaitingConnection) =
-	action.matches:
+	action.matchesP:
 		case action @ ClueAction(giver, target, list, clue) if wc.target != giver =>
 			val focus = game.determineFocus(prev, action).focus
 
@@ -55,7 +55,7 @@ def unplayableAlt(game: HGroup, action: Action, wc: WaitingConnection) =
 			conn.order == order &&
 			conn.ids.exists: i =>
 				!game.state.isPlayable(i) ||
-				action.matches:
+				action.matchesP:
 					case PlayAction(_, _, suitIndex, rank) => i.prev.contains(Identity(suitIndex, rank))
 
 private def revert(g: HGroup, order: Int, ids: List[Identity]) =
@@ -277,7 +277,7 @@ def otherPlay(game: HGroup, action: Action, wc: WaitingConnection) =
 	val thought = game.me.thoughts(wc.currConn.order)
 
 	// The card needs to match our thoughts as well as the hypothesized identity in the connection
-	action.matches { case PlayAction(_, order, suitIndex, rank) =>
+	action.matchesP { case PlayAction(_, order, suitIndex, rank) =>
 		order != wc.currConn.order &&
 		thought.matches(Identity(suitIndex, rank), infer = true)
 	} &&
@@ -334,9 +334,11 @@ def resolveRetained(prev: HGroup, game: HGroup, action: Action, wc: WaitingConne
 	// 	return UpdateResult.Remove
 
 	val missedReaction = newFinesseQueued.isDefined ||
-		wc.currConn.matches:
+		wc.currConn.matchesP:
 			case _: FinesseConn => true
-			case _: PromptConn => true
+			case _: PromptConn => game.lastActions(reacting).matchesP:
+				case Some(ClueAction(_, _, _, _)) => game.lastMove == Some(ClueInterp.Stall)
+				case Some(DiscardAction(_, _, _, _, _)) => true
 			case _: PositionalConn => true
 
 	if !missedReaction then
@@ -387,7 +389,7 @@ def resolveRetained(prev: HGroup, game: HGroup, action: Action, wc: WaitingConne
 			// 	return UpdateResult.Keep
 		case _ => ()
 
-	val passback = wc.currConn.matches:
+	val passback = wc.currConn.matchesP:
 		case f: FinesseConn =>
 			lazy val nonHiddenConns = wc.connections.count: conn =>
 				!conn.hidden &&
@@ -430,7 +432,7 @@ def resolvePlayed(game: HGroup, wc: WaitingConnection, play: Int): UpdateResult 
 
 	val nextIndex = wc.getNextIndex(state)
 
-	val missedReaction = wc.currConn.matches:
+	val missedReaction = wc.currConn.matchesP:
 		case _: FinesseConn => true
 		case _: PromptConn => true
 

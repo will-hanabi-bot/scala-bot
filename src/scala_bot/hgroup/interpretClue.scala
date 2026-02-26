@@ -37,36 +37,43 @@ def badCM(ctx: ClueContext, chopMoved: Seq[Int]) =
 				// Clue must be valid
 				prev.copy(noRecurse = true, allowFindOwn = false).simulateClue(clueToAction(prev.state, clue, giver)).lastMove != Some(ClueInterp.Mistake)
 
-def interpClue(ctx: ClueContext): HGroup =
+def checkHFix(ctx: ClueContext): Option[HGroup] =
 	val ClueContext(prev, game, action) = ctx
-	val (common, state) = (game.common, game.state)
-	val ClueAction(giver, target, list, clue) = action
+	val state = game.state
+	val FocusResult(focus, chop, _) = ctx.focusResult
+	val ClueAction(giver, _, list, clue) = action
 
-	val FocusResult(focus, chop, positional) = ctx.focusResult
 	checkFix(prev, game, action) match
-		case FixResult.Normal(cluedResets, duplicateReveals) =>
-			Log.info(s"fix clue! not inferring anything else $cluedResets $duplicateReveals")
+		case FixResult.None =>
+			val pink1Fix = state.includesVariant(PINKISH) &&
+				prev.common.hypoStacks.exists(_ == 0) &&
+				list.exists: o =>
+					!prev.meta(o).focused &&
+					prev.unknown1(o) &&
+					clue.kind == ClueKind.Rank && clue.value != 1
 
-			lazy val oldOrdered1s = prev.order1s(list.filter(prev.unknown1), noFilter = true)
-			val pinkFix1s = state.includesVariant(PINKISH) &&
-				clue.kind == ClueKind.Rank && clue.value != 1 &&
-				oldOrdered1s.nonEmpty
-
-			return game.when (_ => pinkFix1s) { g =>
+			if !pink1Fix then None else
+				val oldOrdered1s = prev.order1s(list.filter(prev.unknown1), noFilter = true)
 				val fixedOrder = oldOrdered1s.head
 
 				if chop && (clue.value == 2 || clue.value == 5) then
 					Log.info(s"pink fix!")
-					g.withThought(fixedOrder)(t => t.copy(
-						inferred = t.possible.difference(state.playableSet)
-					))
-				else
+					Some(game.withThought(fixedOrder)(t => t.copy(
+							inferred = t.possible.difference(state.playableSet)
+						)).copy(lastMove = Some(ClueInterp.Fix)))
+
+				else if state.deck(fixedOrder).id().exists(_.rank == clue.value) then
 					Log.info(s"pink fix promise!")
-					g.withThought(fixedOrder)(t => t.copy(
-						inferred = t.inferred.filter(i => i.rank == clue.value && !state.isPlayable(i))
-					))
-			}
-			.copy(lastMove = Some(ClueInterp.Fix))
+					Some(game.withThought(fixedOrder)(t => t.copy(
+							inferred = t.inferred.filter(i => i.rank == clue.value && !state.isPlayable(i))
+						)).copy(lastMove = Some(ClueInterp.Fix)))
+
+				else
+					None
+
+		case FixResult.Normal(cluedResets, duplicateReveals) =>
+			Log.info(s"fix clue! not inferring anything else $cluedResets $duplicateReveals")
+			Some(game)
 
 		case FixResult.NoNewInfo(fixes) =>
 			Log.info("no info fix clue! not inferring anything else")
@@ -77,11 +84,19 @@ def interpClue(ctx: ClueContext): HGroup =
 
 			val badFix = giver == state.ourPlayerIndex && !game.me.orderTrash(game, fixTarget)
 
-			return game
+			Some(game
 				.withThought(fixTarget)(t => t.copy(inferred = t.possible.intersect(state.trashSet)))
 				.withMeta(fixTarget)(_.copy(trash = true))
-				.copy(lastMove = if badFix then Some(ClueInterp.Mistake) else Some(ClueInterp.Fix))
+				.copy(lastMove = if badFix then Some(ClueInterp.Mistake) else Some(ClueInterp.Fix)))
 
+def interpClue(ctx: ClueContext): HGroup =
+	val ClueContext(prev, game, action) = ctx
+	val (common, state) = (game.common, game.state)
+	val ClueAction(giver, target, list, clue) = action
+	val FocusResult(focus, chop, positional) = ctx.focusResult
+
+	checkHFix(ctx) match
+		case Some(newGame) => return newGame
 		case _ => ()
 
 	val stall = stallingSituation(ctx)
@@ -198,11 +213,12 @@ def interpClue(ctx: ClueContext): HGroup =
 				)
 			.copy(lastMove = Some(ClueInterp.Fix))
 
-	val uselessReclue = prev.state.deck(focus).clued && {
-		prev.common.hypoPlays.contains(focus) ||
-		game.me.thoughts(focus).id().exists: id =>
-			prev.common.hypoStacks(id.suitIndex) >= id.rank
-	}
+	val uselessReclue = prev.state.deck(focus).clued &&
+		!positional && {
+			prev.common.hypoPlays.contains(focus) ||
+			game.me.thoughts(focus).id().exists: id =>
+				prev.common.hypoStacks(id.suitIndex) >= id.rank
+		}
 
 	if uselessReclue then
 		Log.warn("nonsensical burn!")
@@ -230,7 +246,7 @@ def interpClue(ctx: ClueContext): HGroup =
 			(action.clue.kind == ClueKind.Colour || savePoss.nonEmpty || positional)
 
 		common.thoughts(focus).inferred.filter: inf =>
-			!game.invalidFocus(giver, inf, focus) &&
+			!game.invalidFocus(giver, clue, inf, ctx.focusResult) &&
 			visibleFind(state, game.players(target), inf, excludeOrder = focus).filter(o => state.deck(o).clued && !state.hands(giver).contains(o)).isEmpty &&
 			!savePoss.exists(_.id == inf)
 		.flatMap:
@@ -260,6 +276,7 @@ def interpClue(ctx: ClueContext): HGroup =
 			val ownFps =
 				val looksDirect = game.players(target).thoughts(focus).id().isEmpty && {
 					// clue.kind == ClueKind.Colour ||
+					positional ||
 					// Looks like an existing possibility
 					focusPoss.exists: fp =>
 						game.players(target).thoughts(focus).possible.contains(fp.id) &&
@@ -269,7 +286,7 @@ def interpClue(ctx: ClueContext): HGroup =
 				}
 
 				common.thoughts(focus).inferred.filter: inf =>
-					!game.invalidFocus(giver, inf, focus) &&
+					!game.invalidFocus(giver, clue, inf, ctx.focusResult) &&
 					!(savePoss.exists(_.id == inf) || simplest.exists(_.id == inf))
 				.flatMap:
 					connect(ctx, _, looksDirect, thinksStall, findOwn = Some(state.ourPlayerIndex))
@@ -294,3 +311,7 @@ def interpClue(ctx: ClueContext): HGroup =
 				g.copy(lastMove = Some(ClueInterp.Stall), stallInterp = Some(StallInterp.Tempo))
 			case _ =>
 				g
+	.when(_.state.includesVariant(PINKISH) && clue.kind == ClueKind.Rank && clue.value == 1): g =>
+		// Pink 1's Assumption
+		list.filter(g.unknown1).foldLeft(g): (acc, o) =>
+			acc.withThought(o)(t => t.copy(inferred = t.inferred.filter(_.rank == 1)))

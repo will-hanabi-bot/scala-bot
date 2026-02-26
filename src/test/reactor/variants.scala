@@ -1,4 +1,4 @@
-package tests.reactor.variants
+package tests.reactor
 
 import scala_bot.reactor.Reactor
 import scala_bot.basics._
@@ -45,3 +45,32 @@ class Variants extends munit.FunSuite:
 		// Alice does not have a playable.
 		assert(game.common.obviousPlayables(game, Alice.ordinal).isEmpty)
 		hasStatus(game, Alice, 1, CardStatus.None)
+
+	test("it uses value cluing for pink"):
+		val game = setup(Reactor.apply, Vector(
+			Vector("xx", "xx", "xx", "xx", "xx"),
+			Vector("b1", "r1", "r4", "y4", "y4"),
+			Vector("g4", "r4", "g4", "b4", "b4")
+		),
+			variant = TestVariant.Pink5,
+			starting = Cathy
+		)
+		.pipe(takeTurn("Cathy clues 4 to Bob"))
+
+		// 3 + 1 = 4, not 2 + 1 = 3
+		hasStatus(game, Alice, 3, CardStatus.CalledToPlay)
+
+	test("it uses value cluing for rainbow"):
+		val game = setup(Reactor.apply, Vector(
+			Vector("xx", "xx", "xx", "xx", "xx"),
+			Vector("g1", "b1", "r4", "r4", "y4"),
+			Vector("g4", "y4", "g4", "b4", "b4")
+		),
+			variant = TestVariant.Rainbow5,
+			starting = Cathy,
+			clueTokens = 6
+		)
+		.pipe(takeTurn("Cathy clues red to Bob"))
+
+		// 5 + 1 = 1, not 2 + 1 = 3
+		hasStatus(game, Alice, 5, CardStatus.CalledToDiscard)

@@ -31,7 +31,7 @@ extension [A](a: A)
 	inline def when(inline condition: A => Boolean)(inline f: A => A): A =
 		if condition(a) then f(a) else a
 
-	def matches(cond: PartialFunction[A, Boolean]): Boolean =
+	def matchesP(cond: PartialFunction[A, Boolean]): Boolean =
 		cond.applyOrElse(a, _ => false)
 
 	inline def pipe[B](inline f: A => B): B = f(a)
@@ -40,7 +40,7 @@ extension [A](a: A)
 
 extension[A](it: Iterator[A])
 	def existsM(cond: PartialFunction[A, Boolean]): Boolean =
-		it.fastExists(_.matches(cond))
+		it.fastExists(_.matchesP(cond))
 
 	inline def fastForeach(inline f: A => Unit): Unit =
 		while it.hasNext do
@@ -99,7 +99,7 @@ extension[A](it: Iterator[A])
 
 extension [A](a: Iterable[A])
 	def existsM(cond: PartialFunction[A, Boolean]): Boolean =
-		a.iterator.fastExists(_.matches(cond))
+		a.iterator.fastExists(_.matchesP(cond))
 
 	inline def fastForeach(inline f: A => Unit): Unit =
 		a.iterator.fastForeach(f)

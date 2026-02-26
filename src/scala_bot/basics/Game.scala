@@ -71,7 +71,7 @@ trait Game:
 
 	def goodTouch: Boolean
 
-	def filterPlayables(@annotation.unused player: Player, @annotation.unused playerIndex: Int, orders: Seq[Int]) =
+	def filterPlayables(@annotation.unused player: Player, @annotation.unused playerIndex: Int, orders: Seq[Int], @annotation.unused assume: Boolean = true) =
 		orders
 
 	def validArr(@annotation.unused id: Identity, @annotation.unused order: Int) =

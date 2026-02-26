@@ -121,7 +121,7 @@ def alternativeClue(ctx: ClueContext, maxStall: Int) =
 		val (badTouch, _, _) = badTouchResult(game, hypo, action)
 		val (_, playables) = playablesResult(game, hypo)
 
-		hypo.lastMove.get.matches:
+		hypo.lastMove.get.matchesP:
 			case ClueInterp.Play =>
 				playables.exists(!game.state.deck(_).clued) &&
 				badTouch.isEmpty &&
@@ -151,7 +151,7 @@ def alternativeClue(ctx: ClueContext, maxStall: Int) =
 			list = prev.state.clueTouched(prev.state.hands(target), clue)
 			action = ClueAction(giver, target, list, clue.base)
 			focus = prev.determineFocus(prev, action).focus if focus != origFocus && !prev.isTouched(focus)
-			hypo = prev.copy(allowFindOwn = false, noRecurse = true)
+			hypo = prev.copy(allowFindOwn = false, noRecurse = true, assumePlays = false)
 				.simulateClue(action) if satisfied(hypo, action)
 		yield
 			Log.info(s"found alt clue ${clue.fmt(state)} ${hypo.lastMove.get}")
@@ -173,16 +173,20 @@ def stallingSituation(ctx: ClueContext): Option[(StallInterp, Set[Int])] =
 	val ClueContext(prev, game, action) = ctx
 	val ClueAction(giver, target, list, clue) = ctx.action
 
-	val giverLoaded = prev.common.thinksPlayables(prev, giver).nonEmpty ||
+	val severity = stallSeverity(ctx.prev, ctx.prev.common, giver, infoPlayer = Some(ctx.game.common))
+	Log.info(s"severity $severity")
+
+	lazy val giverLoaded = prev.common.thinksPlayables(prev, giver, assume = false).nonEmpty ||
 		(prev.common.thinksTrash(prev, giver).nonEmpty && prev.state.clueTokens < 8)
 
-	if giverLoaded then
+	if severity == 0 then
+		None
+
+	else if giverLoaded then
 		Log.info(s"giver loaded ${prev.common.thinksPlayables(prev, giver)}, not stall!")
 		None
-	else
-		val severity = stallSeverity(ctx.prev, ctx.prev.common, giver, infoPlayer = Some(ctx.game.common))
-		Log.info(s"severity $severity")
 
+	else
 		isStall(ctx, severity).map: stall =>
 			if game.noRecurse then
 				(stall, (0 until game.state.numPlayers).toSet)

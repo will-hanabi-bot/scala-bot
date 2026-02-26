@@ -353,7 +353,7 @@ case class EndgameSolver[G <: Game](
 
 		if state.score + 1 == state.maxScore then
 			val winningPlay = performs.find: (p, _) =>
-				p.matches:
+				p.matchesP:
 					case PerformAction.Play(target) => state.isPlayable(state.deck(target).id().get)
 
 			if winningPlay.isDefined then
