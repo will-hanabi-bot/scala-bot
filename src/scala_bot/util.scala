@@ -193,7 +193,7 @@ def visibleFind(
 			cond(playerIndex, order)
 		}
 
-def clueToPerform(clue: Clue): PerformAction.Colour | PerformAction.Rank =
+def clueToPerform(clue: Clue): PerformAction =
 	val Clue(kind, value, target) = clue
 	kind match
 		case ClueKind.Colour => PerformAction.Colour(target, value)

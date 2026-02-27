@@ -3,6 +3,9 @@ package scala_bot.basics
 enum ClueKind:
 	case Colour, Rank
 
+/** Generic trait that all clues extend, containing a [[kind]] and a [[value]].
+  * Provides [[ClueLike.base]] to convert to a BaseClue, [[ClueLike.fmt]] to pretty-print, and [[ClueLike.isEq]] for equality.
+  */
 trait ClueLike:
 	def kind: ClueKind
 	def value: Int
@@ -18,6 +21,10 @@ trait ClueLike:
 	def isEq(other: ClueLike): Boolean =
 		kind == other.kind && value == other.value
 
+/** The pairing of a clue kind and value.
+  * @param kind  Whether the clue is rank or colour.
+  * @param value The rank of a rank clue, or the suitIndex of a colour clue.
+  */
 case class BaseClue(kind: ClueKind, value: Int) extends ClueLike:
 	def hash: Int =
 		(if kind == ClueKind.Colour then 0 else 10) + value
@@ -33,6 +40,12 @@ object BaseClue:
 			case _ => throw new IllegalArgumentException("Invalid clue kind")
 		BaseClue(kind, json.obj("value").num.toInt)
 
+/** A clue that has touched a card.
+  * @param kind   Whether the clue is rank or colour.
+  * @param value  The rank of a rank clue, or the suitIndex of a colour clue.
+  * @param giver  The index of the player who gave the clue.
+  * @param turn   The turn on which the clue was given.
+  */
 case class CardClue(
 	kind: ClueKind,
 	value: Int,
@@ -40,6 +53,11 @@ case class CardClue(
 	turn: Int
 ) extends ClueLike
 
+/** A clue that can be given.
+  * @param kind   Whether the clue is rank or colour.
+  * @param value  The rank of a rank clue, or the suitIndex of a colour clue.
+  * @param target  The index of the player to receive this clue.
+  */
 case class Clue(
 	kind: ClueKind,
 	value: Int,

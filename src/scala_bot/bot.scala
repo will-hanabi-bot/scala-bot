@@ -1,4 +1,4 @@
-//> using scala 3.7.2
+//> using scala 3.8.2
 //> using jvm 25
 //> using options -Wall -Wconf:msg=toString:s -feature
 //> using dep com.softwaremill.sttp.client4::core:4.0.19

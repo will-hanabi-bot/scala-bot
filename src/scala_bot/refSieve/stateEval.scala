@@ -143,10 +143,10 @@ def advance(orig: RefSieve, game: RefSieve, offset: Int): Double =
 				val action = DiscardAction(playerIndex, chop, id.suitIndex, id.rank)
 				val dcGame = game.simulate(action)
 
-				if state.clueTokens > 2 then
-					val clueGame = game.withState(s => s.copy(clueTokens = s.clueTokens - 1))
-
-					val clueProb = if offset == 1 then
+				val clueProb =
+					if state.numPlayers == 2 then
+						0
+					else if offset == 1 then
 						if common.thinksLoaded(game, bob) then
 							0.2
 						else if bobChop.isDefined then
@@ -156,8 +156,9 @@ def advance(orig: RefSieve, game: RefSieve, offset: Int): Double =
 					else
 						0.8
 
+				if state.clueTokens > 2 && clueProb > 0 then
 					Log.info(s"${state.names(playerIndex)} discarding ${state.logId(id)} but might clue $clueProb")
-					clueProb * advance(orig, clueGame, offset + 1) + (1.0 - clueProb) * advance(orig, dcGame, offset + 1)
+					clueProb * _forceClue(orig, game, offset) + (1.0 - clueProb) * advance(orig, dcGame, offset + 1)
 				else
 					Log.info(s"${state.names(playerIndex)} discarding ${state.logId(id)}")
 					advance(orig, dcGame, offset + 1)

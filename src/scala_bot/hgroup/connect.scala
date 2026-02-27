@@ -127,7 +127,13 @@ def findUnknownConnecting(ctx: ClueContext, reacting: Int, id: Identity, connect
 
 	val prompt = prev.common.findPrompt(prev, reacting, id, connected, ignore)
 	// Need to use 'game' to exclude newly clued cards
-	val potentialFinesse = game.findFinesseId(reacting, id, connected, ignore, overrideLayer = opts.insertingInto.exists(prev.state.hands(reacting).contains))
+	val potentialFinesse = game.findFinesseId(
+		reacting,
+		id,
+		connected,
+		ignore,
+		overrideLayer = opts.insertingInto.exists(_.exists(prev.state.hands(reacting).contains))
+	)
 
 	if prompt.exists(!rainbowMismatch(prev, action, id, _)) then
 		return tryPrompt(prompt.get)
@@ -220,7 +226,7 @@ def findUnknownConnecting(ctx: ClueContext, reacting: Int, id: Identity, connect
 			if newConnected.isEmpty then
 				None
 			else
-				game.findFinesseId(reacting, id, newConnected, ignore, overrideLayer = opts.insertingInto.exists(prev.state.hands(reacting).contains))
+				game.findFinesseId(reacting, id, newConnected, ignore, overrideLayer = opts.insertingInto.exists(_.exists(prev.state.hands(reacting).contains)))
 		else
 			potentialFinesse
 
@@ -479,12 +485,12 @@ def connect(ctx: ClueContext, id: Identity, looksDirect: Boolean, thinksStall: S
 	loop(game, state.playStacks(id.suitIndex) + 1, Nil, initialConnCtx, initialOpts) match
 		case (Left(conns), _) if conns.existsM { case _: KnownConn => true } =>
 			val newIgnore = ignoreKnown + conns.collectFirst { case c: KnownConn => c.order }.get
-			connect(ctx, id, looksDirect, thinksStall, ignoreKnown = newIgnore, findOwn = findOwn)
+			connect(ctx, id, looksDirect, thinksStall, ignoreKnown = newIgnore, findOwn = findOwn, assumeTruth = assumeTruth, preferOwn = preferOwn)
 
 		case (Left(_), bluffed) if game.level > Level.Bluffs && !assumeTruth && bluffed =>
 			Log.highlight(Console.MAGENTA, "bluff connection failed, retrying true finesse")
 
-			connect(ctx, id, looksDirect, thinksStall, assumeTruth = true, findOwn = findOwn)
+			connect(ctx, id, looksDirect, thinksStall, assumeTruth = true, findOwn = findOwn, ignoreKnown = ignoreKnown, preferOwn = preferOwn)
 
 		case (Right(conns), _) =>
 			val symmetric = !state.deck(focus).matches(id, assume = true) ||

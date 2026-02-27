@@ -5,6 +5,7 @@ import scala_bot.utils._
 import scala_bot.logger.Log
 
 extension[G <: Game](game: G)
+	/** Returns the updated game after the clue, without conventional interpretations or elim. */
 	def onClue(action: ClueAction)(using ops: GameOps[G]): G =
 		val state = game.state
 		val ClueAction(giver, target, list, clue) = action
@@ -42,6 +43,7 @@ extension[G <: Game](game: G)
 		.withState: s =>
 			s.copy(endgameTurns = s.endgameTurns.map(_ - 1), clueTokens = s.clueTokens - 1)
 
+	/** Returns the updated game after the discard, without conventional interpretations or elim. */
 	def onDiscard(action: DiscardAction)(using ops: GameOps[G]): G =
 		val DiscardAction(playerIndex, order, suitIndex, rank, failed) = action
 		val id = Identity(suitIndex, rank)
@@ -61,16 +63,20 @@ extension[G <: Game](game: G)
 			.withThought(order):
 				_.copy(suitIndex, rank, inferred = IdentitySet.single(id), possible = IdentitySet.single(id))
 
+	/** Returns the updated game after the draw, without conventional interpretations or elim.
+	  * @throws Exception If the draw reveals an inconsistent state, like the card order not matching the # of cards in the deck.
+	  */
 	def onDraw(action: DrawAction)(using ops: GameOps[G]): G =
+		val state = game.state
 		val DrawAction(playerIndex, order, suitIndex, rank) = action
 
-		if game.state.hands(playerIndex).length == HAND_SIZE(game.state.numPlayers) then
-			throw new Exception(s"${game.state.names(playerIndex)} already has a full hand!")
+		if state.hands(playerIndex).length == HAND_SIZE(state.numPlayers) then
+			throw new Exception(s"${state.names(playerIndex)} already has a full hand!")
 
 		val id = Option.when(suitIndex != -1 && rank != -1):
 			game.deckIds.lift(order).flatten.foreach: id =>
 				if id != Identity(suitIndex, rank) then
-					throw new Exception(s"drew ${game.state.logId(Identity(suitIndex, rank))}, expected ${game.state.logId(id)} ${game.deckIds.map(game.state.logId)} ${order}")
+					throw new Exception(s"drew ${state.logId(Identity(suitIndex, rank))}, expected ${state.logId(id)} ${game.deckIds.map(state.logId)} ${order}")
 
 			Identity(suitIndex, rank)
 
@@ -119,6 +125,7 @@ extension[G <: Game](game: G)
 				meta = Some(g.meta :+ ConvData(order))
 			))
 
+	/** Returns the updated game after the play, without conventional interpretations or elim. */
 	def onPlay(action: PlayAction)(using ops: GameOps[G]): G =
 		val PlayAction(playerIndex, order, suitIndex, rank) = action
 		val id = Identity(suitIndex, rank)
@@ -141,6 +148,10 @@ extension[G <: Game](game: G)
 					oldPossible = t.possible.toOpt
 				)
 
+	/** Returns the updated game after performing empathy operations, including good touch if the convention uses it.
+	  * Also clears the dirty bit on all players.
+	  * @param except The index of the player to ignore during good touch elim (e.g. if they are giving a clue).
+	  */
 	def elim(except: Option[Int] = None)(using ops: GameOps[G]): G =
 		val state = game.state
 

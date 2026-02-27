@@ -2,6 +2,9 @@ package scala_bot.basics
 
 import scala_bot.utils._
 
+/** Computes empathy-related statistics of the clue.
+  * @return A tuple of the orders that were newly touched, filled-in, and had inferences removed from negative info.
+  */
 def elimResult(prev: Game, game: Game, hand: IndexedSeq[Int], list: Seq[Int]) =
 	val state = game.state
 	val initial = (List[Int](), List[Int](), List[Int]())
@@ -31,6 +34,9 @@ def elimResult(prev: Game, game: Game, hand: IndexedSeq[Int], list: Seq[Int]) =
 			(newTouched, fill, elim)
 	}
 
+/** Computes bad-touch-related statistics of the clue.
+  * @return A tuple of the orders that were bad touched, known trash, and dupes that could have been clued by someone else.
+  */
 def badTouchResult(prev: Game, game: Game, action: ClueAction) =
 	val state = game.state
 	val ClueAction(giver, target, _, _) = action
@@ -80,6 +86,9 @@ def badTouchResult(prev: Game, game: Game, action: ClueAction) =
 
 	(badTouch, trash, avoidableDupe)
 
+/** Computes playable-related statistics of the clue.
+  * @return A tuple of the orders that are newly blind playing and newly playable.
+  */
 def playablesResult(prev: Game, game: Game) =
 	game.me.hypoPlays.foldRight((List[Int](), List[Int]())) { case (order, (blindPlays, playables)) =>
 		val badPlayable = prev.me.hypoPlays.contains(order) ||

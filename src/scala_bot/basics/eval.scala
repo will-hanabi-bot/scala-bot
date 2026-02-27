@@ -3,11 +3,23 @@ package scala_bot.basics
 import scala_bot.utils._
 import scala_bot.logger.{Log, Logger, LogLevel}
 
+/** Evaluates the game state assuming the provided giver clues on their turn.
+  * If there are no clue tokens or there are no visible clues (outside of 2p), returns -999.
+  * In 2p, simply lowers the clue count by 1 before calling [[advance]].
+  * @param game The current game.
+  * @param giver The index of the player who will clue.
+  * @param advance Evaluates the game state; called after cluing.
+  * @param only If provided, only allows the giver to clue this player.
+  * @param clueFilter Filters what clues are allowed to be given.
+  */
 def forceClue[G <: Game](game: G, giver: Int, advance: G => Double, only: Option[Int] = None, clueFilter: Clue => Boolean = _ => true)(using ops: GameOps[G]): Double =
 	val state = game.state
 
 	if !state.canClue then
 		return -999.0
+
+	if state.numPlayers == 2 then
+		return advance(game.withState(s => s.copy(clueTokens = s.clueTokens - 1)))
 
 	val allClues =
 		for

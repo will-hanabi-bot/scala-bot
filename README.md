@@ -25,7 +25,6 @@ https://github.com/user-attachments/assets/665e7d78-7c8b-4f07-b4c3-9116ec2ec8ab
 - Debug logs will show up in the console, providing more information about what the bot thinks about every action.
 	- `hand <playerName> [observerName]` will display the information on that player's hand from a particular perspective.
         - If no observer name is provided, the hand will be logged from the common knowledge perspective.
-
 - Compiling a Scala program can be memory-intensive, so you may want to package an executable file that can be run elsewhere.
 	- Use `scala-cli --power package . --main-class scala_bot.main -o bot --assembly`.
 	- Add `--preamble=false` to create a jar instead (more portable).

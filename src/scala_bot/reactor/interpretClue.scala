@@ -13,9 +13,9 @@ private def reactiveFocus(state: State, receiver: Int, action: ClueAction) =
 
 	clue.kind match
 		case ClueKind.Colour =>
-			if state.includesVariant(RAINBOWISH) then clue.value + 1 else focusIndex + 1
+			if state.includesVariant(RAINBOWISH) || state.variant.rainbowS then clue.value + 1 else focusIndex + 1
 		case ClueKind.Rank =>
-			if state.includesVariant(PINKISH) then clue.value else focusIndex + 1
+			if state.includesVariant(PINKISH) || state.variant.pinkS then clue.value else focusIndex + 1
 
 def interpretStable(prev: Reactor, game: Reactor, action: ClueAction, stall: Boolean) =
 	val ClueAction(giver, target, _, _) = action

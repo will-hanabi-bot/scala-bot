@@ -62,7 +62,7 @@ case class Reactor(
 			meta(_).status == CardStatus.CalledToDiscard
 		.orElse:
 			state.hands(playerIndex).find: order =>
-				zcsTurn.forall(_ >= state.deck(order).drawnIndex) &&
+				zcsTurn.forall(_ >= state.deck(order).turnDrawn) &&
 				!state.deck(order).clued &&
 				meta(order).status == CardStatus.None
 

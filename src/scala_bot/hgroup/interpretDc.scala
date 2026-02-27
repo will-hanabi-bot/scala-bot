@@ -425,7 +425,7 @@ def interpretPosDc(ctx: DiscardContext): Option[HGroup] =
 					order,
 					newGame.common.thoughts(order).inferred.toList,
 					ambiguousOwn =
-						if targets.contains(state.ourPlayerIndex) || playerIndex == state.ourPlayerIndex then None else
+						if targets.exists(_._1 == state.ourPlayerIndex) || playerIndex == state.ourPlayerIndex then None else
 							state.ourHand.lift(slot - 1).map:
 								_ -> playablePoss(g, state.ourPlayerIndex, playerIndex).toList
 				)
