@@ -2,7 +2,7 @@ package tests.hgroup.level10
 
 import scala_bot.basics._
 import scala_bot.test.{hasInfs, hasStatus, Player, preClue, setup, takeTurn}, Player._
-import scala_bot.hgroup.HGroup
+import scala_bot.hgroup.{evalAction, HGroup}
 
 import scala_bot.utils.{pipe, tap}
 import scala_bot.logger.{Logger, LogLevel}
@@ -228,6 +228,18 @@ class GentlemansDiscards extends munit.FunSuite:
 		// Layered GD revealed, r3 moved to slot 2.
 		hasInfs(game, None, Alice, 2, Vector("r3"))
 		hasStatus(game, Alice, 2, CardStatus.GentlemansDiscard)
+
+	test("doesn't perform an illegal gentleman's discard"):
+		val game = setup(HGroup.atLevel(10), Vector(
+			Vector("xx", "xx", "xx", "xx", "xx"),
+			Vector("b2", "g4", "r4", "p2", "b4")
+		),
+			playStacks = Some(Vector(2, 2, 2, 1, 0)),
+			clueTokens = 7,
+			init = preClue(Alice, 5, Seq("2"))
+		)
+
+		assert(evalAction(game, DiscardAction(Alice.ordinal, game.state.hands(Alice.ordinal)(4), -1, -1, false)) < 0)
 
 class BatonDiscards extends munit.FunSuite:
 	override def beforeAll() = Logger.setLevel(LogLevel.Off)

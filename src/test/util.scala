@@ -1,5 +1,6 @@
 package scala_bot.test
 
+import scala_bot.TableOptions
 import scala_bot.basics._
 import scala_bot.utils.{pipe, tap, visibleFind}
 
@@ -40,7 +41,8 @@ def setup[G <: Game](
 	init: G => G = (x: G) => x
 )(using ops: GameOps[G]) =
 	val playerNames = NAMES.slice(0, hands.length)
-	val _state = State(playerNames, 0, VARIANTS(variant))
+	val _variant = VARIANTS(variant)
+	val _state = State(playerNames, 0, _variant, TableOptions(playerNames.length, _variant.name))
 
 	ops.copyWith(constructor(0, _state, false), GameUpdates(catchup = Some(true)))
 		.pipe: g =>

@@ -63,10 +63,22 @@ def checkHFix(ctx: ClueContext): Option[HGroup] =
 						)).copy(lastMove = Some(ClueInterp.Fix)))
 
 				else if state.deck(fixedOrder).id().exists(_.rank == clue.value) then
-					Log.info(s"pink fix promise!")
-					Some(game.withThought(fixedOrder)(t => t.copy(
-							inferred = t.inferred.filter(i => i.rank == clue.value && !state.isPlayable(i))
-						)).copy(lastMove = Some(ClueInterp.Fix)))
+					Log.info(s"pink fix promise! ${game.common.links} $fixedOrder")
+					val newGame =
+						game.withThought(fixedOrder)(t => t.copy(
+							inferred = t.possible.filter(i => i.rank == clue.value && !state.isPlayable(i))
+						))
+						.pipe: g =>
+							list.filter(oldOrdered1s.contains).foldLeft(g): (acc, o) =>
+								if o == fixedOrder then
+									acc
+								else
+									acc.withThought(o)(t => t.copy(
+										inferred = t.possible
+									))
+						.copy(lastMove = Some(ClueInterp.Fix))
+
+					Some(newGame)
 
 				else
 					None
@@ -222,7 +234,7 @@ def interpClue(ctx: ClueContext): HGroup =
 
 	if uselessReclue then
 		Log.warn("nonsensical burn!")
-		return game.copy(lastMove = Some(ClueInterp.Mistake))
+		return game.copy(lastMove = Some(ClueInterp.Useless))
 
 	def validSave(inf: Identity) =
 		!state.isBasicTrash(inf) &&

@@ -6,6 +6,7 @@ import scala_bot.hgroup.HGroup
 
 import scala_bot.utils.pipe
 import scala_bot.logger.{Logger, LogLevel}
+import scala_bot.test.preClue
 
 class Brown extends munit.FunSuite:
 	override def beforeAll() = Logger.setLevel(LogLevel.Off)
@@ -90,3 +91,31 @@ class Brown extends munit.FunSuite:
 
 		// Slot 2 should not be chop moved.
 		hasStatus(game, Alice, 2, CardStatus.None)
+
+	test("interprets a loaded brown clue"):
+		val game = setup(HGroup.atLevel(1), Vector(
+			Vector("xx", "xx", "xx", "xx", "xx"),
+			Vector("r4", "r4", "y4", "y4", "g4")
+		),
+			starting = Bob,
+			variant = TestVariant.Brown5,
+			init = preClue(Alice, 1, Seq("1"))
+		)
+		.pipe(takeTurn("Bob clues brown to Alice (slot 5)"))
+
+		// Not a save clue.
+		hasInfs(game, None, Alice, 5, Vector("n1"))
+
+	test("doesn't interpret a loaded brown clue when only giver is loaded"):
+		val game = setup(HGroup.atLevel(1), Vector(
+			Vector("xx", "xx", "xx", "xx", "xx"),
+			Vector("r1", "r4", "y4", "y4", "g4")
+		),
+			starting = Bob,
+			variant = TestVariant.Brown5,
+			init = preClue(Bob, 1, Seq("1"))
+		)
+		.pipe(takeTurn("Bob clues brown to Alice (slot 5)"))
+
+		// Potentially a save clue.
+		hasInfs(game, None, Alice, 5, Vector("n1", "n2", "n5"))

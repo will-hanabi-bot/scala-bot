@@ -53,7 +53,7 @@ def interpret5cm(ctx: ClueContext): Option[Vector[Int]] =
 	val not5cm = clue != BaseClue(ClueKind.Rank, 5) ||
 		prev.state.deck(focus).clued ||
 		game.inEarlyGame ||
-		chop.isEmpty
+		chop.forall(list.contains)
 
 	if not5cm then
 		return None

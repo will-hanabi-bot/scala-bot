@@ -103,3 +103,16 @@ class General extends munit.FunSuite:
 
 		hasInfs(game, None, Alice, 4, Vector("y3"))
 		assertEquals(game.lastMove, Some(ClueInterp.Play))
+
+	test("plays the focus first"):
+		val game = setup(HGroup.atLevel(1), Vector(
+			Vector("xx", "xx", "xx", "xx", "xx"),
+			Vector("r1", "y1", "g1", "b1", "p1"),
+			Vector("r1", "y1", "g1", "b1", "p1"),
+		),
+			starting = Cathy,
+			playStacks = Some(Vector(3, 3, 3, 3, 3))
+		)
+		.pipe(takeTurn("Cathy clues 4 to Alice (slots 2,4,5)"))
+
+		assertEquals(game.takeAction, PerformAction.Play(game.state.hands(Alice.ordinal)(4)))

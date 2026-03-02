@@ -81,25 +81,33 @@ case class HGroup(
 		val ordered1s = this.order1s(orders.filter(this.unknown1), noFilter = true)
 
 		orders.filter: o =>
-			player.orderKp(this, o) ||
-			!{
-				(!assume && !isDefinite(o)) ||
-				state.hands(playerIndex).exists: o2 =>
-					// An older finesse exists which could be swapped with this identity
-					xmeta(o2).idUncertain &&
-					xmeta(o2).turnFinessed.exists(t2 => xmeta(o).turnFinessed.exists(_ > t2)) &&
-					xmeta(o2).finesseIds.exists(ids => player.thoughts(o).id(infer = true).exists(ids.contains))
-				||
-				waiting.exists: wc =>
-					!wc.symmetric && !wc.ambiguousSelf &&
-					// This is part of a hidden (?) connection that is not currently revealed
-					wc.connections.nonEmpty && {
-						wc.currConn.hidden && wc.connections.tail.exists(_.order == o) ||
-						wc.connections.tail.exists(c => c.order == o && c.hidden)
-					}
-				||
-				state.includesVariant(PINKISH) && ordered1s.nonEmpty && ordered1s.tail.contains(o)
-			}
+			// if player.orderKp(this, o) then
+			// 	true
+			val possibleFocusDupe = !ordered1s.contains(o) && !meta(o).focused && state.deck(o).clued && state.hands(playerIndex).exists: o2 =>
+				meta(o2).focused &&
+				state.deck(o).clues.forall(clue => state.deck(o2).clues.exists(_.isEq(clue)))
+
+			val olderFinesseExists = state.hands(playerIndex).exists: o2 =>
+				// An older finesse exists which could be swapped with this identity
+				xmeta(o2).idUncertain &&
+				xmeta(o2).turnFinessed.exists(t2 => xmeta(o).turnFinessed.exists(_ > t2)) &&
+				xmeta(o2).finesseIds.exists(ids => player.thoughts(o).id(infer = true).exists(ids.contains))
+
+			val unrevealedHidden = waiting.exists: wc =>
+				!wc.symmetric && !wc.ambiguousSelf &&
+				// This is part of a hidden (?) connection that is not currently revealed
+				wc.connections.nonEmpty && {
+					wc.currConn.hidden && wc.connections.tail.exists(_.order == o) ||
+					wc.connections.tail.exists(c => c.order == o && c.hidden)
+				}
+
+			val unorderedPink1 = state.includesVariant(PINKISH) && ordered1s.nonEmpty && ordered1s.tail.contains(o)
+
+			(assume || isDefinite(o)) &&
+			!possibleFocusDupe &&
+			!olderFinesseExists &&
+			!unrevealedHidden &&
+			!unorderedPink1
 
 	override def validArr(id: Identity, order: Int): Boolean =
 		val playables = this.me.thinksPlayables(this, state.ourPlayerIndex)
@@ -183,7 +191,6 @@ case class HGroup(
 			val status = this.meta(o).status
 
 			!card.clued &&
-			!this.meta(o).cm &&
 			!connected.contains(o) && {
 				if level < Level.IntermediateFinesses then
 					status != CardStatus.Finessed || this.xmeta(o).fStatus.contains(FStatus.PossiblyOn(state.ourPlayerIndex))
@@ -554,7 +561,8 @@ object HGroup:
 				refreshedGame.copy(
 					inEarlyGame = game.inEarlyGame && !endEarlyGame,
 					dcStatus = DcStatus.None,
-					dda = Some(Identity(suitIndex, rank))
+					dda = Some(Identity(suitIndex, rank)),
+					lastMove = Some(DiscardInterp.None)
 				)
 			.elim()
 			.when(g => g.level < Level.Stalling || g.dda.exists(id => id.suitIndex == -1 || id.rank == -1 || g.state.isBasicTrash(id))):
@@ -617,7 +625,8 @@ object HGroup:
 				yield
 					val perform = clueToPerform(clue)
 					val action = performToAction(state, perform, state.ourPlayerIndex)
-					(perform, action)
+					val value = evalAction(game, action)
+					(perform, action, value)
 
 			val earlyGameClue = game.earlyGameClue(state.ourPlayerIndex)
 
@@ -632,11 +641,12 @@ object HGroup:
 
 			val allPlays = playableOrders.map: o =>
 				val action = PlayAction(state.ourPlayerIndex, o, me.thoughts(o).id(infer = true, partial = true))
-				(PerformAction.Play(o), action)
+				val value = evalAction(game, action)
+				(PerformAction.Play(o), action, value)
 
 			val cantDiscard = state.clueTokens == 8 ||
 				// playableOrders.exists(game.meta(_).status == CardStatus.Finessed) ||
-				(state.pace == 0 && (allClues.nonEmpty || allPlays.nonEmpty)) ||
+				(state.pace == 0 && (allClues.exists(_._3 > 0) || allPlays.nonEmpty)) ||
 				game.dcStatus != DcStatus.None ||
 				hasEarlyGameClue
 
@@ -645,16 +655,21 @@ object HGroup:
 			val allDiscards = if cantDiscard then Nil else
 				discardOrders.map: o =>
 					val action = DiscardAction(state.ourPlayerIndex, o, me.thoughts(o).id(infer = true))
-					(PerformAction.Discard(o), action)
+					val value = evalAction(game, action)
+					(PerformAction.Discard(o), action, value)
 
 			val chop = game.chop(state.ourPlayerIndex)
+
+			val inDDA = game.level >= Level.Stalling &&
+				game.state.numPlayers >= 2 &&
+				game.dda.exists(id => state.isCritical(id) && game.chop(state.ourPlayerIndex).exists(me.thoughts(_).possible.contains(id)))
 
 			val canDiscardChop =
 				chop.isDefined &&
 				!cantDiscard &&
 				!me.thinksLocked(game, state.ourPlayerIndex) &&
 				!hasEarlyGameClue &&
-				!game.dda.exists(id => state.isCritical(id) && game.chop(state.ourPlayerIndex).exists(me.thoughts(_).possible.contains(id))) &&
+				!inDDA &&
 				{
 					((!state.canClue || allPlays.isEmpty) && allDiscards.isEmpty) ||
 					state.clueTokens == 0 ||
@@ -663,7 +678,9 @@ object HGroup:
 
 			val allActions =
 				allClues.concat(allPlays).concat(allDiscards).when(_ => canDiscardChop): as =>
-					as :+ (PerformAction.Discard(chop.get), DiscardAction(state.ourPlayerIndex, chop.get, -1, -1, false))
+					val action = DiscardAction(state.ourPlayerIndex, chop.get, -1, -1, false)
+					val value = evalAction(game, action)
+					as :+ (PerformAction.Discard(chop.get), action, value)
 
 			if allActions.isEmpty then
 				val anxietyPlay = me.anxietyPlay(state, state.ourPlayerIndex)
@@ -677,7 +694,7 @@ object HGroup:
 				else
 					return PerformAction.Discard(me.lockedDiscard(state, state.ourPlayerIndex))
 
-			allActions.maxBy((_, action) => evalAction(game, action)._2)._1
+			allActions.maxBy(_._3)._1
 
 		def updateTurn(game: HGroup, action: TurnAction) =
 			game

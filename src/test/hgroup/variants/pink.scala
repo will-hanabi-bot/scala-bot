@@ -118,8 +118,11 @@ class Pink1sAssumption extends munit.FunSuite:
 		.pipe(takeTurn("Alice clues pink to Cathy"))
 		.pipe(takeTurn("Bob plays y1", "b4"))
 		.pipe(takeTurn("Cathy clues 5 to Alice (slot 5)"))
+		.tap: g =>
+			assertEquals(g.takeAction, PerformAction.Rank(Bob.ordinal, 5))
+		.pipe(takeTurn("Alice clues 5 to Bob"))
 
-		assertEquals(game.takeAction, PerformAction.Rank(Bob.ordinal, 5))
+		hasInfs(game, None, Bob, 4, Vector("i2", "i3", "i4", "i5"))
 
 	test("fixes a pink 1s assumption with fix promise"):
 		val game = setup(HGroup.atLevel(4), Vector(
@@ -138,8 +141,12 @@ class Pink1sAssumption extends munit.FunSuite:
 
 		assertEquals(game.takeAction, PerformAction.Rank(Bob.ordinal, 3))
 
-		val hypo = takeTurn("Alice clues 4 to Bob")(game)
-		assertEquals(hypo.lastMove, Some(ClueInterp.Mistake))
+		val fixHypo = takeTurn("Alice clues 3 to Bob")(game)
+		assertEquals(fixHypo.lastMove, Some(ClueInterp.Fix))
+		hasInfs(fixHypo, None, Bob, 4, Vector("i3"))
+
+		val badHypo = takeTurn("Alice clues 4 to Bob")(game)
+		assertEquals(badHypo.lastMove, Some(ClueInterp.Mistake))
 
 	test("doesn't perform OCMs in pink"):
 		val game = setup(HGroup.atLevel(4), Vector(

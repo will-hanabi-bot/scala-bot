@@ -30,7 +30,7 @@ def stallSeverity(game: HGroup, player: Player, giver: Int, infoPlayer: Option[P
 	lazy val severity2 =
 		game.dcStatus == DcStatus.Scream ||
 		game.dcStatus == DcStatus.Shout ||
-		game.dda.exists: id =>
+		game.level >= Level.Stalling && game.state.numPlayers > 2 && game.dda.exists: id =>
 			state.isCritical(id) &&
 			game.chop(giver).exists: chop =>
 				infoPlayer.getOrElse(player).thoughts(chop).possible.contains(id)

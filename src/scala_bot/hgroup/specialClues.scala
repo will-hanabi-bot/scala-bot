@@ -51,7 +51,7 @@ def colourSave(prev: HGroup, action: ClueAction, id: Identity, focus: Int): Bool
 		if fillIns < 2 && trash == 0 then
 			return false
 
-	if suit.suitType.brownish && prev.common.thinksLoaded(prev, giver) then
+	if suit.suitType.brownish && prev.common.thinksLoaded(prev, target) then
 		return false
 
 	if "Dark Rainbow|Dark Prism".r.matches(suit.name) then

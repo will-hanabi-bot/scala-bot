@@ -12,7 +12,7 @@ case class Note(turn: Int, last: String, full: String)
 sealed trait Interp
 
 enum ClueInterp extends Interp:
-	case Mistake, Reactive, Play, Save, Discard, Lock, Reveal, Fix, Stall, Distribution
+	case Mistake, Reactive, Play, Save, Discard, Lock, Reveal, Fix, Stall, Distribution, Useless
 
 enum PlayInterp extends Interp:
 	case None, Mistake, OrderCM
@@ -250,7 +250,7 @@ extension[G <: Game](game: G)
 	def simulate(action: Action)(using ops: GameOps[G]): G =
 		action match
 			case clue: ClueAction => game.simulateAction(clue, log = true)
-			case _ => game.simulateAction(action)
+			case _ => game.simulateAction(action, log = true)
 
 	def rewind(turn: Int, action: Action)(using ops: GameOps[G]): Either[String, G] =
 		val state = game.state

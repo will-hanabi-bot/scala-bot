@@ -115,6 +115,23 @@ class TrashCM extends munit.FunSuite:
 		hasStatus(game, Alice, 2, CardStatus.None)
 		hasStatus(game, Alice, 3, CardStatus.None)
 
+	test("finesses into chop moved cards"):
+		val game = setup(HGroup.atLevel(4), Vector(
+			Vector("xx", "xx", "xx", "xx", "xx"),
+			Vector("b4", "b4", "g4", "r5", "r4")
+		),
+			starting = Bob,
+			playStacks = Some(Vector(1, 1, 1, 1, 1))
+		)
+		.pipe(takeTurn("Bob clues 1 to Alice (slots 2,3,4)"))
+		.pipe(takeTurn("Alice discards r1 (slot 2)"))
+		.pipe(takeTurn("Bob clues 4 to Alice (slot 1)"))
+		.pipe(takeTurn("Alice plays r2 (slot 2)"))
+
+		// Slot 5 should be finessed as r3.
+		hasStatus(game, Alice, 5, CardStatus.Finessed)
+		hasInfs(game, None, Alice, 5, Vector("r3"))
+
 class CM5 extends munit.FunSuite:
 	override def beforeAll() = Logger.setLevel(LogLevel.Off)
 

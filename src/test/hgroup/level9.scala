@@ -10,6 +10,33 @@ import scala_bot.logger.{Logger, LogLevel}
 class Stalling extends munit.FunSuite:
 	override def beforeAll() = Logger.setLevel(LogLevel.Off)
 
+	test("doesn't dda stall before level 9"):
+		val game = setup(HGroup.atLevel(8), Vector(
+			Vector("xx", "xx", "xx", "xx", "xx"),
+			Vector("r5", "g4", "b4", "b3", "g3"),
+			Vector("y4", "y4", "r4", "r3", "p3")
+		),
+			starting = Cathy,
+			clueTokens = 4
+		)
+		.pipe(takeTurn("Cathy discards p3", "g2"))
+		.pipe(takeTurn("Alice clues 5 to Bob"))
+
+		assertEquals(game.lastMove, Some(ClueInterp.Mistake))
+
+	test("doesn't dda stall in 2p"):
+		val game = setup(HGroup.atLevel(9), Vector(
+			Vector("xx", "xx", "xx", "xx", "xx"),
+			Vector("r5", "g4", "b4", "b3", "g3")
+		),
+			starting = Bob,
+			clueTokens = 4
+		)
+		.pipe(takeTurn("Bob discards g3", "p3"))
+		.pipe(takeTurn("Alice clues 5 to Bob"))
+
+		assertEquals(game.lastMove, Some(ClueInterp.Mistake))
+
 	test("understands a locked hand stall"):
 		val game = setup(HGroup.atLevel(9), Vector(
 			Vector("xx", "xx", "xx", "xx"),
@@ -242,6 +269,8 @@ class Stalling extends munit.FunSuite:
 		hasStatus(yellowFinesse, Alice, 1, CardStatus.Finessed)
 
 class DoubleDiscardAvoidance extends munit.FunSuite:
+	override def beforeAll() = Logger.setLevel(LogLevel.Off)
+
 	test("will give a 5 stall in dda"):
 		val game = setup(HGroup.atLevel(9), Vector(
 			Vector("xx", "xx", "xx", "xx"),

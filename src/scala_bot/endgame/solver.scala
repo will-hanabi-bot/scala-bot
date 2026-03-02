@@ -299,6 +299,7 @@ case class EndgameSolver[G <: Game](
 				Right((bestPerform, bestWinrate))
 
 		else
+			Logger.setLevel(level)
 			Right(initialActions.head)
 
 	def winnable(game: G, playerTurn: Int, remaining: RemainingMap, deadline: Instant, depth: Int = 0)(using ops: GameOps[G]): WinnableResult =

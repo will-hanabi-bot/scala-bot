@@ -1,5 +1,6 @@
 package scala_bot.basics
 
+import scala_bot.TableOptions
 import scala_bot.utils._
 import scala.util.matching.Regex
 import scala.util.hashing.MurmurHash3
@@ -32,7 +33,8 @@ case class State(
 
 	ourPlayerIndex: Int,
 	actionList: Vector[List[Action]] = Vector(),
-	currentPlayerIndex: Int = 0
+	currentPlayerIndex: Int = 0,
+	options: TableOptions
 ):
 	val hash =
 		val deckInts = Array.ofDim[Int](deck.length)
@@ -45,7 +47,7 @@ case class State(
 				else
 					0
 
-		MurmurHash3.productHash((hands, deckInts, clueTokens, halfClueToken, endgameTurns))
+		MurmurHash3.caseClassHash((hands, deckInts, clueTokens, halfClueToken, endgameTurns))
 
 	def withDiscard(id: Identity, order: Int) =
 		val Identity(suitIndex, rank) = id
@@ -221,7 +223,8 @@ object State:
 	def apply(
 		names: Vector[String],
 		ourPlayerIndex: Int,
-		variant: Variant
+		variant: Variant,
+		options: TableOptions
 	): State =
 		val cardCount = Array.ofDim[Int](variant.suits.length * 5)
 		var playableSet = IdentitySet.empty
@@ -259,4 +262,5 @@ object State:
 			names = names,
 			hands = Vector.fill(names.length)(Vector()),
 
-			ourPlayerIndex = ourPlayerIndex)
+			ourPlayerIndex = ourPlayerIndex,
+			options = options)

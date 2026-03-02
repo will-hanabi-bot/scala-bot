@@ -327,8 +327,9 @@ extension (p: Player)
 			val newThought =
 				if newInferred.isEmpty && !thought.reset then
 					thought.resetInferences()
-						.when(_ => game.goodTouch): t =>
-							t.copy(inferred = t.inferred.filter(!p.isTrash(game, _, order)))
+					// .when(_ => game.goodTouch): t =>
+						// val infs = t.inferred.filter(i => !p.isTrash(game, i, order) && i != id)
+						// t.copy(inferred = if infs.isEmpty then t.possible else infs)
 				else
 					thought.copy(inferred = newInferred)
 

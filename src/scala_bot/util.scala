@@ -201,7 +201,7 @@ def clueToPerform(clue: Clue): PerformAction =
 
 def performToAction(state: State, perform: PerformAction, playerIndex: Int, deck: Option[IndexedSeq[Identity]] = None) =
 	val deckId = (order: Int) =>
-		state.deck(order).id().orElse(deck.flatMap(d => d(order).id()))
+		state.deck.lift(order).map(_.id()).flatten.orElse(deck.flatMap(d => d(order).id()))
 
 	val clueTouched = (orders: Seq[Int], clue: BaseClue) =>
 		orders.filter(deckId(_).map(state.variant.cardTouched(_, clue)).getOrElse(false))

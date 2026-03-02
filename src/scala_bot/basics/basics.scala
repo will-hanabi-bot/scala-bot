@@ -70,7 +70,7 @@ extension[G <: Game](game: G)
 		val state = game.state
 		val DrawAction(playerIndex, order, suitIndex, rank) = action
 
-		if state.hands(playerIndex).length == HAND_SIZE(state.numPlayers) then
+		if state.hands(playerIndex).length == HAND_SIZE(state.numPlayers) && !(state.options.deckPlays && order == state.cardCount.sum - 1) then
 			throw new Exception(s"${state.names(playerIndex)} already has a full hand!")
 
 		val id = Option.when(suitIndex != -1 && rank != -1):
@@ -92,8 +92,9 @@ extension[G <: Game](game: G)
 				throw new IllegalArgumentException(s"Only have ${deckIds.length} deck ids, but drew card with order $order! ${g.state.hands}")
 
 		.tap: g =>
-			assert(g.state.deck.length == order, s"Deck length ${g.state.deck.length} doesn't match drawn order $order!s")
-			assert(g.state.deck.length == g.state.nextCardOrder, "deck length doesn't match next order")
+			if !state.options.deckPlays then
+				assert(g.state.deck.length == order, s"Deck length ${g.state.deck.length} doesn't match drawn order $order!s")
+				assert(g.state.deck.length == g.state.nextCardOrder, "deck length doesn't match next order")
 			assert(g.common.thoughts.length == g.players(0).thoughts.length, "common thoughts length differs from player 0's thoughts")
 			assert(g.common.thoughts.length == g.meta.length, "common thoughts length differs from meta length")
 
@@ -135,6 +136,30 @@ extension[G <: Game](game: G)
 				hands = s.hands.updated(playerIndex, s.hands(playerIndex).filter(_ != order)),
 				endgameTurns = s.endgameTurns.map(_ - 1)
 			)
+		.when(_ => game.state.options.deckPlays && order == game.state.cardCount.sum - 1 && game.state.deck.length == order): g =>
+			g.withState: s =>
+				s.copy(
+					deck = s.deck :+ Card(suitIndex, rank, order, s.turnCount),
+					nextCardOrder = s.nextCardOrder + 1,
+					cardsLeft = s.cardsLeft - 1,
+					endgameTurns = Some(s.numPlayers)
+				)
+			.pipe(ops.copyWith(_, GameUpdates(
+				players = Some(g.players.zipWithIndex.map((player, i) => player.copy(
+					thoughts = player.thoughts :+ Thought(
+						if i != playerIndex then suitIndex else -1,
+						if i != playerIndex then rank else -1,
+						order,
+						player.allPossible
+					),
+					dirty = player.dirty.incl(order)
+				))),
+				common = Some(g.common.copy(
+					thoughts = g.common.thoughts :+ Thought(-1, -1, order, g.common.allPossible),
+					dirty = g.common.dirty + order
+				)),
+				meta = Some(g.meta :+ ConvData(order))
+			)))
 		.when(_ => suitIndex != -1 && rank != -1):
 			_.withState(_.withPlay(id))
 			.withId(order, id)

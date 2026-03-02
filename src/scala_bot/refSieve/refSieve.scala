@@ -29,6 +29,17 @@ case class RefSieve(
 	waiting: List[WaitingConnection] = Nil,
 	zcsTurn: Option[Int] = None
 ) extends Game:
+	override def validArr(id: Identity, order: Int): Boolean =
+		val playables = this.me.thinksPlayables(this, state.ourPlayerIndex)
+
+		if playables.contains(order) then
+			state.isPlayable(id)
+		else if this.isTouched(order) && !this.common.thoughts(order).reset then
+			val good = this.me.thoughts(order).possible.difference(state.trashSet)
+			good.isEmpty || good.contains(id)
+		else
+			true
+
 	def chop(playerIndex: Int) =
 		state.hands(playerIndex).find:
 			meta(_).status == CardStatus.CalledToDiscard
@@ -340,11 +351,26 @@ object RefSieve:
 			val level = Logger.level
 			Logger.setLevel(LogLevel.Off)
 
-			def validClue(clue: Clue, target: Int) =
+			var addedUselessClue = false
+
+			def validClue(clue: Clue, target: Int): Boolean =
 				val list = state.clueTouched(state.hands(target), clue)
+				val useless = list.forall(o => state.deck(o).clued && state.isBasicTrash(state.deck(o).id().get))
 
 				// Do not simulate clues that touch only previously-clued trash
-				!list.forall(o => state.deck(o).clued && state.isBasicTrash(state.deck(o).id().get))
+				if useless && addedUselessClue then
+					return false
+
+				val hypo = game.simulate(ClueAction(giver, clue.target, state.clueTouched(state.hands(clue.target), clue), clue.base))
+				val legal = hypo.lastMove != Some(ClueInterp.Mistake)
+
+				if !legal then
+					return false
+
+				if useless then
+					addedUselessClue = true
+
+				true
 
 			val allClues =
 				for

@@ -73,6 +73,14 @@ extension(ids: IdentitySet)
 				res &= ~(1L << tz)
 		res
 
+	inline def count(inline cond: Identity => Boolean): Int =
+		var res = 0
+
+		ids.foreach: i =>
+			if cond(i) then
+				res += 1
+		res
+
 	def flatMap[A](f: Identity => Iterable[A]) =
 		var res = Seq.empty[A]
 		ids.foreach: i =>

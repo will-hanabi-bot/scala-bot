@@ -119,7 +119,9 @@ case class Player(
 			meta.trash ||
 			meta.status == CardStatus.CalledToDiscard)
 
-		if thought.possible.forall(game.state.isCritical) then
+		if orderKt(game, order) then
+			true
+		else if thought.possible.forall(game.state.isCritical) then
 			false
 		else
 			conventionalTrash || thought.possibilities.forall(isTrash(game, _, order))
@@ -335,6 +337,8 @@ case class Player(
 		def state = hypo.state
 
 		def play(order: Int) =
+			val holder = hypo.state.holderOf(order)
+
 			player.thoughts(order).id(infer = true, symmetric = true) match
 				case None =>
 					links.fastForeach: link =>
@@ -353,7 +357,7 @@ case class Player(
 
 				case Some(id) =>
 					if hypo.state.isPlayable(id) then
-						val playAction = PlayAction(state.holderOf(order), order, id.suitIndex, id.rank)
+						val playAction = PlayAction(holder, order, id.suitIndex, id.rank)
 
 						val level = Logger.level
 						Logger.setLevel(LogLevel.Error.min(level))
@@ -366,6 +370,8 @@ case class Player(
 					else
 						// Log.warn(s"tried to add ${state.logId(id)} ($order) onto hypo stacks, but they were at ${hypo.state.playStacks} $played ($name)")
 						attempted = attempted.incl(order)
+
+			hypo = hypo.withState(s => s.copy(hands = s.hands.updated(holder, s.hands(holder).filter(_ != order))))
 
 		var changed = true
 

@@ -12,7 +12,7 @@ import scala_bot.logger._
 import scala_bot.refSieve.RefSieve
 import scala_bot.hgroup.HGroup
 
-val BOT_VERSION = "v0.8.1 (scala-bot)"
+val BOT_VERSION = "v0.8.2 (scala-bot)"
 
 case class ChatMessage(
 	msg: String,
@@ -54,8 +54,14 @@ case class Table(
 
 case class TableOptions(
 	numPlayers: Int,
-	startingPlayer: Int,
-	variantName: String
+	variantName: String,
+	startingPlayer: Int = 0,
+	deckPlays: Boolean = false,
+	detrimentalCharacters: Boolean = false,
+	emptyClues: Boolean = false,
+	oneExtraCard: Boolean = false,
+	oneLessCard: Boolean = false,
+	speedrun: Boolean = false
 ) derives ReadWriter
 
 case class InitMessage(
@@ -271,7 +277,7 @@ class BotClient(queue: Queue[IO, String], gameRef: Ref[IO, Option[Game]]):
 	def handleInit(data: InitMessage) =
 		val InitMessage(tID, playerNames, ourPlayerIndex, _, _, options) = data
 		val variant = Variant.getVariant(options.variantName)
-		val state = State(playerNames, ourPlayerIndex, variant)
+		val state = State(playerNames, ourPlayerIndex, variant, options)
 
 		val game = settings.convention match
 			case Convention.Reactor  => Reactor(tID, state, inProgress = true)

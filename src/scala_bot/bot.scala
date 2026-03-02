@@ -7,7 +7,7 @@
 //> using dep com.lihaoyi::upickle:4.4.3
 //> using dep com.lihaoyi::requests:0.9.3
 //> using dep org.scala-lang.modules::scala-parallel-collections:1.2.0
-//> using test.dep org.scalameta::munit:1.2.2
+//> using test.dep org.scalameta::munit:1.2.3
 
 package scala_bot
 
@@ -71,10 +71,9 @@ def main(args: String*): Unit =
 						case WebSocketFrame.Close(_, _) => IO.println("Connection closed")
 
 						case _ => loop
-					.handleErrorWith: err =>
-						IO(err.printStackTrace()) *> IO.raiseError(err)
 
-				loop
+				loop.handleErrorWith: err =>
+					IO(err.printStackTrace()) *> IO.raiseError(err)
 
 		def startSender(ws: WebSocket[IO], queue: Queue[IO, String]): IO[FiberIO[Unit]] =
 			def loop: IO[Unit] =

@@ -59,7 +59,7 @@ def badTouchResult(prev: Game, game: Game, action: ClueAction) =
 	val inter = state.hands(target).foldRight((List[Int](), List[Int]())) { case (order, (badTouch, trash)) =>
 		if prev.state.deck(order).clued || !state.deck(order).clued then
 			(badTouch, trash)
-		else if game.common.orderKt(game, order) then
+		else if game.common.orderTrash(game, order) then
 			(badTouch, order +: trash)
 		else
 			state.deck(order).id() match
@@ -74,6 +74,7 @@ def badTouchResult(prev: Game, game: Game, action: ClueAction) =
 			(!prev.state.deck(order).clued && state.deck(order).clued && !badTouch.contains(order) && !trash.contains(order)) &&
 			state.hands.zipWithIndex.exists: (hand, i) =>
 				hand.exists: o =>
+					!trash.contains(o) &&
 					(prev.isTouched(o) || game.isTouched(o)) &&
 					game.me.thoughts(o).matches(state.deck(order), infer = true) &&
 					(i != target || o < order)

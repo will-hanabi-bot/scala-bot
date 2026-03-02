@@ -8,7 +8,6 @@ import scala_bot.hgroup.HGroup
 import scala_bot.utils._
 
 import scala.io.Source._
-import scala.util.Try
 import cats.effect.std.Queue
 import cats.effect.{IO, IOApp, ExitCode}
 import cats.effect.kernel.Ref
@@ -17,10 +16,8 @@ case class GameData(
 	players: Vector[String],
 	deck: Vector[Identity],
 	actions: Vector[PerformAction],
-	options: Option[ReplayOptions]
+	options: TableOptions
 )
-
-case class ReplayOptions(variant: String)
 
 object GameData:
 	def fetchId(id: String) =
@@ -36,10 +33,16 @@ object GameData:
 			.toVector
 
 		val actions = data("actions").arr.map(PerformAction.fromJSON).toVector
-		val options = Try {
-			val variant = data("options").obj("variant").str
-			Some(ReplayOptions(variant))
-		}.getOrElse(None)
+
+		val opts = data.obj.lift("options").map(_.objOpt).flatten
+		val variant = opts.map(_.lift("variant").map(_.str)).flatten
+		val deckPlays = opts.map(_.lift("deckPlays").map(_.bool)).flatten
+
+		val options = TableOptions(
+			players.length,
+			variantName = variant.getOrElse("No Variant"),
+			deckPlays = deckPlays.getOrElse(false)
+		)
 
 		GameData(players, deck, actions, options)
 
@@ -66,9 +69,9 @@ def fetchGame(args: Seq[String]) =
 		throw new IllegalArgumentException(s"Replay only has ${players.length} players!")
 
 	Variant.init()
-	val variant = Variant.getVariant(options.map(_.variant).getOrElse("No Variant"))
+	val variant = Variant.getVariant(options.variantName)
 
-	val state = State(players, index, variant)
+	val state = State(players, index, variant, options)
 	convention match
 		case Convention.Reactor =>
 			val game = Reactor(0, state, false).copy(catchup = true)
