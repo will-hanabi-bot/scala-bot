@@ -30,15 +30,21 @@ object Level:
 	val SpecialDiscards = 10
 	val Bluffs = 11
 	val Context = 12
+	val IntermediateBluffs = 13
+	val TrashMoves = 14
 
 enum FStatus:
+	/** The card may be part of an *Ambiguous Finesse* on the player. */
 	case PossiblyAmbiguous(to: Int)
+	/** The card may or may not be playing, according to the player. */
 	case PossiblyOn(to: Int)
 
 case class XConvData(
+	/** This card may be a different identity than expected (e.g. if it ended up being *Layered*). */
 	idUncertain: Boolean = false,
 	fStatus: Seq[FStatus] = Nil,
 	turnFinessed: Option[Int] = None,
+	/** The valid identities of the card that were promised when it was finessed, if they exist. */
 	finesseIds: Option[IdentitySet] = None
 )
 
@@ -83,9 +89,15 @@ case class HGroup(
 		orders.filter: o =>
 			// if player.orderKp(this, o) then
 			// 	true
-			val possibleFocusDupe = !ordered1s.contains(o) && !meta(o).focused && state.deck(o).clued && state.hands(playerIndex).exists: o2 =>
-				meta(o2).focused &&
-				state.deck(o).clues.forall(clue => state.deck(o2).clues.exists(_.isEq(clue)))
+			val possibleFocusDupe =
+				!ordered1s.contains(o) &&
+				!this.knownAs(o, PINKISH) &&
+				!meta(o).focused &&
+				state.deck(o).clued &&
+				state.hands(playerIndex).exists: o2 =>
+					meta(o2).focused &&
+					player.thoughts(o).inferred == player.thoughts(o2).inferred &&
+					state.deck(o).clues.forall(clue => state.deck(o2).clues.exists(_.isEq(clue)))
 
 			val olderFinesseExists = state.hands(playerIndex).exists: o2 =>
 				// An older finesse exists which could be swapped with this identity
@@ -607,7 +619,7 @@ object HGroup:
 					case Left(err) => Log.info(s"couldn't solve endgame: $err")
 					case Right((perform, winrate)) =>
 						if winrate < Frac(1, 100) then
-							Log.info("winrate below 1%, skipping")
+							Log.info(s"winrate below 1% (${winrate.toString}), skipping")
 						else
 							Log.info(s"endgame solved!")
 							return perform

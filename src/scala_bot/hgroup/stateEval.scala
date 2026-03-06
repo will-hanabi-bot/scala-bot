@@ -71,7 +71,7 @@ def getResult(game: HGroup, hypo: HGroup, action: ClueAction): Double =
 		else
 			3 * List(0.0, 0.125, 0.25, 0.35, 0.45, 0.55)(newTouched.length)
 
-	val precision = -0.01 * hypo.common.thoughts(focus).inferred.length
+	val precision = (list.summing(o => -0.001 * hypo.common.thoughts(o).inferred.length)) / list.length
 
 	val untouchedPlays = playables.count(!hypo.state.deck(_).clued)
 

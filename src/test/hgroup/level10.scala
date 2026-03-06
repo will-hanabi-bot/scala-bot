@@ -1,7 +1,7 @@
 package tests.hgroup.level10
 
 import scala_bot.basics._
-import scala_bot.test.{hasInfs, hasStatus, Player, preClue, setup, takeTurn}, Player._
+import scala_bot.test.{fullyKnown, hasInfs, hasStatus, Player, preClue, setup, takeTurn}, Player._
 import scala_bot.hgroup.{evalAction, HGroup}
 
 import scala_bot.utils.{pipe, tap}
@@ -240,6 +240,25 @@ class GentlemansDiscards extends munit.FunSuite:
 		)
 
 		assert(evalAction(game, DiscardAction(Alice.ordinal, game.state.hands(Alice.ordinal)(4), -1, -1, false)) < 0)
+
+	test("correctly interprets a play clue after gd"):
+		val game = setup(HGroup.atLevel(10), Vector(
+			Vector("xx", "xx", "xx", "xx", "xx"),
+			Vector("r4", "g3", "g3", "p4", "p4"),
+			Vector("y4", "y4", "b4", "b4", "g4")
+		),
+			starting = Bob,
+			playStacks = Some(Vector(3, 0, 0, 0, 0)),
+			clueTokens = 4,
+			init = fullyKnown(Bob, 1, "r4")
+		)
+		.pipe(takeTurn("Bob discards r4", "y3"))
+		.pipe(takeTurn("Cathy clues red to Alice (slots 1,2,5)"))
+
+		hasInfs(game, None, Alice, 1, Vector("r4"))
+		hasInfs(game, None, Alice, 5, Vector("r5"))
+		assertEquals(game.common.thinksTrash(game, Alice.ordinal), Vector(game.state.hands(Alice.ordinal)(1)))
+		assertEquals(game.common.thinksPlayables(game, Alice.ordinal), Vector(game.state.hands(Alice.ordinal)(0)))
 
 class BatonDiscards extends munit.FunSuite:
 	override def beforeAll() = Logger.setLevel(LogLevel.Off)

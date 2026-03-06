@@ -1,11 +1,12 @@
 package tests.reactor.endgame
 
-import scala_bot.reactor.Reactor, Reactor.given
+import scala_bot.reactor.Reactor
+import scala_bot.hgroup.HGroup
 import scala_bot.basics._
 import scala_bot.endgame.EndgameSolver
 import scala_bot.fraction.Frac
 
-import scala_bot.test.{fullyKnown, Player, setup}, Player._
+import scala_bot.test.{Colour, fullyKnown, Player, preClue, setup, TestVariant}, Player._
 import scala_bot.logger.{Logger, LogLevel}
 
 class Endgame extends munit.FunSuite:
@@ -201,3 +202,67 @@ class Endgame extends munit.FunSuite:
 				assertEquals(winrate, Frac(1, 6))
 				// Alice should play r3.
 				assertEquals(perform, PerformAction.Play(game.state.hands(Alice.ordinal)(4)))
+
+	test("it wins an unconventional rainbow endgame in Reactor"):
+		val game = setup(Reactor.apply, Vector(
+			Vector("xx", "xx", "xx", "xx", "xx"),
+			Vector("b1", "r1", "m1", "m5", "y5"),
+			Vector("b1", "r1", "g1", "y1", "m4"),
+		),
+			playStacks = Some(Vector(5, 4, 5, 5, 3)),
+			clueTokens = 1,
+			variant = TestVariant.Rainbow5,
+			discarded =  Vector(
+				"r2", "r3",
+				"y2", "y3",
+				"g2", "g3",
+				"b2", "b3", "b4",
+				"m2", "m3", "m4"
+			),	// Missing: y1, g1, m1, r4, y4, g4
+			init =
+				preClue[Reactor](Bob, 4, Seq("5")) andThen
+				preClue[Reactor](Bob, 5, Seq("5")) andThen
+				preClue[Reactor](Cathy, 5, Seq("4", "yellow", "blue"))
+		)
+
+		assertEquals(game.state.cardsLeft, 1)
+
+		EndgameSolver(monteCarlo = false).solve(game) match
+			case Left(msg) => throw new Exception(s"Game should be winnable! $msg")
+			case Right((perform, winrate)) =>
+				assertEquals(winrate, Frac.one)
+				assert(perform match
+					case PerformAction.Colour(1, colour) => colour != Colour.Yellow.ordinal
+					case _ => false)
+
+	test("it wins an unconventional rainbow endgame in H"):
+		val game = setup(HGroup.atLevel(10), Vector(
+			Vector("xx", "xx", "xx", "xx", "xx"),
+			Vector("b1", "r1", "m1", "m5", "y5"),
+			Vector("b1", "r1", "g1", "y1", "m4"),
+		),
+			playStacks = Some(Vector(5, 4, 5, 5, 3)),
+			clueTokens = 1,
+			variant = TestVariant.Rainbow5,
+			discarded =  Vector(
+				"r2", "r3",
+				"y2", "y3",
+				"g2", "g3",
+				"b2", "b3", "b4",
+				"m2", "m3", "m4"
+			),	// Missing: y1, g1, m1, r4, y4, g4
+			init =
+				preClue[HGroup](Bob, 4, Seq("5")) andThen
+				preClue[HGroup](Bob, 5, Seq("5")) andThen
+				preClue[HGroup](Cathy, 5, Seq("4", "yellow", "blue"))
+		)
+
+		assertEquals(game.state.cardsLeft, 1)
+
+		EndgameSolver(monteCarlo = false).solve(game) match
+			case Left(msg) => throw new Exception(s"Game should be winnable! $msg")
+			case Right((perform, winrate)) =>
+				assertEquals(winrate, Frac.one)
+				assert(perform match
+					case PerformAction.Colour(1, colour) => colour != Colour.Yellow.ordinal
+					case _ => false)

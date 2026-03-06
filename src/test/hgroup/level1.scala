@@ -116,3 +116,11 @@ class General extends munit.FunSuite:
 		.pipe(takeTurn("Cathy clues 4 to Alice (slots 2,4,5)"))
 
 		assertEquals(game.takeAction, PerformAction.Play(game.state.hands(Alice.ordinal)(4)))
+
+	test("gives a 5 save even if a 2 will be lost"):
+		val game = setup(HGroup.atLevel(1), Vector(
+			Vector("xx", "xx", "xx", "xx", "xx"),
+			Vector("g4", "g4", "b4", "y2", "r5")
+		))
+
+		assertEquals(game.takeAction, PerformAction.Rank(Bob.ordinal, 5))

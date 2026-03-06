@@ -7,8 +7,23 @@ import scala.util.matching.Regex
 
 val HAND_SIZE = Vector(0, 0, 5, 5, 4, 4, 3)
 
-case class Note(turn: Int, last: String, full: String)
+/** Manages the note written on a card.
+  * @param turn The most recent turn the note was updated.
+  * @param last The most recent specific note on the card (ignoring notes from earlier turns).
+  * @param full The full note on the card (including notes from earlier turns).
+  */
+case class Note(
+	/** The most recent turn the note was updated. */
+	turn: Int,
+	/** The most recent specific note on the card (ignoring notes from earlier turns). */
+	last: String,
+	/** The full note on the card (including notes from earlier turns). */
+	full: String
+)
 
+/** An interpretation of a game action.
+  * @see [[ClueInterp]], [[PlayInterp]], [[DiscardInterp]]
+ */
 sealed trait Interp
 
 enum ClueInterp extends Interp:
@@ -41,6 +56,7 @@ case class GameUpdates(
 	noRecurse: Option[Boolean] = None
 )
 
+/** A helper function to generate the players and common perspective, given a state. */
 def genPlayers(state: State) =
 	val allPossible = state.allIds
 	val hypoStacks = Vector.fill(state.variant.suits.length)(0)
@@ -53,44 +69,76 @@ trait Game:
 	def tableID: Int
 	def state: State
 	def players: Vector[Player]
+	/** The "common knowledge" perspective. Contains what all players know (that all players know...). */
 	def common: Player
+	/** The original state, meta-knowledge, players, and common perspective. Used when reinterpreting from the beginning of the game. */
 	def base: (State, Vector[ConvData], Vector[Player], Player)
+	/** The conventional knowledge on cards shared by all players. Indexed by card order. */
 	def meta: Vector[ConvData]
 
+	/** The identities of every card in the deck, if known. Potentially contains future info, unlike [[State.deck]]. */
 	def deckIds: Vector[Option[Identity]]
+	/** The possible ids of every card in the deck, if needed for retroactive notes (e.g. revealing a *Layered Finesse*). */
 	def future: Vector[IdentitySet]
+	/** Whether the game is "catching up" on game actions (i.e. if true, it shouldn't send websocket messages). */
 	def catchup: Boolean
 	def notes: Map[Int, Note]
+	/** The last game action taken by each player, if they exist. */
 	def lastActions: Vector[Option[Action]]
+	/** The interpretation of the most recent move, if it exists. */
 	def lastMove: Option[Interp]
+	/** Commands that are queued to be sent to hanab.live (e.g. to play a specific card). */
 	def queuedCmds: List[(String, String)]
+	/** What the next clue should be interpreted as. Used when rewinding after a particular interpretation is demonstrated. */
 	def nextInterp: Option[Interp]
+	/** Whether to disallow recursing into hypothetical states, like seeing if a stall was available. */
 	def noRecurse: Boolean
 	def rewindDepth: Int
+	/** Whether the game is live or a replay. */
 	def inProgress: Boolean
 
+	/** Whether the convention set observes Good Touch Principle. */
 	def goodTouch: Boolean
 
+	/** An extra filter function before returning from [[Player.thinksPlayables]]
+	  * (e.g. 1's to be played in a conventionally-specific order).
+	  */
 	def filterPlayables(@annotation.unused player: Player, @annotation.unused playerIndex: Int, orders: Seq[Int], @annotation.unused assume: Boolean = true) =
 		orders
 
+	/** Returns whether assigning the given identity to the card with the given order is valid.
+	  * For example, a convention with good touch may disallow assigning a trash identity to a clued card.
+	  */
 	def validArr(@annotation.unused id: Identity, @annotation.unused order: Int) =
 		true
 
 trait GameOps[G <: Game]:
+	/** Returns a copy of the game state, but restarted from the beginning.
+	  * @param game     The current game state.
+	  * @param keepDeck Whether to keep the same deck (relevant when simulating endgames).
+	  */
 	def blank(game: G, keepDeck: Boolean): G
 	def copyWith(game: G, updates: GameUpdates): G
 
+	/** Returns the game state after interpreting the given clue.*/
 	def interpretClue(prev: G, game: G, action: ClueAction): G
+	/** Returns the game state after interpreting the given discard.*/
 	def interpretDiscard(prev: G, game: G, action: DiscardAction): G
+	/** Returns the game state after interpreting the given play.*/
 	def interpretPlay(prev: G, game: G, action: PlayAction): G
+	/** Returns the best action to take.*/
 	def takeAction(game: G): PerformAction
+	/** Called between every play, clue and discard. */
 	def updateTurn(game: G, action: TurnAction): G
 
+	/** A hook that returns the updated game state after a play in particular. */
 	def refreshAfterPlay(@annotation.unused prev: G, game: G, @annotation.unused action: PlayAction): G =
 		game
 
+	/** Returns all valid clues the giver can give (used in endgame solving). */
 	def findAllClues(game: G, giver: Int): Seq[PerformAction]
+
+	/** Returns all valid discards the giver can perform (used in endgame solving). */
 	def findAllDiscards(game: G, playerIndex: Int): Seq[PerformAction]
 
 extension[G <: Game](game: G)

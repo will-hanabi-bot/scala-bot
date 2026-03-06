@@ -66,13 +66,26 @@ def assignConns(game: HGroup, action: ClueAction, fps: Seq[FocusPossibility], fo
 						t.copy(inferred = newInferred, oldInferred = t.oldInferred.orElse(t.inferred.toOpt))
 					.pipe: g =>
 						val idUncertain =
-							conn.reacting == state.ourPlayerIndex &&
-							!conn.isInstanceOf[KnownConn] &&
-							// There's an older card in our hand that allows for a swap
-							conn.ids.exists: i =>
-								state.ourHand.exists: o =>
-									o < conn.order && g.me.thoughts(o).possible.contains(i)
-							&&
+							conn.reacting == state.ourPlayerIndex && {
+								val connected = fp.connections.take(connI).map(_.order).toSet
+
+								def possiblyFinesse (id: Identity) =
+									g.findFinesseId(state.ourPlayerIndex, id, connected).exists(g.me.thoughts(_).possible.contains(id))
+
+								conn match
+									case PlayableConn(_, _, id, linked, _, _) =>
+										linked.length > 1 || possiblyFinesse(id)
+
+									case PromptConn(reacting, order, id, _) =>
+										g.common.findPrompt(g, reacting, id, connected + order).exists(g.me.thoughts(_).possible.contains(id)) ||
+										possiblyFinesse(id)
+
+									case FinesseConn(reacting, order, ids, _, _, _, _, _) =>
+										ids.exists: i =>
+											state.ourHand.exists(o => o < order && g.me.thoughts(o).possible.contains(i))
+
+									case _ => false
+							} &&
 							// Playable in some other suit
 							thought.possible.exists: i =>
 								i.suitIndex != conn.ids.head.suitIndex && i.rank <= g.common.hypoStacks(i.suitIndex) + 1

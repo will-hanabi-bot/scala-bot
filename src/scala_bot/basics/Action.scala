@@ -341,7 +341,10 @@ enum PerformAction:
 				s"Discard slot $slot, inferences ${player.strInfs(state, target)}"
 
 			case Colour(target, value) =>
-				Clue(ClueKind.Colour, value, target).fmt(state)
+				// A PerformAction can only clue the colourable suits, but logging uses the index out of all suits.
+				// e.g. In Rainbow & Pink (6 Suits), a value of 5 is a pink clue, not a "rainbow" clue.
+				val adjustedValue = state.variant.suits.indexOf(state.variant.colourableSuits(value))
+				Clue(ClueKind.Colour, adjustedValue, target).fmt(state)
 
 			case Rank(target, value) =>
 				Clue(ClueKind.Rank, value, target).fmt(state)

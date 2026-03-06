@@ -3,10 +3,19 @@ package scala_bot.basics
 import scala_bot.utils._
 
 enum FixResult:
+	/** A "conventional" fix clue, indicating either trash or a duplicate (or both). */
 	case Normal(cluedResets: Seq[Int], duplicateReveals: Seq[Int])
+	/** A fix clue that gives no new information. */
 	case NoNewInfo(fixes: Seq[Int])
+	/** Not a fix clue. */
 	case None
 
+/** Returns a [[FixResult]] describing whether a fix clue was just given..
+  *
+  * @param prev   The game state before the clue.
+  * @param game   The game state after the clue (and associated elim).
+  * @param action The clue action.
+  */
 def checkFix(prev: Game, game: Game, action: ClueAction): FixResult =
 	val list = action.list
 	val prevPlayables = prev.common.thinksPlayables(prev, action.target)
@@ -42,6 +51,15 @@ def checkFix(prev: Game, game: Game, action: ClueAction): FixResult =
 	else
 		FixResult.None
 
+/** If id is provided, returns a non-empty list if it can be made playable by [[target]]'s turn.
+  * Otherwise, returns the orders of playable cards in [[target]]'s hand by their turn.
+  *
+  * @param game   The initial game state.
+  * @param player The observing player (determines which cards are playable).
+  * @param start  The index of the first player allowed to play a card.
+  * @param target The index of the destination player (they do not play a card).
+  * @param id     Optionally, the identity desired to be made playable by [[target]]'s turn.
+  */
 def connectableSimple[G <: Game](game: G, player: Player, start: Int, target: Int, id: Option[Identity] = None)(using ops: GameOps[G]): List[Int] =
 	val state = game.state
 
@@ -97,6 +115,13 @@ def distributionClue(prev: Game, game: Game, action: ClueAction, focus: Int): Op
 
 	Option.when(useful.nonEmpty)(useful)
 
+/** Returns whether the prompted card should be ignored as a *Free Choice Finesse*.
+  *
+  * @param game    The game state (after the clue).
+  * @param action  The clue action.
+  * @param id      The identity that this card would be prompted as.
+  * @param prompt  The order of the prompted card.
+  */
 def rainbowMismatch(game: Game, action: ClueAction, id: Identity, prompt: Int): Boolean =
 	val state = game.state
 	val ClueAction(_, target, list, clue) = action

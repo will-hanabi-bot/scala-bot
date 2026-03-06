@@ -47,6 +47,7 @@ case class Reactor(
 
 		orders.filterNot: o =>
 			player.thoughts(o).id(infer = true).isEmpty &&
+			!player.links.exists(l => l.getOrders.contains(o) && l.getOrders.max != o) &&
 			// There's another unknown card that was queued before this
 			orders.exists: o2 =>
 				o != o2 &&

@@ -167,7 +167,7 @@ case class Player(
 
 		if orderKp(game, order, excludeTrash) then
 			true
-		else if game.meta(order).trash || links.exists(l => l.getOrders.contains(order) && l.getOrders.max != order) then
+		else if game.meta(order).trash then
 			false
 		else
 			val infer =

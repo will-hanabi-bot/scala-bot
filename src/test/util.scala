@@ -11,7 +11,7 @@ enum Player:
 	case Alice, Bob, Cathy, Donald, Emily
 
 enum TestVariant:
-	case NoVariant, NoVar6, Rainbow5, Black5, White5, Pink5, Brown5, Prism5, Muddy5, Cocoa5, Omni5
+	case NoVariant, NoVar6, Rainbow5, Black5, White5, Pink5, Brown5, Prism5, Muddy5, Cocoa5, Omni5, PinkLPink6
 
 val VARIANTS = Map(
 	TestVariant.NoVariant	-> Variant(0, "No Variant",           Vector("Red", "Yellow", "Green", "Blue", "Purple"),  shorts = Vector('r', 'y', 'g', 'b', 'p')),
@@ -24,7 +24,8 @@ val VARIANTS = Map(
 	TestVariant.Prism5		-> Variant(1465, "Prism (5 Suits)",   Vector("Red", "Yellow", "Green", "Blue", "Prism"),   shorts = Vector('r', 'y', 'g', 'b', 'i')),
 	TestVariant.Muddy5		-> Variant(161, "Muddy Rainbow (5 Suits)", Vector("Red", "Yellow", "Green", "Blue", "Muddy Rainbow"),   shorts = Vector('r', 'y', 'g', 'b', 'm')),
 	TestVariant.Cocoa5		-> Variant(291, "Cocoa Rainbow (5 Suits)", Vector("Red", "Yellow", "Green", "Blue", "Cocoa Rainbow"),   shorts = Vector('r', 'y', 'g', 'b', 'm')),
-	TestVariant.Omni5		-> Variant(177, "Omni (5 Suits)",     Vector("Red", "Yellow", "Green", "Blue", "Omni"),    shorts = Vector('r', 'y', 'g', 'b', 'o'))
+	TestVariant.Omni5		-> Variant(177, "Omni (5 Suits)",     Vector("Red", "Yellow", "Green", "Blue", "Omni"),    shorts = Vector('r', 'y', 'g', 'b', 'o')),
+	TestVariant.PinkLPink6	-> Variant(1296, "Pink & Light Pink (6 Suits)", Vector("Red", "Yellow", "Green", "Blue", "Pink", "Light Pink"), shorts = Vector('r', 'y', 'g', 'b', 'i', 'l'))
 )
 
 val NAMES = Vector("Alice", "Bob", "Cathy", "Donald", "Emily")

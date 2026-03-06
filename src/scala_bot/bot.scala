@@ -1,13 +1,13 @@
 //> using scala 3.8.2
 //> using jvm 25
-//> using options -Wall -Wconf:msg=toString:s -feature
+//> using options -Wall -Wconf:msg=toString:s -feature -J-Xmx3g
 //> using dep com.softwaremill.sttp.client4::core:4.0.19
 //> using dep com.softwaremill.sttp.client4::cats:4.0.19
 //> using dep org.typelevel::cats-effect:3.6.3
 //> using dep com.lihaoyi::upickle:4.4.3
 //> using dep com.lihaoyi::requests:0.9.3
 //> using dep org.scala-lang.modules::scala-parallel-collections:1.2.0
-//> using test.dep org.scalameta::munit:1.2.3
+//> using test.dep org.scalameta::munit:1.2.4
 
 package scala_bot
 
@@ -72,8 +72,7 @@ def main(args: String*): Unit =
 
 						case _ => loop
 
-				loop.handleErrorWith: err =>
-					IO(err.printStackTrace()) *> IO.raiseError(err)
+				loop
 
 		def startSender(ws: WebSocket[IO], queue: Queue[IO, String]): IO[FiberIO[Unit]] =
 			def loop: IO[Unit] =
@@ -92,9 +91,9 @@ def main(args: String*): Unit =
 			gameRef  <- Ref.of[IO, Option[Game]](None)
 			client   = new BotClient(wsQueue, gameRef)
 			console  <- spawnConsole(consoleQ, client)
-			_        <- startSender(ws, wsQueue)
+			sender   <- startSender(ws, wsQueue)
 			_        <- IO { Variant.init() }
-			_        <- (console.join, receive(client)).parTupled
+			_        <- (console.join, receive(client)).parTupled.guaranteeCase(_ => sender.cancel)
 		yield ()
 
 	val parsedArgs = parseArgs(args)

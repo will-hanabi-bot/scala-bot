@@ -29,6 +29,10 @@ case class RefSieve(
 	waiting: List[WaitingConnection] = Nil,
 	zcsTurn: Option[Int] = None
 ) extends Game:
+	override def filterPlayables(player: Player, playerIndex: Int, orders: Seq[Int], assume: Boolean): Seq[Int] =
+		orders.filter: o =>
+			!player.links.exists(l => l.getOrders.contains(o) && l.getOrders.max != o)
+
 	override def validArr(id: Identity, order: Int): Boolean =
 		val playables = this.me.thinksPlayables(this, state.ourPlayerIndex)
 

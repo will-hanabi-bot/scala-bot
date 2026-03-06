@@ -148,9 +148,15 @@ def transferWCs(ctx: DiscardContext, result: DiscardResult): HGroup =
 
 					wc.when(_ => connIndex != -1): _ =>
 						Log.info(s"rewriting wc ${state.logConns(wc.connections)}")
+						val order =
+							if orders.exists(game.unknown1) then
+								game.order1s(orders, noFilter = true).head
+							else
+								orders.head
+
 						wc.copy(connections = wc.connections.updated(connIndex, PlayableConn(
-							reacting = state.holderOf(orders.head),
-							order = orders.head,
+							reacting = state.holderOf(order),
+							order = order,
 							linked = orders,
 							id = id
 						)))

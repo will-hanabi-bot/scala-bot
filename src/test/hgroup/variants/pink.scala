@@ -162,6 +162,61 @@ class Pink1sAssumption extends munit.FunSuite:
 		// Alice must play slot 5 (not allowed to OCM by playing slot 4).
 		assertEquals(game.takeAction, PerformAction.Play(game.state.hands(Alice.ordinal)(4)))
 
+	test("plays 1s in order even after a certain discard"):
+		val game = setup(HGroup.atLevel(10), Vector(
+			Vector("xx", "xx", "xx", "xx"),
+			Vector("r1", "g2", "r3", "i4"),
+			Vector("g1", "g3", "i1", "i1"),
+			Vector("r4", "r4", "b3", "r5")
+		),
+			starting = Cathy,
+			variant = TestVariant.Pink5,
+			clueTokens = 7
+		)
+		.pipe(takeTurn("Cathy clues 1 to Alice (slots 1,2,3,4)"))
+		.pipe(takeTurn("Donald clues red to Bob"))
+		.pipe(takeTurn("Alice clues green to Bob"))
+		.pipe(takeTurn("Bob plays r1", "b1"))
+
+		.pipe(takeTurn("Cathy discards g1", "y2"))
+
+		// Only slot 4 is playable.
+		assertEquals(game.common.thinksPlayables(game, Alice.ordinal), Vector(game.state.hands(Alice.ordinal)(3)))
+
+
+	test("doesn't play filled-in pink cards as 1s"):
+		val game = setup(HGroup.atLevel(4), Vector(
+			Vector("xx", "xx", "xx", "xx", "xx"),
+			Vector("g4", "g4", "b4", "b4", "r4")
+		),
+			starting = Bob,
+			variant = TestVariant.Pink5,
+			clueTokens = 7
+		)
+		.pipe(takeTurn("Bob clues 1 to Alice (slots 4,5)"))
+		.pipe(takeTurn("Alice plays r1 (slot 5)"))
+		.pipe(takeTurn("Bob clues pink to Alice (slots 1,5)"))
+
+		// This is a pink fix.
+		assertEquals(game.common.thinksPlayables(game, Alice.ordinal), Seq.empty)
+
+	test("doesn't play filled-in omni cards as 1s"):
+		val game = setup(HGroup.atLevel(4), Vector(
+			Vector("xx", "xx", "xx", "xx", "xx"),
+			Vector("g4", "g4", "b4", "b4", "r4")
+		),
+			starting = Bob,
+			variant = TestVariant.Omni5,
+			clueTokens = 7
+		)
+		.pipe(takeTurn("Bob clues 1 to Alice (slots 3,4,5)"))
+		.pipe(takeTurn("Alice plays r1 (slot 5)"))
+		.pipe(takeTurn("Bob clues red to Alice (slots 1,4)"))
+		.pipe(takeTurn("Alice plays y1 (slot 5)"))
+		.pipe(takeTurn("Bob clues green to Alice (slots 1,5)"))
+
+		// This is an omni fix (only r1 is playable).
+		assertEquals(game.common.thinksPlayables(game, Alice.ordinal), Vector(game.state.hands(Alice.ordinal)(1)))
 
 class PinkPrompts extends munit.FunSuite:
 	override def beforeAll() = Logger.setLevel(LogLevel.Off)
@@ -391,6 +446,40 @@ class PinkChoiceTempo extends munit.FunSuite:
 
 		// Bob demonstrated the finesse.
 		hasInfs(game, None, Alice, 3, Vector("r2"))
+
+	test("plays into complex pink tempo clues"):
+		val game = setup(HGroup.atLevel(3), Vector(
+			Vector("xx", "xx", "xx", "xx", "xx"),
+			Vector("b4", "b4", "y4", "r4", "g1"),
+			Vector("i1", "g4", "g4", "r4", "y4")
+		),
+			starting = Bob,
+			variant = TestVariant.PinkLPink6,
+			clueTokens = 7
+		)
+		.pipe(takeTurn("Bob clues 1 to Alice (slots 2,3,4)"))
+		.pipe(takeTurn("Cathy clues green to Bob"))
+		.pipe(takeTurn("Alice plays l1 (slot 4)"))
+
+		.pipe(takeTurn("Bob plays g1", "y3"))
+		.pipe(takeTurn("Cathy clues 2 to Alice (slots 1,3,4)"))
+		.tap: g =>
+			// Pink fix promise
+			hasInfs(g, None, Alice, 4, Vector("i2"))
+
+		.pipe(takeTurn("Alice clues pink to Cathy"))
+		.pipe(takeTurn("Bob clues 3 to Alice (slots 1,3,4)"))	// Pink choice tempo on slot 3
+		.pipe(takeTurn("Cathy plays i1", "r3"))
+		.tap: g =>
+			// Slot 4 as [i2,l2] must be played first.
+			assertEquals(g.common.thinksPlayables(g, Alice.ordinal), Vector(g.state.hands(Alice.ordinal)(3)))
+
+		.pipe(takeTurn("Alice plays i2 (slot 4)"))
+		.pipe(takeTurn("Bob discards r4", "g3"))
+		.pipe(takeTurn("Cathy clues 2 to Alice (slots 2,4)"))	// Pink choice tempo on slot 2
+
+		// Slot 4 as [i3, l2] must be played first.
+		assertEquals(game.common.thinksPlayables(game, Alice.ordinal), Vector(game.state.hands(Alice.ordinal)(3)))
 
 class PinkFixes extends munit.FunSuite:
 	override def beforeAll() = Logger.setLevel(LogLevel.Off)
