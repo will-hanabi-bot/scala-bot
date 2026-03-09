@@ -86,7 +86,7 @@ def checkHFix(ctx: ClueContext): Option[HGroup] =
 
 		case FixResult.Normal(cluedResets, duplicateReveals) =>
 			Log.info(s"fix clue! not inferring anything else $cluedResets $duplicateReveals")
-			Some(game)
+			Some(game.copy(lastMove = Some(ClueInterp.Fix)))
 
 		case FixResult.NoNewInfo(fixes) =>
 			Log.info("no info fix clue! not inferring anything else")

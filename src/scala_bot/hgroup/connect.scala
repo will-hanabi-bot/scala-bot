@@ -237,7 +237,7 @@ def findUnknownConnecting(ctx: ClueContext, reacting: Int, id: Identity, connect
 			Option.when(state.isPlayable(actualId))
 				(FinesseConn(reacting, finesse.get, List(actualId), hidden = actualId != id))
 
-		case None if knownLayeredIds.isDefined =>
+		case None if finesse.isDefined && knownLayeredIds.isDefined =>
 			Some(FinesseConn(reacting, finesse.get, knownLayeredIds.get.toList, hidden = true))
 
 		case _ if insertingInto.isDefined =>

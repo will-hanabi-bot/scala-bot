@@ -2,6 +2,7 @@ package scala_bot.utils
 
 import scala_bot.basics._
 
+/** A simple for loop. */
 inline def loop(
 	inline start: Int,
 	inline cond: Int => Boolean,
@@ -12,6 +13,7 @@ inline def loop(
 		body(i)
 		i = advance(i)
 
+/** A simple for loop which only executes the body if the condition is true. */
 inline def loopIf(
 	inline start: Int,
 	inline cond: Int => Boolean,
@@ -25,20 +27,26 @@ inline def loopIf(
 		i = advance(i)
 
 extension [A](a: A)
+	/** Executes [[ifTrue]] if the condition is true, otherwise [[ifFalse]]. */
 	def cond(condition: A => Boolean)(ifTrue: A => A)(ifFalse: A => A): A =
 		if condition(a) then ifTrue(a) else ifFalse(a)
 
+	/** Executes [[f]] if the condition is true, otherwise returns itself. */
 	inline def when(inline condition: A => Boolean)(inline f: A => A): A =
 		if condition(a) then f(a) else a
 
+	/** Returns true if the partial function matches and evaluates to true. */
 	def matchesP(cond: PartialFunction[A, Boolean]): Boolean =
 		cond.applyOrElse(a, _ => false)
 
+	/** Returns the given function applied to this. */
 	inline def pipe[B](inline f: A => B): B = f(a)
 
+	/** Applies the given function to this, but returns the original value of this. */
 	inline def tap(inline f: A => Unit): A = { f(a); a }
 
 extension[A](it: Iterator[A])
+	/** Returns true if any element causes the partial function to match and evaluate to true. */
 	def existsM(cond: PartialFunction[A, Boolean]): Boolean =
 		it.fastExists(_.matchesP(cond))
 
@@ -68,6 +76,10 @@ extension[A](it: Iterator[A])
 				exists = true
 		exists
 
+	/** A left fold, but the reducer must return an Either wrapping the result.
+	  * Left() means that the fold should stop.
+	  * Right() means to continue reducing.
+	  */
 	def foldLeftOpt[B](initial: B)(reducer: (acc: B, curr: A) => Either[B, B]): B =
 		var acc = initial
 
@@ -77,6 +89,7 @@ extension[A](it: Iterator[A])
 				case Right(next) => acc = next
 		acc
 
+	/** Returns the first defined result when applying the given function to each element. */
 	def findSome[B](f: A => Option[B]): Option[B] =
 		while it.hasNext do
 			val res = f(it.next)
@@ -85,12 +98,14 @@ extension[A](it: Iterator[A])
 
 		return None
 
+	/** Returns the sum of all elements transformed with the given function. */
 	def summing[N](f: A => N)(using numeric: Numeric[N]) =
 		var res = numeric.zero
 		while it.hasNext do
 			res = numeric.plus(res, f(it.next))
 		res
 
+	/** Returns max(default, max of all elements transformed with the given function). */
 	def maximizing[N](default: N)(f: A => N)(using numeric: Numeric[N]) =
 		var currMax = default
 		while it.hasNext do
@@ -98,6 +113,7 @@ extension[A](it: Iterator[A])
 		currMax
 
 extension [A](a: Iterable[A])
+	/** Returns true if any element causes the partial function to match and evaluate to true. */
 	def existsM(cond: PartialFunction[A, Boolean]): Boolean =
 		a.iterator.fastExists(_.matchesP(cond))
 
@@ -113,12 +129,18 @@ extension [A](a: Iterable[A])
 	inline def fastExists(inline f: A => Boolean): Boolean =
 		a.iterator.fastExists(f)
 
+	/** A left fold, but the reducer must return an Either wrapping the result.
+	  * Left() means that the fold should stop.
+	  * Right() means to continue reducing.
+	  */
 	def foldLeftOpt[B](initial: B)(reducer: (acc: B, curr: A) => Either[B, B]): B =
 		a.iterator.foldLeftOpt(initial)(reducer)
 
+	/** Returns the first defined result when applying the given function to each element. */
 	def findSome[B](f: A => Option[B]): Option[B] =
 		a.iterator.findSome(f)
 
+	/** Returns the sum of all elements transformed with the given function. */
 	def summing[N](f: A => N)(using numeric: Numeric[N]) =
 		val it = a.iterator
 		var res = numeric.zero
@@ -128,6 +150,7 @@ extension [A](a: Iterable[A])
 
 		res
 
+	/** Returns max(default, max of all elements transformed with the given function). */
 	def maximizing[N](default: N)(f: A => N)(using numeric: Numeric[N]) =
 		val it = a.iterator
 		var currMax = default
@@ -167,6 +190,7 @@ extension [A](seq: IndexedSeq[Int])
 			i += 1
 		sum
 
+/** Returns the orders of cards matching the given id that this player can see in anyone's hands. */
 def visibleFind(
 	state: State,
 	player: Player,

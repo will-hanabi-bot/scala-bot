@@ -158,6 +158,7 @@ extension[G <: Game](game: G)
 		val deck = game.state.deck
 		withState(_.copy(deck = deck.updated(order, f(deck(order)))))
 
+	/** Writes the identity on the given order in [[State.deck]] and [[Game.deckIds]]. */
 	def withId(order: Int, id: Identity)(using ops: GameOps[G]): G =
 		withCard(order)(c => c.copy(suitIndex = id.suitIndex, rank = id.rank))
 			.pipe(g => ops.copyWith(g, GameUpdates(deckIds = Some(g.deckIds.updated(order, Some(id))))))
@@ -167,6 +168,7 @@ extension[G <: Game](game: G)
 			.pipe(f)
 			.pipe(ops.copyWith(_, GameUpdates(catchup = Some(false))))
 
+	/** Returns an updated copy of the game after interpreting the given action. */
 	def handleAction(action: Action)(using ops: GameOps[G]): G =
 		val state = game.state
 
@@ -217,6 +219,7 @@ extension[G <: Game](game: G)
 
 	inline def me = game.players(game.state.ourPlayerIndex)
 
+	/** Returns whether a card is "gotten" (clued, finessed, gd, etc.) */
 	def isTouched(order: Int) =
 		val status = game.meta(order).status
 
@@ -225,13 +228,14 @@ extension[G <: Game](game: G)
 		status == CardStatus.GentlemansDiscard ||
 		status == CardStatus.Finessed
 
+	/** Returns whether a card is playing without being clued (excludes gd). */
 	def isBlindPlaying(order: Int) =
 		!game.state.deck(order).clued && (
 			game.meta(order).status == CardStatus.CalledToPlay ||
 			game.meta(order).status == CardStatus.Finessed
 		)
 
-	/** Tries all ways to see if the order matches. */
+	/** Tries all ways to see if the order matches the given identity. */
 	def orderMatches(order: Int, id: Identity, infer: Boolean = false) =
 		game.state.deck(order).id()
 		.orElse(game.deckIds(order))
@@ -298,7 +302,7 @@ extension[G <: Game](game: G)
 	def simulate(action: Action)(using ops: GameOps[G]): G =
 		action match
 			case clue: ClueAction => game.simulateAction(clue, log = true)
-			case _ => game.simulateAction(action, log = true)
+			case _ => game.simulateAction(action)
 
 	def rewind(turn: Int, action: Action)(using ops: GameOps[G]): Either[String, G] =
 		val state = game.state

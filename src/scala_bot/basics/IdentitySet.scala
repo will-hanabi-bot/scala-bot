@@ -4,6 +4,7 @@ opaque type IdentitySet = Long
 
 extension(ids: IdentitySet)
 	inline def value: Long = ids
+	/** The number of identities contained. */
 	inline def length: Int = java.lang.Long.bitCount(ids)
 	inline def isEmpty: Boolean = length == 0
 	inline def nonEmpty: Boolean = length > 0
@@ -11,6 +12,7 @@ extension(ids: IdentitySet)
 	inline def ==(other: IdentitySet): Boolean =
 		value == other.value
 
+	/** Returns a random identity contained in the set. */
 	inline def head: Identity =
 		if value == 0 then
 			throw new NoSuchElementException("head of empty IdentitySet!")
@@ -151,6 +153,7 @@ object IdentitySet:
 	inline def from(ids: Iterable[Identity]): IdentitySet =
 		ids.foldLeft(0L) { (acc, id) => acc | IdentitySet.single(id) }
 
+	/** Returns an IdentitySet with ids that satisfy the condition, up to the max number. */
 	inline def create(inline cond: Identity => Boolean, maxIds: Int): IdentitySet =
 		var i = 0
 		var res = 0L
@@ -186,9 +189,11 @@ extension(ids: IdentitySetOpt)
 	inline def forallO(inline f: IdentitySet => Boolean) =
 		ids == -1L || f(ids)
 
+	/** A mapping to another IdentitySet. */
 	inline def mapO(f: IdentitySet => IdentitySet): IdentitySetOpt =
 		if ids == -1L then -1L else f(ids)
 
+	/** A mapping to another type. */
 	def mapA[A](f: IdentitySet => A): Option[A] =
 		Option.when(ids != -1L)(f(ids))
 

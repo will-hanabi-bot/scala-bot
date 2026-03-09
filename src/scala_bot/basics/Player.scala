@@ -7,8 +7,18 @@ import scala.collection.immutable.BitSet
 import scala_bot.logger.{Logger, LogLevel}
 
 enum Link:
+	/** A link where one of the cards are conventionally promised to be the identity.
+	  * @example With multiple clued 1s and a play clue on r2, a Promised link would exist for r1.
+	  * @param orders The orders of the cards involved.
+	  * @param id     The promised identity.
+	  * @param target The order of the card this link connects to.
+	  */
 	case Promised(orders: Seq[Int], id: Identity, target: Int)
+	/** A link created from a *Sarcastic Discard*. */
 	case Sarcastic(orders: Seq[Int], id: Identity)
+	/** A link created from *Good Touch*. It's possible none of the cards are the identity.
+	  * @example With two blue cards when the blue stack is at 4, an Unpromised link would exist for r5.
+	  */
 	case Unpromised(orders: Seq[Int], ids: List[Identity])
 
 	def getOrders: Seq[Int] = this match
@@ -21,9 +31,16 @@ enum Link:
 		case Sarcastic(_, id) => Some(id)
 		case _ => None
 
+/** A link where we only know playing a set of cards lets another card play.
+  * @example With multiple clued 1s and receiving a play clue on a 2 in our hand.
+  */
 case class PlayLink(
 	orders: Seq[Int],
+	/** The set of identities that, if played, would allow the target to play
+	  * (allowing other cards to play instead of those in [[PlayLink.orders]])
+	  */
 	prereqs: IdentitySet,
+	/** The order of the card this link connects to. */
 	target: Int
 )
 
@@ -52,9 +69,11 @@ case class Player(
 			dirty = dirty.incl(order)
 		)
 
+	/** A string of this player's inferences on the card with the given order (e.g. "r1,r4,r5"). */
 	def strInfs(state: State, order: Int) =
 		thoughts(order).inferred.toList.sortBy(_.toOrd).map(state.logId).mkString(",")
 
+	/** A string of this player's possible ids on the card with the given order (e.g. "r1,r4,r5"). */
 	def strPoss(state: State, order: Int) =
 		thoughts(order).possible.toList.sortBy(_.toOrd).map(state.logId).mkString(",")
 
@@ -266,13 +285,13 @@ case class Player(
 			thought.infoLock.forallO(_.contains(id)) &&
 			(thought.inferred.length != 1 || thought.inferred.contains(id))	// not info-locked on a different id
 
-	/**
-	* Returns how far the identity is from playable (through cards known by this player).
-	* 0 means that it is playable.
-	*/
+	/** Returns how far the identity is from playable (through cards known by this player).
+	  * 0 means that it is playable.
+	  */
 	def playableAway(id: Identity) =
 		id.rank - (hypoStacks(id.suitIndex) + 1)
 
+	/** Returns the order of the card least likely to be critical in the given player's hand. */
 	def lockedDiscard(state: State, playerIndex: Int) =
 		val critPercents = state.hands(playerIndex).map { o =>
 			val poss = thoughts(o).possibilities
@@ -288,10 +307,9 @@ case class Player(
 				if critDistance < 0 then 5 else critDistance
 		}._1
 
-	/**
-	* Returns the card most likely to be playable, breaking ties by leftmost.
-	* If all cards are known unplayble, returns None.
-	*/
+	/** Returns the card most likely to be playable, breaking ties by leftmost.
+	  * If all cards are known unplayble, returns `None`.
+	  */
 	def anxietyPlay(state: State, playerIndex: Int): Option[Int] =
 		val hand = state.hands(playerIndex)
 		val playableExists = hand.exists: o =>
@@ -304,6 +322,7 @@ case class Player(
 				percent * 1000 - i
 			._1
 
+	/** Returns how many copies of the given id are unseen by this player. */
 	def unknownIds(state: State, id: Identity) =
 		val visibleCount = state.hands.flatten.filter(thoughts(_).matches(id)).length
 		state.cardCount(id.toOrd) - state.baseCount(id.toOrd) - visibleCount
