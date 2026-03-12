@@ -4,6 +4,7 @@ import scala_bot.basics._
 import scala_bot.endgame.EndgameSolver
 import scala_bot.logger._
 import scala_bot.utils._
+import scala_bot.fraction.Frac
 
 case class ReactorWC(
 	giver: Int,
@@ -407,9 +408,12 @@ object Reactor:
 
 				EndgameSolver(monteCarlo = true).solve(game) match
 					case Left(err) => Log.info(s"couldn't solve endgame: $err")
-					case Right((perform, _)) =>
-						Log.info(s"endgame solved!")
-						return perform
+					case Right((perform, winrate)) =>
+						if winrate < Frac(1, 100) then
+							Log.info(s"winrate below 1% (${winrate.toString}), skipping")
+						else
+							Log.info(s"endgame solved!")
+							return perform
 
 			val playableOrders =
 				val commonP = game.common.obviousPlayables(game, state.ourPlayerIndex)
@@ -514,24 +518,34 @@ object Reactor:
 			val level = Logger.level
 			Logger.setLevel(LogLevel.Off)
 
-			def validClue(clue: Clue, target: Int) =
-				val list = state.clueTouched(state.hands(target), clue)
-				val action = ClueAction(giver, target, list, clue.base)
+			def filterClues(clues: Seq[Clue]): Seq[Clue] =
+				val (nonTrashClues, trashClues) = clues.partition: clue =>
+					val list = state.clueTouched(state.hands(clue.target), clue)
+					val action = ClueAction(giver, clue.target, list, clue.base)
 
-				// Do not simulate clues that touch only previously-clued trash
-				if list.forall(o => state.deck(o).clued && state.isBasicTrash(state.deck(o).id().get)) then
-					false
-				else
-					Log.highlight(Console.GREEN, s"===== Predicting value for ${clue.fmt(state)} =====")
-					val hypoGame = game.simulateClue(action, log = true)
-					getResult(game, hypoGame, action) > -1
+					// Only touches previously-clued trash
+					if list.forall(o => state.deck(o).clued && state.isBasicTrash(state.deck(o).id().get)) then
+						false
+					else
+						Log.highlight(Console.GREEN, s"===== Predicting value for ${clue.fmt(state)} =====")
+						val hypoGame = game.simulateClue(action, log = true)
+
+						getResult(game, hypoGame, action) > -1 &&
+						hypoGame.lastMove != Some(ClueInterp.Mistake) &&
+						(hypoGame.lastMove == Some(ClueInterp.Reactive) || state.hands(clue.target).exists: o =>
+							game.deckIds(o).forall(state.isUseful) &&
+							hypoGame.state.deck(o).clued &&
+							hypoGame.common.thoughts(o).possible.difference(hypoGame.state.trashSet).length < game.common.thoughts(o).possible.difference(hypoGame.state.trashSet).length)
+
+				nonTrashClues ++ trashClues.take(1)
 
 			val allClues =
 				(for
 					target <- (0 until state.numPlayers) if target != giver
-					clue   <- state.allValidClues(target) if validClue(clue, target)
+					clue   <- state.allValidClues(target)
 				yield
 					clue)
+				.pipe(filterClues)
 				.sortBy: clue =>
 					val list = state.clueTouched(state.hands(clue.target), clue)
 					val nonTrash = list.filterNot(o => state.isBasicTrash(state.deck(o).id().get))

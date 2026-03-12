@@ -71,9 +71,7 @@ def checkHFix(ctx: ClueContext): Option[HGroup] =
 										if o == fixedOrder then
 											acc
 										else
-											acc.withThought(o)(t => t.copy(
-												inferred = t.possible
-											))
+											acc.withThought(o)(t => t.copy(inferred = t.possible))
 								.copy(lastMove = Some(ClueInterp.Fix))
 
 							Some(newGame)

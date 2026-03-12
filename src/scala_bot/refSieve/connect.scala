@@ -61,7 +61,7 @@ def connect(prev: RS, game: RS, targetOrder: Int, id: Identity, action: ClueActi
 
 			val nextPlayerIndex = state.nextPlayerIndex(playerIndex)
 
-			connecting.match
+			connecting match
 				case None if (playerIndex == action.target && unknown) || (turnsSincePlay == state.numPlayers) => None
 				case None =>
 					loop(nextRank, nextPlayerIndex, connections, turnsSincePlay + 1)

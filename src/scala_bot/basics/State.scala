@@ -36,7 +36,7 @@ case class State(
 	currentPlayerIndex: Int = 0,
 	options: TableOptions
 ):
-	val hash =
+	lazy val hash =
 		val deckInts = Array.ofDim[Int](deck.length)
 		loop(0, _ < deck.length, _ + 1): i =>
 			val card = deck(i)
@@ -120,6 +120,9 @@ case class State(
 
 	inline def isBasicTrash(id: Identity) =
 		id.rank <= playStacks(id.suitIndex) || id.rank > maxRanks(id.suitIndex)
+
+	inline def isUseful(id: Identity) =
+		id.rank > playStacks(id.suitIndex) && id.rank <= maxRanks(id.suitIndex)
 
 	def playableAway(id: Identity) =
 		id.rank - (playStacks(id.suitIndex) + 1)

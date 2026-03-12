@@ -41,7 +41,7 @@ def stallSeverity(game: HGroup, player: Player, giver: Int, infoPlayer: Option[P
 		3
 	else if severity2 then
 		2
-	else if game.inEarlyGame then
+	else if game.level >= 2 && game.inEarlyGame then
 		1
 	else
 		0

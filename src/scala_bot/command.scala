@@ -12,7 +12,7 @@ import scala_bot.logger._
 import scala_bot.refSieve.RefSieve
 import scala_bot.hgroup.HGroup
 
-val BOT_VERSION = "v0.8.4 (scala-bot)"
+val BOT_VERSION = "v0.8.5 (scala-bot)"
 
 case class ChatMessage(
 	msg: String,
@@ -153,7 +153,7 @@ class BotClient(queue: Queue[IO, String], gameRef: Ref[IO, Option[Game]]):
 										player.thoughts(order).infoLock.mapA(info => s"info lock: [${info.fmt(state)}]"),
 										Some(s"possible: [${player.strPoss(state, order)}]"),
 										Some(s"reasoning: ${meta.reasoning}"),
-										Option.when(!flags.isEmpty)(s"flags: ${flags.toList}"),
+										Option.when(!flags.isEmpty)(s"flags: $flags"),
 										Some("====================")
 									).flatten
 

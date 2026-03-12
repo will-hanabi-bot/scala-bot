@@ -9,17 +9,18 @@ extension[G <: Game] (solver: EndgameSolver[G])
 	def cluelessWinnable(state: State, playerTurn: Int, deadline: Instant, depth: Int): Option[PerformAction] =
 		val hash = state.hash
 
+		solver.cluelessCache.get(hash) match
+			case Some(res) => return res
+			case None => ()
+
 		if state.score == state.maxScore then
 			Some(PerformAction.Play(99))
-
-		else if solver.cluelessCache.contains(hash) then
-			solver.cluelessCache(hash)
 
 		else if Instant.now().isAfter(deadline) then
 			None
 
 		else if unwinnableState(state, playerTurn, depth) then
-			solver.cluelessCache = solver.cluelessCache.updated(hash, None)
+			solver.cluelessCache.update(hash, None)
 			None
 
 		else
@@ -42,7 +43,7 @@ extension[G <: Game] (solver: EndgameSolver[G])
 					yield
 						action
 
-			solver.cluelessCache = solver.cluelessCache.updated(hash, winnable)
+			solver.cluelessCache.update(hash, winnable)
 			winnable
 
 	def winnableSimpler(state: State, playerTurn: Int, remaining: RemainingMap, deadline: Instant, depth: Int): Boolean =
@@ -51,17 +52,18 @@ extension[G <: Game] (solver: EndgameSolver[G])
 
 		val hash = state.hash
 
-		if solver.simplerCache.contains(hash) then
-			return solver.simplerCache(hash)
+		solver.simplerCache.get(hash) match
+			case Some(res) => return res
+			case None => ()
 
 		if unwinnableState(state, playerTurn, depth) then
-			solver.simplerCache = solver.simplerCache.updated(hash, false)
+			solver.simplerCache.update(hash, false)
 			return false
 
-		val initial = (false, Option.when(state.canClue)(PerformAction.Rank(0, 0)).toList)
+		val initial = (false, if !state.canClue then Nil else List(PerformAction.Rank(0, 0)))
 		val possibleActions = state.hands(playerTurn).foldRight(initial) { (order, acc) =>
 			val (foundDc, actions) = acc
-			state.deck(order).id().match
+			state.deck(order).id() match
 				case None if !foundDc =>
 					(true, PerformAction.Discard(order) +: actions)
 
@@ -74,15 +76,14 @@ extension[G <: Game] (solver: EndgameSolver[G])
 				case _ => acc
 		}
 		._2
-		.sortBy:
-			case PerformAction.Play(_) => 0
-			case _ => 1
+		.partition:
+			case PerformAction.Play(_) => true
+			case _ => false
+		.pipe: (plays, discards) =>
+			plays ++ discards
 
-		val winnable = possibleActions.exists(winnableIf(state, playerTurn, _, remaining, deadline, depth) match {
-			case SimpleResult.Unwinnable => false
-			case _ => true
-		})
-		solver.simplerCache = solver.simplerCache.updated(hash, winnable)
+		val winnable = possibleActions.exists(winnableIf(state, playerTurn, _, remaining, deadline, depth) != SimpleResult.Unwinnable)
+		solver.simplerCache.update(hash, winnable)
 		winnable
 
 	def winnableIf(state: State, playerTurn: Int, perform: PerformAction, remaining: RemainingMap, deadline: Instant, depth: Int): SimpleResult =

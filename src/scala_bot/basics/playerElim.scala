@@ -369,7 +369,7 @@ extension (p: Player)
 					else if orders.length > inferred.length then
 						// We have enough inferred cards to elim elsewhere
 						Log.info(s"adding link $orders infs ${inferred.fmt(state)} (${p.name})")
-						newPlayer = newPlayer.copy(links = Link.Unpromised(orders, inferred.toList) +: newPlayer.links)
+						newPlayer = newPlayer.copy(links = Link.Unpromised(orders, inferred) +: newPlayer.links)
 
 		newPlayer
 

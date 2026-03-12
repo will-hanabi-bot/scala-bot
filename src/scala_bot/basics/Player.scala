@@ -19,7 +19,7 @@ enum Link:
 	/** A link created from *Good Touch*. It's possible none of the cards are the identity.
 	  * @example With two blue cards when the blue stack is at 4, an Unpromised link would exist for r5.
 	  */
-	case Unpromised(orders: Seq[Int], ids: List[Identity])
+	case Unpromised(orders: Seq[Int], ids: IdentitySet)
 
 	def getOrders: Seq[Int] = this match
 		case Promised(orders, _, _) => orders
@@ -336,7 +336,7 @@ case class Player(
 				if orders.length > unknownIds(state, id) then orders else Nil
 
 			case Link.Unpromised(orders, ids) =>
-				if orders.length > ids.summing(unknownIds(state, _)) then orders else Nil
+				if orders.length > ids.iter.summing(unknownIds(state, _)) then orders else Nil
 
 	def hypoScore = hypoStacks.sum + unknownPlays.size - linkedPlays
 

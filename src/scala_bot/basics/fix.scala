@@ -60,15 +60,15 @@ def checkFix(prev: Game, game: Game, action: ClueAction): FixResult =
   * @param target The index of the destination player (they do not play a card).
   * @param id     Optionally, the identity desired to be made playable by [[target]]'s turn.
   */
-def connectableSimple[G <: Game](game: G, player: Player, start: Int, target: Int, id: Option[Identity] = None)(using ops: GameOps[G]): List[Int] =
+def connectableSimple[G <: Game](game: G, player: Player, start: Int, target: Int, id: Option[Identity] = None)(using ops: GameOps[G]): Seq[Int] =
 	val state = game.state
 
 	if id.exists(state.isPlayable) then
 		List(99)
 	else if start == target then
-		player.obviousPlayables(game, target).toList
+		player.obviousPlayables(game, target)
 	else if game.state.ended then
-		List()
+		List.empty
 	else
 		val nextPlayerIndex = state.nextPlayerIndex(start)
 		val playables = player.obviousPlayables(game, start)
@@ -98,11 +98,11 @@ def distributionClue(prev: Game, game: Game, action: ClueAction, focus: Int): Op
 		return None
 
 	val poss = if clue.kind == ClueKind.Colour then
-		thought.possible.toList
+		thought.possible
 	else
-		thought.possible.filter(_.rank == clue.value).toList
+		thought.possible.filter(_.rank == clue.value)
 
-	val useful = poss.foldLeftOpt(IdentitySet.empty): (acc, id) =>
+	val useful = poss.iter.foldLeftOpt(IdentitySet.empty): (acc, id) =>
 		lazy val duplicated = state.hands.zipWithIndex.exists: (hand, i) =>
 			i != target && hand.exists(o => game.isTouched(o) && game.orderMatches(o, id, infer = true))
 

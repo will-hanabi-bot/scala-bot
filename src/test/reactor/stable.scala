@@ -1,8 +1,8 @@
-package tests.reactor.stable
+package tests.reactor
 
 import scala_bot.reactor.Reactor
 import scala_bot.basics._
-import scala_bot.test.{hasInfs, hasStatus, Player, preClue, setup, takeTurn}, Player._
+import scala_bot.test.{hasInfs, hasStatus, Player, preClue, setup, takeTurn, TestVariant}, Player._
 
 import scala_bot.utils.pipe
 import scala_bot.logger.{Logger, LogLevel}
@@ -183,3 +183,15 @@ class Stable extends munit.FunSuite:
 
 		// Bob thinks they can connect by playing p1, but it's actually g1.
 		assertEquals(game.lastMove, Some(ClueInterp.Mistake))
+
+	test("doesn't break pink promise"):
+		val game = setup(Reactor.apply, Vector(
+			Vector("xx", "xx", "xx", "xx", "xx"),
+			Vector("i2", "i5", "g3", "g3", "r3"),
+			Vector("r4", "y4", "g4", "b4", "r4"),
+		),
+			variant = TestVariant.Pink5
+		)
+
+		// Bob should clue 5 and not 2.
+		assertEquals(game.takeAction, PerformAction.Rank(Bob.ordinal, 5))

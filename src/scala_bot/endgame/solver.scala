@@ -6,9 +6,10 @@ import scala_bot.logger.{Log, Logger, LogLevel}
 import scala_bot.utils._
 
 import java.time.Instant
+import scala.collection.mutable
 import scala.util.boundary, boundary.break
 
-type WinnableResult = Either[String, (List[PerformAction], Frac)]
+type WinnableResult = Either[String, (Seq[PerformAction], Frac)]
 
 enum SimpleResult:
 	case AlwaysWinnable
@@ -101,10 +102,9 @@ case class Arrangement(
 )
 
 case class EndgameSolver[G <: Game](
-	var simpleCache: Map[Int, WinnableResult] = Map(),
-	var simplerCache: Map[Int, Boolean] = Map(),
-	var cluelessCache: Map[Int, Option[PerformAction]] = Map(),
-	var ifCache: Map[Int, SimpleResult] = Map(),
+	val simpleCache: mutable.HashMap[Int, WinnableResult] = mutable.HashMap.empty,
+	val simplerCache: mutable.HashMap[Int, Boolean] = mutable.HashMap.empty,
+	val cluelessCache: mutable.HashMap[Int, Option[PerformAction]] = mutable.HashMap.empty,
 	var successRate: Map[Int, Map[PerformAction, (Frac, Int)]] = Map(),
 	monteCarlo: Boolean = true
 ):
@@ -118,11 +118,11 @@ case class EndgameSolver[G <: Game](
 				return Right(PerformAction.Play(winningPlay.get), Frac.one)
 
 		val start = Instant.now()
-		val deadline = Instant.now().plusSeconds(2)
+		val deadline = Instant.now().plusSeconds(5)
 		val (remainingIds, ownIds) = findRemainingIds(game)
 
 		if remainingIds.count((id, v) => !state.isBasicTrash(id) && v.all) > 3 then
-			val missingIds = remainingIds.keys.filter(!state.isBasicTrash(_)).map(state.logId).mkString(",")
+			val missingIds = remainingIds.keys.filter(state.isUseful).map(state.logId).mkString(",")
 			return Left(s"couldn't find any $missingIds!")
 
 		val level = Logger.level
@@ -161,7 +161,7 @@ case class EndgameSolver[G <: Game](
 			// We cannot assign a trash id if it is linked for a non-trash id and all other orders are already trash
 			(state.isBasicTrash(id) && linkedOrders.contains(order) && game.me.links.exists: l =>
 				val orders = l.getOrders
-				l.promise.exists(!state.isBasicTrash(_)) && orders.contains(order) && orders.forall: o =>
+				l.promise.exists(state.isUseful) && orders.contains(order) && orders.forall: o =>
 					o == order ||
 					ids.zipWithIndex.exists((id2, i) => o == unknownOwn(i) && state.isBasicTrash(id2)))
 
@@ -306,8 +306,9 @@ case class EndgameSolver[G <: Game](
 		val state = game.state
 		val hash = game.hashCode
 
-		if simpleCache.contains(hash) then
-			return simpleCache(hash)
+		simpleCache.get(hash) match
+			case Some(res) => return res
+			case None => ()
 
 		if Instant.now().isAfter(deadline) then
 			return TIMEOUT
@@ -316,7 +317,7 @@ case class EndgameSolver[G <: Game](
 
 		if trivialWin.isRight then
 			Log.info(s"${indent(depth)}trivially winnable!")
-			simpleCache = simpleCache.updated(hash, trivialWin)
+			simpleCache.update(hash, trivialWin)
 			return trivialWin
 
 		val viableClueless =
@@ -341,15 +342,20 @@ case class EndgameSolver[G <: Game](
 
 				// Replace dummy action
 				if cluelessWin.get == PerformAction.Rank(0, 0) then
-					return Right((ops.findAllClues(game, playerTurn).take(1).toList, Frac.one))
+					return Right((ops.findAllClues(game, playerTurn).take(1), Frac.one))
 				else
 					return Right((List(cluelessWin.get), Frac.one))
 
 		val bottomDecked = remaining.nonEmpty && remaining.keys.forall(id => state.isCritical(id) && id.rank != 5)
-		lazy val performs = possibleActions(game, playerTurn, remaining, deadline, depth)
 
-		if bottomDecked || unwinnableState(state, playerTurn, depth) || performs.isEmpty then
-			simpleCache = simpleCache.updated(hash, UNWINNABLE)
+		if bottomDecked || unwinnableState(state, playerTurn, depth) then
+			simpleCache.update(hash, UNWINNABLE)
+			return UNWINNABLE
+
+		val performs = possibleActions(game, playerTurn, remaining, deadline, depth)
+
+		if performs.isEmpty then
+			simpleCache.update(hash, UNWINNABLE)
 			return UNWINNABLE
 
 		if state.score + 1 == state.maxScore then
@@ -364,7 +370,7 @@ case class EndgameSolver[G <: Game](
 
 		val arrs = genArrs(game, remaining, false)
 		val result = optimize(game, arrs, performs, playerTurn, deadline, depth)
-		simpleCache = simpleCache.updated(hash, result)
+		simpleCache.update(hash, result)
 		result
 
 	def possibleActions(game: G, playerTurn: Int, remaining: RemainingMap, deadline: Instant, depth: Int = 0, infer: Boolean = false)(using ops: GameOps[G]): Seq[(PerformAction, Seq[Identity])] =
@@ -386,8 +392,8 @@ case class EndgameSolver[G <: Game](
 			if urgentAction.isDefined then
 				return Seq(urgentAction.get)
 
-			val playables = if infer || game.goodTouch then
-				game.players(playerTurn).thinksPlayables(game, playerTurn)
+			val playables = if infer || game.goodTouch || game.state.endgameTurns.isDefined then
+				game.players(playerTurn).thinksPlayables(game, playerTurn, excludeTrash = true)
 			else
 				game.players(playerTurn).obviousPlayables(game, playerTurn)
 
@@ -400,7 +406,7 @@ case class EndgameSolver[G <: Game](
 						// Log.info(s"can't identify $order ${game.players(playerTurn).thoughts(order)}")
 						None
 					case _ => tryAction(PerformAction.Play(order))
-			.flatten.toList
+			.flatten
 
 			val defaultClue = PerformAction.Rank(0, 0)
 			val tooManyClues = state.actionList.flatten.reverse
@@ -423,12 +429,23 @@ case class EndgameSolver[G <: Game](
 
 				val allClues = ops.findAllClues(game, playerTurn).map(_ -> Nil)
 
-				(if fullyKnown then allClues.take(1) else allClues).toList
+				if fullyKnown then allClues.take(1) else allClues
 
 			if Instant.now.isAfter(deadline) then
 				break(Nil)
 
-			val dcActions = if state.pace <= 0 || playables.exists(p => game.players(playerTurn).thoughts(p).id(infer = true).exists(_.rank == 5)) then Nil else
+			val ignoreDc = state.pace == 0 ||
+				playables.exists: p =>
+					game.players(playerTurn).thoughts(p).id(infer = true).exists: id =>
+						// Always play a 5 over dc
+						id.rank == 5 ||
+						(state.hands(playerTurn).exists(o => o != p && state.deck(o).clued && game.common.thoughts(o).possible.forall(state.isCritical)) && {
+							state.isCritical(id) ||
+							// Always play a duped card in hand over dc
+							state.hands(playerTurn).exists(o => o != p && game.players(playerTurn).thoughts(o).matches(id, infer = true))
+						})
+
+			val dcActions = if ignoreDc then Nil else
 				ops.findAllDiscards(game, playerTurn).map(tryAction).flatten
 
 			// If every hand other than ours is trash, try discarding before cluing

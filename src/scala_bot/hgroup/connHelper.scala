@@ -33,12 +33,7 @@ def assignConns(game: HGroup, action: ClueAction, fps: Seq[FocusPossibility], fo
 					// yield
 					// 	id
 
-					val currPlayableIds =
-						for
-							(stack, i) <- state.playStacks.zipWithIndex
-							id = Identity(i, stack + 1) if !acc.common.isTrash(acc, id, conn.order)
-						yield
-							id
+					val currPlayableIds = state.playableSet.filter(!acc.common.isTrash(acc, _, conn.order))
 
 					val isUnknownPlayable = conn.matchesP { case c: PlayableConn => c.linked.length > 1 }
 					val thought = acc.common.thoughts(conn.order)
@@ -93,12 +88,10 @@ def assignConns(game: HGroup, action: ClueAction, fps: Seq[FocusPossibility], fo
 						val finesseIds = // Option.when(idUncertain):
 							if isBluff then currPlayableIds else
 								// Allow connecting on self blind plays (except hidden ones)
-								state.hands(conn.reacting).foldLeft(state.playableSet.toList): (acc, order) =>
+								state.hands(conn.reacting).foldLeft(state.playableSet): (acc, order) =>
 									if !g.isBlindPlaying(order) || g.meta(order).hidden then acc else
-										acc.foldLeft(acc): (a, i) =>
-											i.next.fold(a)(_ +: a)
-								.filter(!state.isBasicTrash(_))
-						.pipe(IdentitySet.from)
+										acc.union(acc.flatMap(_.next))
+								.filter(state.isUseful)
 
 						val maybeFinessed =
 							conn.matchesP:
@@ -234,7 +227,7 @@ def urgentSave(ctx: ClueContext): Boolean =
 			case Some(_) =>
 				val order = getFinessedOrder(includeHidden = true).get
 				game.common.thoughts(order).id(infer = true) match
-					case None => loop(hypoState, state.nextPlayerIndex(playerIndex))
+					case None     => loop(hypoState, state.nextPlayerIndex(playerIndex))
 					case Some(id) => loop(hypoState.withPlay(id), state.nextPlayerIndex(playerIndex))
 
 	loop(game.state, state.nextPlayerIndex(action.giver))
@@ -315,22 +308,28 @@ def resolveClue(ctx: ClueContext, fps: Seq[FocusPossibility], ambiguousOwn: Seq[
 				val holder = state.holderOf(d)
 				holder != giver && !game.chop(holder).contains(d)
 
-	val interp = if state.deck(focus).id().exists(id => !simplestFps.exists(_.id == id)) then
-		Log.error(s"resolving clue but focus ${state.logId(focus)} doesn't match simplest fps [${simplestFps.map(fp => state.logId(fp.id)).mkString(",")}]!")
-		ClueInterp.Mistake
-	else if simplestFps.forall(_.symmetric) then
-		Log.error(s"resolving clue but all focus possibilities are symmetric!")
-		ClueInterp.Mistake
-	else if badSave then
-		Log.warn("appears to be save clue but copy visible and not on chop!")
-		ClueInterp.Mistake
-	else if stompedWc then
-		Log.error("cluing a card part of a waiting connection!")
-		ClueInterp.Mistake
-	else if fps.exists(_.save) then
-		ClueInterp.Save
-	else
-		ClueInterp.Play
+	val interp =
+		if state.deck(focus).id().exists(id => !simplestFps.exists(_.id == id)) then
+			Log.error(s"resolving clue but focus ${state.logId(focus)} doesn't match simplest fps [${simplestFps.map(fp => state.logId(fp.id)).mkString(",")}]!")
+			ClueInterp.Mistake
+
+		else if simplestFps.forall(_.symmetric) then
+			Log.error(s"resolving clue but all focus possibilities are symmetric!")
+			ClueInterp.Mistake
+
+		else if badSave then
+			Log.warn("appears to be save clue but copy visible and not on chop!")
+			ClueInterp.Mistake
+
+		else if stompedWc then
+			Log.error("cluing a card part of a waiting connection!")
+			ClueInterp.Mistake
+
+		else if fps.exists(_.save) then
+			ClueInterp.Save
+
+		else
+			ClueInterp.Play
 
 	val undoScream =
 		interp == ClueInterp.Save &&
@@ -339,7 +338,7 @@ def resolveClue(ctx: ClueContext, fps: Seq[FocusPossibility], ambiguousOwn: Seq[
 		state.numPlayers > 2
 
 	game.withThought(focus): t =>
-		val newInferred = t.inferred.intersect(IdentitySet.from(allFps.map(_.id)))
+		val newInferred = t.inferred.intersect(allFps.map(_.id))
 			// If a non-finesse connection exists, the focus can't be a copy of it
 			.filter: i =>
 				!fps.filterNot(_.symmetric).flatMap(_.connections).existsM:

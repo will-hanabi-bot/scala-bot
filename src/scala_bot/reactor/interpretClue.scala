@@ -450,21 +450,36 @@ def refDiscard(prev: Reactor, game: Reactor, action: ClueAction, stall: Boolean)
 			else
 				Log.info("locked!")
 
-				if clue.kind == ClueKind.Rank && state.includesVariant(PINKISH) then
+				if state.includesVariant(PINKISH) then
 					newCommon = newCommon.withThought(lockOrder)(t => t.copy(inferred = t.inferred.filter(_.rank == clue.value)))
 					newMeta = newMeta.updated(lockOrder, newMeta(lockOrder).copy(focused = true))
+
+					// Breaks pink promise
+					if state.deck(lockOrder).id().exists(_.rank != clue.value) then
+						return (None, game)
 
 				for order <- hand if !state.deck(order).clued do // && game.meta(order).status == CardStatus.None) {
 					newMeta = newMeta.updated(order, newMeta(order).copy(
 						status = CardStatus.ChopMoved,
 						by = Some(giver)
 					).reason(state.turnCount))
+
 				(Some(ClueInterp.Lock), game.copy(common = newCommon, meta = newMeta))
 
 		case _ =>
 			val focus = newlyTouched.max
 			val focusPos = hand.indexOf(focus)
 			val targetIndex = hand.zipWithIndex.indexWhere((o, i) => i > focusPos && !state.deck(o).clued)
+			val promisedOrder = list.filter(_ > hand(targetIndex)).min
+
+			if state.includesVariant(PINKISH) then
+				newCommon = newCommon.withThought(promisedOrder)(t => t.copy(inferred = t.inferred.filter(_.rank == clue.value)))
+				newMeta = newMeta.updated(promisedOrder, newMeta(promisedOrder).copy(focused = true))
+
+				// Breaks pink promise
+				if state.deck(promisedOrder).id().exists(_.rank != clue.value) then
+					return (None, game)
+
 			Log.info(s"ref discard on ${state.names(receiver)}'s slot ${targetIndex + 1}")
 
 			val meta = newMeta(hand(targetIndex))
@@ -474,5 +489,6 @@ def refDiscard(prev: Reactor, game: Reactor, action: ClueAction, stall: Boolean)
 					by = Some(giver))
 					.reason(state.turnCount)
 					.signal(state.turnCount))
-				.updated(focus, newMeta(focus).copy(focused = true))
+				.when(_ => !state.includesVariant(PINKISH)):
+					_.updated(focus, newMeta(focus).copy(focused = true))
 			(Some(ClueInterp.Discard), game.copy(common = newCommon, meta = newMeta))

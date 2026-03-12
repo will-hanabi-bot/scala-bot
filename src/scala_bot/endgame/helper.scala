@@ -28,8 +28,8 @@ def unwinnableState(state: State, playerTurn: Int, depth: Int = 0): Boolean =
 	if state.ended || state.pace < 0 then
 		return true
 
-	var voidPlayers = List.empty[Int]
-	var mustPlays = List.empty[List[Identity]]
+	val isVoid = Array.fill(state.numPlayers)(false)
+	val mustPlays = Array.fill(state.numPlayers)(0)
 	var mustStartEndgame = List.empty[Int]
 
 	loop(state.numPlayers - 1, _ >= 0, _ - 1): i =>
@@ -37,10 +37,10 @@ def unwinnableState(state: State, playerTurn: Int, depth: Int = 0): Boolean =
 		val void = hand.fastForall(state.deck(_).id().forall(state.isBasicTrash))
 
 		if void then
-			voidPlayers = i +: voidPlayers
+			isVoid(i) = true
 
 		val plays = findMustPlays(state, hand)
-		mustPlays = plays +: mustPlays
+		mustPlays(i) += plays.length
 
 		if (plays.length > 1)
 			mustStartEndgame = i +: mustStartEndgame
@@ -54,10 +54,10 @@ def unwinnableState(state: State, playerTurn: Int, depth: Int = 0): Boolean =
 		loop(0, _ < state.endgameTurns.get, _ + 1): i =>
 			val playerIndex = (playerTurn + i) % state.numPlayers
 
-			if !voidPlayers.contains(playerIndex) then
+			if !isVoid(playerIndex) then
 				possiblePlayers += 1
 
-				if mustPlays(playerIndex).length > 1 then
+				if mustPlays(playerIndex) > 1 then
 					doublePlay = i
 
 		if possiblePlayers + state.score < state.maxScore then
@@ -85,7 +85,7 @@ def unwinnableState(state: State, playerTurn: Int, depth: Int = 0): Boolean =
 				// println(s"${indent(depth)}${state.names(target)} needs to start endgame, not enough clues to reach their turn")
 				return true
 
-	else if state.endgameTurns.isEmpty && voidPlayers.length > state.pace then
+	else if state.endgameTurns.isEmpty && isVoid.count(_ == true) > state.pace then
 		// println(s"${indent(depth)}too many void players, pace ${state.pace}")
 		return true
 
@@ -106,9 +106,8 @@ def triviallyWinnable(game: Game, playerTurn: Int): WinnableResult =
 
 				if playables.isEmpty then
 					acc
-				else state.deck(playables.head).id() match
-					case None => acc
-					case Some(id) =>
+				else
+					state.deck(playables.head).id().fold(acc): id =>
 						val perform = if i == 0 then PerformAction.Play(playables.head) else action
 						(perform, stacks.updated(id.suitIndex, id.rank))
 
@@ -125,7 +124,7 @@ def genArrs(game: Game, remaining: RemainingMap, clueOnly: Boolean): (List[GameA
 
 	val drawn =
 		if clueOnly then
-			List()
+			Nil
 
 		else if remaining.size > 0 && remaining.forall((id, _) => state.isBasicTrash(id)) then
 			// Log.info(s"${indent(depth)}short-circuiting all remaining trash!")
@@ -133,7 +132,7 @@ def genArrs(game: Game, remaining: RemainingMap, clueOnly: Boolean): (List[GameA
 			List(GameArr(Frac.one, remaining.rem(id), Some(id)))
 
 		else
-			val drawnArrs = {
+			val drawnArrs =
 				val (usefulArrs, trashArr) = remaining.foldLeft((List.empty[GameArr], GameArr(Frac.zero, remaining, None))):
 					case ((acc, trashArr), (id, RemainingEntry(missing, _))) if state.isBasicTrash(id) =>
 						val newProb = Frac(missing, state.cardsLeft)
@@ -144,11 +143,11 @@ def genArrs(game: Game, remaining: RemainingMap, clueOnly: Boolean): (List[GameA
 						val newProb = Frac(missing, state.cardsLeft)
 						val newRemaining = remaining.rem(id)
 						(GameArr(newProb, newRemaining, Some(id)) +: acc, trashArr)
+
 				if trashArr.prob > Frac.zero then
 					usefulArrs :+ trashArr
 				else
 					usefulArrs
-			}.toList
 
 			if drawnArrs.isEmpty then List(undrawn) else drawnArrs
 

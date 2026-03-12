@@ -50,11 +50,42 @@ extension(ids: IdentitySet)
 			remaining &= (remaining - 1)
 		res
 
+	inline def find(inline cond: Identity => Boolean): Option[Identity] =
+		var bits = ids
+		var found = false
+		var foundId: Identity = null
+
+		while bits != 0 && !found do
+			val tz = java.lang.Long.numberOfTrailingZeros(bits)
+			bits &= bits - 1
+
+			val id = Identity.fromOrd(tz)
+			if cond(id) then
+				found = true
+				foundId = id
+
+		if found then Some(foundId) else None
+
 	def toList =
 		var res = List.empty[Identity]
 		ids.foreach: i =>
 			res = i +: res
 		res
+
+	def iter: Iterator[Identity] =
+		new Iterator[Identity]:
+			private var remaining = ids
+
+			def hasNext: Boolean = remaining != 0L
+
+			def next(): Identity =
+				if remaining == 0L then
+					throw new NoSuchElementException("next on empty iterator")
+
+				val tz = java.lang.Long.numberOfTrailingZeros(remaining)
+				remaining &= (remaining - 1)
+
+				Identity.fromOrd(tz)
 
 	def map[A](f: Identity => A) =
 		var res = Seq.empty[A]
@@ -105,6 +136,9 @@ extension(ids: IdentitySet)
 		ids.foreach: i =>
 			res = numeric.plus(res, f(i))
 		res
+
+	inline def whenEmpty(inline alternative: => IdentitySet) =
+		if ids.isEmpty then alternative else ids
 
 	inline def intersect(other: IdentitySet): IdentitySet =
 		ids & other

@@ -379,7 +379,7 @@ case class HGroup(
 
 			meta(focus).status != CardStatus.Finessed &&
 			!focusCard.clued &&
-			focusCard.id().exists(!state.isBasicTrash(_)) && {
+			focusCard.id().exists(state.isUseful) && {
 				val hypo = this.copy(noRecurse = true, allowFindOwn = false).simulateClue(action)
 
 				hypo.lastMove.matchesP:
@@ -725,7 +725,7 @@ object HGroup:
 					val list = state.clueTouched(state.hands(clue.target), clue)
 
 					list.exists: o =>
-						state.deck(o).id().exists(!state.isBasicTrash(_))
+						state.deck(o).id().exists(state.isUseful)
 
 				if nonTrashClues.isEmpty then
 					trashClues.take(1)

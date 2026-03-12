@@ -367,8 +367,7 @@ private def checkPosDc(ctx: DiscardContext): Option[IndexedSeq[(Int, Vector[Iden
 			order == o
 		else
 			prev.meta(order).status == CardStatus.ChopMoved &&
-			thought.possible.exists(!state.isBasicTrash(_)) &&
-			thought.possible.exists(state.isPlayable)
+			thought.possible.intersect(state.playableSet).nonEmpty
 
 	if unintended then
 		return None

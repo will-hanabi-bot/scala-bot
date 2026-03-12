@@ -60,8 +60,15 @@ extension[G <: Game](game: G)
 		.when(_ => suitIndex != -1 && rank != -1): g =>
 			g.withState(_.withDiscard(id, order))
 			.withId(order, id)
-			.withThought(order):
-				_.copy(suitIndex, rank, inferred = IdentitySet.single(id), possible = IdentitySet.single(id))
+			.withThought(order): t =>
+				t.copy(
+					suitIndex,
+					rank,
+					inferred = IdentitySet.single(id),
+					oldInferred = t.inferred.toOpt,
+					possible = IdentitySet.single(id),
+					oldPossible = t.possible.toOpt,
+				)
 
 	/** Returns the updated game after the draw, without conventional interpretations or elim.
 	  * @throws Exception If the draw reveals an inconsistent state, like the card order not matching the # of cards in the deck.
@@ -186,10 +193,8 @@ extension[G <: Game](game: G)
 
 				g.when(_ => thought.inferred.isEmpty && !thought.reset):
 					_.withThought(order)(_.resetInferences())
-					.withMeta(order)(_.copy(
-						status = CardStatus.None,
-						by = None
-					))
+					.withMeta(order):
+						_.copy(status = CardStatus.None, by = None)
 				.when(_.common.thoughts(order).infoLock.existsO(_.isEmpty)):
 					Log.warn(s"lost info lock on $order!")
 					_.withThought(order)(_.copy(infoLock = IdentitySetOpt.empty))
@@ -203,10 +208,8 @@ extension[G <: Game](game: G)
 			resets.foldLeft(ops.copyWith(g, GameUpdates(common = Some(newCommon)))): (acc, order) =>
 				val entry = acc.meta(order)
 				if entry.status != CardStatus.CalledToPlay then acc else
-					acc.withMeta(order)(_.copy(
-						status = CardStatus.None,
-						by = None
-					))
+					acc.withMeta(order):
+						_.copy(status = CardStatus.None, by = None)
 
 		.pipe: g =>
 			val (sarcastics, newCommon) = g.common.refreshLinks(g)
@@ -224,8 +227,7 @@ extension[G <: Game](game: G)
 						if !g.common.dirty.contains(t.order) then t else
 							val thought = g.common.thoughts(t.order)
 							val newInferred =
-								thought.inferred.intersect(t.possible)
-									.when(_.isEmpty)(_ => t.possible)
+								thought.inferred.intersect(t.possible).whenEmpty(t.possible)
 
 							val newInfoLock =
 								if !thought.infoLock.isDefined then
