@@ -397,10 +397,10 @@ object Reactor:
 						game.meta(urgent).status match
 							case CardStatus.CalledToPlay if !me.thoughts(urgent).possible.forall(state.isBasicTrash) =>
 								return PerformAction.Play(urgent)
-							case CardStatus.CalledToDiscard =>
+							case CardStatus.CalledToDiscard if !me.thoughts(urgent).possible.forall(state.isCritical) =>
 								return PerformAction.Discard(urgent)
 							case _ =>
-								Log.warn(s"Unexpected urgent card status ${game.meta(urgent).status}")
+								Log.warn(s"unexpected urgent card status: ${game.meta(urgent).status}")
 				case _ => ()
 
 			if state.inEndgame && state.remScore <= state.variant.suits.length + 1 then

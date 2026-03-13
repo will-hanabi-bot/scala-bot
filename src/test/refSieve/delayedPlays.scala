@@ -51,7 +51,7 @@ class DelayedPlays extends munit.FunSuite:
 
 	test("understands a self-delayed play clue"):
 		val game = setup(RefSieve.apply, Vector(
-			Vector("xx", "xx", "xx", "xx", "xx"),
+			Vector("xx", "xx", "xx", "xx", "xx"),		// p1 y1 r4 g4 b4
 			Vector("b1", "b4", "y4", "y4", "g4"),
 		),
 			starting = Bob

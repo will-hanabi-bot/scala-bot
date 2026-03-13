@@ -1,6 +1,6 @@
 //> using scala 3.8.2
 //> using jvm 25
-//> using options -Wall -Wconf:msg=toString:s -feature -J-Xmx3g
+//> using options -Wall -Wconf:msg=toString:s -feature -J-Xmx512M
 //> using dep com.softwaremill.sttp.client4::core:4.0.19
 //> using dep com.softwaremill.sttp.client4::cats:4.0.19
 //> using dep org.typelevel::cats-effect:3.7.0

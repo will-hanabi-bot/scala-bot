@@ -1,11 +1,12 @@
 package scala_bot.refSieve
 
-import scala_bot.basics._, RefSieve as RS
+import scala_bot.basics._
 import scala_bot.logger.Log
 
 import scala.annotation.tailrec
 
-def findConnecting(prev: RS, game: RS, id: Identity, playerIndex: Int, connected: Set[Int], looksDirect: Boolean, ignore: Set[Int] = Set(), findOwn: Boolean = false): Option[Connection] =
+def findConnecting(ctx: ClueContext, id: Identity, playerIndex: Int, connected: Set[Int], looksDirect: Boolean, ignore: Set[Int] = Set(), findOwn: Boolean = false, alwaysConnect: Boolean = false, preferF: Boolean = false): Option[Connection] =
+	val ClueContext(prev, game, action) = ctx
 	val state = game.state
 	val player = if findOwn then game.players(playerIndex) else game.common
 	val hand = state.hands(playerIndex)
@@ -27,29 +28,38 @@ def findConnecting(prev: RS, game: RS, id: Identity, playerIndex: Int, connected
 	if playable.exists(p => state.deck(p).matches(id, assume = findOwn) && !ignore.contains(p)) then
 		return Some(PlayableConn(playerIndex, playable.get, id))
 
-	if looksDirect || playable.nonEmpty then
+	if looksDirect || playable.nonEmpty || playerIndex == action.giver then
 		return None
 
-	game.common.findPrompt(prev, playerIndex, id, connected, ignore, rightmost = true).map: prompt =>
-		if !state.deck(prompt).matches(id, assume = findOwn) then
+	lazy val prompt = game.common.findPrompt(prev, playerIndex, id, connected, ignore, rightmost = true).map: prompt =>
+		if alwaysConnect || state.deck(prompt).matches(id, assume = findOwn) then
+			Some(PromptConn(playerIndex, prompt, id))
+		else
 			if state.deck(prompt).id().isDefined then
 				Log.warn(s"wrong prompt! ${state.logId(prompt)} looks like ${state.logId(id)}")
 			None
-		else
-			Some(PromptConn(playerIndex, prompt, id))
-	.getOrElse:
+
+	lazy val finesse =
 		game.findFinesse(playerIndex, connected, ignore)
-			.filter(state.deck(_).matches(id, assume = findOwn))
+			.filter: o =>
+				alwaysConnect ||
+				(game.future(o).contains(id) && state.deck(o).matches(id, assume = findOwn))
 			.map(FinesseConn(playerIndex, _, List(id)))
 
-def connect(prev: RS, game: RS, targetOrder: Int, id: Identity, action: ClueAction, unknown: Boolean, findOwn: Boolean = false): Option[List[Connection]] =
+	if preferF then
+		finesse
+	else
+		prompt.getOrElse(finesse)
+
+def connect(ctx: ClueContext, targetOrder: Int, id: Identity, unknown: Boolean, findOwn: Boolean = false): Option[List[Connection]] =
+	val ClueContext(prev, game, action) = ctx
 	val state = game.state
 	val Identity(suitIndex, rank) = id
 
 	// Log.info(s"attempting to ${if (findOwn) "find own finesses" else "connect"} ${state.logId(id)} $targetOrder")
 
 	@tailrec
-	def loop(nextRank: Int, playerIndex: Int, connections: List[Connection], turnsSincePlay: Int = 1): Option[List[Connection]] =
+	def loop(nextRank: Int, playerIndex: Int, connections: List[Connection] = Nil, turnsSincePlay: Int = 1, alwaysConnect: Boolean = false, remF: Int = 0): Option[List[Connection]] =
 		if nextRank == rank then
 			Some(connections.reverse)
 		else
@@ -57,17 +67,52 @@ def connect(prev: RS, game: RS, targetOrder: Int, id: Identity, action: ClueActi
 			val connected = connections.map(_.order).toSet + targetOrder
 			val looksDirect = unknown && playerIndex == action.target
 			val own = findOwn && playerIndex == state.ourPlayerIndex
-			val connecting = findConnecting(prev, game, nextId, playerIndex, connected, looksDirect, findOwn = own)
+			val connecting = findConnecting(ctx, nextId, playerIndex, connected, looksDirect, findOwn = own, alwaysConnect = alwaysConnect, preferF = remF > 0)
 
 			val nextPlayerIndex = state.nextPlayerIndex(playerIndex)
 
 			connecting match
 				case None if (playerIndex == action.target && unknown) || (turnsSincePlay == state.numPlayers) => None
 				case None =>
-					loop(nextRank, nextPlayerIndex, connections, turnsSincePlay + 1)
+					loop(nextRank, nextPlayerIndex, connections, turnsSincePlay + 1, alwaysConnect, remF)
 				case Some(conn) =>
-					loop(nextRank + 1, nextPlayerIndex, conn +: connections, 1)
+					val newRemF = if conn.isInstanceOf[FinesseConn] then remF - 1 else remF
+					loop(nextRank + 1, nextPlayerIndex, conn +: connections, 1, alwaysConnect, newRemF)
 
-	loop(state.playStacks(suitIndex) + 1, state.nextPlayerIndex(action.giver), List()).map: conns =>
-		Log.info(s"found connections ${state.logConns(conns, id)}")
-		conns
+	val conns =
+		if state.numPlayers == 2 then
+			lazy val tryBluff = if !prev.state.deck(targetOrder).clued then None else
+				game.findFinesse(action.target)
+					.filter: o =>
+						state.deck(o).id() match
+							case Some(i) => state.isPlayable(i)
+							case None if findOwn => game.common.thoughts(o).possible.intersect(state.playableSet).nonEmpty
+							case _ => false
+					.map(o => List(FinesseConn(action.target, o, game.common.thoughts(o).possible.intersect(state.playableSet).toList, bluff = true)))
+
+			// First, count the # of finesses required. Then force finesses first, that many times.
+			loop(state.playStacks(suitIndex) + 1, state.nextPlayerIndex(action.giver), alwaysConnect = true) match
+				case Some(conns) =>
+					if conns.exists(_.isInstanceOf[PromptConn]) && conns.exists(_.isInstanceOf[FinesseConn]) then
+						val numFinesses = conns.count(_.isInstanceOf[FinesseConn])
+
+						loop(state.playStacks(suitIndex) + 1, state.nextPlayerIndex(action.giver), remF = numFinesses)
+							.orElse(tryBluff)
+					else if conns.forall(_.isInstanceOf[PromptConn]) then
+						val wrongPrompt = conns.exists:
+							case p: PromptConn => !state.deck(p.order).matches(p.id, assume = findOwn)
+							case _ => false
+
+						Option.when(!wrongPrompt)(conns)
+					else if conns.count(_.isInstanceOf[FinesseConn]) <= 1 then
+						Some(conns)
+					else
+						tryBluff
+				case None => tryBluff
+
+		else
+			loop(state.playStacks(suitIndex) + 1, state.nextPlayerIndex(action.giver))
+
+	conns.map: cs =>
+		Log.info(s"found connections ${state.logConns(cs, id)}")
+		cs

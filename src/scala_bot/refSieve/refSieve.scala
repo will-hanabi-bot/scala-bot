@@ -5,6 +5,10 @@ import scala_bot.endgame.EndgameSolver
 import scala_bot.utils._
 import scala_bot.logger.{Log, Logger, LogLevel}
 
+enum UpdateResult:
+	case Remove
+	case Keep
+
 case class RefSieve(
 	tableID: Int,
 	state: State,
@@ -14,8 +18,8 @@ case class RefSieve(
 	lastActions: Vector[Option[Action]],
 
 	meta: Vector[ConvData] = Vector(),
-	deckIds: Vector[Option[Identity]] = Vector(),
-	future: Vector[IdentitySet] = Vector(),
+	deckIds: Vector[Option[Identity]],
+	future: Vector[IdentitySet],
 	catchup: Boolean = false,
 	notes: Map[Int, Note] = Map(),
 	lastMove: Option[Interp] = None,
@@ -75,6 +79,25 @@ case class RefSieve(
 	def dependentConns(order: Int) =
 		waiting.filter(_.connections.exists(_.order == order))
 
+	def reinterpPlay(prev: RefSieve, action: PlayAction | DiscardAction): Option[RefSieve] =
+		val (order, suitIndex, rank) = action match
+			case PlayAction(playerIndex, order, suitIndex, rank) => (order, suitIndex, rank)
+			case DiscardAction(playerIndex, order, suitIndex, rank, _) => (order, suitIndex, rank)
+
+		if suitIndex == -1 || rank == -1 then
+			return None
+
+		val needsReplay =
+			action.playerIndex == state.ourPlayerIndex &&
+			prev.me.thoughts(order).possible.length > 1 &&
+			future(order).length > 1
+
+		Option.when(needsReplay) {
+			copy(future = future.updated(order, IdentitySet.single(Identity(suitIndex, rank))))
+			.replay
+			.toOption
+		}.flatten
+
 object RefSieve:
 	private def init(
 		tableID: Int,
@@ -88,6 +111,8 @@ object RefSieve:
 		players = t.players,
 		common = t.common,
 		base = (state, Vector(), t.players, t.common),
+		deckIds = Vector.fill(state.variant.totalCards)(None),
+		future = Vector.fill(state.variant.totalCards)(state.allIds),
 		lastActions = Vector.fill(state.numPlayers)(None),
 		inProgress = inProgress
 	)
@@ -125,13 +150,17 @@ object RefSieve:
 				common = game.base._4,
 				base = game.base,
 				inProgress = game.inProgress,
-				deckIds = if keepDeck then game.deckIds else Vector(),
+
+				deckIds = if keepDeck then game.deckIds else Vector.fill(game.state.variant.totalCards)(None),
+				future = if keepDeck then game.future else Vector.fill(game.state.variant.totalCards)(game.state.allIds),
 				lastActions = Vector.fill(game.state.numPlayers)(None)
 			)
 
 		def interpretClue(prev: RefSieve, game: RefSieve, action: ClueAction): RefSieve =
+			val state = game.state
 			val ClueAction(giver, target, list, clue) = action
 			val newlyTouched = list.filter(!prev.state.deck(_).clued)
+			val ctx = ClueContext(prev, game, action)
 
 			// val resetOrder = clueResets.find(o => {
 			// 	val thought = game.common.thoughts(o)
@@ -146,25 +175,57 @@ object RefSieve:
 			// 	return game.rewind()
 			// }
 
-			val fix = checkFix(prev, game, action).matchesP:
-				case _: FixResult.Normal => true
+			val fix = checkFix(prev, game, action).isInstanceOf[FixResult.Normal]
 			val trashPush = !fix && newlyTouched.forall(game.common.orderKt(game, _))
 
-			val intent = determineFocus(prev, game, action, push = false)
-			val distributionIds = distributionClue(prev, game, action, intent)
+			val intent = determineFocus(ctx, push = false)
 
-			if !fix && !trashPush && distributionIds.isDefined then
-				return game.withThought(intent): t =>
-					t.copy(
-						inferred = t.inferred.intersect(distributionIds.get),
-						reset = false
-					)
+			if !fix && !trashPush then
+				distributionClue(prev, game, action, intent) match
+					case Some(ids) =>
+						return game.withThought(intent): t =>
+							t.copy(
+								inferred = t.inferred.intersect(ids),
+								reset = false
+							)
+					case None => ()
 
 			val prevPlayables = prev.common.thinksPlayables(prev, target)
 			val prevLoaded = prev.common.thinksLoaded(prev, target)
 			val stalling = prev.common.thinksLocked(prev, giver) || prev.state.clueTokens == 8
 
-			lazy val focus = determineFocus(prev, game, action, push = trashPush || clue.kind == ClueKind.Colour)
+			val noInfo = state.numPlayers == 2 && !stalling && list.forall: o =>
+				prev.common.thoughts(o).possible == game.common.thoughts(o).possible
+
+			if noInfo then
+				// No-Info Double Bluff
+				return game.findFinesse(action.target) match
+					case Some(f1) =>
+						def validNI(o1: Int, o2: Int) =
+							val valid = for
+								id1 <- state.deck(o1).id()
+								id2 <- state.deck(o2).id()
+							yield
+								state.isPlayable(id1) &&
+								(state.isPlayable(id2) || id1.next.exists(_ == id2))
+
+							valid.forall(x => x)
+
+						game.findFinesse(action.target, Set(f1)) match
+							case Some(f2) =>
+								Log.info(s"no-info double bluff on $f1 and $f2!")
+
+								game.withMeta(f1)(_.copy(status = CardStatus.CalledToPlay))
+									.withMeta(f2)(_.copy(status = CardStatus.CalledToPlay))
+									.copy(lastMove = if validNI(f1, f2) then Some(ClueInterp.Play) else Some(ClueInterp.Mistake))
+							case None =>
+								game.withMeta(f1)(_.copy(status = CardStatus.CalledToPlay))
+									.withMeta(list.max)(_.copy(status = CardStatus.CalledToPlay))
+									.copy(lastMove = if validNI(f1, list.max) then Some(ClueInterp.Play) else Some(ClueInterp.Mistake))
+					case None =>
+						game.copy(lastMove = Some(ClueInterp.Mistake))
+
+			lazy val focus = determineFocus(ctx, push = trashPush || clue.kind == ClueKind.Colour)
 			lazy val cluedGame = game.withMeta(focus)(_.copy(focused = true)).elim()
 
 			lazy val newPlayables = cluedGame.common.thinksPlayables(cluedGame, target).filter(!prevPlayables.contains(_))
@@ -177,14 +238,14 @@ object RefSieve:
 							Log.info("rank stall!")
 							(Some(ClueInterp.Stall), game)
 						else
-							refPlay(prev, game, action, right = clue.kind == ClueKind.Rank && !trashPush)
+							refPlay(ctx, right = clue.kind == ClueKind.Rank && !trashPush)
 
 					else if stalling then
 						Log.info("fill-in stall!")
 						(Some(ClueInterp.Stall), game)
 
 					else	// Loaded reclue
-						targetPlay(prev, game, action, list.max)
+						targetPlay(ctx, list.max)
 
 				else if newlyTouched.isEmpty then
 					if loaded then
@@ -196,11 +257,11 @@ object RefSieve:
 						(Some(ClueInterp.Stall), game)
 
 					else	// Reclue
-						targetPlay(game, game, action, list.max)
+						targetPlay(ctx, list.max)
 
 				else if newPlayables.isEmpty && trashPush then
 					Log.info(s"trash push!")
-					refPlay(prev, game, action)
+					refPlay(ctx)
 
 				else if fix || (loaded && !(clue.kind == ClueKind.Colour && newPlayables.forall(newlyTouched.contains))) then
 					Log.info(s"revealed a safe action${if fix then " (fix)" else ""}, not continuing")
@@ -214,15 +275,15 @@ object RefSieve:
 					(Some(ClueInterp.Reveal), newGame)
 
 				else if clue.kind == ClueKind.Colour then
-					refPlay(prev, cluedGame, action)
+					refPlay(ctx)
 
 				else
-					refDiscard(prev, cluedGame, action)
+					refDiscard(ctx)
 
 			if interp.isEmpty then
 				Log.warn("interpreted mistake!")
 
-			newGame.copy(lastMove = Some(interp.getOrElse(ClueInterp.Mistake)))
+			newGame.copy(lastMove = Some(interp.getOrElse(ClueInterp.Mistake))).elim()
 
 		def interpretDiscard(prev: RefSieve, game: RefSieve, action: DiscardAction): RefSieve =
 			val state = game.state
@@ -262,7 +323,7 @@ object RefSieve:
 			.elim()
 
 		def interpretPlay(prev: RefSieve, game: RefSieve, action: PlayAction): RefSieve =
-			game.elim()
+			game.reinterpPlay(prev, action).getOrElse(game).elim()
 
 		def takeAction(game: RefSieve): PerformAction =
 			val (state, me) = (game.state, game.me)

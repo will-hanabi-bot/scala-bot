@@ -4,7 +4,10 @@ import scala_bot.basics._
 import scala_bot.utils._
 import scala_bot.logger.Log
 
-def determineFocus(prev: RefSieve, game: RefSieve, action: ClueAction, push: Boolean, right: Boolean = false) =
+case class ClueContext(prev: RefSieve, game: RefSieve, action: ClueAction)
+
+def determineFocus(ctx: ClueContext, push: Boolean, right: Boolean = false) =
+	val ClueContext(prev, game, action) = ctx
 	val state = game.state
 	val newlyTouched = action.list.filter(o => state.deck(o).clued && !prev.state.deck(o).clued)
 
@@ -24,13 +27,14 @@ def determineFocus(prev: RefSieve, game: RefSieve, action: ClueAction, push: Boo
 	else
 		newlyTouched.maxOption.get
 
-def refPlay(prev: RefSieve, game: RefSieve, action: ClueAction, right: Boolean = false): (Option[ClueInterp], RefSieve) =
+def refPlay(ctx: ClueContext, right: Boolean = false): (Option[ClueInterp], RefSieve) =
+	val ClueContext(prev, game, action) = ctx
 	val (common, state) = (game.common, game.state)
 	val clueTarget = action.target
 	val hand = state.hands(clueTarget)
 	val newlyTouched = action.list.filter(o => state.deck(o).clued && !prev.state.deck(o).clued)
 
-	val focus = determineFocus(prev, game, action, push = true, right)
+	val focus = determineFocus(ctx, push = true, right)
 	val target = if right then
 		newlyTouched.map(common.refer(prev, hand, _, left = false)).min
 	else
@@ -43,18 +47,19 @@ def refPlay(prev: RefSieve, game: RefSieve, action: ClueAction, right: Boolean =
 		Log.info(s"targeting a card called to discard!")
 		(None, game)
 	else
-		targetPlay(prev, game, action, target) match
+		targetPlay(ctx, target) match
 			case res @ (None, _) => res
 			case (interp, result) =>
 				Log.info(s"ref play on ${state.names(clueTarget)}'s slot ${hand.indexOf(target) + 1} (focus $focus) infs ${result.common.strInfs(result.state, target)}")
 				(interp, result)
 
-def refDiscard(prev: RefSieve, game: RefSieve, action: ClueAction): (Option[ClueInterp], RefSieve) =
+def refDiscard(ctx: ClueContext): (Option[ClueInterp], RefSieve) =
+	val ClueContext(prev, game, action) = ctx
 	val state = game.state
 	val clueTarget = action.target
 	val hand = state.hands(clueTarget)
 
-	val focus = determineFocus(prev, game, action, push = false)
+	val focus = determineFocus(ctx, push = false)
 	val targetIndex = hand.indexWhere(o => o < focus && !state.deck(o).clued)
 
 	if targetIndex == -1 then
@@ -83,14 +88,15 @@ def refDiscard(prev: RefSieve, game: RefSieve, action: ClueAction): (Option[Clue
 
 		(Some(ClueInterp.Discard), newGame)
 
-def targetPlay(prev: RefSieve, game: RefSieve, action: ClueAction, targetOrder: Int): (Option[ClueInterp], RefSieve) =
+def targetPlay(ctx: ClueContext, targetOrder: Int): (Option[ClueInterp], RefSieve) =
+	val ClueContext(prev, game, action) = ctx
 	val (common, state) = (game.common, game.state)
 	val unknown = common.thoughts(targetOrder).id(infer = true, symmetric = true).isEmpty
 
 	val focusPoss =
 		for
 			inf   <- common.thoughts(targetOrder).inferred if visibleFind(state, common, inf, infer = true, excludeOrder = targetOrder).isEmpty
-			conns <- connect(prev, game, targetOrder, inf, action, unknown)
+			conns <- connect(ctx, targetOrder, inf, unknown)
 		yield
 			FocusPossibility(inf, conns, ClueInterp.Play)
 
@@ -100,20 +106,24 @@ def targetPlay(prev: RefSieve, game: RefSieve, action: ClueAction, targetOrder: 
 
 	targetId match
 		case Some(id) if !focusPoss.exists(_.id == id) =>
-			lazy val conns = connect(prev, game, targetOrder, id, action, unknown, findOwn = true)
 			if action.giver == state.ourPlayerIndex then
 				(None, game)
-			else if conns.isEmpty then
-				Log.warn(s"targeting an unplayable card!")
-				(None, game)
 			else
-				val newFps = focusPoss :+ FocusPossibility(id, conns.get, ClueInterp.Play)
-				(Some(ClueInterp.Play), resolvePlay(game, action, targetOrder, newFps, targetId))
+				Log.highlight(Console.YELLOW, s"finding own!")
+				val conns = connect(ctx, targetOrder, id, unknown, findOwn = true)
+
+				if conns.isEmpty then
+					Log.warn(s"targeting an unplayable card!")
+					(None, game)
+				else
+					val newFps = focusPoss :+ FocusPossibility(id, conns.get, ClueInterp.Play)
+					(Some(ClueInterp.Play), resolvePlay(ctx, targetOrder, newFps, targetId))
 
 		case _ =>
-			(Some(ClueInterp.Play), resolvePlay(game, action, targetOrder, focusPoss, targetId))
+			(Some(ClueInterp.Play), resolvePlay(ctx, targetOrder, focusPoss, targetId))
 
-def resolvePlay(game: RefSieve, action: ClueAction, targetOrder: Int, focusPoss: Seq[FocusPossibility], targetId: Option[Identity]): RefSieve =
+def resolvePlay(ctx: ClueContext, targetOrder: Int, focusPoss: Seq[FocusPossibility], targetId: Option[Identity]): RefSieve =
+	val ClueContext(_, game, action) = ctx
 	val ClueAction(giver = giver, list = list, target = clueTarget, clue = _) = action
 	val matchedFps = focusPoss.filter(fp => targetId.exists(_.matches(fp.id)))
 

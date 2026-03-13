@@ -243,32 +243,35 @@ case class Player(
 			game.state.deck(order).clued ||
 			(status != CardStatus.None && status != CardStatus.CalledToDiscard)
 
+	def validPrompt(prev: Game, order: Int, id: Identity, connected: Set[Int] = Set(), forcePink: Boolean = false) =
+		val state = prev.state
+		val card = state.deck(order)
+		val thought = thoughts(order)
+
+		!connected.contains(order) &&				// not already connected
+		state.deck(order).clued &&
+		thought.possible.contains(id) &&			// must be a possibility
+		thought.infoLock.forallO(_.contains(id)) &&
+		(thought.inferred.length != 1 || thought.inferred.contains(id)) &&	// not info-locked on a different id
+		card.clues.exists(state.variant.idTouched(id, _)) &&	// at least one clue matches
+		(
+			// Not trying to prompt a pink id, or forcing pink prompt
+			if !state.variant.suits(id.suitIndex).suitType.pinkish || forcePink then
+				true
+			else
+				val clues = card.clues
+				val misranked =
+					clues.forall(_.isEq(clues.head)) &&
+					clues.head.kind == ClueKind.Rank &&
+					clues.head.value != id.rank
+
+				!misranked && prev.knownAs(order, PINKISH)
+		)
+
 	def findPrompt(prev: Game, playerIndex: Int, id: Identity, connected: Set[Int] = Set(), ignore: Set[Int] = Set(), forcePink: Boolean = false, rightmost: Boolean = false) =
 		val state = prev.state
 		val hand = state.hands(playerIndex).when(_ => rightmost)(_.reverse)
-		val validPrompts = hand.filter: order =>
-			val card = state.deck(order)
-			val thought = thoughts(order)
-
-			!connected.contains(order) &&				// not already connected
-			state.deck(order).clued &&
-			thought.possible.contains(id) &&			// must be a possibility
-			thought.infoLock.forallO(_.contains(id)) &&
-			(thought.inferred.length != 1 || thought.inferred.contains(id)) &&	// not info-locked on a different id
-			card.clues.exists(state.variant.idTouched(id, _)) &&	// at least one clue matches
-			(
-				// Not trying to prompt a pink id, or forcing pink prompt
-				if !state.variant.suits(id.suitIndex).suitType.pinkish || forcePink then
-					true
-				else
-					val clues = card.clues
-					val misranked =
-						clues.forall(_.isEq(clues.head)) &&
-						clues.head.kind == ClueKind.Rank &&
-						clues.head.value != id.rank
-
-					!misranked && prev.knownAs(order, PINKISH)
-			)
+		val validPrompts = hand.filter(validPrompt(prev, _, id, connected, forcePink))
 
 		// Prompt the card with the most positive information
 		validPrompts.maxByOption(state.deck(_).clues.map(_.base).distinct.length)
@@ -358,7 +361,8 @@ case class Player(
 		def play(order: Int) =
 			val holder = hypo.state.holderOf(order)
 
-			player.thoughts(order).id(infer = true, symmetric = true) match
+			// NOTE: symmetric = true?
+			player.thoughts(order).id(infer = true) match
 				case None =>
 					links.fastForeach: link =>
 						val orders = link.getOrders

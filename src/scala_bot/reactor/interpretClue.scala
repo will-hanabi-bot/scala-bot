@@ -3,7 +3,7 @@ package scala_bot.reactor
 import scala_bot.basics._
 import scala_bot.utils._
 import scala_bot.logger.Log
-import scala_bot.utils.playersUntil
+import scala.util.boundary, boundary.break
 
 private def reactiveFocus(state: State, receiver: Int, action: ClueAction) =
 	val ClueAction(_, _, list, clue) = action
@@ -42,45 +42,43 @@ private def tryStable(prev: Reactor, game: Reactor, action: ClueAction, stall: B
 	val newlyTouched = list.filter(!prev.state.deck(_).clued)
 	val nextPlayerIndex = state.nextPlayerIndex(giver)
 
-	var newCommon = game.common
-	var newMeta = game.meta
-
-	if clue.kind == ClueKind.Rank && newlyTouched.nonEmpty then
-		var focus = newlyTouched.max
-
+	game.when(_ => clue.kind == ClueKind.Rank && newlyTouched.nonEmpty): g =>
 		val trashPush = (0 until state.variant.suits.length).forall(suitIndex => state.isBasicTrash(Identity(suitIndex, clue.value)))
 		lazy val playableRank = (0 until state.variant.suits.length).forall: suitIndex =>
 			val id = Identity(suitIndex, clue.value)
 			state.isBasicTrash(id) || state.isPlayable(id)
 
 		if trashPush then
-			newCommon = newCommon.withThought(focus)(t => t.copy(inferred = t.inferred.intersect(state.trashSet)))
-			newMeta = newMeta.updated(focus, newMeta(focus).copy(trash = true))
+			val focus = newlyTouched.max
+			g.withThought(focus): t =>
+				t.copy(inferred = t.inferred.intersect(state.trashSet))
+			.withMeta(focus):
+				_.copy(trash = true)
 
 		else if playableRank then
-			game.state.hands(target).filter(!prev.state.deck(_).clued).minOption.foreach: lockOrder =>
-				if state.includesVariant(PINKISH) && list.contains(lockOrder) then
-					focus = lockOrder
+			val focus =
+				if state.includesVariant(PINKISH) then
+					g.state.hands(target).filter(!prev.state.deck(_).clued).minOption.filter(list.contains).getOrElse(newlyTouched.max)
+				else
+					newlyTouched.max
 
-			val unneccessaryFocus = game.common.thoughts(focus).possible.forall: i =>
-				state.isBasicTrash(i) || state.hands.flatten.exists(game.common.thoughts(_).matches(i))
+			val unneccessaryFocus = g.common.thoughts(focus).possible.forall: i =>
+				state.isBasicTrash(i) || state.hands.flatten.exists(g.common.thoughts(_).matches(i))
 
 			if unneccessaryFocus then
 				Log.info("unnecessary focus!")
+				g
 			else
-				val newInferred = newCommon.thoughts(focus).inferred.filter(i => state.isPlayable(i) && i.rank == clue.value)
-				newCommon = newCommon.withThought(focus)(t => t.copy(
+				val newInferred = g.common.thoughts(focus).inferred.filter(i => state.isPlayable(i) && i.rank == clue.value)
+				g.withThought(focus)(t => t.copy(
 					inferred = newInferred,
 					infoLock = newInferred.toOpt
 				))
-				newMeta = newMeta.updated(focus, newMeta(focus).copy(
-					focused = true,
-					status = CardStatus.CalledToPlay
-				))
-
-	val newGame = game.copy(
-		common = newCommon,
-		meta = newMeta,
+				.withMeta(focus):
+					_.copy(focused = true, status = CardStatus.CalledToPlay)
+		else
+			g
+	.copy(
 		waiting = Option.when(game.waiting.isEmpty && nextPlayerIndex != target):
 			val receiver = target
 			val focusSlot = reactiveFocus(state, receiver, action)
@@ -95,115 +93,115 @@ private def tryStable(prev: Reactor, game: Reactor, action: ClueAction, stall: B
 				clue,
 				focusSlot,
 				inverted = true,
-				turn = game.state.turnCount
+				turn = state.turnCount
 			)
 		)
+	.pipe: g =>
+		checkFix(prev, g, action) match
+			case FixResult.Normal(_, _) =>
+				Log.info("fix clue!")
+				return (Some(ClueInterp.Fix), g)
+			case _ => ()
 
-	checkFix(prev, game, action) match
-		case FixResult.Normal(_, _) =>
-			Log.info("fix clue!")
-			(Some(ClueInterp.Fix), newGame)
+		val common = g.common
+		val prevPlayables = prev.common.obviousPlayables(prev, target)
+			.concat(connectableSimple(prev, prev.players(giver), nextPlayerIndex, target)).distinct
+		val playables = common.obviousPlayables(g, target)
+			.concat(connectableSimple(g, g.players(giver), nextPlayerIndex, target)).distinct
 
-		case _ =>
-			val common = newGame.common
-			val prevPlayables = prev.common.obviousPlayables(prev, target)
-				.concat(connectableSimple(prev, prev.players(giver), nextPlayerIndex, target)).distinct
-			val playables = common.obviousPlayables(newGame, target)
-				.concat(connectableSimple(newGame, newGame.players(giver), nextPlayerIndex, target)).distinct
+		Log.info(s"playables $playables, prev_playables $prevPlayables")
 
-			Log.info(s"playables $playables, prev_playables $prevPlayables")
+		lazy val reveal = playables.find: o =>
+			list.contains(o) &&
+			!prevPlayables.contains(o) &&
+			(clue.kind == ClueKind.Rank || prev.state.deck(o).clued)
 
-			lazy val reveal = playables.find: o =>
-				list.contains(o) &&
-				!prevPlayables.contains(o) &&
-				(clue.kind == ClueKind.Rank || prev.state.deck(o).clued)
+		// Try connecting with an unknown playable
+		lazy val revealConnectable = if nextPlayerIndex == target then None else
+			val prevPlays = prev.common.obviousPlayables(prev, nextPlayerIndex)
+			val possibleConnections =
+				for
+					o  <- list if prev.state.deck(o).clued
+					id <- state.deck(o).id() if state.playableAway(id) == 1
+				yield id
+
+			prevPlays.findSome: o =>
+				val connectId = possibleConnections.find: id =>
+					common.thoughts(o).inferred.contains(id.prev.get)
+
+				connectId.map(o -> _.prev.get)
+
+		if newlyTouched.isEmpty then
+			val safeActions = playables.concat(common.thinksTrash(g, target))
+			val oldSafeActions = prevPlayables.concat(prev.common.thinksTrash(prev, target))
 
 			// Try connecting with an unknown playable
-			lazy val revealConnectable = if nextPlayerIndex == target then None else
-				val prevPlays = prev.common.obviousPlayables(prev, nextPlayerIndex)
-				val possibleConnections =
-					for
-						o  <- list if prev.state.deck(o).clued
-						id <- state.deck(o).id() if state.playableAway(id) == 1
-					yield id
+			lazy val connectable =
+				state.deck(list.max).id() match
+					case Some(focusId) if nextPlayerIndex != target && state.playableAway(focusId) == 1 =>
+						prev.common.obviousPlayables(prev, nextPlayerIndex).find:
+							common.thoughts(_).inferred.contains(focusId.prev.get)
+					case _ => None
 
-				prevPlays.findSome: o =>
-					val connectId = possibleConnections.find: id =>
-						common.thoughts(o).inferred.contains(id.prev.get)
+			if safeActions.exists(!oldSafeActions.contains(_)) then
+				Log.info(s"revealed a safe action! ${safeActions.find(!oldSafeActions.contains(_)).get}")
+				(Some(ClueInterp.Reveal), g)
 
-					connectId.map(o -> _.prev.get)
+			else if stall then
+				Log.info("stalling with fill-in/hard burn!")
+				(Some(ClueInterp.Stall), g)
 
-			if newlyTouched.isEmpty then
-				val safeActions = playables.concat(common.thinksTrash(newGame, target))
-				val oldSafeActions = prevPlayables.concat(prev.common.thinksTrash(prev, target))
+			else if connectable.isDefined then
+				Log.info(s"connecting through unknown playable (${connectable.get})!")
+				val connectedGame = g.withThought(connectable.get): t =>
+					 t.copy(inferred = IdentitySet.single(state.deck(list.max).id().get.prev.get))
 
-				// Try connecting with an unknown playable
-				lazy val connectable =
-					state.deck(list.max).id() match
-						case Some(focusId) if nextPlayerIndex != target && state.playableAway(focusId) == 1 =>
-							prev.common.obviousPlayables(prev, nextPlayerIndex).find:
-								common.thoughts(_).inferred.contains(focusId.prev.get)
-						case _ => None
-
-				if safeActions.exists(!oldSafeActions.contains(_)) then
-					Log.info(s"revealed a safe action! ${safeActions.find(!oldSafeActions.contains(_)).get}")
-					(Some(ClueInterp.Reveal), newGame)
-
-				else if stall then
-					Log.info("stalling with fill-in/hard burn!")
-					(Some(ClueInterp.Stall), newGame)
-
-				else if connectable.isDefined then
-					Log.info(s"connecting through unknown playable (${connectable.get})!")
-					val connectedGame = newGame.withThought(connectable.get) { t =>
-						 t.copy(inferred = IdentitySet.single(state.deck(list.max).id().get.prev.get))
-					}
-					(Some(ClueInterp.Reveal), connectedGame)
-
-				else
-					Log.warn("looked like fill-in/hard burn outside of a stalling situation!")
-					(None, newGame)
-
-			else if reveal.isDefined then
-				Log.info(s"revealed a safe action! ${reveal.get} $prevPlayables")
-				(Some(ClueInterp.Reveal), newGame)
-
-			else if revealConnectable.isDefined then
-				val (connOrder, connId) = revealConnectable.get
-				Log.highlight(Console.CYAN, s"revealed a potential safe action! playing $connOrder urgently as ${state.logId(connId)} to connect")
-				val connectedGame = newGame
-					.withThought(connOrder): t =>
-						t.copy(
-							inferred = IdentitySet.single(connId),
-							oldInferred = t.inferred.toOpt
-						)
-					.withMeta(connOrder):
-						_.copy(urgent = true, status = CardStatus.CalledToPlay, by = Some(giver))
 				(Some(ClueInterp.Reveal), connectedGame)
 
-			else if common.orderKt(game, newlyTouched.max) then
-				// at least 1 useful unplayable brown and clue didn't touch chop
-				val brownishTcm =
-					state.includesVariant(BROWNISH) &&
-					clue.kind == ClueKind.Rank &&
-					state.variant.suits.zipWithIndex.exists: (suit, suitIndex) =>
-						suit.suitType.brownish && state.playStacks(suitIndex) + 1 < state.maxRanks(suitIndex) &&
-						!newlyTouched.contains(state.hands(target)(0))
-
-				if brownishTcm then
-					Log.info("brown direct discard!")
-					(Some(ClueInterp.Reveal), newGame)
-				else
-					Log.info("trash push!")
-					refPlay(prev, newGame, action)
-
-			else if clue.kind == ClueKind.Colour then
-				Log.info("colour clue!")
-				refPlay(prev, newGame, action)
-
 			else
-				Log.info(s"rank clue!")
-				refDiscard(prev, newGame, action, stall)
+				Log.warn("looked like fill-in/hard burn outside of a stalling situation!")
+				(None, g)
+
+		else if reveal.isDefined then
+			Log.info(s"revealed a safe action! ${reveal.get} $prevPlayables")
+			(Some(ClueInterp.Reveal), g)
+
+		else if revealConnectable.isDefined then
+			val (connOrder, connId) = revealConnectable.get
+			Log.highlight(Console.CYAN, s"revealed a potential safe action! playing $connOrder urgently as ${state.logId(connId)} to connect")
+			val connectedGame = g
+				.withThought(connOrder): t =>
+					t.copy(
+						inferred = IdentitySet.single(connId),
+						oldInferred = t.inferred.toOpt
+					)
+				.withMeta(connOrder):
+					_.copy(urgent = true, status = CardStatus.CalledToPlay, by = Some(giver))
+			(Some(ClueInterp.Reveal), connectedGame)
+
+		else if common.orderKt(game, newlyTouched.max) then
+			// at least 1 useful unplayable brown and clue didn't touch chop
+			val brownishTcm =
+				state.includesVariant(BROWNISH) &&
+				clue.kind == ClueKind.Rank &&
+				state.variant.suits.zipWithIndex.exists: (suit, suitIndex) =>
+					suit.suitType.brownish && state.playStacks(suitIndex) + 1 < state.maxRanks(suitIndex) &&
+					!newlyTouched.contains(state.hands(target)(0))
+
+			if brownishTcm then
+				Log.info("brown direct discard!")
+				(Some(ClueInterp.Reveal), g)
+			else
+				Log.info("trash push!")
+				refPlay(prev, g, action)
+
+		else if clue.kind == ClueKind.Colour then
+			Log.info("colour clue!")
+			refPlay(prev, g, action)
+
+		else
+			Log.info(s"rank clue!")
+			refDiscard(prev, g, action, stall)
 
 /**
 * Returns a non-bad touching ref play clue or a ref dc clue on trash to the clue target, if it exists.
@@ -358,49 +356,48 @@ def targetPlay(game: Reactor, action: ClueAction, target: Int, urgent: Boolean =
 	val possibleConns = delayedPlays(game, action.giver, holder, stable)
 
 	val newInferred = game.common.thoughts(target).inferred.filter(i => state.isPlayable(i) || possibleConns.exists(_._2 == i))
-	var (newCommon, newMeta) = (game.common, game.meta)
 
-	state.deck(target).id().foreach: id =>
-		possibleConns.find(_._2 == id).foreach: (connOrder, _) =>
-			newCommon = newCommon.withThought(connOrder)(_.copy(
-				oldInferred = newCommon.thoughts(connOrder).inferred.toOpt,
-				inferred = IdentitySet.single(id.prev.get)
-			))
-			val meta = newMeta(connOrder)
-			newMeta = newMeta.updated(connOrder, meta.copy(
-				urgent = true,
-				status = CardStatus.CalledToPlay,
-				by = Some(action.giver))
-			.reason(state.turnCount))
-
+	state.deck(target).id().fold(game): id =>
+		possibleConns.find(_._2 == id).fold(game): (connOrder, _) =>
 			Log.info(s"updating connecting $connOrder as ${state.logId(id.prev.get)} to be urgent")
 
-	val reset = newInferred.isEmpty
-	newCommon = newCommon.withThought(target)(t => t.copy(
-		oldInferred = t.inferred.toOpt,
-		inferred = newInferred,
-		infoLock = newInferred.toOpt
-	))
+			game.withThought(connOrder): t =>
+				t.copy(
+					oldInferred = t.inferred.toOpt,
+					inferred = IdentitySet.single(id.prev.get)
+				)
+			.withMeta(connOrder):
+				_.copy(
+					urgent = true,
+					status = CardStatus.CalledToPlay,
+					by = Some(action.giver))
+				.reason(state.turnCount)
+	.withThought(target): t =>
+		t.copy(
+			oldInferred = t.inferred.toOpt,
+			inferred = newInferred,
+			infoLock = newInferred.toOpt
+		)
+	.withMeta(target):
+		_.reason(state.turnCount).signal(state.turnCount)
+	.pipe: g =>
+		if newInferred.isEmpty || !state.hasConsistentInfs(g.common.thoughts(target)) then
+			Log.warn(s"target $target was reset!")
 
-	newMeta = newMeta.updated(target, newMeta(target).reason(state.turnCount).signal(state.turnCount))
+			val newGame = g.withThought(target)(_.resetInferences())
+			val interp = Option.when(stable && newGame.common.orderKt(newGame, target))(ClueInterp.Stall)
+			(interp, newGame)
+		else
+			val newGame = g.withMeta(target):
+				_.copy(
+					status = CardStatus.CalledToPlay,
+					by = Some(action.giver),
+					focused = true,
+					urgent = urgent
+				)
 
-	if reset || !state.hasConsistentInfs(newCommon.thoughts(target)) then
-		newCommon = newCommon.withThought(target)(_.resetInferences())
-		Log.warn(s"target $target was reset!")
-
-		val newGame = game.copy(common = newCommon, meta = newMeta)
-		val interp = Option.when(stable && newCommon.orderKt(newGame, target))(ClueInterp.Stall)
-		(interp, newGame)
-	else
-		newMeta = newMeta.updated(target, newMeta(target).copy(
-			status = CardStatus.CalledToPlay,
-			by = Some(action.giver),
-			focused = true,
-			urgent = urgent
-		))
-
-		Log.info(s"targeting play $target (${state.names(holder)}), infs ${newCommon.strInfs(state, target)}${if urgent then ", urgent" else ""}")
-		(Some(ClueInterp.Play), game.copy(common = newCommon, meta = newMeta))
+			Log.info(s"targeting play $target (${state.names(holder)}), infs ${newGame.common.strInfs(state, target)}${if urgent then ", urgent" else ""}")
+			(Some(ClueInterp.Play), newGame)
 
 def targetDiscard(game: Reactor, action: ClueAction, target: Int, urgent: Boolean = false) =
 	val meta = game.meta(target)
@@ -429,66 +426,65 @@ def targetDiscard(game: Reactor, action: ClueAction, target: Int, urgent: Boolea
 		(Some(ClueInterp.Discard), newGame)
 
 def refDiscard(prev: Reactor, game: Reactor, action: ClueAction, stall: Boolean): (Option[ClueInterp], Reactor) =
-	val state = game.state
-	val ClueAction(giver = giver, target = receiver, list = list, clue = clue) = action
-	val hand = state.hands(receiver)
-	val newlyTouched = list.filter(!prev.state.deck(_).clued)
+	boundary:
+		val state = game.state
+		val ClueAction(giver = giver, target = receiver, list = list, clue = clue) = action
+		val hand = state.hands(receiver)
+		val newlyTouched = list.filter(!prev.state.deck(_).clued)
 
-	var newCommon = game.common
-	var newMeta = game.meta
+		hand.filter(!prev.state.deck(_).clued).minOption match
+			case Some(lockOrder) if list.contains(lockOrder) =>
+				if stall && state.nextPlayerIndex(receiver) == giver then
+					Log.info("stall to Cathy's lock card!")
+					(Some(ClueInterp.Stall), game)
 
-	hand.filter(!prev.state.deck(_).clued).minOption match
-		case Some(lockOrder) if list.contains(lockOrder) =>
-			if stall && state.nextPlayerIndex(receiver) == giver then
-				Log.info("stall to Cathy's lock card!")
-				(Some(ClueInterp.Stall), game)
+				else if prev.common.thinksLocked(prev, receiver) then
+					Log.info("player was already locked!")
+					(Some(ClueInterp.Mistake), game)
 
-			else if prev.common.thinksLocked(prev, receiver) then
-				Log.info("player was already locked!")
-				(Some(ClueInterp.Mistake), game)
+				else
+					Log.info("locked!")
 
-			else
-				Log.info("locked!")
+					game.when(_.state.includesVariant(PINKISH)):
+						_.withThought(lockOrder): t =>
+							t.copy(inferred = t.inferred.filter(_.rank == clue.value))
+						.withMeta(lockOrder):
+							_.copy(focused = true)
+						// Breaks pink promise
+						.when(_.state.deck(lockOrder).id().exists(_.rank != clue.value)):
+							break((None, game))
+					.pipe: g =>
+						val newGame = hand.foldLeft(g): (acc, order) =>
+							acc.withMeta(order):
+								_.copy(status = CardStatus.ChopMoved, by = Some(giver)).reason(state.turnCount)
 
-				if state.includesVariant(PINKISH) then
-					newCommon = newCommon.withThought(lockOrder)(t => t.copy(inferred = t.inferred.filter(_.rank == clue.value)))
-					newMeta = newMeta.updated(lockOrder, newMeta(lockOrder).copy(focused = true))
+						(Some(ClueInterp.Lock), newGame)
 
+			case _ =>
+				val focus = newlyTouched.max
+				val focusPos = hand.indexOf(focus)
+				val targetIndex = hand.zipWithIndex.indexWhere((o, i) => i > focusPos && !state.deck(o).clued)
+				val promisedOrder = list.filter(_ > hand(targetIndex)).min
+
+				Log.info(s"ref discard on ${state.names(receiver)}'s slot ${targetIndex + 1}")
+
+				game.cond(_.state.includesVariant(PINKISH)) {
+					_.withThought(promisedOrder): t =>
+						t.copy(inferred = t.inferred.filter(_.rank == clue.value))
+					.withMeta(promisedOrder):
+						_.copy(focused = true)
 					// Breaks pink promise
-					if state.deck(lockOrder).id().exists(_.rank != clue.value) then
-						return (None, game)
+					.when(_.state.deck(promisedOrder).id().exists(_.rank != clue.value)):
+						break((None, game))
+				} {
+					_.withMeta(focus)(_.copy(focused = true))
+				}
+				.pipe: g =>
+					val newGame = g.withMeta(hand(targetIndex)):
+						_.copy(
+							status = CardStatus.CalledToDiscard,
+							by = Some(giver))
+						.reason(state.turnCount)
+						.signal(state.turnCount)
 
-				for order <- hand if !state.deck(order).clued do // && game.meta(order).status == CardStatus.None) {
-					newMeta = newMeta.updated(order, newMeta(order).copy(
-						status = CardStatus.ChopMoved,
-						by = Some(giver)
-					).reason(state.turnCount))
-
-				(Some(ClueInterp.Lock), game.copy(common = newCommon, meta = newMeta))
-
-		case _ =>
-			val focus = newlyTouched.max
-			val focusPos = hand.indexOf(focus)
-			val targetIndex = hand.zipWithIndex.indexWhere((o, i) => i > focusPos && !state.deck(o).clued)
-			val promisedOrder = list.filter(_ > hand(targetIndex)).min
-
-			if state.includesVariant(PINKISH) then
-				newCommon = newCommon.withThought(promisedOrder)(t => t.copy(inferred = t.inferred.filter(_.rank == clue.value)))
-				newMeta = newMeta.updated(promisedOrder, newMeta(promisedOrder).copy(focused = true))
-
-				// Breaks pink promise
-				if state.deck(promisedOrder).id().exists(_.rank != clue.value) then
-					return (None, game)
-
-			Log.info(s"ref discard on ${state.names(receiver)}'s slot ${targetIndex + 1}")
-
-			val meta = newMeta(hand(targetIndex))
-			newMeta = newMeta
-				.updated(hand(targetIndex), meta.copy(
-					status = CardStatus.CalledToDiscard,
-					by = Some(giver))
-					.reason(state.turnCount)
-					.signal(state.turnCount))
-				.when(_ => !state.includesVariant(PINKISH)):
-					_.updated(focus, newMeta(focus).copy(focused = true))
-			(Some(ClueInterp.Discard), game.copy(common = newCommon, meta = newMeta))
+					(Some(ClueInterp.Discard), newGame)

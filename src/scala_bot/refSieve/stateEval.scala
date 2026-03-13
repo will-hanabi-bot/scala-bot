@@ -55,7 +55,7 @@ def getResult(game: RefSieve, hypo: RefSieve, action: ClueAction): Double =
 					Log.info(s"good touch: $goodTouch, playables: $playablesS, duped: $dupedPlayables, trash: ${trash.length}, fill: ${fill.length}, elim: ${elim.length}, bad touch: $badTouch, ${hypo.lastMove}")
 
 					val value = goodTouch +
-						(playables.length - 2.0 * dupedPlayables) +
+						- 2.0 * dupedPlayables +
 						0.2 * untouchedPlays +
 						(if state.inEndgame then 0.01 else 0.1) * revealedTrash +
 						(if state.inEndgame then 0.2 else 0.1) * fill.length +
@@ -236,39 +236,44 @@ def evalGame(orig: RefSieve, game: RefSieve): Double =
 	val stateVal = evalState(state)
 
 	val futureVal = state.hands.flatten.summing: order =>
-		game.meta(order).status match
-			case CardStatus.CalledToPlay =>
-				game.me.thoughts(order).id(infer = true) match
-					case None => 0.4
-					case Some(id) =>
-						if state.isBasicTrash(id) then
-							-1.5
-						else if id.rank == 5 then
-							0.8
-						else
-							0.4
-			case CardStatus.CalledToDiscard =>
-				val by = game.meta(order).by.getOrElse(throw new Exception(s"order $order doesn't have a by!"))
+		if game.me.hypoPlays.contains(order) then
+			game.me.thoughts(order).id(infer = true) match
+				case None => 0.4
+				case Some(id) =>if id.rank == 5 then 0.8 else 0.4
+		else
+			game.meta(order).status match
+				case CardStatus.CalledToPlay =>
+					game.me.thoughts(order).id(infer = true) match
+						case None => 0.4
+						case Some(id) =>
+							if state.isBasicTrash(id) then
+								-1.5
+							else if id.rank == 5 then
+								0.8
+							else
+								0.4
+				case CardStatus.CalledToDiscard =>
+					val by = game.meta(order).by.getOrElse(throw new Exception(s"order $order doesn't have a by!"))
 
-				state.deck(order).id() match
-					case None =>
-						// Trust others to discard trash
-						if by != state.ourPlayerIndex then
-							0
-						else
-							0.5
-					case Some(id) =>
-						if state.isBasicTrash(id) then
-							1
-						else if game.me.isSieved(game, id, order) then
-							0.5
-						else if state.isCritical(id) then
-							-(5 - state.playableAway(id)) * 10.0
-						else if by != state.ourPlayerIndex then
-							0
-						else
-							-(5 - state.playableAway(id)) * 0.5
-			case _ => 0
+					state.deck(order).id() match
+						case None =>
+							// Trust others to discard trash
+							if by != state.ourPlayerIndex then
+								0
+							else
+								0.5
+						case Some(id) =>
+							if state.isBasicTrash(id) then
+								1
+							else if game.me.isSieved(game, id, order) then
+								0.5
+							else if state.isCritical(id) then
+								-(5 - state.playableAway(id)) * 10.0
+							else if by != state.ourPlayerIndex then
+								0
+							else
+								-(5 - state.playableAway(id)) * 0.5
+				case _ => 0
 
 	val bdrVal = 2.5 * state.variant.allIds.summing: id =>
 		val prevDiscarded = orig.state.discardStacks(id.suitIndex)(id.rank - 1)
