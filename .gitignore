@@ -1,6 +1,7 @@
 .bsp
 .scala-build
 .metals
+*.jar
 
 flamegraph.html
 

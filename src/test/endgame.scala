@@ -1,4 +1,4 @@
-package tests.reactor.endgame
+package tests
 
 import scala_bot.reactor.Reactor
 import scala_bot.hgroup.HGroup
@@ -266,3 +266,35 @@ class Endgame extends munit.FunSuite:
 				assert(perform match
 					case PerformAction.Colour(1, colour) => colour != Colour.Yellow.ordinal
 					case _ => false)
+
+	test("it completes an early endgame"):
+		val game = setup(Reactor.apply, Vector(
+			Vector("xx", "xx", "xx", "xx", "xx"),
+			Vector("b2", "y4", "p4", "y3", "b5"),
+			Vector("p1", "g1", "g2", "b1", "g3"),
+		),
+			playStacks = Some(Vector(5, 5, 5, 3, 4)),
+			discarded =  Vector(
+				"r1", "r1",
+				"y1",
+				"b1", "b4",
+				"p1", "p3"
+			),	// Missing: r2, y1, g4, b3, b4, p5
+			clueTokens = 5,
+			init =
+				fullyKnown[Reactor](Alice, 2, "r3") andThen
+				fullyKnown[Reactor](Alice, 3, "r4") andThen
+				fullyKnown[Reactor](Alice, 4, "p2") andThen
+				fullyKnown[Reactor](Alice, 5, "g1") andThen
+				preClue[Reactor](Bob, 5, Seq("5")) andThen
+				preClue[Reactor](Cathy, 4, Seq("blue")) andThen
+				fullyKnown[Reactor](Cathy, 5, "g3")
+		)
+
+		assertEquals(game.state.cardsLeft, 6)
+
+		EndgameSolver(monteCarlo = false).solve(game) match
+			case Left(msg) => throw new Exception(s"Game should be winnable! $msg")
+			case Right((_, winrate)) =>
+				// We only lose if b4 is on the bottom.
+				assert(winrate > Frac(2, 3), s"got winrate $winrate, expected > 2/3")

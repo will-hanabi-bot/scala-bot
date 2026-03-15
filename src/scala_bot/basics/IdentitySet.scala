@@ -19,6 +19,9 @@ extension(ids: IdentitySet)
 		val bit = java.lang.Long.numberOfTrailingZeros(ids)
 		Identity.fromOrd(bit)
 
+	inline def isExactly(id: Identity): Boolean =
+		length == 1 && head == id
+
 	inline def contains(id: Identity): Boolean =
 		(ids & IdentitySet.single(id)) != 0
 

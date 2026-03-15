@@ -250,7 +250,11 @@ object RefSieve:
 				else if newlyTouched.isEmpty then
 					if loaded then
 						Log.info(s"revealed a safe action, not continuing")
-						(Some(ClueInterp.Reveal), game)
+
+						val newGame = newPlayables.foldLeft(game): (acc, p) =>
+							acc.withMeta(p)(_.signal(state.turnCount))
+
+						(Some(ClueInterp.Reveal), newGame)
 
 					else if stalling then
 						Log.info("fill-in stall!")
@@ -271,6 +275,9 @@ object RefSieve:
 							// Playable rank clue
 							val focus = newlyTouched.max
 							g.withMeta(focus)(_.copy(focused = true))
+						.pipe: g =>
+							newPlayables.foldLeft(g): (acc, p) =>
+								acc.withMeta(p)(_.signal(state.turnCount))
 
 					(Some(ClueInterp.Reveal), newGame)
 
@@ -389,26 +396,24 @@ object RefSieve:
 			val currentPlayerIndex = action.currentPlayerIndex
 			val state = game.state
 
-			val (newCommon, newMeta) = state.hands(currentPlayerIndex).foldLeft((game.common, game.meta)) { case ((c, m), order) =>
-				if m(order).status == CardStatus.CalledToPlay then
-					val newInferred = c.thoughts(order).inferred.intersect(state.playableSet)
+			val nextBlindPlay =
+				game.common.thinksPlayables(game, currentPlayerIndex).filter(game.meta(_).signalTurn.isDefined)
+					.minByOption(game.meta(_).signalTurn.getOrElse(99))
+
+			nextBlindPlay.fold(game): order =>
+				val newInferred = game.common.thoughts(order).inferred.intersect(state.playableSet)
+				if newInferred == game.common.thoughts(order).inferred then
+					game
+				else
+					Log.info(s"updating $order to ${newInferred.fmt(state)}")
 
 					if newInferred.isEmpty then
-						val newCommon = c.withThought(order)(_.resetInferences())
-						val newMeta = m.updated(order, m(order).copy(
-							status = CardStatus.None,
-							by = None,
-							trash = true
-						))
-						(newCommon, newMeta)
+						game.withThought(order)(_.resetInferences())
+						.withMeta(order):
+							_.copy(status = CardStatus.None, by = None, trash = true)
 					else
-						(c.withThought(order)(_.copy(inferred = newInferred)), m)
-				else
-					(c, m)
-			}
-
-			game.copy(common = newCommon, meta = newMeta)
-				.elim()
+						game.withThought(order)(_.copy(inferred = newInferred))
+			.elim()
 
 		def findAllClues(game: RefSieve, giver: Int) =
 			val state = game.state

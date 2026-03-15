@@ -124,6 +124,7 @@ def targetPlay(ctx: ClueContext, targetOrder: Int): (Option[ClueInterp], RefSiev
 
 def resolvePlay(ctx: ClueContext, targetOrder: Int, focusPoss: Seq[FocusPossibility], targetId: Option[Identity]): RefSieve =
 	val ClueContext(_, game, action) = ctx
+	val state = game.state
 	val ClueAction(giver = giver, list = list, target = clueTarget, clue = _) = action
 	val matchedFps = focusPoss.filter(fp => targetId.exists(_.matches(fp.id)))
 
@@ -139,10 +140,9 @@ def resolvePlay(ctx: ClueContext, targetOrder: Int, focusPoss: Seq[FocusPossibil
 
 		.when(_ => conn.isInstanceOf[FinesseConn]):
 			_.withMeta(order):
-				 _.copy(
-					status = CardStatus.Finessed,
-					by = Some(action.giver)
-				).reason(game.state.turnCount)
+				_.copy(status = CardStatus.Finessed, by = Some(action.giver))
+				.reason(state.turnCount)
+				.signal(state.turnCount)
 			.withThought(order)(_.copy(oldInferred = game.common.thoughts(order).inferred.toOpt))
 
 		(newGame, modified + order)
@@ -175,3 +175,4 @@ def resolvePlay(ctx: ClueContext, targetOrder: Int, focusPoss: Seq[FocusPossibil
 			status = CardStatus.CalledToPlay,
 			by = Some(action.giver))
 		.reason(game.state.turnCount)
+		.signal(game.state.turnCount)

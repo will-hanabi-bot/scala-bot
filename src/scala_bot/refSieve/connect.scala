@@ -22,10 +22,10 @@ def findConnecting(ctx: ClueContext, id: Identity, playerIndex: Int, connected: 
 		val thought = player.thoughts(o)
 
 		!connected.contains(o) &&
-		(game.isBlindPlaying(o) || (if findOwn then thought.inferred else thought.possible).forall(state.isPlayable)) &&
+		(game.isBlindPlaying(o) || (if findOwn then thought.inferred else thought.possible).forall(state.isPlayable) || game.future(o).isExactly(id)) &&
 		thought.inferred.contains(id)
 
-	if playable.exists(p => state.deck(p).matches(id, assume = findOwn) && !ignore.contains(p)) then
+	if playable.exists(p => !ignore.contains(p) && (state.deck(p).matches(id, assume = findOwn) || game.future(p).isExactly(id))) then
 		return Some(PlayableConn(playerIndex, playable.get, id))
 
 	if looksDirect || playable.nonEmpty || playerIndex == action.giver then
@@ -56,7 +56,7 @@ def connect(ctx: ClueContext, targetOrder: Int, id: Identity, unknown: Boolean, 
 	val state = game.state
 	val Identity(suitIndex, rank) = id
 
-	// Log.info(s"attempting to ${if (findOwn) "find own finesses" else "connect"} ${state.logId(id)} $targetOrder")
+	// Log.highlight(Console.MAGENTA, s"attempting to ${if (findOwn) "find own finesses" else "connect"} ${state.logId(id)} $targetOrder")
 
 	@tailrec
 	def loop(nextRank: Int, playerIndex: Int, connections: List[Connection] = Nil, turnsSincePlay: Int = 1, alwaysConnect: Boolean = false, remF: Int = 0): Option[List[Connection]] =
