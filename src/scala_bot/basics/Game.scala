@@ -1,9 +1,11 @@
 package scala_bot.basics
 
+import cats.effect.IO
+
 import scala_bot.utils._
 import scala_bot.logger._
-
 import scala.util.matching.Regex
+import cats.effect.unsafe.IORuntime
 
 val HAND_SIZE = Vector(0, 0, 5, 5, 4, 4, 3)
 
@@ -127,7 +129,7 @@ trait GameOps[G <: Game]:
 	/** Returns the game state after interpreting the given play.*/
 	def interpretPlay(prev: G, game: G, action: PlayAction): G
 	/** Returns the best action to take.*/
-	def takeAction(game: G): PerformAction
+	def takeAction(game: G): IO[PerformAction]
 	/** Called between every play, clue and discard. */
 	def updateTurn(game: G, action: TurnAction): G
 
@@ -391,7 +393,7 @@ extension[G <: Game](game: G)
 							c.copy(suitIndex = id.suitIndex, rank = id.rank))),
 			rewindDepth = Some(game.rewindDepth))))
 
-	def navigate(turn: Int)(using ops: GameOps[G]) =
+	def navigate(turn: Int)(using ops: GameOps[G], runtime: IORuntime) =
 		Log.highlight(Console.GREEN, s"------- NAVIGATING (turn $turn) -------")
 
 		val actions = game.state.actionList
@@ -416,7 +418,7 @@ extension[G <: Game](game: G)
 				}
 			.pipe(ops.copyWith(_, GameUpdates(catchup = Some(game.catchup))))
 			.when(g => !g.catchup && g.state.currentPlayerIndex == g.state.ourPlayerIndex): g =>
-				Log.highlight(Console.BLUE, s"Suggested action: ${g.takeAction.fmt(g, accordingTo = Some(g.me))}")
+				Log.highlight(Console.BLUE, s"Suggested action: ${g.takeAction.unsafeRunSync().fmt(g, accordingTo = Some(g.me))}")
 				g
 			.withState(_.copy(actionList = actions))
 

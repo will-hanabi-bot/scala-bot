@@ -1,5 +1,7 @@
 package tests.hgroup.level10
 
+import cats.effect.unsafe.implicits.global
+
 import scala_bot.basics._
 import scala_bot.test.{fullyKnown, hasInfs, hasStatus, Player, preClue, setup, takeTurn}, Player._
 import scala_bot.hgroup.{evalAction, HGroup}
@@ -92,7 +94,7 @@ class GentlemansDiscards extends munit.FunSuite:
 		)
 		.pipe(takeTurn("Donald clues blue to Alice (slots 3,4)"))	// b1 in slot 4
 		.tap: g =>
-			assertEquals(g.takeAction, PerformAction.Discard(g.state.hands(Alice.ordinal)(3)))
+			assertEquals(g.takeAction.unsafeRunSync(), PerformAction.Discard(g.state.hands(Alice.ordinal)(3)))
 		.pipe(takeTurn("Alice discards b1 (slot 4)"))
 
 		// We performed a GD on Donald.
@@ -110,7 +112,7 @@ class GentlemansDiscards extends munit.FunSuite:
 		)
 		.pipe(takeTurn("Donald clues blue to Alice (slots 3,4)"))	// b1 in slot 4
 		.tap: g =>
-			assertEquals(g.takeAction, PerformAction.Discard(g.state.hands(Alice.ordinal)(3)))
+			assertEquals(g.takeAction.unsafeRunSync(), PerformAction.Discard(g.state.hands(Alice.ordinal)(3)))
 		.pipe(takeTurn("Alice discards b1 (slot 4)"))
 
 		// We performed a GD on Donald.
@@ -131,7 +133,7 @@ class GentlemansDiscards extends munit.FunSuite:
 			// Alice should play slot 1.
 			val slot1 = g.state.hands(Alice.ordinal)(0)
 			assertEquals(g.common.thinksPlayables(g, Alice.ordinal), Seq(slot1))
-			assertEquals(g.takeAction, PerformAction.Play(slot1))
+			assertEquals(g.takeAction.unsafeRunSync(), PerformAction.Play(slot1))
 		.pipe(takeTurn("Alice plays y1 (slot 1)"))
 
 		// Bob performed a gd on us. b1 is now expected to be in slot 2.
@@ -156,7 +158,7 @@ class GentlemansDiscards extends munit.FunSuite:
 			// Alice should play slot 1.
 			val slot1 = g.state.hands(Alice.ordinal)(0)
 			assertEquals(g.common.thinksPlayables(g, Alice.ordinal), Seq(slot1))
-			assertEquals(g.takeAction, PerformAction.Play(slot1))
+			assertEquals(g.takeAction.unsafeRunSync(), PerformAction.Play(slot1))
 		.pipe(takeTurn("Alice plays b1 (slot 1)"))
 
 		// Bob performed a layered gd on us. y1 is now expected to be in slot 2.
@@ -178,7 +180,7 @@ class GentlemansDiscards extends munit.FunSuite:
 			// Alice should play slot 1.
 			val slot1 = g.state.hands(Alice.ordinal)(0)
 			assertEquals(g.common.thinksPlayables(g, Alice.ordinal), Seq(slot1))
-			assertEquals(g.takeAction, PerformAction.Play(slot1))
+			assertEquals(g.takeAction.unsafeRunSync(), PerformAction.Play(slot1))
 		.pipe(takeTurn("Alice plays y1 (slot 1)"))
 
 		// Bob performed a layered finesse on us. b1 is now expected to be in slot 2.
@@ -340,7 +342,7 @@ class CompositionFinesses extends munit.FunSuite:
 		.pipe(takeTurn("Cathy discards b3", "y1"))
 
 		// Alice should certain discard slot 1 as r3.
-		assertEquals(game.takeAction, PerformAction.Discard(game.state.hands(Alice.ordinal)(0)))
+		assertEquals(game.takeAction.unsafeRunSync(), PerformAction.Discard(game.state.hands(Alice.ordinal)(0)))
 
 	test("recognizes an illegal layered certain finesse"):
 		val game = setup(HGroup.atLevel(10), Vector(

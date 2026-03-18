@@ -1,5 +1,7 @@
 package tests.refSieve
 
+import cats.effect.unsafe.implicits.global
+
 import scala_bot.refSieve.RefSieve
 import scala_bot.basics._
 import scala_bot.test.{hasInfs, hasStatus, Player, preClue, setup, takeTurn}, Player._
@@ -85,7 +87,7 @@ class Stable extends munit.FunSuite:
 		))
 
 		// Alice should clue 4 to Bob.
-		assertEquals(game.takeAction, PerformAction.Rank(Bob.ordinal, 4))
+		assertEquals(game.takeAction.unsafeRunSync(), PerformAction.Rank(Bob.ordinal, 4))
 
 	test("it understands a lock"):
 		val game = setup(RefSieve.apply, Vector(
@@ -112,7 +114,7 @@ class Stable extends munit.FunSuite:
 		// Although Alice could play slot 2, she should play slot 5 first.
 		.pipe(takeTurn("Cathy clues 3 to Alice (slots 2,5)"))
 
-		assertEquals(game.takeAction, PerformAction.Play(0))
+		assertEquals(game.takeAction.unsafeRunSync(), PerformAction.Play(0))
 
 	test("understands a trash push with rank"):
 		val game = setup(RefSieve.apply, Vector(

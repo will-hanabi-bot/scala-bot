@@ -1,5 +1,7 @@
 package tests.hgroup.pink
 
+import cats.effect.unsafe.implicits.global
+
 import scala_bot.basics._
 import scala_bot.test.{fullyKnown, hasInfs, hasStatus, Player, preClue, setup, takeTurn, TestVariant}, Player._
 import scala_bot.hgroup.HGroup
@@ -119,7 +121,7 @@ class Pink1sAssumption extends munit.FunSuite:
 		.pipe(takeTurn("Bob plays y1", "b4"))
 		.pipe(takeTurn("Cathy clues 5 to Alice (slot 5)"))
 		.tap: g =>
-			assertEquals(g.takeAction, PerformAction.Rank(Bob.ordinal, 5))
+			assertEquals(g.takeAction.unsafeRunSync(), PerformAction.Rank(Bob.ordinal, 5))
 		.pipe(takeTurn("Alice clues 5 to Bob"))
 
 		hasInfs(game, None, Bob, 4, Vector("i2", "i3", "i4", "i5"))
@@ -139,7 +141,7 @@ class Pink1sAssumption extends munit.FunSuite:
 		.pipe(takeTurn("Bob plays y1", "b4"))
 		.pipe(takeTurn("Cathy clues 5 to Alice (slot 5)"))
 
-		assertEquals(game.takeAction, PerformAction.Rank(Bob.ordinal, 3))
+		assertEquals(game.takeAction.unsafeRunSync(), PerformAction.Rank(Bob.ordinal, 3))
 
 		val fixHypo = takeTurn("Alice clues 3 to Bob")(game)
 		assertEquals(fixHypo.lastMove, Some(ClueInterp.Fix))
@@ -160,7 +162,7 @@ class Pink1sAssumption extends munit.FunSuite:
 		.pipe(takeTurn("Bob clues 1 to Alice (slots 4,5)"))
 
 		// Alice must play slot 5 (not allowed to OCM by playing slot 4).
-		assertEquals(game.takeAction, PerformAction.Play(game.state.hands(Alice.ordinal)(4)))
+		assertEquals(game.takeAction.unsafeRunSync(), PerformAction.Play(game.state.hands(Alice.ordinal)(4)))
 
 	test("plays 1s in order even after a certain discard"):
 		val game = setup(HGroup.atLevel(10), Vector(
@@ -498,7 +500,7 @@ class PinkFixes extends munit.FunSuite:
 		.pipe(takeTurn("Bob clues pink to Cathy"))
 		.pipe(takeTurn("Cathy plays i2", "b3"))
 		.tap: g =>
-			assertEquals(g.takeAction, PerformAction.Rank(Cathy.ordinal, 1))
+			assertEquals(g.takeAction.unsafeRunSync(), PerformAction.Rank(Cathy.ordinal, 1))
 		.pipe(takeTurn("Alice clues 1 to Cathy"))
 
 		assertEquals(game.common.thinksTrash(game, Cathy.ordinal),

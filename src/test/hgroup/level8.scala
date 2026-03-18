@@ -1,5 +1,7 @@
 package tests.hgroup.level8
 
+import cats.effect.unsafe.implicits.global
+
 import scala_bot.basics._
 import scala_bot.test.{fullyKnown, hasInfs, hasStatus, Player, preClue, setup, takeTurn, TestVariant}, Player._
 import scala_bot.hgroup.HGroup
@@ -33,7 +35,7 @@ class PositionalDiscards extends munit.FunSuite:
 
 		// Alice's slot 3 should be called to play from a positional discard.
 		hasStatus(game, Alice, 3, CardStatus.CalledToPlay)
-		assertEquals(game.takeAction, PerformAction.Play(game.state.hands(Alice.ordinal)(2)))
+		assertEquals(game.takeAction.unsafeRunSync(), PerformAction.Play(game.state.hands(Alice.ordinal)(2)))
 
 	test("doesn't play from a pos dc to someone after them"):
 		val game = setup(HGroup.atLevel(8), Vector(
@@ -209,7 +211,7 @@ class PositionalDiscards extends munit.FunSuite:
 			assertEquals(g.state.cardsLeft, 0)
 
 		// Alice should discard slot 3 as a positional discard.
-		assertEquals(game.takeAction, PerformAction.Discard(game.state.hands(Alice.ordinal)(2)))
+		assertEquals(game.takeAction.unsafeRunSync(), PerformAction.Discard(game.state.hands(Alice.ordinal)(2)))
 
 	test("plays from a pos dc against common good touch"):
 		val game = setup(HGroup.atLevel(8), Vector(
@@ -237,7 +239,7 @@ class PositionalDiscards extends munit.FunSuite:
 
 		// Alice's slot 2 is called to play.
 		hasStatus(game, Alice, 2, CardStatus.CalledToPlay)
-		assertEquals(game.takeAction, PerformAction.Play(game.state.hands(Alice.ordinal)(1)))
+		assertEquals(game.takeAction.unsafeRunSync(), PerformAction.Play(game.state.hands(Alice.ordinal)(1)))
 
 	test("doesn't bomb from a mistake"):
 		val game = setup(HGroup.atLevel(8), Vector(
@@ -290,7 +292,7 @@ class PositionalMisplays extends munit.FunSuite:
 
 		// Alice's slot 5 should be called to play from a positional misplay.
 		hasStatus(game, Alice, 5, CardStatus.CalledToPlay)
-		assertEquals(game.takeAction, PerformAction.Play(game.state.hands(Alice.ordinal)(4)))
+		assertEquals(game.takeAction.unsafeRunSync(), PerformAction.Play(game.state.hands(Alice.ordinal)(4)))
 
 	test("plays from a double pos misplay"):
 		val game = setup(HGroup.atLevel(8), Vector(
@@ -315,7 +317,7 @@ class PositionalMisplays extends munit.FunSuite:
 
 		// Alice's slot 3 should be called to play from a positional misplay.
 		hasStatus(game, Alice, 3, CardStatus.CalledToPlay)
-		assertEquals(game.takeAction, PerformAction.Play(game.state.hands(Alice.ordinal)(2)))
+		assertEquals(game.takeAction.unsafeRunSync(), PerformAction.Play(game.state.hands(Alice.ordinal)(2)))
 
 class DistributionClues extends munit.FunSuite:
 	override def beforeAll() = Logger.setLevel(LogLevel.Off)

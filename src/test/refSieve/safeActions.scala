@@ -1,5 +1,7 @@
 package tests.refSieve
 
+import cats.effect.unsafe.implicits.global
+
 import scala_bot.refSieve.RefSieve
 import scala_bot.basics._
 import scala_bot.test.{fullyKnown, hasInfs, hasStatus, Player, setup, takeTurn}, Player._
@@ -16,7 +18,7 @@ class SafeActions extends munit.FunSuite:
 			Vector("y4", "g1", "b1", "g3", "g4")
 		))
 
-		assertEquals(game.takeAction, PerformAction.Rank(Bob.ordinal, 1))
+		assertEquals(game.takeAction.unsafeRunSync(), PerformAction.Rank(Bob.ordinal, 1))
 
 	test("understands direct ranks are not referential"):
 		val game = setup(RefSieve.apply, Vector(
@@ -70,7 +72,7 @@ class SafeActions extends munit.FunSuite:
 		)
 
 		// Alice should not give purple.
-		assert(game.takeAction match
+		assert(game.takeAction.unsafeRunSync() match
 			case PerformAction.Colour(1, 4) => false
 			case _ => true
 		)

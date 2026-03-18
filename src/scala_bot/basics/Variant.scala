@@ -29,6 +29,7 @@ case class Variant(
 	pinkS: Boolean,
 	brownS: Boolean,
 	deceptiveS: Boolean,
+	scarce1s: Boolean
 ):
 	def allIds =
 		for
@@ -44,6 +45,8 @@ case class Variant(
 		val Identity(suitIndex, rank) = id
 		if suits(suitIndex).suitType.dark || criticalRank.contains(rank) then
 			1
+		else if rank == 1 && scarce1s then
+			2
 		else
 			Vector(3, 2, 2, 2, 1)(rank - 1)
 
@@ -156,7 +159,8 @@ object Variant:
 			whiteS = false,
 			pinkS = false,
 			brownS = false,
-			deceptiveS = false
+			deceptiveS = false,
+			scarce1s = false
 		)
 
 	def apply(
@@ -170,7 +174,8 @@ object Variant:
 		whiteS: Boolean = false,
 		pinkS: Boolean = false,
 		brownS: Boolean = false,
-		deceptiveS: Boolean = false
+		deceptiveS: Boolean = false,
+		scarce1s: Boolean = false
 	): Variant =
 		val (suits, shortForms, colourableSuits) = suitNames.foldLeft((Vector.empty[Suit], Vector.empty[Char], Vector.empty[Suit])):
 			case ((suits, shortForms, colourableSuits), name) =>
@@ -197,7 +202,7 @@ object Variant:
 				else
 					(suit +: suits, short +: shortForms, suit +: colourableSuits)
 
-		Variant(id, name, suits.reverse, shortForms.reverse, colourableSuits.reverse, criticalRank, clueStarved, specialRank, rainbowS, whiteS, pinkS, brownS, deceptiveS)
+		Variant(id, name, suits.reverse, shortForms.reverse, colourableSuits.reverse, criticalRank, clueStarved, specialRank, rainbowS, whiteS, pinkS, brownS, deceptiveS, scarce1s)
 
 	def fromJSON(json: ujson.Value) =
 		val obj = json.obj
@@ -212,7 +217,8 @@ object Variant:
 			whiteS = obj.get("specialRankNoClueColors").map(_.bool).getOrElse(false),
 			pinkS = obj.get("specialRankAllClueRanks").map(_.bool).getOrElse(false),
 			brownS = obj.get("specialRankNoClueRanks").map(_.bool).getOrElse(false),
-			obj.get("specialRankDeceptive").map(_.bool).getOrElse(false)
+			deceptiveS = obj.get("specialRankDeceptive").map(_.bool).getOrElse(false),
+			scarce1s = obj.get("scarceOnes").map(_.bool).getOrElse(false)
 		)
 
 	def getVariant(name: String) =

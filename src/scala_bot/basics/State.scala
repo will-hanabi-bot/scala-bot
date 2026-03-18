@@ -145,8 +145,17 @@ case class State(
 			clue
 
 	def allValidClues(target: Int) =
-		val rankClues = (1 to 5).view.map(Clue(ClueKind.Rank, _, target))
-		val colourClues = (0 until variant.colourableSuits.length).view.map(Clue(ClueKind.Colour, _, target))
+		val rankClues =
+			for
+				rank <- (1 to 5).view if !(variant.specialRank.contains(rank) && (variant.pinkS || variant.brownS || variant.deceptiveS))
+			yield
+				Clue(ClueKind.Rank, rank, target)
+
+		val colourClues =
+			for
+				suitIndex <- (0 until variant.colourableSuits.length).view
+			yield
+				Clue(ClueKind.Colour, suitIndex, target)
 
 		rankClues.concat(colourClues).filter: clue =>
 			clueTouched(hands(target), clue.base).nonEmpty

@@ -1,5 +1,7 @@
 package tests.reactor.reactive
 
+import cats.effect.unsafe.implicits.global
+
 import scala_bot.reactor.Reactor
 import scala_bot.basics._
 import scala_bot.test.{hasInfs, hasStatus, Player, preClue, setup, takeTurn}, Player._
@@ -38,7 +40,7 @@ class Reactive extends munit.FunSuite:
 		hasStatus(game, Alice, 1, CardStatus.CalledToPlay)
 		hasInfs(game, None, Alice, 1, Vector("r1", "y1", "g1", "p1"))
 
-		assertEquals(game.takeAction, PerformAction.Play(game.state.hands(Alice.ordinal)(0)))
+		assertEquals(game.takeAction.unsafeRunSync(), PerformAction.Play(game.state.hands(Alice.ordinal)(0)))
 
 	test("it receives a reactive play play"):
 		val game = setup(Reactor.apply, Vector(
@@ -188,7 +190,7 @@ class Reactive extends munit.FunSuite:
 		hasStatus(game, Alice, 1, CardStatus.CalledToPlay)
 		hasInfs(game, None, Alice, 1, Vector("r1"))
 
-		assertEquals(game.takeAction, PerformAction.Play(game.state.hands(Alice.ordinal)(0)))
+		assertEquals(game.takeAction.unsafeRunSync(), PerformAction.Play(game.state.hands(Alice.ordinal)(0)))
 
 	test("it doesnt play target an unclued dupe"):
 		val game = setup(Reactor.apply, Vector(
@@ -272,7 +274,7 @@ class Reactive extends munit.FunSuite:
 			hasStatus(g, Alice, 1, CardStatus.CalledToPlay)
 			hasInfs(g, None, Alice, 1, Vector("r1"))
 
-			assertEquals(g.takeAction, PerformAction.Play(g.state.hands(Alice.ordinal)(0)))
+			assertEquals(g.takeAction.unsafeRunSync(), PerformAction.Play(g.state.hands(Alice.ordinal)(0)))
 		.pipe(takeTurn("Alice plays r1 (slot 1)"))
 
 		// Bob's slot 1 should still be allowed to be b1.

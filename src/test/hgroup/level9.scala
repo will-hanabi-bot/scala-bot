@@ -1,5 +1,7 @@
 package tests.hgroup.level9
 
+import cats.effect.unsafe.implicits.global
+
 import scala_bot.basics._
 import scala_bot.test.{Colour, hasInfs, hasStatus, Player, preClue, setup, takeTurn}, Player._
 import scala_bot.hgroup.{HGroup, StallInterp}
@@ -231,7 +233,7 @@ class Stalling extends munit.FunSuite:
 		.pipe(takeTurn("Cathy discards g4", "p4"))
 
 		// Alice is in DDA, she should clue 2 to Bob even though it bad touches.
-		assertEquals(game.takeAction, PerformAction.Rank(Bob.ordinal, 2))
+		assertEquals(game.takeAction.unsafeRunSync(), PerformAction.Rank(Bob.ordinal, 2))
 
 	test("5 stalls to the one closest to chop"):
 		val game = setup(HGroup.atLevel(9), Vector(
@@ -245,7 +247,7 @@ class Stalling extends munit.FunSuite:
 		.pipe(takeTurn("Cathy clues 5 to Alice (slot 5)"))
 
 		// Alice should 5 Stall on Cathy, since Bob's 5 is farther away from chop.
-		assertEquals(game.takeAction, PerformAction.Rank(Cathy.ordinal, 5))
+		assertEquals(game.takeAction.unsafeRunSync(), PerformAction.Rank(Cathy.ordinal, 5))
 
 	test("respects potentially having a clue in their hand when interpreting a stall"):
 		val game = setup(HGroup.atLevel(9), Vector(
@@ -283,7 +285,7 @@ class DoubleDiscardAvoidance extends munit.FunSuite:
 		)
 		.pipe(takeTurn("Donald discards r3", "p3"))
 		.tap: g =>
-			assertEquals(g.takeAction, PerformAction.Rank(Bob.ordinal, 5))
+			assertEquals(g.takeAction.unsafeRunSync(), PerformAction.Rank(Bob.ordinal, 5))
 		.pipe(takeTurn("Alice clues 5 to Bob"))
 
 		assertEquals(game.lastMove, Some(ClueInterp.Stall))
@@ -301,7 +303,7 @@ class DoubleDiscardAvoidance extends munit.FunSuite:
 		.pipe(takeTurn("Donald discards r3", "p3"))
 
 		// Since Alice can see the other copy of r3, she should discard.
-		assertEquals(game.takeAction, PerformAction.Discard(game.state.hands(Alice.ordinal)(3)))
+		assertEquals(game.takeAction.unsafeRunSync(), PerformAction.Discard(game.state.hands(Alice.ordinal)(3)))
 
 	test("doesn't trigger dda from a sarcastic discard"):
 		val game = setup(HGroup.atLevel(9), Vector(
@@ -338,7 +340,7 @@ class Anxiety extends munit.FunSuite:
 		.pipe(takeTurn("Donald clues 2 to Alice (slot 1)"))
 
 		// Alice should play slot 2 as r5.
-		assertEquals(game.takeAction, PerformAction.Play(game.state.hands(Alice.ordinal)(1)))
+		assertEquals(game.takeAction.unsafeRunSync(), PerformAction.Play(game.state.hands(Alice.ordinal)(1)))
 
 	test("doesn't assume anxiety if there are clues available"):
 		val game = setup(HGroup.atLevel(9), Vector(
@@ -353,7 +355,7 @@ class Anxiety extends munit.FunSuite:
 		.pipe(takeTurn("Donald clues 5 to Alice (slots 1,2,3,4)"))
 
 		// Alice should clue.
-		val action = game.takeAction
+		val action = game.takeAction.unsafeRunSync()
 		assert(action match
 			case _: PerformAction.Rank => true
 			case _: PerformAction.Colour => true
@@ -373,7 +375,7 @@ class Anxiety extends munit.FunSuite:
 		.pipe(takeTurn("Donald clues 5 to Alice (slots 1,2,3,4)"))
 
 		// Alice should discard, since it isn't possible to play any card.
-		assert(game.takeAction.isInstanceOf[PerformAction.Discard])
+		assert(game.takeAction.unsafeRunSync().isInstanceOf[PerformAction.Discard])
 
 	test("forces the next player into anxiety by playing a connecting card"):
 		val game = setup(HGroup.atLevel(9), Vector(
@@ -390,7 +392,7 @@ class Anxiety extends munit.FunSuite:
 		.pipe(takeTurn("Donald clues red to Alice (slot 1)"))
 
 		// Alice should play slot 1.
-		assertEquals(game.takeAction, PerformAction.Play(game.state.hands(Alice.ordinal)(0)))
+		assertEquals(game.takeAction.unsafeRunSync(), PerformAction.Play(game.state.hands(Alice.ordinal)(0)))
 
 	test("forces the next player into anxiety by playing an unrelated card"):
 		val game = setup(HGroup.atLevel(9), Vector(
@@ -407,7 +409,7 @@ class Anxiety extends munit.FunSuite:
 		.pipe(takeTurn("Donald clues blue to Alice (slot 1)"))
 
 		// Alice should play slot 1.
-		assertEquals(game.takeAction, PerformAction.Play(game.state.hands(Alice.ordinal)(0)))
+		assertEquals(game.takeAction.unsafeRunSync(), PerformAction.Play(game.state.hands(Alice.ordinal)(0)))
 
 	test("gives an anxiety clue to the next player"):
 		val game = setup(HGroup.atLevel(9), Vector(
@@ -427,5 +429,5 @@ class Anxiety extends munit.FunSuite:
 
 		// Alice should clue red/3 to Bob as anxiety
 		val clues = Seq(PerformAction.Rank(Bob.ordinal, 3), PerformAction.Colour(Bob.ordinal, Colour.Red.ordinal))
-		val action = game.takeAction
+		val action = game.takeAction.unsafeRunSync()
 		assert(clues.contains(action), s"Expected clue, got ${action.fmt(game)}")

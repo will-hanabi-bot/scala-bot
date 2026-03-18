@@ -7,6 +7,7 @@ import scala_bot.refSieve.RefSieve
 import scala_bot.hgroup.HGroup
 import scala_bot.utils._
 
+import cats.effect.unsafe.implicits.global
 import java.nio.file.{Files, Paths}
 import scala.collection.parallel.CollectionConverters._
 import scala.util.{Random, Try}
@@ -45,7 +46,7 @@ def simulateGame[G <: Game](gs: Seq[G], deck: Vector[Identity])(using ops: GameO
 		try
 			val currentPlayerIndex = games.head.state.currentPlayerIndex
 			val currentGame = games(currentPlayerIndex)
-			val perform = currentGame.takeAction
+			val perform = currentGame.takeAction.unsafeRunSync()
 
 			val newGames = games.map: game =>
 				val state = game.state

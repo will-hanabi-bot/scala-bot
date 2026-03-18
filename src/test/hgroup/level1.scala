@@ -1,5 +1,7 @@
 package tests.hgroup.level1
 
+import cats.effect.unsafe.implicits.global
+
 import scala_bot.basics._
 import scala_bot.test.{hasInfs, hasStatus, Player, setup, takeTurn}, Player._
 import scala_bot.hgroup.{getResult, HGroup}
@@ -115,7 +117,7 @@ class General extends munit.FunSuite:
 		)
 		.pipe(takeTurn("Cathy clues 4 to Alice (slots 2,4,5)"))
 
-		assertEquals(game.takeAction, PerformAction.Play(game.state.hands(Alice.ordinal)(4)))
+		assertEquals(game.takeAction.unsafeRunSync(), PerformAction.Play(game.state.hands(Alice.ordinal)(4)))
 
 	test("gives a 5 save even if a 2 will be lost"):
 		val game = setup(HGroup.atLevel(1), Vector(
@@ -123,4 +125,4 @@ class General extends munit.FunSuite:
 			Vector("g4", "g4", "b4", "y2", "r5")
 		))
 
-		assertEquals(game.takeAction, PerformAction.Rank(Bob.ordinal, 5))
+		assertEquals(game.takeAction.unsafeRunSync(), PerformAction.Rank(Bob.ordinal, 5))

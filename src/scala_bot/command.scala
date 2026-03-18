@@ -1,6 +1,6 @@
 package scala_bot
 
-import cats.effect.{kernel,IO,std}, kernel.Ref, std.Queue
+import cats.effect.{kernel, IO, std, unsafe}, kernel.Ref, std.Queue, unsafe.IORuntime
 import cats.syntax.all._
 import upickle.default._
 import scala.concurrent.duration._
@@ -12,7 +12,7 @@ import scala_bot.logger._
 import scala_bot.refSieve.RefSieve
 import scala_bot.hgroup.HGroup
 
-val BOT_VERSION = "v0.8.7 (scala-bot)"
+val BOT_VERSION = "v0.8.8 (scala-bot)"
 
 case class ChatMessage(
 	msg: String,
@@ -108,7 +108,7 @@ case class Settings(convention: Convention, level: Int = 1):
 		case Convention.RefSieve => "Ref Sieve"
 		case Convention.HGroup => s"H-Group $level"
 
-class BotClient(queue: Queue[IO, String], gameRef: Ref[IO, Option[Game]]):
+class BotClient(queue: Queue[IO, String], gameRef: Ref[IO, Option[Game]])(using runtime: IORuntime):
 	private var info: Option[SelfData] = None
 	private var tableID: Option[Int] = None
 	private var gameStarted = false
@@ -379,16 +379,17 @@ class BotClient(queue: Queue[IO, String], gameRef: Ref[IO, Option[Game]]):
 						case _ => (IO.unit, newGame)
 
 					val actIO = IO.whenA(perform):
-						val suggestedAction = nextGame match
+						val suggestedActionIO = nextGame match
 							case r: Reactor  => r.takeAction
 							case r: RefSieve => r.takeAction
 							case h: HGroup   => h.takeAction
 
-						Log.highlight(Console.BLUE, s"Suggested action: ${suggestedAction.fmt(newGame, accordingTo = Some(newGame.me))}")
-						val arg = suggestedAction.json(tableID.get)
+						suggestedActionIO.flatMap: suggestedAction =>
+							Log.highlight(Console.BLUE, s"Suggested action: ${suggestedAction.fmt(newGame, accordingTo = Some(newGame.me))}")
+							val arg = suggestedAction.json(tableID.get)
 
-						IO.whenA(nextGame.inProgress):
-							IO.sleep(2.seconds) *> sendCmd("action", ujson.write(arg))
+							IO.whenA(nextGame.inProgress):
+								IO.sleep(2.seconds) *> sendCmd("action", ujson.write(arg))
 
 					val x = nextGame match
 						case r: Reactor  => r.copy(queuedCmds = Nil)

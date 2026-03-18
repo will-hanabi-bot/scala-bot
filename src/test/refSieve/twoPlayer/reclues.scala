@@ -1,5 +1,7 @@
 package tests.refSieve.twoPlayer
 
+import cats.effect.unsafe.implicits.global
+
 import scala_bot.refSieve.RefSieve
 import scala_bot.basics._
 import scala_bot.test.{fullyKnown, hasInfs, hasStatus, Player, preClue, setup, takeTurn}, Player._
@@ -72,7 +74,7 @@ class Reclues extends munit.FunSuite:
 		.pipe(takeTurn("Bob clues 3 to Alice (slot 5)"))
 		.tap: g =>
 			hasStatus(g, Alice, 1, CardStatus.Finessed)
-			assertEquals(g.takeAction, PerformAction.Play(g.state.hands(Alice.ordinal)(0)))
+			assertEquals(g.takeAction.unsafeRunSync(), PerformAction.Play(g.state.hands(Alice.ordinal)(0)))
 		.pipe(takeTurn("Alice plays g1 (slot 1)"))
 
 		hasInfs(game, None, Alice, 4, Vector("g2"))
@@ -122,7 +124,7 @@ class Reclues extends munit.FunSuite:
 		.pipe(takeTurn("Bob clues 3 to Alice (slot 5)"))
 		.tap: g =>
 			hasStatus(g, Alice, 1, CardStatus.Finessed)
-			assertEquals(g.takeAction, PerformAction.Play(g.state.hands(Alice.ordinal)(0)))
+			assertEquals(g.takeAction.unsafeRunSync(), PerformAction.Play(g.state.hands(Alice.ordinal)(0)))
 		.pipe(takeTurn("Alice plays b1 (slot 1)"))
 
 		hasInfs(game, None, Alice, 4, Vector("g1", "g2", "g4", "g5"))
@@ -142,7 +144,7 @@ class Reclues extends munit.FunSuite:
 		.pipe(takeTurn("Bob clues 4 to Alice (slot 5)"))
 		.tap: g =>
 			hasStatus(g, Alice, 1, CardStatus.Finessed)
-			assertEquals(g.takeAction, PerformAction.Play(g.state.hands(Alice.ordinal)(2)))
+			assertEquals(g.takeAction.unsafeRunSync(), PerformAction.Play(g.state.hands(Alice.ordinal)(2)))
 		.pipe(takeTurn("Alice plays g1 (slot 3)"))
 		.pipe(takeTurn("Bob discards g4", "r4"))
 		.pipe(takeTurn("Alice plays g2 (slot 2)"))
@@ -196,7 +198,7 @@ class Reclues extends munit.FunSuite:
 		.pipe(takeTurn("Bob clues 4 to Alice (slot 5)"))
 		.tap: g =>
 			hasStatus(g, Alice, 1, CardStatus.Finessed)
-			assertEquals(g.takeAction, PerformAction.Play(g.state.hands(Alice.ordinal)(2)))
+			assertEquals(g.takeAction.unsafeRunSync(), PerformAction.Play(g.state.hands(Alice.ordinal)(2)))
 		.pipe(takeTurn("Alice plays g1 (slot 3)"))
 		.pipe(takeTurn("Bob discards g4", "r4"))
 		.pipe(takeTurn("Alice plays b1 (slot 2)"))

@@ -1,4 +1,6 @@
-package tests.reactor.invert
+package tests.reactor
+
+import cats.effect.unsafe.implicits.global
 
 import scala_bot.reactor.Reactor
 import scala_bot.basics._
@@ -24,7 +26,7 @@ class Invert extends munit.FunSuite:
 			hasStatus(g, Alice, 2, CardStatus.CalledToDiscard)
 
 			// We should discard slot 2 urgently.
-			assertEquals(g.takeAction, PerformAction.Discard(g.state.hands(Alice.ordinal)(1)))
+			assertEquals(g.takeAction.unsafeRunSync(), PerformAction.Discard(g.state.hands(Alice.ordinal)(1)))
 		.pipe(takeTurn("Alice discards r4 (slot 2)"))
 
 		hasStatus(game, Bob, 1, CardStatus.CalledToPlay)

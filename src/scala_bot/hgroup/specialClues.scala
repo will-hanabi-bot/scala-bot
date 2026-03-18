@@ -37,6 +37,9 @@ def colourSave(prev: HGroup, action: ClueAction, id: Identity, focus: Int): Bool
 	if rank == 5 && suit.name != "Black" && !suit.suitType.brownish then
 		return false
 
+	if state.variant.criticalRank.contains(rank) then
+		return false
+
 	if suit.name == "Black" && (rank == 2 || rank == 5) then
 		// Newly touched or fill-in cards
 		val fillIns = list.count: o =>

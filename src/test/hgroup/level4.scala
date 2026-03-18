@@ -1,5 +1,7 @@
 package tests.hgroup.level4
 
+import cats.effect.unsafe.implicits.global
+
 import scala_bot.basics._
 import scala_bot.test.{hasInfs, hasStatus, Player, preClue, setup, takeTurn}, Player._
 import scala_bot.hgroup.HGroup
@@ -257,13 +259,13 @@ class OrderCM extends munit.FunSuite:
 
 		.pipe(takeTurn("Cathy discards y1", "r1"))
 		.tap: g =>
-			assertEquals(g.takeAction, PerformAction.Play(g.state.hands(Alice.ordinal)(0)))
+			assertEquals(g.takeAction.unsafeRunSync(), PerformAction.Play(g.state.hands(Alice.ordinal)(0)))
 
 		.pipe(takeTurn("Alice plays r2 (slot 1)"))
 		.pipe(takeTurn("Bob discards r2", "p2"))
 		.pipe(takeTurn("Cathy discards p3", "y4"))
 
-		assertEquals(game.takeAction, PerformAction.Play(game.state.hands(Alice.ordinal)(1)))
+		assertEquals(game.takeAction.unsafeRunSync(), PerformAction.Play(game.state.hands(Alice.ordinal)(1)))
 
 	test("symmetrically elminates against cm cards"):
 		val game = setup(HGroup.atLevel(4), Vector(
@@ -280,4 +282,4 @@ class OrderCM extends munit.FunSuite:
 
 		hasInfs(game, None, Alice, 2, Vector("r5"))
 
-		assertEquals(game.takeAction, PerformAction.Play(game.state.hands(Alice.ordinal)(1)))
+		assertEquals(game.takeAction.unsafeRunSync(), PerformAction.Play(game.state.hands(Alice.ordinal)(1)))

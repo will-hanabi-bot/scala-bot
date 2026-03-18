@@ -1,5 +1,7 @@
 package tests.hgroup
 
+import cats.effect.unsafe.implicits.global
+
 import scala_bot.basics._
 import scala_bot.test.{hasInfs, hasStatus, Player, setup, takeTurn, TestVariant}, Player._
 import scala_bot.hgroup.HGroup
@@ -31,7 +33,7 @@ class Brown extends munit.FunSuite:
 			variant = TestVariant.Brown5
 		)
 
-		assertEquals(game.takeAction, PerformAction.Colour(Bob.ordinal, 4))
+		assertEquals(game.takeAction.unsafeRunSync(), PerformAction.Colour(Bob.ordinal, 4))
 
 	test("plays the correct card after a delayed play clue"):
 		val game = setup(HGroup.atLevel(1), Vector(

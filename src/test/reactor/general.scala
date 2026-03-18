@@ -1,4 +1,6 @@
-package tests.reactor.general
+package tests.reactor
+
+import cats.effect.unsafe.implicits.global
 
 import scala_bot.basics._
 import scala_bot.test.{Colour, fullyKnown, hasInfs, hasStatus, Player, preClue, setup, takeTurn}, Player._
@@ -122,10 +124,8 @@ class General extends munit.FunSuite:
 
 		hasStatus(game, Bob, 1, CardStatus.CalledToPlay)
 
-		val action = game.takeAction
-
 		// We should play g2 into it.
-		assertEquals(action, PerformAction.Play(game.state.hands(Alice.ordinal)(1)))
+		assertEquals(game.takeAction.unsafeRunSync(), PerformAction.Play(game.state.hands(Alice.ordinal)(1)))
 
 	test("it understands an unknown delayed stable play"):
 		val game = setup(Reactor.apply, Vector(
@@ -140,10 +140,8 @@ class General extends munit.FunSuite:
 
 		hasStatus(game, Bob, 1, CardStatus.CalledToPlay)
 
-		val action = game.takeAction
-
 		// We should play our 1 into it as g1.
-		assertEquals(action, PerformAction.Play(game.state.hands(Alice.ordinal)(0)))
+		assertEquals(game.takeAction.unsafeRunSync(), PerformAction.Play(game.state.hands(Alice.ordinal)(0)))
 		hasInfs(game, None, Alice, 1, Vector("g1"))
 
 	test("it doesn't give a bad connecting clue"):

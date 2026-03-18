@@ -1,5 +1,7 @@
 package tests.hgroup.level7
 
+import cats.effect.unsafe.implicits.global
+
 import scala_bot.basics._
 import scala_bot.test.{fullyKnown, hasStatus, Player, setup, takeTurn, TestVariant}, Player._
 import scala_bot.hgroup.{DcStatus, HGroup}
@@ -22,7 +24,7 @@ class ScreamDiscards extends munit.FunSuite:
 		.pipe(takeTurn("Cathy clues red to Alice (slot 5)"))
 		.tap: g =>
 			// Alice should discard slot 4 as a SDCM.
-			assertEquals(g.takeAction, PerformAction.Discard(g.state.hands(Alice.ordinal)(3)))
+			assertEquals(g.takeAction.unsafeRunSync(), PerformAction.Discard(g.state.hands(Alice.ordinal)(3)))
 		.pipe(takeTurn("Alice discards y4 (slot 4)"))
 
 		hasStatus(game, Bob, 5, CardStatus.ChopMoved)
@@ -39,7 +41,7 @@ class ScreamDiscards extends munit.FunSuite:
 		.pipe(takeTurn("Cathy clues red to Alice (slot 5)"))
 
 		// Alice should play slot 5.
-		assertEquals(game.takeAction, PerformAction.Play(game.state.hands(Alice.ordinal)(4)))
+		assertEquals(game.takeAction.unsafeRunSync(), PerformAction.Play(game.state.hands(Alice.ordinal)(4)))
 
 	test("doesn't sdcm when target is loaded"):
 		val game = setup(HGroup.atLevel(7), Vector(
@@ -54,7 +56,7 @@ class ScreamDiscards extends munit.FunSuite:
 		.pipe(takeTurn("Cathy clues green to Bob"))
 
 		// Alice should play slot 5.
-		assertEquals(game.takeAction, PerformAction.Play(game.state.hands(Alice.ordinal)(4)))
+		assertEquals(game.takeAction.unsafeRunSync(), PerformAction.Play(game.state.hands(Alice.ordinal)(4)))
 
 	test("stalls after a scream"):
 		val game = setup(HGroup.atLevel(7), Vector(
@@ -72,7 +74,7 @@ class ScreamDiscards extends munit.FunSuite:
 		hasStatus(game, Alice, 5, CardStatus.ChopMoved)
 
 		// Alice should 5 stall on Bob.
-		assertEquals(game.takeAction, PerformAction.Rank(Bob.ordinal, 5))
+		assertEquals(game.takeAction.unsafeRunSync(), PerformAction.Rank(Bob.ordinal, 5))
 
 	test("screams at 1 clue when the next player will become locked"):
 		val game = setup(HGroup.atLevel(7), Vector(
@@ -88,7 +90,7 @@ class ScreamDiscards extends munit.FunSuite:
 		.pipe(takeTurn("Cathy clues 5 to Bob"))
 		.tap: g =>
 			// Alice should discard slot 5 as a SDCM.
-			assertEquals(g.takeAction, PerformAction.Discard(g.state.hands(Alice.ordinal)(4)))
+			assertEquals(g.takeAction.unsafeRunSync(), PerformAction.Discard(g.state.hands(Alice.ordinal)(4)))
 		.pipe(takeTurn("Alice discards y3 (slot 5)"))
 
 		hasStatus(game, Bob, 1, CardStatus.ChopMoved)
@@ -125,7 +127,7 @@ class ShoutDiscards extends munit.FunSuite:
 		.pipe(takeTurn("Cathy clues 1 to Alice (slots 4,5)"))
 		.tap: g =>
 			// Alice should discard slot 4 as a Shout Discard.
-			assertEquals(g.takeAction, PerformAction.Discard(g.state.hands(Alice.ordinal)(3)))
+			assertEquals(g.takeAction.unsafeRunSync(), PerformAction.Discard(g.state.hands(Alice.ordinal)(3)))
 		.pipe(takeTurn("Alice discards y1 (slot 4)"))
 
 		hasStatus(game, Bob, 5, CardStatus.ChopMoved)
@@ -147,7 +149,7 @@ class ShoutDiscards extends munit.FunSuite:
 		hasStatus(game, Alice, 5, CardStatus.ChopMoved)
 
 		// Alice should 5 Stall on Bob.
-		assertEquals(game.takeAction, PerformAction.Rank(Bob.ordinal, 5))
+		assertEquals(game.takeAction.unsafeRunSync(), PerformAction.Rank(Bob.ordinal, 5))
 
 class GenDiscards extends munit.FunSuite:
 	override def beforeAll() = Logger.setLevel(LogLevel.Off)
@@ -164,7 +166,7 @@ class GenDiscards extends munit.FunSuite:
 		.pipe(takeTurn("Cathy clues red to Alice (slot 5)"))
 		.tap: g =>
 			// Alice should discard slot 4 as a Generation Discard.
-			assertEquals(g.takeAction, PerformAction.Discard(g.state.hands(Alice.ordinal)(3)))
+			assertEquals(g.takeAction.unsafeRunSync(), PerformAction.Discard(g.state.hands(Alice.ordinal)(3)))
 		.pipe(takeTurn("Alice discards b4 (slot 4)"))
 
 		// Bob's slot 5 should not be chop moved.
@@ -205,7 +207,7 @@ class GenDiscards extends munit.FunSuite:
 		.pipe(takeTurn("Cathy plays r3", "p4"))
 
 		// Alice should play slot 5 (r4 -> r5) rather than generating for Cathy.
-		assertEquals(game.takeAction, PerformAction.Play(game.state.hands(Alice.ordinal)(4)))
+		assertEquals(game.takeAction.unsafeRunSync(), PerformAction.Play(game.state.hands(Alice.ordinal)(4)))
 
 	test("doesn't gen if next player can connect"):
 		val game = setup(HGroup.atLevel(7), Vector(
@@ -225,4 +227,4 @@ class GenDiscards extends munit.FunSuite:
 		.pipe(takeTurn("Donald clues yellow to Cathy"))
 
 		// Alice should play slot 4 (g2) instead of generating for Cathy.
-		assertEquals(game.takeAction, PerformAction.Play(game.state.hands(Alice.ordinal)(3)))
+		assertEquals(game.takeAction.unsafeRunSync(), PerformAction.Play(game.state.hands(Alice.ordinal)(3)))

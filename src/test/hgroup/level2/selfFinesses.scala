@@ -1,5 +1,7 @@
 package tests.hgroup.level2
 
+import cats.effect.unsafe.implicits.global
+
 import scala_bot.basics._
 import scala_bot.test.{hasInfs, hasStatus, Player, preClue, setup, takeTurn, TestVariant}, Player._
 import scala_bot.hgroup.HGroup
@@ -298,4 +300,4 @@ class SelfFinesses extends munit.FunSuite:
 			hasStatus(g, Alice, 1, CardStatus.Finessed)
 		.pipe(takeTurn("Cathy plays p1", "y3"))
 
-		assertEquals(game.takeAction, PerformAction.Play(game.state.hands(Alice.ordinal)(0)))
+		assertEquals(game.takeAction.unsafeRunSync(), PerformAction.Play(game.state.hands(Alice.ordinal)(0)))

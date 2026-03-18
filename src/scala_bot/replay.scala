@@ -125,7 +125,7 @@ object replay extends IOApp:
 			consoleQ <- Queue.unbounded[IO, ConsoleCmd]
 			game = fetchGame(args)
 			gameRef  <- Ref.of[IO, Option[Game]](Some(game))
-			client = new BotClient(wsQueue, gameRef)
+			client = new BotClient(wsQueue, gameRef)(using runtime)
 			console  <- spawnConsole(consoleQ, client)
 			_ <- console.join
 		yield (ExitCode.Success)

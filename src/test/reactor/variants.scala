@@ -1,5 +1,7 @@
 package tests.reactor
 
+import cats.effect.unsafe.implicits.global
+
 import scala_bot.reactor.Reactor
 import scala_bot.basics._
 import scala_bot.test.{hasInfs, hasStatus, Player, setup, takeTurn, TestVariant}, Player._
@@ -23,7 +25,7 @@ class Variants extends munit.FunSuite:
 		.pipe(takeTurn("Cathy clues 2 to Alice (slots 2,4)"))
 
 		// Alice should play slot 2.
-		assertEquals(game.takeAction, PerformAction.Play(game.state.hands(Alice.ordinal)(1)))
+		assertEquals(game.takeAction.unsafeRunSync(), PerformAction.Play(game.state.hands(Alice.ordinal)(1)))
 		hasInfs(game, None, Alice, 2, Vector("r2", "g2", "b2"))
 
 		// Alice's slot 4 is not playable.

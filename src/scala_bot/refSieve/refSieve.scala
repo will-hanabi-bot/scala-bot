@@ -1,5 +1,7 @@
 package scala_bot.refSieve
 
+import cats.effect.IO
+
 import scala_bot.basics._
 import scala_bot.endgame.EndgameSolver
 import scala_bot.utils._
@@ -332,65 +334,73 @@ object RefSieve:
 		def interpretPlay(prev: RefSieve, game: RefSieve, action: PlayAction): RefSieve =
 			game.reinterpPlay(prev, action).getOrElse(game).elim()
 
-		def takeAction(game: RefSieve): PerformAction =
+		def takeAction(game: RefSieve): IO[PerformAction] =
 			val (state, me) = (game.state, game.me)
 
-			if state.inEndgame && state.remScore <= state.variant.suits.length + 1 then
-				Log.highlight(Console.MAGENTA, "trying to solve endgame...")
+			val solveEndgame =
+				if state.inEndgame && state.remScore <= state.variant.suits.length + 1 then
+					IO.blocking:
+						Log.highlight(Console.MAGENTA, "trying to solve endgame...")
 
-				EndgameSolver(monteCarlo = true).solve(game) match
-					case Left(err) => Log.info(s"couldn't solve endgame: $err")
-					case Right((perform, _)) =>
-						Log.info(s"endgame solved!")
-						return perform
-
-			val playableOrders = me.thinksPlayables(game, state.ourPlayerIndex)
-			Log.info(s"playables $playableOrders")
-
-			val allClues = if !state.canClue then Nil else
-				for
-					target <- (0 until state.numPlayers) if target != state.ourPlayerIndex
-					clue   <- state.allValidClues(target)
-				yield
-					val perform = clueToPerform(clue)
-					val action = performToAction(state, perform, state.ourPlayerIndex)
-					(perform, action)
-
-			val allPlays = playableOrders.map: o =>
-				val action = PlayAction(state.ourPlayerIndex, o, me.thoughts(o).id(infer = true))
-				(PerformAction.Play(o), action)
-
-			val cantDiscard = state.clueTokens == 8 ||
-				game.mustClue(state.ourPlayerIndex) ||
-				(state.pace == 0 && (allClues.nonEmpty || allPlays.nonEmpty))
-			Log.info(s"can discard: ${!cantDiscard} ${state.clueTokens}")
-
-			val allDiscards = if cantDiscard then Nil else
-				val trash = me.thinksTrash(game, state.ourPlayerIndex)
-				val expectedDiscards =
-					if trash.nonEmpty then
-						trash
-					else if (!state.canClue || allPlays.isEmpty) && !me.thinksLocked(game, state.ourPlayerIndex) then
-						game.chop(state.ourPlayerIndex).toVector
-					else
-						Vector.empty
-				val discardOrders = (expectedDiscards ++ me.discardable(game, state.ourPlayerIndex)).distinct
-
-				Log.info(s"discardable $discardOrders")
-				discardOrders.map: o =>
-					val action = DiscardAction(state.ourPlayerIndex, o, me.thoughts(o).id(infer = true))
-					(PerformAction.Discard(o), action)
-
-			val allActions = allClues.concat(allPlays).concat(allDiscards)
-
-			if allActions.isEmpty then
-				if state.clueTokens == 8 then
-					Log.error("No actions available at 8 clues! Playing slot 1")
-					return PerformAction.Play(state.ourHand.head)
+						EndgameSolver(monteCarlo = true).solve(game) match
+							case Left(err) =>
+								Log.info(s"couldn't solve endgame: $err")
+								None
+							case Right((perform, _)) =>
+								Log.info(s"endgame solved!")
+								Some(perform)
 				else
-					return PerformAction.Discard(me.lockedDiscard(state, state.ourPlayerIndex))
+					IO.pure(None)
 
-			allActions.maxBy((_, action) => evalAction(game, action))._1
+			solveEndgame.map: solved =>
+				solved.getOrElse:
+					val playableOrders = me.thinksPlayables(game, state.ourPlayerIndex)
+					Log.info(s"playables $playableOrders")
+
+					val allClues = if !state.canClue then Nil else
+						for
+							target <- (0 until state.numPlayers) if target != state.ourPlayerIndex
+							clue   <- state.allValidClues(target)
+						yield
+							val perform = clueToPerform(clue)
+							val action = performToAction(state, perform, state.ourPlayerIndex)
+							(perform, action)
+
+					val allPlays = playableOrders.map: o =>
+						val action = PlayAction(state.ourPlayerIndex, o, me.thoughts(o).id(infer = true))
+						(PerformAction.Play(o), action)
+
+					val cantDiscard = state.clueTokens == 8 ||
+						game.mustClue(state.ourPlayerIndex) ||
+						(state.pace == 0 && (allClues.nonEmpty || allPlays.nonEmpty))
+					Log.info(s"can discard: ${!cantDiscard} ${state.clueTokens}")
+
+					val allDiscards = if cantDiscard then Nil else
+						val trash = me.thinksTrash(game, state.ourPlayerIndex)
+						val expectedDiscards =
+							if trash.nonEmpty then
+								trash
+							else if (!state.canClue || allPlays.isEmpty) && !me.thinksLocked(game, state.ourPlayerIndex) then
+								game.chop(state.ourPlayerIndex).toVector
+							else
+								Vector.empty
+						val discardOrders = (expectedDiscards ++ me.discardable(game, state.ourPlayerIndex)).distinct
+
+						Log.info(s"discardable $discardOrders")
+						discardOrders.map: o =>
+							val action = DiscardAction(state.ourPlayerIndex, o, me.thoughts(o).id(infer = true))
+							(PerformAction.Discard(o), action)
+
+					val allActions = allClues.concat(allPlays).concat(allDiscards)
+
+					if allActions.isEmpty then
+						if state.clueTokens == 8 then
+							Log.error("No actions available at 8 clues! Playing slot 1")
+							PerformAction.Play(state.ourHand.head)
+						else
+							PerformAction.Discard(me.lockedDiscard(state, state.ourPlayerIndex))
+					else
+						allActions.maxBy((_, action) => evalAction(game, action))._1
 
 		def updateTurn(game: RefSieve, action: TurnAction): RefSieve =
 			val currentPlayerIndex = action.currentPlayerIndex
