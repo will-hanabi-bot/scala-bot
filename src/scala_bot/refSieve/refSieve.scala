@@ -100,6 +100,31 @@ case class RefSieve(
 			.toOption
 		}.flatten
 
+	/** Updates the game state if the partner now has PTD. */
+	def check2pPtd(prev: RefSieve, action: PlayAction | ClueAction | DiscardAction): RefSieve =
+		val playerIndex = action.playerIndex
+		val partner = state.nextPlayerIndex(playerIndex)
+
+		if state.numPlayers > 2 || prev.common.thinksLocked(prev, partner) || prev.common.thinksLoaded(prev, partner) then
+			return this
+
+		val writePtd = action match
+			case _: DiscardAction => true
+			case _: ClueAction => prev.common.thinksLocked(prev, playerIndex)
+			case p: PlayAction =>
+				// Try playing the common knowledge id, if known, then see if partner becomes loaded.
+				val id = prev.common.thoughts(p.order).id(infer = true)
+				val hypo = id.fold(prev)(i => prev.copy(state = prev.state.withPlay(i)))
+
+				!hypo.common.thinksLoaded(hypo, partner)
+
+		if writePtd then
+			chop(partner).fold(this): chop =>
+				Log.info(s"writing ptd on ${state.names(partner)}'s chop $chop")
+				this.withMeta(chop)(_.copy(status = CardStatus.PermissionToDiscard))
+		else
+			this
+
 object RefSieve:
 	private def init(
 		tableID: Int,
@@ -158,24 +183,26 @@ object RefSieve:
 				lastActions = Vector.fill(game.state.numPlayers)(None)
 			)
 
-		def interpretClue(prev: RefSieve, game: RefSieve, action: ClueAction): RefSieve =
-			val state = game.state
+		def interpretClue(_prev: RefSieve, _game: RefSieve, action: ClueAction): RefSieve =
+			val state = _game.state
 			val ClueAction(giver, target, list, clue) = action
-			val newlyTouched = list.filter(!prev.state.deck(_).clued)
+			val newlyTouched = list.filter(!_prev.state.deck(_).clued)
+
+			val (prev, game) = if state.numPlayers > 2 then (_prev, _game) else
+				list.foldLeft((_prev, _game)): (acc, o) =>
+					val (prev, game) = acc
+					// Remove PTD on clued cards that are not 1s/2s
+					val removePtd =
+						state.deck(o).clued &&
+						prev.meta(o).status == CardStatus.PermissionToDiscard &&
+						!state.deck(o).id(partial = true).exists(id => id.rank == 1 || id.rank == 2)
+
+					if removePtd then
+						(prev.withMeta(o)(_.copy(status = CardStatus.None)), game.withMeta(o)(_.copy(status = CardStatus.None)))
+					else
+						acc
+
 			val ctx = ClueContext(prev, game, action)
-
-			// val resetOrder = clueResets.find(o => {
-			// 	val thought = game.common.thoughts(o)
-			// 	!thought.rewinded &&
-			// 	thought.possible.length == 1 &&
-			// 	game.common.dependentConns(o).nonEmpty
-			// })
-
-			// // There is a waiting connection that depends on this card
-			// resetOrder.foreach { order =>
-			// 	val action = IdentifyAction
-			// 	return game.rewind()
-			// }
 
 			val fix = checkFix(prev, game, action).isInstanceOf[FixResult.Normal]
 			val trashPush = !fix && newlyTouched.forall(game.common.orderKt(game, _))
@@ -196,7 +223,7 @@ object RefSieve:
 			val prevLoaded = prev.common.thinksLoaded(prev, target)
 			val stalling = prev.common.thinksLocked(prev, giver) || prev.state.clueTokens == 8
 
-			val noInfo = state.numPlayers == 2 && !stalling && list.forall: o =>
+			val noInfo = state.numPlayers == 2 && !stalling && !state.inEndgame && list.forall: o =>
 				prev.common.thoughts(o).possible == game.common.thoughts(o).possible
 
 			if noInfo then
@@ -239,6 +266,8 @@ object RefSieve:
 						if clue.kind == ClueKind.Rank && stalling then
 							Log.info("rank stall!")
 							(Some(ClueInterp.Stall), game)
+						else if state.numPlayers == 2 && clue.kind == ClueKind.Colour then
+							targetPlay(ctx, list.max)
 						else
 							refPlay(ctx, right = clue.kind == ClueKind.Rank && !trashPush)
 
@@ -292,7 +321,7 @@ object RefSieve:
 			if interp.isEmpty then
 				Log.warn("interpreted mistake!")
 
-			newGame.copy(lastMove = Some(interp.getOrElse(ClueInterp.Mistake))).elim()
+			newGame.copy(lastMove = Some(interp.getOrElse(ClueInterp.Mistake))).elim().check2pPtd(prev, action)
 
 		def interpretDiscard(prev: RefSieve, game: RefSieve, action: DiscardAction): RefSieve =
 			val state = game.state
@@ -330,9 +359,10 @@ object RefSieve:
 			else
 				game
 			.elim()
+			.check2pPtd(prev, action)
 
 		def interpretPlay(prev: RefSieve, game: RefSieve, action: PlayAction): RefSieve =
-			game.reinterpPlay(prev, action).getOrElse(game).elim()
+			game.reinterpPlay(prev, action).getOrElse(game.check2pPtd(prev, action)).elim()
 
 		def takeAction(game: RefSieve): IO[PerformAction] =
 			val (state, me) = (game.state, game.me)
@@ -373,7 +403,7 @@ object RefSieve:
 					val cantDiscard = state.clueTokens == 8 ||
 						game.mustClue(state.ourPlayerIndex) ||
 						(state.pace == 0 && (allClues.nonEmpty || allPlays.nonEmpty))
-					Log.info(s"can discard: ${!cantDiscard} ${state.clueTokens}")
+					Log.info(s"can discard: ${!cantDiscard}")
 
 					val allDiscards = if cantDiscard then Nil else
 						val trash = me.thinksTrash(game, state.ourPlayerIndex)

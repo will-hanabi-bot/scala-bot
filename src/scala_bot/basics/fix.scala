@@ -41,6 +41,7 @@ def checkFix(prev: Game, game: Game, action: ClueAction): FixResult =
 		return FixResult.Normal(cluedResets, duplicateReveals)
 
 	val noNewInfoFixes = list.filter: o =>
+		!prev.meta(o).focused &&
 		prevPlayables.contains(o) &&
 		list.forall(prev.state.deck(_).clued) &&
 		prev.common.thoughts(o).possible == game.common.thoughts(o).possible &&

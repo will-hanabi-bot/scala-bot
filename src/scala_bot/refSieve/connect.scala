@@ -32,7 +32,7 @@ def findConnecting(ctx: ClueContext, id: Identity, playerIndex: Int, connected: 
 		return None
 
 	lazy val prompt = game.common.findPrompt(prev, playerIndex, id, connected, ignore, rightmost = true).map: prompt =>
-		if alwaysConnect || state.deck(prompt).matches(id, assume = findOwn) then
+		if alwaysConnect || (state.deck(prompt).matches(id, assume = findOwn) && game.common.thoughts(prompt).possible.contains(id)) then
 			Some(PromptConn(playerIndex, prompt, id))
 		else
 			if state.deck(prompt).id().isDefined then
@@ -43,7 +43,7 @@ def findConnecting(ctx: ClueContext, id: Identity, playerIndex: Int, connected: 
 		game.findFinesse(playerIndex, connected, ignore)
 			.filter: o =>
 				alwaysConnect ||
-				(game.future(o).contains(id) && state.deck(o).matches(id, assume = findOwn))
+				(game.future(o).contains(id) && state.deck(o).matches(id, assume = findOwn) && game.common.thoughts(o).possible.contains(id))
 			.map(FinesseConn(playerIndex, _, List(id)))
 
 	if preferF then
@@ -93,6 +93,8 @@ def connect(ctx: ClueContext, targetOrder: Int, id: Identity, unknown: Boolean, 
 			// First, count the # of finesses required. Then force finesses first, that many times.
 			loop(state.playStacks(suitIndex) + 1, state.nextPlayerIndex(action.giver), alwaysConnect = true) match
 				case Some(conns) =>
+					lazy val realConns = loop(state.playStacks(suitIndex) + 1, state.nextPlayerIndex(action.giver))
+
 					if conns.exists(_.isInstanceOf[PromptConn]) && conns.exists(_.isInstanceOf[FinesseConn]) then
 						val numFinesses = conns.count(_.isInstanceOf[FinesseConn])
 
@@ -103,9 +105,9 @@ def connect(ctx: ClueContext, targetOrder: Int, id: Identity, unknown: Boolean, 
 							case p: PromptConn => !state.deck(p.order).matches(p.id, assume = findOwn)
 							case _ => false
 
-						Option.when(!wrongPrompt)(conns)
+						Option.when(!wrongPrompt)(realConns.orElse(tryBluff)).flatten
 					else if conns.count(_.isInstanceOf[FinesseConn]) <= 1 then
-						Some(conns)
+						realConns.orElse(tryBluff)
 					else
 						tryBluff
 				case None => tryBluff

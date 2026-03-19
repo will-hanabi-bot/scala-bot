@@ -24,49 +24,50 @@ def getResult(game: RefSieve, hypo: RefSieve, action: ClueAction): Double =
 	badPlayable match
 		case Some(badPlay) =>
 			Log.warn(s"clue ${clue.fmt(state, target)} results in ${state.logId(badPlay)} ${badPlay} looking playable! ${hypo.me.hypoPlays}")
+			return -100
+		case None => ()
+
+	hypo.lastMove match
+		case Some(ClueInterp.Play) if playables.isEmpty && !state.inEndgame =>
+			Log.warn(s"clue ${clue.fmt(state, target)} looks like ref play but gets no playables!")
 			-100
-		case None =>
+		case Some(ClueInterp.Reveal) if playables.isEmpty && trash.nonEmpty && trash.forall(state.deck(_).clued) =>
+			Log.warn(s"clue ${clue.fmt(state, target)} only reveals new trash but isn't a trash push!")
+			-100
+		case Some(i) if i != ClueInterp.Reactive && badTouch.nonEmpty && newTouched.forall(badTouch.contains) && playables.isEmpty =>
+			Log.warn(s"clue ${clue.fmt(state, target)} only bad touches and gets no playables! ${common.hypoPlays}")
+			-100
+		case _ =>
+			// Previously-unclued playables whose copies are already touched
+			val dupedPlayables = hypo.me.hypoPlays.count: p =>
+				!state.deck(p).clued &&
+				state.hands.flatten.exists(o =>
+					o != p && game.isTouched(o) && state.deck(o).matches(state.deck(p)))
+
+			val goodTouch: Double =
+				if badTouch.length > newTouched.length then
+					-badTouch.length
+				else
+					List(0.0, 0.125, 0.25, 0.35, 0.45, 0.55)(newTouched.length - badTouch.length)
+
+			val untouchedPlays = playables.count(!hypo.state.deck(_).clued)
+
+			val playablesS = playables.map(state.logId(_)).mkString(", ")
+			Log.info(s"good touch: $goodTouch, playables: $playablesS, duped: $dupedPlayables, trash: ${trash.length}, fill: ${fill.length}, elim: ${elim.length}, bad touch: $badTouch, ${hypo.lastMove}")
+
+			val value = goodTouch +
+				- 2.0 * dupedPlayables +
+				0.2 * untouchedPlays +
+				(if state.inEndgame then 0.01 else 0.1) * revealedTrash +
+				(if state.inEndgame then 0.2 else 0.1) * fill.length +
+				(if state.inEndgame then 0.1 else 0.05) * elim.length +
+				-0.1 * badTouch.length
+
 			hypo.lastMove match
-				case Some(ClueInterp.Play) if playables.isEmpty && !state.inEndgame =>
-					Log.warn(s"clue ${clue.fmt(state, target)} looks like ref play but gets no playables!")
-					-100
-				case Some(ClueInterp.Reveal) if playables.isEmpty && trash.nonEmpty && trash.forall(state.deck(_).clued) =>
-					Log.warn(s"clue ${clue.fmt(state, target)} only reveals new trash but isn't a trash push!")
-					-100
-				case Some(i) if i != ClueInterp.Reactive && badTouch.nonEmpty && newTouched.forall(badTouch.contains) && playables.isEmpty =>
-					Log.warn(s"clue ${clue.fmt(state, target)} only bad touches and gets no playables! ${common.hypoPlays}")
-					-100
-				case _ =>
-					// Previously-unclued playables whose copies are already touched
-					val dupedPlayables = hypo.me.hypoPlays.count: p =>
-						!state.deck(p).clued &&
-						state.hands.flatten.exists(o =>
-							o != p && game.isTouched(o) && state.deck(o).matches(state.deck(p)))
-
-					val goodTouch: Double =
-						if badTouch.length > newTouched.length then
-							-badTouch.length
-						else
-							List(0.0, 0.125, 0.25, 0.35, 0.45, 0.55)(newTouched.length - badTouch.length)
-
-					val untouchedPlays = playables.count(!hypo.state.deck(_).clued)
-
-					val playablesS = playables.map(state.logId(_)).mkString(", ")
-					Log.info(s"good touch: $goodTouch, playables: $playablesS, duped: $dupedPlayables, trash: ${trash.length}, fill: ${fill.length}, elim: ${elim.length}, bad touch: $badTouch, ${hypo.lastMove}")
-
-					val value = goodTouch +
-						- 2.0 * dupedPlayables +
-						0.2 * untouchedPlays +
-						(if state.inEndgame then 0.01 else 0.1) * revealedTrash +
-						(if state.inEndgame then 0.2 else 0.1) * fill.length +
-						(if state.inEndgame then 0.1 else 0.05) * elim.length +
-						-0.1 * badTouch.length
-
-					hypo.lastMove match
-						case Some(ClueInterp.Mistake)  => value - 10
-						case Some(ClueInterp.Fix)      => value + 1
-						case Some(ClueInterp.Reactive) => value + 1
-						case _ => value
+				case Some(ClueInterp.Mistake)  => value - 10
+				case Some(ClueInterp.Fix)      => value + 1
+				case Some(ClueInterp.Reactive) => value + 1
+				case _ => value
 
 def advanceGame(game: RefSieve, action: Action) =
 	action match
@@ -76,7 +77,7 @@ def advanceGame(game: RefSieve, action: Action) =
 def _forceClue(orig: RefSieve, game: RefSieve, offset: Int, only: Option[Int] = None): Double =
 	val state = game.state
 	val giver = (state.ourPlayerIndex + offset) % state.numPlayers
-	forceClue(game, giver, advance(orig, _, offset + 1), only)
+	-0.5 + forceClue(game, giver, advance(orig, _, offset + 1), only)
 
 def advance(orig: RefSieve, game: RefSieve, offset: Int): Double =
 	val (state, common, meta) = (game.state, game.common, game.meta)
@@ -168,7 +169,7 @@ def advance(orig: RefSieve, game: RefSieve, offset: Int): Double =
 				val Identity(suitIndex, rank) = id
 				val action = DiscardAction(playerIndex, order, suitIndex, rank)
 
-				Log.info(s"${state.names(playerIndex)} discarding trash ${state.logId(id)}")
+				Log.info(s"${state.names(playerIndex)} discarding ${state.logId(id)}")
 				advance(orig, game.simulate(action), offset + 1)
 
 def evalAction(game: RefSieve, action: Action): Double =
@@ -206,8 +207,7 @@ def evalAction(game: RefSieve, action: Action): Double =
 		best
 
 def evalState(state: State): Double =
-	// The first 2 * (# suits) pts are worth 2.
-	val scoreVal: Double = state.score.min(2 * state.variant.suits.length) + state.score
+	val scoreVal: Double = state.score
 
 	val clueVal: Double = state.clueTokens match
 		case 0 					 => -0.5
@@ -239,7 +239,7 @@ def evalGame(orig: RefSieve, game: RefSieve): Double =
 		if game.me.hypoPlays.contains(order) then
 			game.me.thoughts(order).id(infer = true) match
 				case None => 0.4
-				case Some(id) =>if id.rank == 5 then 0.8 else 0.4
+				case Some(id) => if id.rank == 5 then 0.8 else 0.4
 		else
 			game.meta(order).status match
 				case CardStatus.CalledToPlay =>
@@ -311,5 +311,13 @@ def evalGame(orig: RefSieve, game: RefSieve): Double =
 
 		(finalScore - state.maxScore) * 5
 
-	Log.info(s"state: $stateVal, future: $futureVal, bdr: $bdrVal locked: $lockedPenalty${if endgamePenalty != 0 then s" endgame penalty: ${endgamePenalty}" else ""}")
-	stateVal + futureVal + bdrVal + endgamePenalty
+	val badPtdVal =
+		val badPtd = orig.state.hands.flatten.find: o =>
+			orig.meta(o).status != CardStatus.PermissionToDiscard &&
+			game.meta(o).status == CardStatus.PermissionToDiscard &&
+			orig.state.deck(o).id().exists(orig.state.isCritical)
+
+		if badPtd.isDefined then -5 else 0
+
+	Log.info(s"state: $stateVal, future: $futureVal, bdr: $bdrVal locked: $lockedPenalty${if endgamePenalty != 0 then s" endgame penalty: ${endgamePenalty}" else ""}${if badPtdVal != 0 then s" badPtd!" else ""}")
+	stateVal + futureVal + bdrVal + endgamePenalty + badPtdVal

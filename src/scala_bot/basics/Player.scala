@@ -133,10 +133,11 @@ case class Player(
 		val thought = thoughts(order)
 
 		lazy val conventionalTrash =
-			thought.possible.forall(isTrash(game, _, order) ||
+			thought.possible.forall(isTrash(game, _, order)) ||
 			thought.infoLock.existsO(_.forall(isTrash(game, _, order))) ||
 			meta.trash ||
-			meta.status == CardStatus.CalledToDiscard)
+			meta.status == CardStatus.CalledToDiscard ||
+			meta.status == CardStatus.PermissionToDiscard
 
 		if orderKt(game, order) then
 			true

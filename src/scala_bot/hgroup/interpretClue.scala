@@ -87,18 +87,22 @@ def checkHFix(ctx: ClueContext): Option[HGroup] =
 			Some(game.copy(lastMove = Some(ClueInterp.Fix)))
 
 		case FixResult.NoNewInfo(fixes) =>
-			Log.info("no info fix clue! not inferring anything else")
+			if game.level < Level.Fix then
+				Log.info("looked like out-of-level no-info fix!")
+				Some(game.copy(lastMove = Some(ClueInterp.Mistake)))
+			else
+				Log.info(s"no info fix clue on $fixes! not inferring anything else")
 
-			val fixTarget = Option.when(clue == BaseClue(ClueKind.Rank, 1)):
-				prev.order1s(list.filter(prev.unknown1), noFilter = true).headOption
-			.flatten.getOrElse(focus)
+				val fixTarget = Option.when(clue == BaseClue(ClueKind.Rank, 1)):
+					prev.order1s(list.filter(prev.unknown1), noFilter = true).headOption
+				.flatten.getOrElse(focus)
 
-			val badFix = giver == state.ourPlayerIndex && !game.me.orderTrash(game, fixTarget)
+				val badFix = giver == state.ourPlayerIndex && !game.me.orderTrash(game, fixTarget)
 
-			Some(game
-				.withThought(fixTarget)(t => t.copy(inferred = t.possible.intersect(state.trashSet)))
-				.withMeta(fixTarget)(_.copy(trash = true))
-				.copy(lastMove = if badFix then Some(ClueInterp.Mistake) else Some(ClueInterp.Fix)))
+				Some(game
+					.withThought(fixTarget)(t => t.copy(inferred = t.possible.intersect(state.trashSet)))
+					.withMeta(fixTarget)(_.copy(trash = true))
+					.copy(lastMove = if badFix then Some(ClueInterp.Mistake) else Some(ClueInterp.Fix)))
 
 def interpClue(ctx: ClueContext): HGroup =
 	val ClueContext(prev, game, action) = ctx

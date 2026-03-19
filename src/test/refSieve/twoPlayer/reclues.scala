@@ -43,6 +43,37 @@ class Reclues extends munit.FunSuite:
 
 		hasStatus(game, Alice, 2, CardStatus.None)
 
+	test("interprets a self-colour bluff"):
+		val game = setup(RefSieve.apply, Vector(
+			Vector("xx", "xx", "xx", "xx", "xx"),
+			Vector("b1", "b4", "y4", "y4", "g2")
+		),
+			clueTokens = 4,
+			init = preClue(Bob, 5, Seq("2"))
+		)
+		.pipe(takeTurn("Alice clues green to Bob"))
+		.tap: g =>
+			hasStatus(g, Bob, 1, CardStatus.Finessed)
+		.pipe(takeTurn("Bob plays b1", "p1"))
+
+		hasStatus(game, Bob, 2, CardStatus.None)
+
+	test("receives a self-colour bluff"):
+		val game = setup(RefSieve.apply, Vector(
+			Vector("xx", "xx", "xx", "xx", "xx"),
+			Vector("b4", "b4", "y4", "y4", "g4")
+		),
+			starting = Bob,
+			clueTokens = 4,
+			init = preClue(Alice, 5, Seq("2"))
+		)
+		.pipe(takeTurn("Bob clues green to Alice (slot 5)"))
+		.tap: g =>
+			hasStatus(g, Alice, 1, CardStatus.Finessed)
+		.pipe(takeTurn("Alice plays b1 (slot 1)"))
+
+		hasStatus(game, Alice, 2, CardStatus.None)
+
 	test("interprets a finesse + prompt"):
 		val game = setup(RefSieve.apply, Vector(
 			Vector("xx", "xx", "xx", "xx", "xx"),
