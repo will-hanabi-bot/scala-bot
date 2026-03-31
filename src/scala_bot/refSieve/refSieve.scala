@@ -59,11 +59,6 @@ case class RefSieve(
 				!state.deck(order).clued &&
 				meta(order).status == CardStatus.None
 
-	def hasPtd(playerIndex: Int) =
-		!common.thinksLocked(this, playerIndex) &&
-		!common.thinksLoaded(this, playerIndex) &&
-		!mustClue(playerIndex)
-
 	def mustClue(playerIndex: Int) =
 		val bob = state.nextPlayerIndex(playerIndex)
 

@@ -1,8 +1,8 @@
 //> using scala 3.8.2
 //> using jvm 25
-//> using options -Wall -Wconf:msg=toString:s -feature -J-XX:+UseSerialGC -J-Xms200M -J-Xmx200M
-//> using dep com.softwaremill.sttp.client4::core:4.0.19
-//> using dep com.softwaremill.sttp.client4::cats:4.0.19
+//> using options -Wall -Wconf:msg=toString:s -feature -J-Xms100M -J-Xmx150M
+//> using dep com.softwaremill.sttp.client4::core:4.0.21
+//> using dep com.softwaremill.sttp.client4::cats:4.0.21
 //> using dep org.typelevel::cats-effect:3.7.0
 //> using dep com.lihaoyi::upickle:4.4.3
 //> using dep com.lihaoyi::requests:0.9.3
@@ -24,6 +24,8 @@ import scala.concurrent.duration._
 import scala_bot.basics.{Game,Variant}
 import scala_bot.console.{ConsoleCmd, spawnConsole}
 import scala.util.Try
+
+case class WebSocketClosedException(code: Int, reason: String) extends Exception(s"WebSocket closed ($code): $reason")
 
 def parseArgs(args: Seq[String]) =
 	args.foldLeft(Map[String, String]()): (acc, arg) =>
@@ -67,7 +69,8 @@ object main extends IOApp:
 										_   <- loop
 									yield ()
 
-							case WebSocketFrame.Close(_, _) => IO.println("Connection closed")
+							case WebSocketFrame.Close(code, reason) =>
+								IO.raiseError(WebSocketClosedException(code, reason))
 
 							case _ => loop
 
@@ -104,19 +107,35 @@ object main extends IOApp:
 		val password = env.lift(s"HANABI_PASSWORD$index")
 			.getOrElse(throw new IllegalStateException(s"Missing HANABI_USERNAME$index env variable!"))
 
+		val maxRetries = 5
+
 		HttpClientCatsBackend.resource[IO]().use: backend =>
-			for
-				response <- basicRequest.post(uri"https://hanab.live:443/login")
-					.header("Content-Type", "application/x-www-form-urlencoded")
-					.body(Map("username" -> username, "password" -> password, "version" -> "bot"))
-					.send(backend)
-				cookie = response.headers.find(_.name == "set-cookie").map(_.value).getOrElse(throw new Exception(s"No cookie found ${response.headers}"))
-				_ <- basicRequest
-					.get(uri"wss://hanab.live/ws")
-					.response(asWebSocket(useWebSocket))
-					.header("Cookie", cookie)
-					.send(backend)
-			yield ()
-		.handleErrorWith: err =>
-			IO(err.printStackTrace()) *> IO.raiseError(err)
+			Ref.of[IO, Boolean](false).flatMap: connectedRef =>
+				def connect(attemptNum: Int = 0): IO[Unit] =
+					def useWebSocketWithReset(ws: WebSocket[IO]): IO[Unit] =
+						connectedRef.set(true) *> useWebSocket(ws)
+
+					val attempt = for
+						response <- basicRequest.post(uri"https://hanab.live:443/login")
+							.header("Content-Type", "application/x-www-form-urlencoded")
+							.body(Map("username" -> username, "password" -> password, "version" -> "bot"))
+							.send(backend)
+						cookie = response.headers.find(_.name == "set-cookie").map(_.value).getOrElse(throw new Exception(s"No cookie found ${response.headers}"))
+						_ <- basicRequest
+							.get(uri"wss://hanab.live/ws")
+							.response(asWebSocket(useWebSocketWithReset))
+							.header("Cookie", cookie)
+							.send(backend)
+					yield ()
+
+					attempt.handleErrorWith:
+						case err @ (_: sttp.client4.SttpClientException.ReadException | _: WebSocketClosedException) if attemptNum < maxRetries =>
+							connectedRef.getAndSet(false).flatMap: wasConnected =>
+								val nextAttemptNum = if wasConnected then 0 else attemptNum + 1
+								IO.println(s"Connection lost (attempt $attemptNum/$maxRetries): ${err.getMessage}") *>
+								IO.sleep((2 << attemptNum).seconds) *>
+								connect(nextAttemptNum)
+						case err =>
+							IO(err.printStackTrace()) *> IO.raiseError(err)
+				connect()
 		.as(ExitCode.Success)

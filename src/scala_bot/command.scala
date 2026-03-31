@@ -12,7 +12,7 @@ import scala_bot.logger._
 import scala_bot.refSieve.RefSieve
 import scala_bot.hgroup.HGroup
 
-val BOT_VERSION = "v0.8.9 (scala-bot)"
+val BOT_VERSION = "v0.9.0 (scala-bot)"
 
 case class ChatMessage(
 	msg: String,
@@ -413,8 +413,8 @@ class BotClient(queue: Queue[IO, String], gameRef: Ref[IO, Option[Game]])(using 
 			case Array(_, level) if level.toIntOption.isDefined =>
 				level.toIntOption match
 					case None => reply(s"Unrecognized level $level.")
-					case Some(l) if l < 1 || l > 10 =>
-						reply(s"scala-bot can only play HGroup between levels 1-10.")
+					case Some(l) if l < 1 || l > 11 =>
+						reply(s"scala-bot can only play HGroup between levels 1-11.")
 					case Some(l) =>
 						settings = settings.copy(convention = Convention.HGroup, level = l)
 						reply(s"Currently playing with ${settings.str} conventions.")
@@ -430,8 +430,8 @@ class BotClient(queue: Queue[IO, String], gameRef: Ref[IO, Option[Game]])(using 
 				case Some(c) if conv == "HGroup" =>
 					level.toIntOption match
 						case None => reply(s"Unrecognized level $level.")
-						case Some(l) if l < 1 || l > 10 =>
-							reply(s"scala-bot can only play HGroup between levels 1-10.")
+						case Some(l) if l < 1 || l > 11 =>
+							reply(s"scala-bot can only play HGroup between levels 1-11.")
 						case Some(l) =>
 							settings = settings.copy(convention = c, level = l)
 							reply(s"Currently playing with ${settings.str} conventions.")

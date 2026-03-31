@@ -234,7 +234,8 @@ extension[G <: Game](game: G)
 	def isBlindPlaying(order: Int) =
 		!game.state.deck(order).clued && (
 			game.meta(order).status == CardStatus.CalledToPlay ||
-			game.meta(order).status == CardStatus.Finessed
+			game.meta(order).status == CardStatus.Finessed ||
+			game.meta(order).bluffed
 		)
 
 	/** Tries all ways to see if the order matches the given identity. */

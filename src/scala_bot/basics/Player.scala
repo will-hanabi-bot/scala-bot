@@ -1,10 +1,9 @@
 package scala_bot.basics
 
 import scala_bot.utils._
-import scala_bot.logger.Log
+import scala_bot.logger.{Logger, LogLevel}
 
 import scala.collection.immutable.BitSet
-import scala_bot.logger.{Logger, LogLevel}
 
 enum Link:
 	/** A link where one of the cards are conventionally promised to be the identity.
@@ -370,7 +369,7 @@ case class Player(
 						if orders.contains(order) && orders.forall(o => o == order || played.contains(o)) then
 							hypo = link.promise.fold(hypo): id =>
 								if !hypo.state.isPlayable(id) then
-									Log.warn(s"tried to add linked ${state.logId(id)} ($order) onto hypo stacks, but they were at ${hypo.state.playStacks} $played ($name)")
+									// Log.warn(s"tried to add linked ${state.logId(id)} ($order) onto hypo stacks, but they were at ${hypo.state.playStacks} $played ($name)")
 									hypo
 								else
 									linkedPlays += 1

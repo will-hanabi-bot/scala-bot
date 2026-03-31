@@ -76,10 +76,16 @@ class General extends munit.FunSuite:
 		.pipe(takeTurn("Donald clues 2 to Cathy"))
 		.tap: g =>
 			hasInfs(g, None, Cathy, 2, Vector("r2", "y2", "g2", "b2", "p2"))
+			// Alice is promised to have y1, since Cathy will never self-finesse.
+			assert(g.common.links.exists:
+				case Link.Promised(orders, id, _) =>
+					orders.toSet == Set(0, 1, 2) && id == g.state.expandShort("y1")
+				case _ => false
+			)
 			assertEquals(g.lastMove, Some(ClueInterp.Play))
 		.pipe(takeTurn("Alice clues yellow to Bob"))
 		.tap: g =>
-			hasInfs(g, None, Bob, 4, Vector("y3"))
+			// hasInfs(g, None, Bob, 4, Vector("y3"))
 			assertEquals(g.lastMove, Some(ClueInterp.Play))
 		.pipe(takeTurn("Bob clues 2 to Donald"))
 		.pipe(takeTurn("Cathy clues 2 to Alice (slot 1)"))

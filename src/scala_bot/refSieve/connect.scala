@@ -44,7 +44,7 @@ def findConnecting(ctx: ClueContext, id: Identity, playerIndex: Int, connected: 
 			.filter: o =>
 				alwaysConnect ||
 				(game.future(o).contains(id) && state.deck(o).matches(id, assume = findOwn) && game.common.thoughts(o).possible.contains(id))
-			.map(FinesseConn(playerIndex, _, List(id)))
+			.map(FinesseConn(playerIndex, _, List(id), FinesseKind.True))
 
 	if preferF then
 		finesse
@@ -88,7 +88,7 @@ def connect(ctx: ClueContext, targetOrder: Int, id: Identity, unknown: Boolean, 
 							case Some(i) => state.isPlayable(i)
 							case None if findOwn => game.common.thoughts(o).possible.intersect(state.playableSet).nonEmpty
 							case _ => false
-					.map(o => List(FinesseConn(action.target, o, game.common.thoughts(o).possible.intersect(state.playableSet).toList, bluff = true)))
+					.map(o => List(FinesseConn(action.target, o, game.common.thoughts(o).possible.intersect(state.playableSet).toList, FinesseKind.Bluff)))
 
 			// First, count the # of finesses required. Then force finesses first, that many times.
 			loop(state.playStacks(suitIndex) + 1, state.nextPlayerIndex(action.giver), alwaysConnect = true) match

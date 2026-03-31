@@ -141,7 +141,7 @@ class GentlemansDiscards extends munit.FunSuite:
 		hasInfs(game, None, Alice, 2, Vector("b1"))
 
 		// The finesse is still on (allow b34 symmetrically?).
-		hasInfs(game, None, Bob, 4, Vector("b2", "b3", "b4"))
+		hasInfs(game, None, Bob, 4, Vector("b2"))
 
 	test("understands a layered gd with finesse on us"):
 		val game = setup(HGroup.atLevel(10), Vector(
@@ -188,7 +188,7 @@ class GentlemansDiscards extends munit.FunSuite:
 		hasInfs(game, None, Alice, 2, Vector("b1"))
 
 		// The finesse is still on (allow b34 symmetrically?).
-		hasInfs(game, None, Donald, 3, Vector("b2", "b3", "b4"))
+		hasInfs(game, None, Donald, 3, Vector("b2"))
 
 	test("understands a sarcastic into a layered finesse (not gd)"):
 		val game = setup(HGroup.atLevel(10), Vector(

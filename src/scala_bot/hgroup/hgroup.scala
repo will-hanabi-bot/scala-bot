@@ -641,83 +641,89 @@ object HGroup:
 					Log.info(s"playables $playableOrders")
 					Log.info(s"discardable $discardOrders")
 
-					val allClues =
-						for
-							target <- (0 until state.numPlayers) if state.canClue && target != state.ourPlayerIndex
-							clue   <- state.allValidClues(target)
-						yield
-							val perform = clueToPerform(clue)
-							val action = performToAction(state, perform, state.ourPlayerIndex)
-							val value = evalAction(game, action)
-							(perform, action, value)
+					val urgent = playableOrders.find(game.meta(_).bluffed)
 
-					val earlyGameClue = game.earlyGameClue(state.ourPlayerIndex)
-
-					// Log.info(s"early game clue? ${earlyGameClue.map(_.fmt(state))}")
-
-					val hasEarlyGameClue = earlyGameClue.isDefined &&
-						discardOrders.isEmpty &&
-						!(state.clueTokens == 1 && valid1ClueScream(game, state.nextPlayerIndex(state.ourPlayerIndex)))
-
-					if hasEarlyGameClue then
-						Log.highlight(Console.YELLOW,"must give clue in early game!")
-
-					val allPlays = playableOrders.map: o =>
-						val action = PlayAction(state.ourPlayerIndex, o, me.thoughts(o).id(infer = true, partial = true))
-						val value = evalAction(game, action)
-						(PerformAction.Play(o), action, value)
-
-					val cantDiscard = state.clueTokens == 8 ||
-						// playableOrders.exists(game.meta(_).status == CardStatus.Finessed) ||
-						(state.pace == 0 && (allClues.exists(_._3 > 0) || allPlays.nonEmpty)) ||
-						game.dcStatus != DcStatus.None ||
-						hasEarlyGameClue
-
-					Log.info(s"can discard: ${!cantDiscard}")
-
-					val allDiscards = if cantDiscard then Nil else
-						discardOrders.map: o =>
-							val action = DiscardAction(state.ourPlayerIndex, o, me.thoughts(o).id(infer = true))
-							val value = evalAction(game, action)
-							(PerformAction.Discard(o), action, value)
-
-					val chop = game.chop(state.ourPlayerIndex)
-
-					val inDDA = game.level >= Level.Stalling &&
-						game.state.numPlayers >= 2 &&
-						game.dda.exists(id => state.isCritical(id) && game.chop(state.ourPlayerIndex).exists(me.thoughts(_).possible.contains(id)))
-
-					val canDiscardChop =
-						chop.isDefined &&
-						!cantDiscard &&
-						!me.thinksLocked(game, state.ourPlayerIndex) &&
-						!hasEarlyGameClue &&
-						!inDDA &&
-						{
-							((!state.canClue || allPlays.isEmpty) && allDiscards.isEmpty) ||
-							state.clueTokens == 0 ||
-							(state.clueTokens == 1 && valid1ClueScream(game, state.nextPlayerIndex(state.ourPlayerIndex)))
-						}
-
-					val allActions =
-						allClues.concat(allPlays).concat(allDiscards).when(_ => canDiscardChop): as =>
-							val action = DiscardAction(state.ourPlayerIndex, chop.get, -1, -1, false)
-							val value = evalAction(game, action)
-							as :+ (PerformAction.Discard(chop.get), action, value)
-
-					if allActions.isEmpty then
-						val anxietyPlay = me.anxietyPlay(state, state.ourPlayerIndex)
-
-						if game.level >= Level.Stalling && anxietyPlay.isDefined then
-							Log.info("anxiety play!")
-							PerformAction.Play(anxietyPlay.get)
-						else if state.clueTokens == 8 then
-							Log.error("No actions available at 8 clues! Playing slot 1")
-							PerformAction.Play(state.ourHand.head)
-						else
-							PerformAction.Discard(me.lockedDiscard(state, state.ourPlayerIndex))
+					if urgent.isDefined then
+						Log.info(s"urgent bluffed play! ${urgent.get}")
+						PerformAction.Play(urgent.get)
 					else
-						allActions.maxBy(_._3)._1
+						val allClues =
+							for
+								target <- (0 until state.numPlayers) if state.canClue && target != state.ourPlayerIndex
+								clue   <- state.allValidClues(target)
+							yield
+								val perform = clueToPerform(clue)
+								val action = performToAction(state, perform, state.ourPlayerIndex)
+								val value = evalAction(game, action)
+								(perform, action, value)
+
+						val earlyGameClue = game.earlyGameClue(state.ourPlayerIndex)
+
+						// Log.info(s"early game clue? ${earlyGameClue.map(_.fmt(state))}")
+
+						val hasEarlyGameClue = earlyGameClue.isDefined &&
+							discardOrders.isEmpty &&
+							!(state.clueTokens == 1 && valid1ClueScream(game, state.nextPlayerIndex(state.ourPlayerIndex)))
+
+						if hasEarlyGameClue then
+							Log.highlight(Console.YELLOW,"must give clue in early game!")
+
+						val allPlays = playableOrders.map: o =>
+							val action = PlayAction(state.ourPlayerIndex, o, me.thoughts(o).id(infer = true, partial = true))
+							val value = evalAction(game, action)
+							(PerformAction.Play(o), action, value)
+
+						val cantDiscard = state.clueTokens == 8 ||
+							// playableOrders.exists(game.meta(_).status == CardStatus.Finessed) ||
+							(state.pace == 0 && (allClues.exists(_._3 > 0) || allPlays.nonEmpty)) ||
+							game.dcStatus != DcStatus.None ||
+							hasEarlyGameClue
+
+						Log.info(s"can discard: ${!cantDiscard}")
+
+						val allDiscards = if cantDiscard then Nil else
+							discardOrders.map: o =>
+								val action = DiscardAction(state.ourPlayerIndex, o, me.thoughts(o).id(infer = true))
+								val value = evalAction(game, action)
+								(PerformAction.Discard(o), action, value)
+
+						val chop = game.chop(state.ourPlayerIndex)
+
+						val inDDA = game.level >= Level.Stalling &&
+							game.state.numPlayers >= 2 &&
+							game.dda.exists(id => state.isCritical(id) && game.chop(state.ourPlayerIndex).exists(me.thoughts(_).possible.contains(id)))
+
+						val canDiscardChop =
+							chop.isDefined &&
+							!cantDiscard &&
+							!me.thinksLocked(game, state.ourPlayerIndex) &&
+							!hasEarlyGameClue &&
+							!inDDA &&
+							{
+								((!state.canClue || allPlays.isEmpty) && allDiscards.isEmpty) ||
+								state.clueTokens == 0 ||
+								(state.clueTokens == 1 && valid1ClueScream(game, state.nextPlayerIndex(state.ourPlayerIndex)))
+							}
+
+						val allActions =
+							allClues.concat(allPlays).concat(allDiscards).when(_ => canDiscardChop): as =>
+								val action = DiscardAction(state.ourPlayerIndex, chop.get, -1, -1, false)
+								val value = evalAction(game, action)
+								as :+ (PerformAction.Discard(chop.get), action, value)
+
+						if allActions.isEmpty then
+							val anxietyPlay = me.anxietyPlay(state, state.ourPlayerIndex)
+
+							if game.level >= Level.Stalling && anxietyPlay.isDefined then
+								Log.info("anxiety play!")
+								PerformAction.Play(anxietyPlay.get)
+							else if state.clueTokens == 8 then
+								Log.error("No actions available at 8 clues! Playing slot 1")
+								PerformAction.Play(state.ourHand.head)
+							else
+								PerformAction.Discard(me.lockedDiscard(state, state.ourPlayerIndex))
+						else
+							allActions.maxBy(_._3)._1
 
 		def updateTurn(game: HGroup, action: TurnAction) =
 			game

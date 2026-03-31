@@ -22,10 +22,10 @@ sealed trait Connection:
 	def hidden: Boolean
 
 	def isBluff = this.matchesP:
-		case f: FinesseConn => f.bluff
+		case f: FinesseConn => f.fKind == FinesseKind.Bluff
 
 	def isPossiblyBluff = this.matchesP:
-		case f: FinesseConn => f.bluff || f.possiblyBluff
+		case f: FinesseConn => f.fKind == FinesseKind.PossiblyBluff || f.fKind == FinesseKind.Bluff
 
 /** A [[Connection]] where the reacting player already knew about this card before the clue.
   * @param reacting $reactingDesc
@@ -74,6 +74,9 @@ case class PromptConn(
 	def ids = List(id)
 	def kind = "prompt"
 
+enum FinesseKind:
+	case True, Hidden, Certain, PossiblyBluff, Bluff
+
 /** A [[Connection]] where the reacting player is finessed for this identity from the clue.
   * @param reacting $reactingDesc
   * @param order $orderDesc
@@ -83,17 +86,18 @@ case class FinesseConn(
 	reacting: Int,
 	order: Int,
 	ids: List[Identity],
-	hidden: Boolean = false,
-	bluff: Boolean = false,
-	possiblyBluff: Boolean = false,
-	/** Whether this is part of a *Certain Finesse*. */
-	certain: Boolean = false,
+	fKind: FinesseKind,
 	ambiguousPassback: Boolean = false
 ) extends Connection:
 	def kind =
-		if possiblyBluff then "possiblyBluff"
-		else if bluff then "bluff"
+		if fKind == FinesseKind.PossiblyBluff then "bluff?"
+		else if fKind == FinesseKind.Bluff then "bluff"
 		else "finesse"
+
+	def hidden = fKind == FinesseKind.Hidden
+	def possiblyBluff = fKind == FinesseKind.PossiblyBluff
+	def bluff = fKind == FinesseKind.Bluff
+	def certain = fKind == FinesseKind.Certain
 
 /** A [[Connection]] where the reacting player is clued to play a specific slot without being touched.
   * @param reacting $reactingDesc
@@ -124,9 +128,9 @@ case class FocusPossibility(
 	/** Whether this is a save clue. */
 	save: Boolean = false,
 ):
+	/** Returns true if the first connection is a bluff. */
 	def isBluff =
-		connections.headOption.existsM:
-			case f: FinesseConn => f.bluff
+		connections.headOption.exists(_.isBluff)
 
 /** A potential set of connections that needs more information before its truthiness can be determined.
   * @param connections   The involved connections if true.

@@ -198,6 +198,11 @@ case class ConvData(
 	/** Whether this card has been chop moved. */
 	inline def cm = status == CardStatus.ChopMoved
 
+	inline def bluffed =
+		status == CardStatus.Bluffed ||
+		status == CardStatus.FMaybeBluffed ||
+		status == CardStatus.MaybeBluffed
+
 	/** Returns a copy with all flags returned to default.
 	  * Does NOT remove a [cm] note.
 	 */

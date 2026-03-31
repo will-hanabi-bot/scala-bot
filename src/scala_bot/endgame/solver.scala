@@ -121,7 +121,7 @@ case class EndgameSolver[G <: Game](
 				return Right(PerformAction.Play(winningPlay.get), Frac.one)
 
 		val start = Instant.now()
-		val deadline = Instant.now().plusSeconds(5)
+		val deadline = Instant.now().plusSeconds(2)
 		val (remainingIds, ownIds) = findRemainingIds(game)
 
 		if remainingIds.count((id, v) => !state.isBasicTrash(id) && v.all) > 3 then

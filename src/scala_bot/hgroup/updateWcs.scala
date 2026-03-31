@@ -146,9 +146,8 @@ def refreshWCs(prev: HGroup, game: HGroup, action: Action, beforeClueInterp: Boo
 			// Demonstrating a hidden connection means they must play all the hidden cards + the actual one
 			if wc.connections(0).hidden then
 				val nonHiddenIndex = wc.connections.indexWhere(!_.hidden)
-				(1 to nonHiddenIndex).foldLeft(acc) { (a, i) =>
+				(1 to nonHiddenIndex).foldLeft(acc): (a, i) =>
 					a.withXMeta(wc.connections(i).order)(_.copy(fStatus = Nil))
-				}
 			else
 				acc
 	.pipe: g =>

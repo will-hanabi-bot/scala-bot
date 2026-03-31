@@ -10,6 +10,9 @@ def getResult(game: HGroup, hypo: HGroup, action: ClueAction): Double =
 	val FocusResult(focus, chop, _) = game.determineFocus(game, action)
 	val ClueAction(giver, target, list, clue) = action
 
+	if hypo.lastMove == Some(ClueInterp.Mistake) then
+		return -100
+
 	val newPlayables = state.hands.flatten.filter: o =>
 		meta(o).status != CardStatus.Finessed && hypo.meta(o).status == CardStatus.Finessed
 
@@ -88,7 +91,6 @@ def getResult(game: HGroup, hypo: HGroup, action: ClueAction): Double =
 		precision
 
 	hypo.lastMove match
-		case Some(ClueInterp.Mistake)  => value - 10
 		case Some(ClueInterp.Useless)  => value - 10
 		case Some(ClueInterp.Fix)      => value + 3
 		case _ => value

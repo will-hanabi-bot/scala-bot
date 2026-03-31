@@ -27,6 +27,6 @@ object Log:
 			()
 
 	inline def error(inline msg: => String): Unit = log(LogLevel.Error, msg, MAGENTA)
-	inline def warn(inline msg: => String): Unit = log(LogLevel.Warn,  msg, CYAN)
-	inline def info(inline msg: => String): Unit = log(LogLevel.Info,  msg)
-	inline def highlight(inline colour: String, inline msg: => String): Unit = log(LogLevel.Info,  msg, colour)
+	inline def warn(inline msg: => String): Unit = log(LogLevel.Warn, msg, CYAN)
+	inline def info(inline msg: => String): Unit = log(LogLevel.Info, msg)
+	inline def highlight(inline colour: String, inline msg: => String): Unit = log(LogLevel.Info, msg, colour)

@@ -24,6 +24,20 @@ def evaluateCM(ctx: ClueContext, chopMoved: Seq[Int]): ClueInterp =
 	else
 		ClueInterp.Discard
 
+def unacceptableClue(prev: HGroup, game: HGroup, @annotation.unused action: ClueAction): Boolean =
+	val fSymmetric = game.state.hands.flatten.find: o =>
+		game.isBlindPlaying(o) &&
+		!prev.isBlindPlaying(o) &&
+		prev.waiting.exists: wc =>
+			wc.symmetric && wc.connections.existsM:
+				case f: FinesseConn => f.order == o
+
+	if fSymmetric.isDefined then
+		Log.warn(s"clue finesses ${fSymmetric.get}, preventing a symmetric finesse from being dispoven!")
+		true
+	else
+		false
+
 def checkHFix(ctx: ClueContext): Option[HGroup] =
 	val ClueContext(prev, game, action) = ctx
 	val state = game.state
@@ -31,56 +45,54 @@ def checkHFix(ctx: ClueContext): Option[HGroup] =
 	val ClueAction(giver, _, list, clue) = action
 
 	checkFix(prev, game, action) match
-		case FixResult.None =>
-			// Check for pink 1's fix, which won't be caught by checkFix().
+		// Check for pink 1's fix, which won't be caught by checkFix().
+		case FixResult.None if state.includesVariant(PINKISH) && prev.common.hypoStacks.exists(_ == 0) =>
+			val fixed = list.filter: o =>
+				!prev.meta(o).focused &&
+				prev.common.thoughts(o).inferred.forall(_.rank == 1) &&
+				!prev.common.thoughts(o).possible.forall(_.rank == 1) &&
+				!prev.waiting.exists(wc => wc.connections.exists(_.order == o) && !prev.xmeta(o).idUncertain) && (
+					(clue.kind == ClueKind.Rank && clue.value != 1) ||
+					(clue.kind == ClueKind.Colour && game.knownAs(o, PINKISH) && !prev.knownAs(o, PINKISH))
+				)
 
-			if state.includesVariant(PINKISH) && prev.common.hypoStacks.exists(_ == 0) then
-				val fixed = list.filter: o =>
-					!prev.meta(o).focused &&
-					prev.common.thoughts(o).inferred.forall(_.rank == 1) &&
-					!prev.common.thoughts(o).possible.forall(_.rank == 1) &&
-					!prev.waiting.exists(wc => wc.connections.exists(_.order == o) && !prev.xmeta(o).idUncertain) && (
-						(clue.kind == ClueKind.Rank && clue.value != 1) ||
-						(clue.kind == ClueKind.Colour && game.knownAs(o, PINKISH) && !prev.knownAs(o, PINKISH))
-					)
+			if fixed.isEmpty then None else
+				if clue.kind == ClueKind.Colour || (chop && (clue.value == 2 || clue.value == 5)) then
+					Log.info(s"pink fix! $fixed")
+					Some(fixed.foldLeft(game)((acc, o) =>
+							acc.withThought(o)(t => t.copy(
+								inferred = t.possible.difference(state.playableSet)
+							))
+						).copy(lastMove = Some(ClueInterp.Fix)))
 
-				if fixed.isEmpty then None else
-					if clue.kind == ClueKind.Colour || (chop && (clue.value == 2 || clue.value == 5)) then
-						Log.info(s"pink fix! $fixed")
-						Some(fixed.foldLeft(game)((acc, o) =>
-								acc.withThought(o)(t => t.copy(
-									inferred = t.possible.difference(state.playableSet)
-								))
-							).copy(lastMove = Some(ClueInterp.Fix)))
+				else
+					val old1s = list.filter: o =>
+						prev.common.thoughts(o).inferred.forall(_.rank == 1) &&
+						!prev.common.thoughts(o).possible.forall(_.rank == 1)
+					val oldOrdered1s = prev.order1s(old1s, noFilter = true)
+					val fixedOrder = oldOrdered1s.head
+
+					if state.deck(fixedOrder).id().forall(_.rank == clue.value) then
+						Log.info(s"pink fix promise! $fixedOrder")
+						val newGame =
+							game.withThought(fixedOrder)(t => t.copy(
+								inferred = t.possible.filter(i => i.rank == clue.value && !state.isPlayable(i))
+							))
+							.pipe: g =>
+								list.filter(oldOrdered1s.contains).foldLeft(g): (acc, o) =>
+									if o == fixedOrder then
+										acc
+									else
+										acc.withThought(o)(t => t.copy(inferred = t.possible))
+							.copy(lastMove = Some(ClueInterp.Fix))
+
+						Some(newGame)
 
 					else
-						val old1s = list.filter: o =>
-							prev.common.thoughts(o).inferred.forall(_.rank == 1) &&
-							!prev.common.thoughts(o).possible.forall(_.rank == 1)
-						val oldOrdered1s = prev.order1s(old1s, noFilter = true)
-						val fixedOrder = oldOrdered1s.head
+						Log.error("looked like pink fix but didn't match possible interpretations?")
+						None
 
-						if state.deck(fixedOrder).id().forall(_.rank == clue.value) then
-							Log.info(s"pink fix promise! $fixedOrder")
-							val newGame =
-								game.withThought(fixedOrder)(t => t.copy(
-									inferred = t.possible.filter(i => i.rank == clue.value && !state.isPlayable(i))
-								))
-								.pipe: g =>
-									list.filter(oldOrdered1s.contains).foldLeft(g): (acc, o) =>
-										if o == fixedOrder then
-											acc
-										else
-											acc.withThought(o)(t => t.copy(inferred = t.possible))
-								.copy(lastMove = Some(ClueInterp.Fix))
-
-							Some(newGame)
-
-						else
-							Log.error("looked like pink fix but didn't match possible interpretations?")
-							None
-			else
-				None
+		case FixResult.None => None
 
 		case FixResult.Normal(cluedResets, duplicateReveals) =>
 			Log.info(s"fix clue! not inferring anything else $cluedResets $duplicateReveals")
@@ -161,7 +173,10 @@ def interpClue(ctx: ClueContext): HGroup =
 		if tcm.isDefined then
 			val newGame =
 				// Prefer TCCM over TCM
-				if common.obviousPlayables(game, target).exists(!prev.common.obviousPlayables(game, target).contains(_)) then
+				val newObvious = common.obviousPlayables(game, target)
+				val oldObvious = prev.common.obviousPlayables(game, target)
+
+				if newObvious.exists(!oldObvious.contains(_)) then
 					if game.level < Level.TempoClues then
 						Log.info("preferring tempo clue that provides trash!")
 						game.copy(lastMove = Some(ClueInterp.Reveal))
@@ -190,31 +205,30 @@ def interpClue(ctx: ClueContext): HGroup =
 							.withMeta(order)(_.copy(trash = true))
 					.pipe(performCM(_, tcm.get))
 					.pipe: g =>
+						lazy val badTCM = game.chop(target).exists: oldChop =>
+							state.deck(oldChop).id().exists: chopId =>
+								state.isBasicTrash(chopId) ||
+								tcm.get.exists(o => o != oldChop && state.deck(o).id().exists(_.matches(chopId))) ||
+								// Could be directly clued
+								state.allValidClues(target).exists: clue =>
+									val directList = state.clueTouched(state.hands(target), clue)
+
+									// Clue must touch all non-trash CM'd cards
+									tcm.get.forall: o =>
+										state.deck(o).id().exists(state.isBasicTrash) ||
+										directList.contains(o)
+									&&
+									// Must have no bad touch
+									!directList.exists: o =>
+										!prev.state.deck(o).clued &&
+										state.deck(o).id().exists(state.isBasicTrash)
+									&&
+									// Clue must be valid
+									(game.noRecurse ||
+										prev.copy(noRecurse = true, allowFindOwn = false).simulateClue(clueToAction(prev.state, clue, giver)).lastMove != Some(ClueInterp.Mistake))
+
 						val lastMove = evaluateCM(ctx, tcm.get) match
-							case ClueInterp.Discard =>
-								val badTCM = game.chop(target).exists: oldChop =>
-									state.deck(oldChop).id().exists: chopId =>
-										state.isBasicTrash(chopId) ||
-										tcm.get.exists(o => o != oldChop && state.deck(o).id().exists(_.matches(chopId))) ||
-										// Could be directly clued
-										state.allValidClues(target).exists: clue =>
-											val directList = state.clueTouched(state.hands(target), clue)
-
-											// Clue must touch all non-trash CM'd cards
-											tcm.get.forall: o =>
-												state.deck(o).id().exists(state.isBasicTrash) ||
-												directList.contains(o)
-											&&
-											// Must have no bad touch
-											!directList.exists: o =>
-												!prev.state.deck(o).clued &&
-												state.deck(o).id().exists(state.isBasicTrash)
-											&&
-											// Clue must be valid
-											(game.noRecurse ||
-												prev.copy(noRecurse = true, allowFindOwn = false).simulateClue(clueToAction(prev.state, clue, giver)).lastMove != Some(ClueInterp.Mistake))
-
-								if badTCM then ClueInterp.Mistake else ClueInterp.Discard
+							case ClueInterp.Discard if badTCM => ClueInterp.Mistake
 							case x => x
 
 						g.copy(lastMove = Some(lastMove))
@@ -300,7 +314,7 @@ def interpClue(ctx: ClueContext): HGroup =
 		val possible = (savePoss ++ focusPoss)
 			.filter(fp => game.players(target).thoughts(focus).possible.contains(fp.id))
 
-		occamsRazor(game, possible, target, focus)
+		occamsRazor(ctx, possible, target)
 
 	val noSelf = !game.allowFindOwn ||
 		giver == state.ourPlayerIndex ||
@@ -335,7 +349,7 @@ def interpClue(ctx: ClueContext): HGroup =
 				.flatMap:
 					connect(ctx, _, looksDirect, thinksStall, findOwn = Some(state.ourPlayerIndex))
 
-			val simplestOwn = occamsRazor(game, simplest ++ ownFps, state.ourPlayerIndex, focus, actualId = game.me.thoughts(focus).id())
+			val simplestOwn = occamsRazor(ctx, filterFps(ctx, simplest ++ ownFps, target), state.ourPlayerIndex, actualId = game.me.thoughts(focus).id())
 
 			if simplestOwn.isEmpty then
 				Log.warn("no inferences!")
@@ -355,7 +369,11 @@ def interpClue(ctx: ClueContext): HGroup =
 				g.copy(lastMove = Some(ClueInterp.Stall), stallInterp = Some(StallInterp.Tempo))
 			case _ =>
 				g
+
 	.when(_.state.includesVariant(PINKISH) && clue.kind == ClueKind.Rank && clue.value == 1): g =>
 		// Pink 1's Assumption
 		list.filter(g.unknown1).foldLeft(g): (acc, o) =>
 			acc.withThought(o)(t => t.copy(inferred = t.inferred.filter(_.rank == 1)))
+
+	.when(g => unacceptableClue(prev, g, action)): g =>
+		g.copy(lastMove = Some(ClueInterp.Mistake))
