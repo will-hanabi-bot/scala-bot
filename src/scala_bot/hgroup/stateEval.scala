@@ -439,7 +439,10 @@ def evalGame(orig: HGroup, game: HGroup): Double =
 
 	val badCM = -1 * game.state.hands.flatten.count: o =>
 		game.isCM(o) &&
-		game.state.deck(o).id().exists(state.isBasicTrash) &&
+		game.state.deck(o).id().exists: id =>
+			state.isBasicTrash(id) ||
+			state.hands(state.holderOf(o)).exists(p => p != o && game.me.thoughts(p).matches(id, infer = true) && game.isSaved(p))
+		&&
 		!game.common.orderKt(game, o)
 
 	val playablesDiscarded = -1 * game.state.playableSet.count: id =>

@@ -190,7 +190,7 @@ case class Player(
 			false
 		else
 			val infer =
-				(playerIndex != state.ourPlayerIndex || state.strikes != 2 || game.meta(order).focused) &&
+				(playerIndex != state.ourPlayerIndex || state.strikes != 2 || game.meta(order).focused || game.isBlindPlaying(order)) &&
 				game.meta(order).status != CardStatus.CalledToDiscard
 
 			val poss = if infer then thoughts(order).possibilities else thoughts(order).possible

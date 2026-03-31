@@ -114,7 +114,7 @@ def checkHFix(ctx: ClueContext): Option[HGroup] =
 				Some(game
 					.withThought(fixTarget)(t => t.copy(inferred = t.possible.intersect(state.trashSet)))
 					.withMeta(fixTarget)(_.copy(trash = true))
-					.copy(lastMove = if badFix then Some(ClueInterp.Mistake) else Some(ClueInterp.Fix)))
+					.copy(lastMove = Some(if badFix then ClueInterp.Mistake else ClueInterp.Fix)))
 
 def interpClue(ctx: ClueContext): HGroup =
 	val ClueContext(prev, game, action) = ctx
@@ -168,78 +168,13 @@ def interpClue(ctx: ClueContext): HGroup =
 			.copy(lastMove = Some(ClueInterp.Distribution))
 
 	if game.level >= Level.BasicCM && !state.inEndgame then
-		val tcm = interpretTcm(ctx)
+		interpretTcm(ctx) match
+			case None => ()
+			case Some(tcm) => return handleTcm(ctx, tcm, stall.isEmpty || thinksStall.isEmpty)
 
-		if tcm.isDefined then
-			val newGame =
-				// Prefer TCCM over TCM
-				val newObvious = common.obviousPlayables(game, target)
-				val oldObvious = prev.common.obviousPlayables(game, target)
-
-				if newObvious.exists(!oldObvious.contains(_)) then
-					if game.level < Level.TempoClues then
-						Log.info("preferring tempo clue that provides trash!")
-						game.copy(lastMove = Some(ClueInterp.Reveal))
-					else
-						interpretTccm(ctx) match
-							case Some(tccm) if stall.isEmpty || thinksStall.isEmpty =>
-								Log.info("preferring TCCM over TCM!")
-								performCM(game, tccm).copy(
-									lastMove = Some(evaluateCM(ctx, tccm))
-								)
-							case Some(_) =>
-								Log.info("stalling situation, tempo clue stall!")
-								game.copy(lastMove = Some(ClueInterp.Stall), stallInterp = Some(StallInterp.Tempo))
-							case _ =>
-								game.copy(lastMove = Some(ClueInterp.Reveal))
-				else
-					// All newly cards are trash
-					list.foldLeft(game): (acc, order) =>
-						if prev.state.deck(order).clued then acc else
-							acc.withThought(order): t =>
-								val newInferred = t.possible.intersect(state.trashSet)
-								t.copy(
-									inferred = newInferred,
-									infoLock = newInferred.toOpt
-								)
-							.withMeta(order)(_.copy(trash = true))
-					.pipe(performCM(_, tcm.get))
-					.pipe: g =>
-						lazy val badTCM = game.chop(target).exists: oldChop =>
-							state.deck(oldChop).id().exists: chopId =>
-								state.isBasicTrash(chopId) ||
-								tcm.get.exists(o => o != oldChop && state.deck(o).id().exists(_.matches(chopId))) ||
-								// Could be directly clued
-								state.allValidClues(target).exists: clue =>
-									val directList = state.clueTouched(state.hands(target), clue)
-
-									// Clue must touch all non-trash CM'd cards
-									tcm.get.forall: o =>
-										state.deck(o).id().exists(state.isBasicTrash) ||
-										directList.contains(o)
-									&&
-									// Must have no bad touch
-									!directList.exists: o =>
-										!prev.state.deck(o).clued &&
-										state.deck(o).id().exists(state.isBasicTrash)
-									&&
-									// Clue must be valid
-									(game.noRecurse ||
-										prev.copy(noRecurse = true, allowFindOwn = false).simulateClue(clueToAction(prev.state, clue, giver)).lastMove != Some(ClueInterp.Mistake))
-
-						val lastMove = evaluateCM(ctx, tcm.get) match
-							case ClueInterp.Discard if badTCM => ClueInterp.Mistake
-							case x => x
-
-						g.copy(lastMove = Some(lastMove))
-			return newGame
-
-		val cm5 = interpret5cm(ctx)
-
-		if cm5.isDefined then
-			return performCM(game, cm5.get)
-				.pipe: g =>
-					g.copy(lastMove = Some(evaluateCM(ctx, cm5.get)))
+		interpret5cm(ctx) match
+			case None => ()
+			case Some(cm5) => return performCM(game, cm5).copy(lastMove = Some(evaluateCM(ctx, cm5)))
 
 	val pinkTrashFix = state.includesVariant(PINKISH) &&
 		!positional && clue.kind == ClueKind.Rank &&

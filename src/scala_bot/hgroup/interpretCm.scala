@@ -1,6 +1,7 @@
 package scala_bot.hgroup
 
 import scala_bot.basics._
+import scala_bot.utils._
 import scala_bot.logger.Log
 
 /**
@@ -38,6 +39,73 @@ def interpretTcm(ctx: ClueContext): Option[Seq[Int]] =
 	else
 		Log.highlight(Console.CYAN, s"trash chop move on ${cmOrders.map(state.logId)}")
 		Some(cmOrders)
+
+def handleTcm(ctx: ClueContext, tcm: Seq[Int], notStall: Boolean) =
+	val ClueContext(prev, game, action) = ctx
+	val (common, state) = (game.common, game.state)
+	val ClueAction(giver, target, list, clue) = action
+
+	// Prefer TCCM over TCM
+	val newObvious = common.obviousPlayables(game, target)
+	val oldObvious = prev.common.obviousPlayables(game, target)
+
+	if newObvious.exists(!oldObvious.contains(_)) then
+		if game.level < Level.TempoClues then
+			Log.info("preferring tempo clue that provides trash!")
+			game.copy(lastMove = Some(ClueInterp.Reveal))
+		else
+			interpretTccm(ctx) match
+				case Some(tccm) if notStall =>
+					Log.info("preferring TCCM over TCM!")
+					performCM(game, tccm).copy(
+						lastMove = Some(evaluateCM(ctx, tccm))
+					)
+				case Some(_) =>
+					Log.info("stalling situation, tempo clue stall!")
+					game.copy(lastMove = Some(ClueInterp.Stall), stallInterp = Some(StallInterp.Tempo))
+				case _ =>
+					game.copy(lastMove = Some(ClueInterp.Reveal))
+	else
+		// All newly cards are trash
+		list.foldLeft(game): (acc, order) =>
+			if prev.state.deck(order).clued then acc else
+				acc.withThought(order): t =>
+					val newInferred = t.possible.intersect(state.trashSet)
+					t.copy(
+						inferred = newInferred,
+						infoLock = newInferred.toOpt
+					)
+				.withMeta(order)(_.copy(trash = true))
+		.pipe(performCM(_, tcm))
+		.pipe: g =>
+			lazy val badTCM = game.chop(target).exists: oldChop =>
+				state.deck(oldChop).id().exists: chopId =>
+					state.isBasicTrash(chopId) ||
+					tcm.exists(o => o != oldChop && state.deck(o).matches(chopId)) ||
+					state.hands(target).exists(o => o != oldChop && game.me.thoughts(o).matches(chopId, infer = true) && game.isSaved(o)) ||
+					// Could be directly clued
+					state.allValidClues(target).exists: clue =>
+						val directList = state.clueTouched(state.hands(target), clue)
+
+						// Clue must touch all non-trash CM'd cards
+						tcm.forall: o =>
+							state.deck(o).id().exists(state.isBasicTrash) ||
+							directList.contains(o)
+						&&
+						// Must have no bad touch
+						!directList.exists: o =>
+							!prev.state.deck(o).clued &&
+							state.deck(o).id().exists(state.isBasicTrash)
+						&&
+						// Clue must be valid
+						(game.noRecurse ||
+							prev.copy(noRecurse = true, allowFindOwn = false).simulateClue(clueToAction(prev.state, clue, giver)).lastMove != Some(ClueInterp.Mistake))
+
+			val lastMove = evaluateCM(ctx, tcm) match
+				case ClueInterp.Discard if badTCM => ClueInterp.Mistake
+				case x => x
+
+			g.copy(lastMove = Some(lastMove))
 
 /**
   * Checks whether a 5's Chop Move was performed.

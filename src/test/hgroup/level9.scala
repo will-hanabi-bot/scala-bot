@@ -54,6 +54,23 @@ class Stalling extends munit.FunSuite:
 
 		hasInfs(game, None, Alice, 4, Vector("p1", "p2", "p3", "p4", "p5"))
 
+	test("understands a fill-in stall on cm'd cards"):
+		val game = setup(HGroup.atLevel(9), Vector(
+			Vector("xx", "xx", "xx", "xx"),
+			Vector("b4", "g4", "b4", "b3"),
+			Vector("y4", "y4", "r4", "r3"),
+			Vector("y5", "r5", "b5", "g5")
+		),
+			starting = Bob,
+			playStacks = Some(Vector(1, 1, 1, 1, 1))
+		)
+		.pipe(takeTurn("Bob clues 1 to Alice (slot 2)"))
+		.pipe(takeTurn("Cathy clues 5 to Donald"))
+		.pipe(takeTurn("Donald clues purple to Alice (slot 3)"))
+
+		assertEquals(game.lastMove, Some(ClueInterp.Stall))
+		hasInfs(game, None, Alice, 3, Vector("p2", "p3", "p4", "p5"))
+
 	test("understands a save can look like a stall"):
 		val game = setup(HGroup.atLevel(9), Vector(
 			Vector("xx", "xx", "xx", "xx"),

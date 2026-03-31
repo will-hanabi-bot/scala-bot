@@ -762,8 +762,15 @@ object HGroup:
 				.pipe(filterClues)
 				.sortBy: clue =>
 					val list = state.clueTouched(state.hands(clue.target), clue)
+					val focus = game.determineFocus(game, ClueAction(giver, clue.target, list, clue.base)).focus
+
 					// Prefer not cluing trash and not previously clued cards
-					list.count(o => state.isBasicTrash(state.deck(o).id().get)) * 10 + list.count(state.deck(_).clued)
+					if state.deck(focus).id().exists(state.isBasicTrash) || game.common.orderPlayable(game, focus) || game.common.orderTrash(game, focus) then
+						10
+					else if state.deck(focus).clued then
+						5
+					else
+						0
 				.map(clueToPerform)
 
 			Logger.setLevel(level)

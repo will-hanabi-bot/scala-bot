@@ -238,6 +238,10 @@ extension[G <: Game](game: G)
 			game.meta(order).bluffed
 		)
 
+	/** Returns whether a card is "gotten" or chop moved. */
+	def isSaved(order: Int) =
+		isTouched(order) || game.meta(order).cm
+
 	/** Tries all ways to see if the order matches the given identity. */
 	def orderMatches(order: Int, id: Identity, infer: Boolean = false) =
 		game.state.deck(order).id()

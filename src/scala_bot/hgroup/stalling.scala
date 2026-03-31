@@ -53,7 +53,7 @@ def isStall(ctx: ClueContext, severity: Int): Option[StallInterp] =
 	val FocusResult(focus, chop, _) = ctx.focusResult
 
 	val focusNew = !prev.state.deck(focus).clued
-	val reclue = list.forall(prev.state.deck(_).clued)
+	val reclue = list.forall(o => prev.state.deck(o).clued || prev.meta(o).cm)
 
 	lazy val trash = state.deck(focus).id().exists(state.isBasicTrash) ||
 		game.me.orderKt(game, focus)
@@ -88,7 +88,7 @@ def isStall(ctx: ClueContext, severity: Int): Option[StallInterp] =
 			Log.info(s"tempo clue stall! new playables: $playables")
 			return Some(StallInterp.Tempo)
 
-		if fill.nonEmpty then
+		if fill.nonEmpty || list.exists(o => prev.meta(o).cm && game.common.thoughts(o).possible.length < prev.common.thoughts(o).possible.length) then
 			Log.info(s"fill-in stall!")
 			return Some(StallInterp.FillIn)
 
@@ -125,9 +125,9 @@ def alternativeClue(ctx: ClueContext, maxStall: Int) =
 			case ClueInterp.Play =>
 				playables.exists(!game.state.deck(_).clued) &&
 				badTouch.isEmpty &&
-				// Can't expect them to clue a possible clued dupe in their hand
+				// Can't expect them to clue a possible clued dupe in their hand or our hand
 				!playables.forall(game.state.deck(_).id().exists: id =>
-					game.state.hands(giver).exists: o =>
+					(game.state.hands(giver) ++ game.state.ourHand).exists: o =>
 						game.isTouched(o) && game.players(giver).thoughts(o).inferred.contains(id)
 				)
 
