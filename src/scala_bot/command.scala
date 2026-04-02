@@ -123,7 +123,7 @@ class BotClient(queue: Queue[IO, String], gameRef: Ref[IO, Option[Game]], config
 			case Convention.RefSieve => RefSieve(tID, state, inProgress = true)
 			case Convention.HGroup => HGroup(tID, state, inProgress = true, level = s.level.getOrElse(1))
 
-	private def writeInfoNote(tableID: Int, game: Game, s: Settings): (IO[Unit], Game) =
+	private def writeInfoNote(msg: NoteListPlayerMessage, game: Game, s: Settings): (IO[Unit], Game) =
 		def addInfoNote(game: Game, note: String): Game =
 			game match
 				case r: Reactor => r.copy(notes = r.notes + (0 -> Note(0, note, note)))
@@ -131,8 +131,8 @@ class BotClient(queue: Queue[IO, String], gameRef: Ref[IO, Option[Game]], config
 				case h: HGroup => h.copy(notes = h.notes + (0 -> Note(0, note, note)))
 
 		val noteStr = infoNote(s)
-		if !game.notes.contains(0) && game.inProgress then
-			val io = sendCmd("note", ujson.write(ujson.Obj("tableID" -> tableID, "order" -> 0, "note" -> noteStr)))
+		if !game.notes.contains(0) && game.inProgress && msg.notes.headOption.getOrElse("").isEmpty then
+			val io = sendCmd("note", ujson.write(ujson.Obj("tableID" -> msg.tableID, "order" -> 0, "note" -> noteStr)))
 			(io, addInfoNote(game, noteStr))
 		else
 			(IO.unit, game)
@@ -227,12 +227,14 @@ class BotClient(queue: Queue[IO, String], gameRef: Ref[IO, Option[Game]], config
 							val maybeNewSettings = msg.notes.headOption.flatMap(parseSettingsFromNote)
 							val game: Game = maybeNewSettings.flatMap: s =>
 									Option.when(s != settings):
-										Log.info(s"Restored settings from first card note: ${s}")
+										Log.info(s"Restored settings from first card note: $s")
 										settings = s
 										newGameFromSettings(msg.tableID, g.base._1, s)
 								.getOrElse(g)
-							val (noteIO, gameWithNote) = writeInfoNote(msg.tableID, game, settings)
-							gameRef.set(Some(gameWithNote)) *> 
+							// Write the note with the settings as early as possible.
+							// This does not fully protect against the note not being written if the bot crashes before this point.
+							val (noteIO, gameWithNote) = writeInfoNote(msg, game, settings)
+							gameRef.set(Some(gameWithNote)) *>
 							noteIO *>
 							IO { restoredSettings = true } *>
 							// This causes 'gameActionList' to be sent again and 'noteListPlayer'.
@@ -282,20 +284,19 @@ class BotClient(queue: Queue[IO, String], gameRef: Ref[IO, Option[Game]], config
 			case "table" =>
 				val table = upickle.read[Table](args)
 
-				gameRef.get.flatMap:
-					case Some(g) if table.id == g.tableID =>
-						if config.leaveReplayIfOnlyBots &&
-							table.sharedReplay &&
-							table.spectators.forall(s => config.isBotName(s.name)) then
-							Log.info("Leaving game. Only bots left spectating.")
-							leaveRoom()
-						else if config.leavePregameIfOnlyBots &&
-							!table.running &&
-							table.players.forall(name => config.isBotName(name)) then
-							Log.info("Leaving game. Only bots left in lobby.")
-							leaveRoom()
-						else IO.unit
-					case _ => IO.unit
+				if tableID.contains(table.id) then
+					if config.leaveReplayIfOnlyBots &&
+						table.sharedReplay &&
+						table.spectators.forall(s => config.isBotName(s.name)) then
+						Log.info("Leaving game. Only bots left spectating.")
+						leaveRoom()
+					else if config.leavePregameIfOnlyBots &&
+						!table.running &&
+						table.players.forall(name => config.isBotName(name)) then
+						Log.info("Leaving game. Only bots left in lobby.")
+						leaveRoom()
+					else IO.unit
+				else IO.unit
 				*>
 				IO { tables = tables + (table.id -> table) }
 
@@ -305,14 +306,17 @@ class BotClient(queue: Queue[IO, String], gameRef: Ref[IO, Option[Game]], config
 
 			case "tableList" =>
 				val list = upickle.read[List[Table]](args)
-				IO { tables = tables ++ list.map(t => t.id -> t) } *>
-				info.fold(IO.unit): self =>
-					val myTable = tables.values
-						.filter(t => t.players.contains(self.username))
-						.maxByOption(_.id)
-					myTable.fold(IO.unit): t =>
-						Log.info(s"Trying to re-attend table ${t.id}")
-						sendCmd("tableReattend", ujson.write(ujson.Obj("tableID" -> t.id)))
+				IO {
+					tables = tables ++ list.map(t => t.id -> t)
+					tables
+				}.flatMap: updatedTables =>
+					info.fold(IO.unit): self =>
+						val myTable = updatedTables.values
+							.filter(t => t.players.contains(self.username))
+							.maxByOption(_.id)
+						myTable.fold(IO.unit): t =>
+							Log.info(s"Automatically reattending table with id ${t.id}")
+							sendCmd("tableReattend", ujson.write(ujson.Obj("tableID" -> t.id)))
 
 			case "tableStart" =>
 				val id = ujson.read(args)("tableID").num.toInt

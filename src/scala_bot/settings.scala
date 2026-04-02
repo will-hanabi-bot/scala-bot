@@ -7,7 +7,7 @@ enum Convention:
 	case Reactor, RefSieve, HGroup
 
 	override def toString: String = this match
-		case Reactor  => "Reactor"
+		case Reactor  => "Reactor 1.0"
 		case RefSieve => "Ref Sieve"
 		case HGroup   => "H-Group"
 
@@ -20,7 +20,7 @@ object Convention:
 
 case class Settings(convention: Convention, level: Option[Int] = None):
 	override def toString: String = convention match
-		case Convention.Reactor => s"${Convention.Reactor} 1.0"
+		case Convention.Reactor => Convention.Reactor.toString
 		case Convention.RefSieve => Convention.RefSieve.toString
 		case Convention.HGroup => s"${Convention.HGroup} ${level.getOrElse(1)}"
 

@@ -7,7 +7,7 @@ import scala_bot.endgame.EndgameSolver
 import scala_bot.fraction.Frac
 import scala_bot.utils._
 import scala_bot.logger._
-import scala_bot.{Settings, Convention}
+import scala_bot.{Settings}
 
 
 import scala.util.matching.Regex
