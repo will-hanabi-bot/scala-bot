@@ -5,6 +5,7 @@ import cats.effect.IO
 import scala_bot.basics._
 import scala_bot.endgame.EndgameSolver
 import scala_bot.utils._
+import scala_bot.{Settings, Convention}
 import scala_bot.logger.{Log, Logger, LogLevel}
 
 enum UpdateResult:
@@ -36,6 +37,7 @@ case class RefSieve(
 ) extends Game:
 	val goodTouch = true
 
+	override def settings: Settings = Settings(Convention.RefSieve)
 	override def filterPlayables(player: Player, playerIndex: Int, orders: Seq[Int], assume: Boolean): Seq[Int] =
 		orders.filter: o =>
 			!player.links.exists(l => l.getOrders.contains(o) && l.getOrders.max != o)

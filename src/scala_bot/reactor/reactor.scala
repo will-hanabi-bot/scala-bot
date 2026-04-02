@@ -5,6 +5,7 @@ import cats.effect.IO
 import scala_bot.basics._
 import scala_bot.endgame.EndgameSolver
 import scala_bot.logger._
+import scala_bot.{Settings, Convention}
 import scala_bot.utils._
 import scala_bot.fraction.Frac
 
@@ -45,6 +46,7 @@ case class Reactor(
 ) extends Game:
 	val goodTouch = false
 
+	override def settings: Settings = Settings(Convention.Reactor)
 	override def filterPlayables(player: Player, playerIndex: Int, orders: Seq[Int], assume: Boolean = true) =
 		// if orders.nonEmpty then
 		// 	Log.info(s"$orders ${orders.map(player.thoughts(_).id(infer = true))} ${orders.map(meta(_).signalTurn)}")
