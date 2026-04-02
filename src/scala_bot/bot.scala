@@ -42,9 +42,12 @@ def readEnv(args: Map[String, String]) =
 		val lines = fromFile("./.env").getLines()
 
 		lines.foldLeft(args): (acc, line) =>
-			line.split("=") match
-				case Array(key, value) => acc.updated(key, value)
-				case Array("") => acc
+			val stripped = line.stripLeading()
+			val withoutComment = stripped.takeWhile(_ != '#').stripTrailing()
+			val withoutExport = withoutComment.stripPrefix("export ")
+			withoutExport.split("=", 2) match
+				case Array(key, value) => acc.updated(key.strip(), value.strip())
+				case Array(rest) if rest.isBlank => acc
 				case _ =>
 					println(s"malformed line in .env: $line")
 					acc
