@@ -2,6 +2,7 @@
 .scala-build
 .metals
 *.jar
+.idea
 
 flamegraph.html
 
