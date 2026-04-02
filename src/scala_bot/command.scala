@@ -248,7 +248,14 @@ class BotClient(queue: Queue[IO, String], gameRef: Ref[IO, Option[Game]])(using 
 
 			case "tableList" =>
 				val list = upickle.read[List[Table]](args)
-				IO { tables = tables ++ list.map(t => t.id -> t) }
+				IO { tables = tables ++ list.map(t => t.id -> t) } *>
+				info.fold(IO.unit): self =>
+					val myTable = tables.values
+						.filter(t => t.players.contains(self.username))
+						.maxByOption(_.id)
+					myTable.fold(IO.unit): t =>
+						Log.info(s"Trying to re-attend table ${t.id}")
+						sendCmd("tableReattend", ujson.write(ujson.Obj("tableID" -> t.id)))
 
 			case "tableStart" =>
 				val id = ujson.read(args)("tableID").num.toInt
