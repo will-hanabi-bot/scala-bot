@@ -100,7 +100,7 @@ object main extends IOApp:
 			yield ()
 
 		val parsedArgs = parseArgs(args)
-		val env = readEnv(parsedArgs)
+		val env = sys.env ++ readEnv(parsedArgs)
 
 		val index = parsedArgs.getOrElse("index", "0").toInt
 		val username = env.lift(s"HANABI_USERNAME$index")

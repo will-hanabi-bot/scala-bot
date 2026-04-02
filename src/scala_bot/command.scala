@@ -13,8 +13,6 @@ import scala_bot.logger._
 import scala_bot.refSieve.RefSieve
 import scala_bot.hgroup.HGroup
 
-val BOT_VERSION = "v0.10.0 (scala-bot)"
-
 case class ChatMessage(
 	msg: String,
 	who: String,
@@ -93,23 +91,24 @@ object GameActionListMessage:
 			json.obj("list").arr.map(Action.fromJSON).flatten.toSeq
 		)
 
-enum Convention:
-	case Reactor, RefSieve, HGroup
 
-object Convention:
-	def from(s: String) = s match
-		case "Reactor" => Some(Convention.Reactor)
-		case "RefSieve" => Some(Convention.RefSieve)
-		case "HGroup" => Some(Convention.HGroup)
-		case _ => None
+case class BotConfig(
+	leavePregameIfOnlyBots: Boolean = false,
+	leaveReplayIfOnlyBots: Boolean = true,
+	botNamePrefixes: List[String] = Nil
+):
+	def isBotName(name: String): Boolean =
+		botNamePrefixes.nonEmpty && botNamePrefixes.exists(name.startsWith)
 
-case class Settings(convention: Convention, level: Int = 1):
-	def str = convention match
-		case Convention.Reactor => "Reactor 1.0"
-		case Convention.RefSieve => "Ref Sieve"
-		case Convention.HGroup => s"H-Group $level"
+object BotConfig:
+	def fromEnv(env: Map[String, String]): BotConfig = BotConfig(
+		leavePregameIfOnlyBots = env.getOrElse("HANABI_LEAVE_PREGAME_IF_ONLY_BOTS", "0") == "1",
+		leaveReplayIfOnlyBots = env.getOrElse("HANABI_LEAVE_REPLAY_IF_ONLY_BOTS", "1") == "1",
+		botNamePrefixes = env.getOrElse("HANABI_BOT_NAME_PREFIXES", "")
+			.split(",").map(_.trim).filter(_.nonEmpty).toList
+	)
 
-class BotClient(queue: Queue[IO, String], gameRef: Ref[IO, Option[Game]])(using runtime: IORuntime):
+class BotClient(queue: Queue[IO, String], gameRef: Ref[IO, Option[Game]], config: BotConfig = BotConfig())(using runtime: IORuntime):
 	private var info: Option[SelfData] = None
 	private var tableID: Option[Int] = None
 	private var gameStarted = false
@@ -233,11 +232,18 @@ class BotClient(queue: Queue[IO, String], gameRef: Ref[IO, Option[Game]])(using 
 				val table = upickle.read[Table](args)
 
 				gameRef.get.flatMap:
-					// Only bots left in the replay
-					case Some(g) if table.id == g.tableID &&
-						table.sharedReplay &&
-						table.spectators.forall(_.name.startsWith("will-bot")) =>
-						leaveRoom()
+					case Some(g) if table.id == g.tableID =>
+						if config.leaveReplayIfOnlyBots &&
+							table.sharedReplay &&
+							table.spectators.forall(s => config.isBotName(s.name)) then
+							Log.info("Leaving game. Only bots left spectating.")
+							leaveRoom()
+						else if config.leavePregameIfOnlyBots &&
+							!table.running &&
+							table.players.forall(name => config.isBotName(name)) then
+							Log.info("Leaving game. Only bots left in lobby.")
+							leaveRoom()
+						else IO.unit
 					case _ => IO.unit
 				*>
 				IO { tables = tables + (table.id -> table) }
