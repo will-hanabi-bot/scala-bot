@@ -132,3 +132,29 @@ class General extends munit.FunSuite:
 		))
 
 		assertEquals(game.takeAction.unsafeRunSync(), PerformAction.Rank(Bob.ordinal, 5))
+
+	test("entertains all possible connections"):
+		val game = setup(HGroup.atLevel(5), Vector(
+			Vector("xx", "xx", "xx", "xx"),
+			Vector("g1", "p4", "g4", "b3"),		// Bob is holding the crit b3
+			Vector("g4", "p5", "b1", "p1"),
+			Vector("r4", "r4", "y4", "y5")
+		),
+			starting = Bob,
+			playStacks = Some(Vector(2, 1, 0, 0, 0)),
+			discarded = Vector("b3")
+		)
+		.pipe(takeTurn("Bob clues 1 to Cathy"))
+		.pipe(takeTurn("Cathy clues green to Bob"))
+		.pipe(takeTurn("Donald clues 2 to Alice (slot 3)"))
+		.tap: g =>
+			hasInfs(g, None, Alice, 3, Vector("y2", "g2", "b2", "p2"))
+		.pipe(takeTurn("Alice clues 5 to Donald"))
+		.pipe(takeTurn("Bob clues 5 to Cathy"))
+
+		.pipe(takeTurn("Cathy plays p1", "r1"))
+		.pipe(takeTurn("Donald clues 3 to Alice (slot 1)"))		// x3 xx x2 xx
+
+		// Alice cannot play slot 1, since it might be y3 or p3.
+		// She also can't play slot 3, since it might be b2.
+		assert(game.me.thinksPlayables(game, Alice.ordinal).isEmpty)

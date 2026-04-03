@@ -117,11 +117,12 @@ case class HGroup(
 
 			val unorderedPink1 = state.includesVariant(PINKISH) && ordered1s.nonEmpty && ordered1s.tail.contains(o)
 
-			(assume || isDefinite(o)) &&
+			((assume && !xmeta(o).fStatus.contains(FStatus.PossiblyOn(state.ourPlayerIndex))) || isDefinite(o)) &&
 			!possibleFocusDupe &&
 			!olderFinesseExists &&
 			!unrevealedHidden &&
-			!unorderedPink1
+			!unorderedPink1 &&
+			!waiting.find(_.connections.exists(_.order == o)).exists(this.potentialClandestineWc(playerIndex, o, _).isDefined)
 
 	override def validArr(id: Identity, order: Int): Boolean =
 		val playables = this.me.thinksPlayables(this, state.ourPlayerIndex)
@@ -400,9 +401,24 @@ case class HGroup(
 
 	def findDiscardable(playerIndex: Int) =
 		state.hands(playerIndex).filter: o =>
-			this.me.orderTrash(this, o) ||
-			this.isTouched(o) && this.me.thoughts(o).inferred.forall: id =>
-				visibleFind(state, this.me, id, excludeOrder = o).nonEmpty
+			this.me.orderTrash(this, o) || {
+				this.isTouched(o) &&
+				this.me.thoughts(o).inferred.forall: id =>
+					visibleFind(state, this.me, id, excludeOrder = o).nonEmpty
+				&&
+				!waiting.find(_.connections.exists(_.order == o)).exists(this.potentialClandestineWc(playerIndex, o, _).isDefined)
+			}
+
+	/** Returns a potential clandestine finesse that may alter the id of the card with the given order.
+	  * @example See test "waits for a clandestine finesse to resolve".
+	  */
+	def potentialClandestineWc(playerIndex: Int, order: Int, containingWc: WaitingConnection) =
+		waiting.find: wc =>
+			!wc.symmetric && !wc.ambiguousSelf &&
+			wc.focus == containingWc.focus &&
+			wc.target == playerIndex &&
+			wc.currConn.matchesP:
+				case f: FinesseConn => f.order != order && f.reacting != state.holderOf(wc.focus)
 
 	def reinterpPlay(prev: HGroup, action: PlayAction | DiscardAction): Option[HGroup] =
 		val (order, suitIndex, rank) = action match

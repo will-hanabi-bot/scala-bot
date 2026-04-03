@@ -1,7 +1,7 @@
 package tests.hgroup.level11
 
 import scala_bot.basics._
-import scala_bot.test.{fullyKnown, hasInfs, hasStatus, Player, setup, takeTurn, TestVariant}, Player._
+import scala_bot.test.{fullyKnown, hasInfs, hasStatus, Player, preClue, setup, takeTurn, TestVariant}, Player._
 import scala_bot.hgroup.HGroup
 
 import scala_bot.utils.pipe
@@ -223,3 +223,17 @@ class TrueClues extends munit.FunSuite:
 
 		hasStatus(game, Alice, 1, CardStatus.Finessed)
 		hasInfs(game, None, Alice, 1, Vector("p1"))
+
+	test("doesn't play into a bluff when a self-finesse + prompt is possible"):
+		val game = setup(HGroup.atLevel(11), Vector(
+			Vector("xx", "xx", "xx", "xx", "xx"),
+			Vector("r1", "r3", "y4", "g4", "b4"),
+			Vector("p4", "p4", "y4", "g4", "b4")
+		),
+			starting = Cathy,
+			init = preClue(Alice, 5, Seq("2"))
+		)
+		.pipe(takeTurn("Cathy clues 3 to Bob"))
+
+		// Alice should wait for Bob to demonstrate.
+		hasStatus(game, Alice, 1, CardStatus.None)

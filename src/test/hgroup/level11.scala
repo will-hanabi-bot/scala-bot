@@ -255,7 +255,6 @@ class IndirectBluffs extends munit.FunSuite:
 		// If the 2 was blue, Donald wouldn't have played.
 		hasInfs(game, None, Alice, 2, Vector("g2"))
 
-
 class GuidePrinciple extends munit.FunSuite:
 	override def beforeAll() = Logger.setLevel(LogLevel.Off)
 

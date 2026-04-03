@@ -301,3 +301,17 @@ class SelfFinesses extends munit.FunSuite:
 		.pipe(takeTurn("Cathy plays p1", "y3"))
 
 		assertEquals(game.takeAction.unsafeRunSync(), PerformAction.Play(game.state.hands(Alice.ordinal)(0)))
+
+	test("doesn't consider self-finesses when it could be a save"):
+		val game = setup(HGroup.atLevel(2), Vector(
+			Vector("xx", "xx", "xx", "xx", "xx"),
+			Vector("p1", "r4", "y4", "g4", "b4"),
+			Vector("p4", "r4", "y4", "g4", "b4")
+		),
+			starting = Cathy,
+			discarded = Vector("r3"),
+			clueTokens = 4
+		)
+		.pipe(takeTurn("Cathy clues 3 to Alice (slot 5)"))
+
+		hasInfs(game, None, Alice, 5, Vector("r3", "p3"))

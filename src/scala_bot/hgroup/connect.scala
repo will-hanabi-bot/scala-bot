@@ -54,6 +54,11 @@ def findKnownConn(ctx: ClueContext, id: Identity, ignore: Set[Int], findOwn: Boo
 			state.deck(ctx.focusResult.focus).id().contains(id)
 		)
 
+	def validLinkedPlay(order: Int) =
+		state.deck(order).clued &&
+		common.playLinks.find(_.target == order).isDefined &&
+		common.thoughts(order).inferred.contains(id)
+
 	// Globally known
 	val knownConns = for
 		playerIndex <- (0 until state.numPlayers).view
@@ -86,9 +91,27 @@ def findKnownConn(ctx: ClueContext, id: Identity, ignore: Set[Int], findOwn: Boo
 
 		PlayableConn(playerIndex, order, id, linked = playables.toList, insertingInto = insertingInto)
 
+	val playLinkedConns = for
+		playerIndex <- (0 until state.numPlayers) if playerIndex != giver
+		order <- state.hands(playerIndex).find(validLinkedPlay) if state.deck(order).matches(id, assume = game.allowFindOwn && findOwn)
+	yield
+		PlayableConn(playerIndex, order, id, linked = List(order))
+
+	val previouslyPlayable = for
+		playerIndex <- (0 until state.numPlayers) if playerIndex != giver
+		order <- state.hands(playerIndex).find: o =>
+			prev.state.deck(o).clued &&
+			prev.common.hypoPlays.contains(o) &&
+			state.deck(o).matches(id, assume = game.allowFindOwn && findOwn) &&
+			common.thoughts(o).inferred.contains(id)
+	yield
+		PlayableConn(playerIndex, order, id, linked = List(order))
+
 	knownConns.headOption
 	.orElse(linkedConns.headOption)
 	.orElse(playableConns.headOption)
+	.orElse(playLinkedConns.headOption)
+	.orElse(previouslyPlayable.headOption)
 
 def findUnknownConnecting(ctx: ClueContext, reacting: Int, id: Identity, connected: Set[Int], ignore: Set[Int], opts: ConnectOpts): Option[Connection] =
 	val ClueContext(prev, game, action) = ctx

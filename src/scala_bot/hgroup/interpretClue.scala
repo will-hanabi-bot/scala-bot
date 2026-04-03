@@ -270,12 +270,13 @@ def interpClue(ctx: ClueContext): HGroup =
 				val looksDirect = game.players(target).thoughts(focus).id().isEmpty && {
 					// clue.kind == ClueKind.Colour ||
 					positional ||
+					savePoss.nonEmpty ||
 					// Looks like an existing possibility
 					focusPoss.exists: fp =>
 						game.players(target).thoughts(focus).possible.contains(fp.id) &&
 						fp.connections.forall: c =>
-							c.isInstanceOf[KnownConn] ||
-							(c.isInstanceOf[PlayableConn] && c.reacting != state.ourPlayerIndex)
+							(c.isInstanceOf[KnownConn] || (c.isInstanceOf[PlayableConn] && c.reacting != state.ourPlayerIndex)) &&
+							!game.isBlindPlaying(c.order)		// A blind-playing card is still unknown
 				}
 
 				common.thoughts(focus).inferred.filter: inf =>

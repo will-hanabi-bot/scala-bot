@@ -185,7 +185,6 @@ class Pink1sAssumption extends munit.FunSuite:
 		// Only slot 4 is playable.
 		assertEquals(game.common.thinksPlayables(game, Alice.ordinal), Vector(game.state.hands(Alice.ordinal)(3)))
 
-
 	test("doesn't play filled-in pink cards as 1s"):
 		val game = setup(HGroup.atLevel(4), Vector(
 			Vector("xx", "xx", "xx", "xx", "xx"),

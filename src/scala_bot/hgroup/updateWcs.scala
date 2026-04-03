@@ -421,6 +421,12 @@ def resolveRetained(prev: HGroup, game: HGroup, action: Action, wc: WaitingConne
 		Log.highlight(Console.CYAN, s"${state.names(reacting)} didn't play but allowable hesitation on ${state.names(allowableHesitation.get)}")
 		return UpdateResult.SelfPassback
 
+	game.potentialClandestineWc(reacting, connOrder, wc) match
+		case None => ()
+		case Some(otherWc) =>
+			Log.highlight(Console.CYAN, s"${state.names(reacting)} didn't play but potential clandestine finesse ${state.logConns(otherWc.connections, otherWc.inference)}")
+			return UpdateResult.Keep
+
 	Log.highlight(Console.CYAN, s"$name didn't react with a waiting connection, removing ${state.logId(wc.inference)}")
 	UpdateResult.Remove
 

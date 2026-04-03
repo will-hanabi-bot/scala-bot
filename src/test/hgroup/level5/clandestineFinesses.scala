@@ -1,5 +1,7 @@
 package tests.hgroup.level5
 
+import cats.effect.unsafe.implicits.global
+
 import scala_bot.basics._
 import scala_bot.test.{hasInfs, hasStatus, Player, setup, takeTurn}, Player._
 import scala_bot.hgroup.HGroup
@@ -125,3 +127,39 @@ class ClandestineFinesses extends munit.FunSuite:
 		hasInfs(game, None, Donald, 3, Vector("y1"))
 
 		hasStatus(game, Alice, 1, CardStatus.None)
+
+	test("waits for a clandestine finesse to resolve"):
+		val game = setup(HGroup.atLevel(5), Vector(
+			Vector("xx", "xx", "xx", "xx"),
+			Vector("p2", "g3", "y3", "g5"),
+			Vector("r1", "p1", "y2", "b4"),
+			Vector("r4", "y5", "b2", "r3")
+		),
+			starting = Donald,
+			playStacks = Some(Vector(0, 0, 0, 2, 0))
+		)
+		.pipe(takeTurn("Donald clues 3 to Alice (slots 2,3)"))
+		.tap: g =>
+			hasInfs(g, None, Alice, 2, Vector("r3", "b3", "p3"))
+		.pipe(takeTurn("Alice clues 5 to Bob"))
+		.pipe(takeTurn("Bob clues 5 to Donald"))
+		.pipe(takeTurn("Cathy plays r1", "g4"))
+
+		.pipe(takeTurn("Donald discards r3", "y1"))
+		.tap: g =>
+			assert(g.takeAction.unsafeRunSync() match
+				case _: PerformAction.Play => false
+				case _ => true
+			)
+		.pipe(takeTurn("Alice clues yellow to Donald"))
+		.pipe(takeTurn("Bob discards y3", "b1"))
+
+		val purpleF = takeTurn("Cathy plays p1", "p4")(game)
+		hasInfs(purpleF, None, Alice, 2, Vector("p3"))
+		assert(purpleF.common.thoughts(purpleF.state.hands(Alice.ordinal)(0)).inferred.length > 1)
+		hasStatus(purpleF, Alice, 1, CardStatus.None)
+
+		val redF = takeTurn("Cathy discards b4", "p4")(game)
+		hasInfs(redF, None, Alice, 2, Vector("r3"))
+		hasInfs(redF, None, Alice, 1, Vector("r2"))
+		hasStatus(redF, Alice, 1, CardStatus.Finessed)

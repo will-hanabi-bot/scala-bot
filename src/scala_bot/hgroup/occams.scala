@@ -25,7 +25,6 @@ def fpSimplicity(fp: FocusPossibility, playerIndex: Int, ourPlayerIndex: Int): I
 
 		10 * blindPlays + prompts
 
-
 def filterFps(ctx: ClueContext, fps: Seq[FocusPossibility], target: Int) =
 	val ClueContext(_, game, action) = ctx
 	val state = game.state
@@ -109,7 +108,6 @@ def occamsRazor(ctx: ClueContext, fps: Seq[FocusPossibility], playerIndex: Int, 
 						conn.matchesP { case f: FinesseConn => f.fKind == FinesseKind.True || f.fKind == FinesseKind.Hidden } &&
 						// No one else can prove the finesse
 						nextUnknown(fp, Some(conn)).forall(_.reacting == playerIndex)
-
 
 			if finesseWhenBluffExists then
 				Log.highlight(Console.CYAN, s"excluding ${state.logConns(fp.connections, fp.id)} due to bluff possibility on same player!")

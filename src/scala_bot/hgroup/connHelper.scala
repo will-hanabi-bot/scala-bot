@@ -238,21 +238,21 @@ def resolveClue(ctx: ClueContext, fps: Seq[FocusPossibility], ambiguousOwn: Seq[
 	val ClueAction(giver, target, _, clue) = action
 	val FocusResult(focus, chop, positional) = ctx.focusResult
 
+	val looksDirect = game.common.thoughts(focus).id(symmetric = true).isEmpty && {
+		positional ||
+		fps.exists: fp =>
+			game.players(target).thoughts(focus).possible.contains(fp.id) &&
+			fp.connections.forall: c =>
+				(c.isInstanceOf[KnownConn] || (c.isInstanceOf[PlayableConn] && c.reacting != state.ourPlayerIndex)) &&
+				!game.isBlindPlaying(c.order)		// A blind-playing card is still unknown
+	}
+
 	val symmetricFps =
 		if target == state.ourPlayerIndex || fps.exists(_.save) then
 			Nil
 		else
 			Log.highlight(Console.YELLOW, "finding symmetric connections!")
 			val symmetricFps =
-				val looksDirect = game.common.thoughts(focus).id(symmetric = true).isEmpty && {
-					positional ||
-					fps.exists: fp =>
-						game.players(target).thoughts(focus).possible.contains(fp.id) &&
-						fp.connections.forall: c =>
-							c.isInstanceOf[KnownConn] ||
-							(c.isInstanceOf[PlayableConn] && c.reacting != state.ourPlayerIndex)
-				}
-
 				game.common.thoughts(focus).inferred.filter: inf =>
 					!game.invalidFocus(giver, clue, inf, ctx.focusResult) &&
 					!fps.exists(_.id == inf)
@@ -266,15 +266,6 @@ def resolveClue(ctx: ClueContext, fps: Seq[FocusPossibility], ambiguousOwn: Seq[
 		Log.highlight(Console.YELLOW, "finding ambiguous connections!")
 
 		val ambiguousFps =
-			val looksDirect = game.common.thoughts(focus).id(symmetric = true).isEmpty && {
-				positional ||
-				fps.exists: fp =>
-					game.players(target).thoughts(focus).possible.contains(fp.id) &&
-					fp.connections.forall: c =>
-						c.isInstanceOf[KnownConn] ||
-						(c.isInstanceOf[PlayableConn] && c.reacting != state.ourPlayerIndex)
-			}
-
 			val poss = game.me.thoughts(focus).id().toList
 				.when(_.isEmpty)(_ => game.me.thoughts(focus).inferred.toList)
 
@@ -286,7 +277,7 @@ def resolveClue(ctx: ClueContext, fps: Seq[FocusPossibility], ambiguousOwn: Seq[
 						fp.connections.forall(_.reacting == state.ourPlayerIndex)
 					}
 			.flatMap:
-				connect(ctx, _, looksDirect, thinksStall = Set(), preferOwn = true)
+				connect(ctx, _, looksDirect, thinksStall = Set(), preferOwn = true, assumeTruth = true)		// An ambiguous connection is always delayed (can't be a bluff)
 			.filter: fp =>
 				!(fps ++ ambiguousOwn).exists(_.connections == fp.connections)
 
@@ -384,28 +375,48 @@ def resolveClue(ctx: ClueContext, fps: Seq[FocusPossibility], ambiguousOwn: Seq[
 		assignConns(_, action, fpsToWrite, focus, ambiguousOwn ++ ambiguousFps)
 
 	.when(_ => action.clue.kind == ClueKind.Rank):		// with a colour clue, there shouldn't be ambiguity about ids (maybe in rainbow?)
-		allFps.foldLeft(_): (a, fp) =>
-			fp.connections.zipWithIndex.foldLeft(a) { case (acc, (conn, i)) => conn match
-				case PlayableConn(reacting, order, id, linked, hidden, _) if linked.length > 1 =>
-					val playLinks = acc.common.playLinks
-					val target = fp.connections.lift(i + 1).map(_.order).getOrElse(focus)
-					val existingIndex = playLinks.indexWhere: l =>
-						l.orders == linked && l.target == target
+		def nextReacting(fp: FocusPossibility, i: Int) =
+			fp.connections.lift(i + 1).map(_.reacting).getOrElse(action.target)
 
-					if existingIndex == -1 then
-						val link = PlayLink(linked, IdentitySet.single(id), target)
-						Log.info(s"adding play link $linked -> $target")
-						acc.copy(common = acc.common.copy(playLinks = link +: playLinks))
-					else
-						val existing = playLinks(existingIndex)
-						val newLink = existing.copy(prereqs = existing.prereqs.union(id))
-						acc.copy(
-							common = acc.common.copy(
-								playLinks = playLinks.updated(existingIndex, newLink)
-							)
-						)
-				case _ => acc
-			}
+		allFps.foldLeft(_): (a, fp) =>
+			fp.connections.zipWithIndex.foldLeft(a):
+				case (acc, (conn, i)) =>
+					def writePlayLink(conn: PlayableConn) =
+						val nextReact = nextReacting(fp, i)
+
+						conn.linked.length >= 1 &&
+						conn.insertingInto.isEmpty &&
+						!allFps.exists: fp2 =>
+							fp2 != fp && {
+								val matchingIndex = fp2.connections.indexWhere:
+									case p: PlayableConn => p.order == conn.order
+									case _ => false
+
+								// If there exists a focus possibility sharing this playable whose next reacting player is different,
+								// don't write a play link (otherwise, playing this card may trigger writing playable ids on the target too early).
+								matchingIndex != -1 && nextReacting(fp2, matchingIndex) != nextReact
+							}
+
+					conn match
+						case conn @ PlayableConn(reacting, order, id, linked, hidden, insertingInto) if writePlayLink(conn) =>
+							val playLinks = acc.common.playLinks
+							val target = fp.connections.lift(i + 1).map(_.order).getOrElse(focus)
+							val existingIndex = playLinks.indexWhere: l =>
+								l.orders == linked && l.target == target
+
+							if existingIndex == -1 then
+								val link = PlayLink(linked, IdentitySet.single(id), target)
+								Log.info(s"adding play link $linked -> $target for fp ${state.logConns(fp.connections, fp.id)}")
+								acc.copy(common = acc.common.copy(playLinks = link +: playLinks))
+							else
+								val existing = playLinks(existingIndex)
+								val newLink = existing.copy(prereqs = existing.prereqs.union(id))
+								acc.copy(
+									common = acc.common.copy(
+										playLinks = playLinks.updated(existingIndex, newLink)
+									)
+								)
+						case _ => acc
 	.pipe: g =>
 		def requiresWc(fp: FocusPossibility) = fp.connections.exists: c =>
 			c.isInstanceOf[PlayableConn] ||
