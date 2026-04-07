@@ -192,7 +192,7 @@ def advance(orig: Reactor, game: Reactor, offset: Int): Double =
 				Log.info(s"${state.names(playerIndex)} discarding ${state.logId(id)} but might clue")
 				tryDiscard(advance(orig, game.simulate(action), offset + 1))
 
-def evalAction(game: Reactor, action: Action): Double =
+def _evalAction(game: Reactor, action: Action): Double =
 	Log.highlight(Console.GREEN, s"===== Predicting value for ${action.fmt(game.state)} =====")
 	val state = game.state
 	val hypoGame = game.simulate(action)

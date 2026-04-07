@@ -376,7 +376,7 @@ case class HGroup(
 			clue
 
 		allClues.find: clue =>
-			val action = clueToAction(state, clue, giver)
+			val action = Action.fromClue(state, clue, giver)
 			val focus = determineFocus(this, action).focus
 			val focusCard = state.deck(focus)
 
@@ -668,8 +668,8 @@ object HGroup:
 								target <- (0 until state.numPlayers) if state.canClue && target != state.ourPlayerIndex
 								clue   <- state.allValidClues(target)
 							yield
-								val perform = clueToPerform(clue)
-								val action = performToAction(state, perform, state.ourPlayerIndex)
+								val perform = PerformAction.fromClue(clue)
+								val action = perform.toAction(state, state.ourPlayerIndex)
 								val value = evalAction(game, action)
 								(perform, action, value)
 
@@ -787,7 +787,7 @@ object HGroup:
 						5
 					else
 						0
-				.map(clueToPerform)
+				.map(PerformAction.fromClue)
 
 			Logger.setLevel(level)
 			allClues
@@ -807,6 +807,9 @@ object HGroup:
 					Seq(expectedDc)
 
 			targets.map(PerformAction.Discard(_))
+
+		def evalAction(game: HGroup, action: Action): Double =
+			_evalAction(game, action)
 
 	def atLevel(level: Int) =
 		(tableID: Int, state: State, inProgress: Boolean) =>

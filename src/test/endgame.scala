@@ -134,7 +134,7 @@ class Endgame extends munit.FunSuite:
 				// Alice should play p3.
 				assertEquals(perform, PerformAction.Play(game.state.hands(Alice.ordinal)(0)))
 
-	test("it plays to start a_complex endgame where all cards are seen"):
+	test("it plays to start a complex endgame where all cards are seen"):
 		val game = setup(Reactor.apply, Vector(
 			Vector("xx", "xx", "xx", "xx", "xx"),
 			Vector("b1", "r1", "g1", "p5", "p2"),

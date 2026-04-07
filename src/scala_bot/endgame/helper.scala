@@ -12,7 +12,7 @@ def findMustPlays(state: State, hand: Vector[Int]) =
 
 	loopIf(0, _ < hand.length, _ + 1, ids(_).isDefined): i =>
 		val id = ids(i).get
-		if !state.isBasicTrash(id) then
+		if state.isUseful(id) then
 			var matches = 1
 
 			loop(i + 1, _ < hand.length, _ + 1): j =>

@@ -109,6 +109,7 @@ extension[G <: Game](game: G)
 			s.copy(
 				hands = s.hands.updated(playerIndex, order +: s.hands(playerIndex)),
 				deck = s.deck :+ Card(suitIndex, rank, order, s.turnCount),
+				holders = s.holders :+ playerIndex,
 				nextCardOrder = order + 1,
 				cardsLeft = s.cardsLeft - 1
 			)
@@ -147,6 +148,7 @@ extension[G <: Game](game: G)
 			g.withState: s =>
 				s.copy(
 					deck = s.deck :+ Card(suitIndex, rank, order, s.turnCount),
+					holders = s.holders :+ playerIndex,
 					nextCardOrder = s.nextCardOrder + 1,
 					cardsLeft = s.cardsLeft - 1,
 					endgameTurns = Some(s.numPlayers)

@@ -12,30 +12,34 @@ https://github.com/user-attachments/assets/665e7d78-7c8b-4f07-b4c3-9116ec2ec8ab
 
 - Supports all the basic variants (Black, Rainbow, White, Prism, Pink, Brown + blends).
 - Takes notes during the game on what it thinks each player knows about their own hand.
-- Can replay completed games on hanab.live and offer suggested actions.
+- Can analyze completed games on hanab.live and offer suggested actions.
 
 ## Running locally
-
-- You'll need to have Scala and Coursier installed. There are instructions [here](https://www.scala-lang.org/download/).
-- Clone the repository to your own computer. There are lots of tutorials online on using Git if you don't know how that works.
-- Navigate to the cloned repository in a terminal.
+- To host the bot locally, you'll need [JVM 25](https://www.oracle.com/ca-en/java/technologies/downloads/#java25) or later.
+- Download the latest JAR file from the Releases page.
 - Fill out the login details for the bot in an .env file. See .env.template for an example.
   - You'll need to create its account on hanab.live first.
+- Run `java [JVM_OPTS] -jar scala-bot-<version>.jar index=<index>` to start the bot.
+  - Some JVM options for reduced memory usage: `-Xms128m -Xmx192m -Xss256k -XX:MaxMetaspaceSize=96m -XX:ReservedCodeCacheSize=64m -XX:+UseSerialGC`.
+
+## Local development
+
+- You'll need to have Scala installed. There are instructions [here](https://www.scala-lang.org/download/).
+- Clone the repository to your own computer. There are lots of tutorials online on using Git if you don't know how that works.
 - Run `scala-cli . --main-class scala_bot.main -- index=<index>` to start the bot.
 - Debug logs will show up in the console, providing more information about what the bot thinks about every action.
 	- `hand <playerName> [observerName]` will display the information on that player's hand from a particular perspective.
         - If no observer name is provided, the hand will be logged from the common knowledge perspective.
-- Compiling a Scala program can be memory-intensive, so you may want to package an executable file that can be run elsewhere.
-	- Use `scala-cli --power package . --main-class scala_bot.main -o bot --assembly`.
-	- Add `--preamble=false` to create a jar instead (more portable).
+- `make build` will package a JAR file based on the current state of the repository.
 
 ## Supported commands
 
 Send a PM to the bot on hanab.live (`/pm <HANABI_USERNAME> <message>`) to interact with it.
 - `/join [password]` to join your current lobby. The bot will remain in your table until it is kicked with `/leave`.
-- `/rejoin` to rejoin a game that has already started (e.g. if it crashed).
+- `/rejoin` to rejoin a game that has already started (e.g. if it disconnected).
 - `/leave` to kick the bot from your table.
 - `/settings [convention=Reactor,RefSieve,HGroup] [level=1-11]` to modify the convention set.
+- `/analyze <replayId> <convention> [level]` to provide a list of potential mistakes and suggested actions in the given replay.
 - `/version` to get the current version of the bot.
 - `/help` to get a link back to this page.
 

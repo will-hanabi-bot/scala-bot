@@ -177,10 +177,8 @@ object Reactor:
 			val ClueAction(giver, target, _, _) = action
 
 			val interpretedGame = checkMissed(game, giver, 99)
-				.pipe: g =>
-					g.waiting match
-						case Some(wc) if wc.reacter == giver => g.copy(waiting = None)
-						case _ => g
+				.when(_.waiting.exists(_.reacter == giver)):
+					_.copy(waiting = None)
 				.pipe: g =>
 					val (interp, interpGame) = g.nextInterp match
 						case Some(interp) =>
@@ -280,7 +278,7 @@ object Reactor:
 				.pipe: g =>
 					lazy val usefulDc = !failed && prev.state.deck(order).clued &&
 						suitIndex != -1 && rank != -1 &&
-						!state.isBasicTrash(id) &&
+						state.isUseful(id) &&
 						prev.meta(order).status != CardStatus.CalledToDiscard &&
 						!(prev.common.thinksLocked(prev, playerIndex) && prev.state.clueTokens == 0)
 
@@ -386,8 +384,8 @@ object Reactor:
 
 					val bobClues = if !state.canClue then Nil else
 						state.allValidClues(nextPlayerIndex).map: clue =>
-							val perform = clueToPerform(clue)
-							val action = performToAction(state, perform, state.ourPlayerIndex)
+							val perform = PerformAction.fromClue(clue)
+							val action = perform.toAction(state, state.ourPlayerIndex)
 							(perform, action)
 
 					val bestClue = bobClues.maxBy((_, action) => evalAction(game, action))._1
@@ -466,8 +464,8 @@ object Reactor:
 								target <- (0 until state.numPlayers) if target != state.ourPlayerIndex
 								clue   <- state.allValidClues(target)
 							yield
-								val perform = clueToPerform(clue)
-								val action = performToAction(state, perform, state.ourPlayerIndex)
+								val perform = PerformAction.fromClue(clue)
+								val action = perform.toAction(state, state.ourPlayerIndex)
 								(perform, action)
 
 						val allPlays = playableOrders.map: o =>
@@ -579,7 +577,7 @@ object Reactor:
 					else
 						-nonTrash.count(!state.deck(_).clued) * 5 +					// unclued non-trash cards
 						-nonTrash.count(!state.deck(_).clues.exists(_.isEq(clue)))	// fill-ins
-				.map(clueToPerform)
+				.map(PerformAction.fromClue)
 
 			Logger.setLevel(level)
 			allClues
@@ -592,3 +590,6 @@ object Reactor:
 				game.players(playerIndex).lockedDiscard(game.state, playerIndex)
 
 			List(PerformAction.Discard(target))
+
+		def evalAction(game: Reactor, action: Action): Double =
+			_evalAction(game, action)

@@ -1,6 +1,7 @@
-//> using scala 3.8.2
+//> using scala 3.8.3
 //> using jvm 25
-//> using options -Wall -Wconf:msg=toString:s -feature -J-Xms100M -J-Xmx150M
+//> using options -opt -Wall -Wconf:msg=toString:s -feature
+//> using javaOpt -Xms128m -Xmx192m -Xss256k -XX:MaxMetaspaceSize=96m -XX:ReservedCodeCacheSize=64m -XX:+UseSerialGC
 //> using dep com.softwaremill.sttp.client4::core:4.0.21
 //> using dep com.softwaremill.sttp.client4::cats:4.0.21
 //> using dep org.typelevel::cats-effect:3.7.0
@@ -38,7 +39,7 @@ def parseArgs(args: Seq[String]) =
 
 def readEnv(args: Map[String, String]) =
 	Try:
-		val lines = fromFile("./.env").getLines
+		val lines = fromFile("./.env").getLines()
 
 		lines.foldLeft(args): (acc, line) =>
 			line.split("=") match
@@ -65,7 +66,7 @@ object main extends IOApp:
 									for
 										acc <- buffer.getAndUpdate(_ => "")
 										full = acc + text
-										_   <- client.handleMsg(full)
+										_   <- client.handleMsg(full).start
 										_   <- loop
 									yield ()
 

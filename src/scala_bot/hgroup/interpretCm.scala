@@ -99,7 +99,7 @@ def handleTcm(ctx: ClueContext, tcm: Seq[Int], notStall: Boolean) =
 						&&
 						// Clue must be valid
 						(game.noRecurse ||
-							prev.copy(noRecurse = true, allowFindOwn = false).simulateClue(clueToAction(prev.state, clue, giver)).lastMove != Some(ClueInterp.Mistake))
+							prev.copy(noRecurse = true, allowFindOwn = false).simulateClue(Action.fromClue(prev.state, clue, giver)).lastMove != Some(ClueInterp.Mistake))
 
 			val lastMove = evaluateCM(ctx, tcm) match
 				case ClueInterp.Discard if badTCM => ClueInterp.Mistake

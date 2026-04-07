@@ -1,11 +1,15 @@
 package scala_bot.basics
 
 import cats.effect.IO
+import cats.effect.unsafe.IORuntime
 
+import scala_bot.endgame.EndgameSolver
+import scala_bot.fraction.Frac
 import scala_bot.utils._
 import scala_bot.logger._
+
 import scala.util.matching.Regex
-import cats.effect.unsafe.IORuntime
+import java.time.Duration
 
 val HAND_SIZE = Vector(0, 0, 5, 5, 4, 4, 3)
 
@@ -142,6 +146,8 @@ trait GameOps[G <: Game]:
 
 	/** Returns all valid discards the giver can perform (used in endgame solving). */
 	def findAllDiscards(game: G, playerIndex: Int): Seq[PerformAction]
+
+	def evalAction(game: G, action: Action): Double
 
 extension[G <: Game](game: G)
 	def withThought(order: Int)(f: Thought => Thought)(using ops: GameOps[G]) =
@@ -309,7 +315,7 @@ extension[G <: Game](game: G)
 	def simulate(action: Action)(using ops: GameOps[G]): G =
 		action match
 			case clue: ClueAction => game.simulateAction(clue, log = true)
-			case _ => game.simulateAction(action)
+			case _ => game.simulateAction(action, log = true)
 
 	def rewind(turn: Int, action: Action)(using ops: GameOps[G]): Either[String, G] =
 		val state = game.state
@@ -426,6 +432,81 @@ extension[G <: Game](game: G)
 				Log.highlight(Console.BLUE, s"Suggested action: ${g.takeAction.unsafeRunSync().fmt(g, accordingTo = Some(g.me))}")
 				g
 			.withState(_.copy(actionList = actions))
+
+	def analyze(using ops: GameOps[G], runtime: IORuntime) =
+		Log.highlight(Console.GREEN, s"------- ANALYZING -------")
+		val blank = ops.blank(game, keepDeck = false)
+
+		case class Comment(turn: Int, note: String)
+
+		/** Analyzes from a particular pov. This hides the cards held by them so the simulation is accurate. */
+		def analyzeIndex(index: Int) =
+			Logger.setLevel(LogLevel.Off)
+			val initial = blank.withState(_.copy(ourPlayerIndex = index))
+				.pipe: g =>
+					ops.copyWith(g, GameUpdates(base = Some(g.base.copy(_1 = g.state))))
+
+			val comments = game.state.actionList.flatten.foldLeft((initial, List.empty[Comment])) { case ((g, comments), action) =>
+				action match
+					case _: InterpAction =>
+						(g, comments)
+
+					case DrawAction(playerIndex, order, suitIndex, rank) =>
+						val action =
+							if playerIndex != index then
+								val id = game.deckIds(order).get
+								DrawAction(playerIndex, order, id.suitIndex, id.rank)
+							else
+								DrawAction(playerIndex, order, -1, -1)
+						(g.handleAction(action), comments)
+
+					case PlayAction(_, _, _, _) | ClueAction(_, _, _, _) | DiscardAction(_, _, _, _, _) if action.playerIndex == index =>
+						val suggestedPerform = g.takeAction.unsafeRunSync()
+
+						val newComments =
+							if suggestedPerform != PerformAction.fromAction(action) then
+								val suggestedAction = suggestedPerform.toAction(g.state, g.state.currentPlayerIndex, deck = Some(game.state.deck.map(_.id().get)))
+
+								if !g.state.inEndgame then
+									val suggestedValue = ops.evalAction(g, suggestedAction)
+									val actualValue = ops.evalAction(g, action)
+									val diff = suggestedValue - actualValue
+
+									if diff < 1 then
+										comments
+									else if diff > 50 then
+										Comment(g.state.turnCount, s"mistake! prefer (${suggestedAction.fmt(g.state)}) over (${action.fmt(g.state)})") +: comments
+									else
+										Comment(g.state.turnCount, s"suggest (${suggestedAction.fmt(g.state)}) over (${action.fmt(g.state)})") +: comments
+								else
+									def winrate(perform: PerformAction) =
+										EndgameSolver(monteCarlo = true, timeout = Duration.ofMillis(500)).solve(game, onlyAction = Some(perform)) match
+											case Left(_) => Frac.zero
+											case Right((_, winrate)) => if winrate < Frac(1, 100) then Frac.zero else winrate
+
+									val suggestedWinrate = winrate(suggestedPerform)
+									val actualWinrate = winrate(PerformAction.fromAction(action))
+
+									if suggestedWinrate - actualWinrate > Frac(1, 10) then
+										Comment(g.state.turnCount, s"mistake! (${suggestedAction.fmt(g.state)}) has winrate $suggestedWinrate vs. (${action.fmt(g.state)}) has winrate $actualWinrate") +: comments
+									else
+										comments
+							else
+								comments
+
+						(g.handleAction(action), newComments)
+
+					case _ =>
+						(g.handleAction(action), comments)
+			}._2.reverse
+
+			Logger.setLevel(LogLevel.Info)
+			comments
+
+		(0 until game.state.numPlayers)
+			.flatMap(analyzeIndex)
+			.sortBy(_.turn)
+			.map(comment => s"turn ${comment.turn}: ${comment.note}")
 
 	def getNote(order: Int): String =
 		if game.meta(order).trash then

@@ -4,7 +4,7 @@ import cats.effect.unsafe.implicits.global
 
 import scala_bot.basics._
 import scala_bot.test.{Colour, fullyKnown, hasInfs, hasStatus, Player, preClue, setup, takeTurn}, Player._
-import scala_bot.reactor.{evalAction, Reactor}
+import scala_bot.reactor.{_evalAction, Reactor}
 
 import scala_bot.utils.{pipe, tap}
 import scala_bot.logger.{Logger,LogLevel}
@@ -86,7 +86,7 @@ class General extends munit.FunSuite:
 			list = Vector(6, 7),
 			clue = BaseClue(ClueKind.Rank, 4)
 		)
-		assert(evalAction(game, clue) < 8.0)
+		assert(_evalAction(game, clue) < 8.0)
 
 	test("it understands targeting dupes"):
 		val game = setup(Reactor.apply, Vector(
@@ -251,7 +251,7 @@ class General extends munit.FunSuite:
 		)
 
 		val action = DiscardAction(0, Alice.ordinal, 2, 1, failed = false)
-		val result = evalAction(game, action)
+		val result = _evalAction(game, action)
 
 		// Discarding g1 in slot 5 is a bad GD.
 		assertEquals(result, -100.0)

@@ -3,7 +3,9 @@ package scala_bot
 import cats.effect.{kernel, IO, std, unsafe}, kernel.Ref, std.Queue, unsafe.IORuntime
 import cats.syntax.all._
 import upickle.default._
+
 import scala.concurrent.duration._
+import scala.util.{Failure, Success, Try}
 
 import scala_bot.basics._
 import scala_bot.console.{ConsoleCmd, NavArg}
@@ -12,7 +14,7 @@ import scala_bot.logger._
 import scala_bot.refSieve.RefSieve
 import scala_bot.hgroup.HGroup
 
-val BOT_VERSION = "v0.9.2 (scala-bot)"
+val BOT_VERSION = "v0.9.3 (scala-bot)"
 
 case class ChatMessage(
 	msg: String,
@@ -341,6 +343,23 @@ class BotClient(queue: Queue[IO, String], gameRef: Ref[IO, Option[Game]])(using 
 
 		else if msg.startsWith("/help") then
 			sendPM(data.who, "See https://github.com/will-hanabi-bot/scala-bot?tab=readme-ov-file#supported-commands for help.")
+
+		else if msg.startsWith("/analyze") then
+			val pattern = """/analyze (\d+) (\w+) ?(\d+)?""".r
+
+			msg match
+				case pattern(id, conv, level) if Convention.from(conv).isDefined =>
+					sendPM(who, s"Analyzing... (may take up to 60s)") *>
+					IO.blocking:
+						Try(fetchAnalyzeGame(List(s"id=$id", s"convention=$conv", s"level=$level")))
+					.flatMap: res =>
+						res match
+							case Success(comments) =>
+								comments.toList.traverse_(sendPM(who, _))
+							case Failure(reason) =>
+								sendPM(who, s"Failed to analyze: $reason.")
+				case _ =>
+					sendPM(who, s"Couldn't parse command. Format is /analyze <id> <convention> [level].")
 
 		else
 			IO.unit

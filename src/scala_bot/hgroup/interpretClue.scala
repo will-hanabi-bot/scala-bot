@@ -218,7 +218,7 @@ def interpClue(ctx: ClueContext): HGroup =
 		return game.copy(lastMove = Some(ClueInterp.Useless))
 
 	def validSave(inf: Identity) =
-		!state.isBasicTrash(inf) &&
+		state.isUseful(inf) &&
 		visibleFind(state, common, inf, infer = true, excludeOrder = focus).isEmpty &&
 		(if clue.kind == ClueKind.Colour then
 			colourSave(prev, action, inf, focus)

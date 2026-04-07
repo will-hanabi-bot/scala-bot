@@ -323,7 +323,7 @@ object RefSieve:
 			val DiscardAction(playerIndex, order, suitIndex, rank, failed) = action
 			val id = Identity(suitIndex, rank)
 
-			if !failed && prev.state.deck(order).clued && suitIndex != -1 && rank != -1 && !state.isBasicTrash(id) then
+			if !failed && prev.state.deck(order).clued && suitIndex != -1 && rank != -1 && state.isUseful(id) then
 				interpretUsefulDc(game, action) match
 					case DiscardResult.None =>
 						game.copy(lastMove = Some(DiscardInterp.None))
@@ -387,8 +387,8 @@ object RefSieve:
 							target <- (0 until state.numPlayers) if target != state.ourPlayerIndex
 							clue   <- state.allValidClues(target)
 						yield
-							val perform = clueToPerform(clue)
-							val action = performToAction(state, perform, state.ourPlayerIndex)
+							val perform = PerformAction.fromClue(clue)
+							val action = perform.toAction(state, state.ourPlayerIndex)
 							(perform, action)
 
 					val allPlays = playableOrders.map: o =>
@@ -458,31 +458,46 @@ object RefSieve:
 
 			var addedUselessClue = false
 
-			def validClue(clue: Clue, target: Int): Boolean =
+			def usefulFill(hypo: RefSieve, order: Int) =
+				state.deck(order).clued &&
+				state.isUseful(state.deck(order).id().get) &&
+				hypo.common.thoughts(order).inferred.length < game.common.thoughts(order).inferred.length
+
+			def clueBadness(clue: Clue, target: Int): Int =
 				val list = state.clueTouched(state.hands(target), clue)
 				val useless = list.forall(o => state.deck(o).clued && state.isBasicTrash(state.deck(o).id().get))
 
-				// Do not simulate clues that touch only previously-clued trash
+				// Clues that touch only previously-clued trash
 				if useless && addedUselessClue then
-					return false
+					return 99
 
 				val hypo = game.simulate(ClueAction(giver, clue.target, state.clueTouched(state.hands(clue.target), clue), clue.base))
 				val legal = hypo.lastMove != Some(ClueInterp.Mistake)
 
 				if !legal then
-					return false
+					return 99
 
 				if useless then
 					addedUselessClue = true
 
-				true
+				// Newly-touched useful card
+				if list.exists(o => !state.deck(o).clued && state.isUseful(state.deck(o).id().get)) then
+					-2
+				// Useful fill-in, or got a playable
+				else if list.exists(usefulFill(hypo, _)) || hypo.common.hypoScore > game.common.hypoScore then
+					-1
+				else
+					0
 
 			val allClues =
-				for
+				(for
 					target <- (0 until state.numPlayers) if target != giver
-					clue   <- state.allValidClues(target) if validClue(clue, target)
+					clue   <- state.allValidClues(target)
+					badness = clueBadness(clue, target) if badness < 99
 				yield
-					clueToPerform(clue)
+					(clue, badness))
+				.sortBy(_._2)
+				.map(t => PerformAction.fromClue(t._1))
 
 			Logger.setLevel(level)
 			allClues
@@ -494,3 +509,6 @@ object RefSieve:
 				.getOrElse(game.players(playerIndex).lockedDiscard(game.state, playerIndex))
 
 			List(PerformAction.Discard(target))
+
+		def evalAction(game: RefSieve, action: Action): Double =
+			_evalAction(game, action)

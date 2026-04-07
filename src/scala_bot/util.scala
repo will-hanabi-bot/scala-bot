@@ -52,27 +52,27 @@ extension[A](it: Iterator[A])
 
 	inline def fastForeach(inline f: A => Unit): Unit =
 		while it.hasNext do
-			f(it.next)
+			f(it.next())
 
 	inline def fastForall(inline f: A => Boolean): Boolean =
 		var satisfied = true
 
 		while it.hasNext && satisfied do
-			if !f(it.next) then
+			if !f(it.next()) then
 				satisfied = false
 		satisfied
 
 	inline def fastCount(inline f: A => Boolean): Int =
 		var res = 0
 		while it.hasNext do
-			if f(it.next) then
+			if f(it.next()) then
 				res += 1
 		res
 
 	inline def fastExists(inline f: A => Boolean): Boolean =
 		var exists = false
 		while it.hasNext && !exists do
-			if f(it.next) then
+			if f(it.next()) then
 				exists = true
 		exists
 
@@ -84,7 +84,7 @@ extension[A](it: Iterator[A])
 		var acc = initial
 
 		while it.hasNext do
-			reducer(acc, it.next) match
+			reducer(acc, it.next()) match
 				case Left(res) =>   return res
 				case Right(next) => acc = next
 		acc
@@ -92,7 +92,7 @@ extension[A](it: Iterator[A])
 	/** Returns the first defined result when applying the given function to each element. */
 	def findSome[B](f: A => Option[B]): Option[B] =
 		while it.hasNext do
-			val res = f(it.next)
+			val res = f(it.next())
 			if res.isDefined then
 				return res
 
@@ -102,14 +102,14 @@ extension[A](it: Iterator[A])
 	def summing[N](f: A => N)(using numeric: Numeric[N]) =
 		var res = numeric.zero
 		while it.hasNext do
-			res = numeric.plus(res, f(it.next))
+			res = numeric.plus(res, f(it.next()))
 		res
 
 	/** Returns max(default, max of all elements transformed with the given function). */
 	def maximizing[N](default: N)(f: A => N)(using numeric: Numeric[N]) =
 		var currMax = default
 		while it.hasNext do
-			currMax = numeric.max(currMax, f(it.next))
+			currMax = numeric.max(currMax, f(it.next()))
 		currMax
 
 extension [A](a: Iterable[A])
@@ -146,7 +146,7 @@ extension [A](a: Iterable[A])
 		var res = numeric.zero
 
 		while it.hasNext do
-			res = numeric.plus(res, f(it.next))
+			res = numeric.plus(res, f(it.next()))
 
 		res
 
@@ -156,7 +156,7 @@ extension [A](a: Iterable[A])
 		var currMax = default
 
 		while it.hasNext do
-			currMax = numeric.max(currMax, f(it.next))
+			currMax = numeric.max(currMax, f(it.next()))
 
 		currMax
 
@@ -216,54 +216,6 @@ def visibleFind(
 			&&
 			cond(playerIndex, order)
 		}
-
-def clueToPerform(clue: Clue): PerformAction =
-	val Clue(kind, value, target) = clue
-	kind match
-		case ClueKind.Colour => PerformAction.Colour(target, value)
-		case ClueKind.Rank   => PerformAction.Rank(target, value)
-
-def performToAction(state: State, perform: PerformAction, playerIndex: Int, deck: Option[IndexedSeq[Identity]] = None) =
-	val deckId = (order: Int) =>
-		state.deck.lift(order).map(_.id()).flatten.orElse(deck.flatMap(d => d(order).id()))
-
-	val clueTouched = (orders: Seq[Int], clue: BaseClue) =>
-		orders.filter(deckId(_).map(state.variant.cardTouched(_, clue)).getOrElse(false))
-
-	perform match
-		case PerformAction.Play(target) =>
-			deckId(target) match
-				case Some(id) =>
-					if state.isPlayable(id) then
-						PlayAction(playerIndex, target, id.suitIndex, id.rank)
-					else
-						DiscardAction(playerIndex, target, id.suitIndex, id.rank, true)
-				case None =>
-					DiscardAction(playerIndex, target, -1, -1, true)
-
-		case PerformAction.Discard(target) =>
-			deckId(target) match
-				case Some(id) =>
-					DiscardAction(playerIndex, target, id.suitIndex, id.rank, false)
-				case None =>
-					DiscardAction(playerIndex, target, -1, -1, false)
-
-		case PerformAction.Colour(target, value) =>
-			val clue = BaseClue(ClueKind.Colour, value)
-			val list = clueTouched(state.hands(target), clue)
-			ClueAction(playerIndex, target, list, clue)
-
-		case PerformAction.Rank(target, value) =>
-			val clue = BaseClue(ClueKind.Rank, value)
-			val list = clueTouched(state.hands(target), clue)
-			ClueAction(playerIndex, target, list, clue)
-
-		case PerformAction.Terminate(target, value) =>
-			GameOverAction(value, target)
-
-def clueToAction(state: State, clue: Clue, giver: Int): ClueAction =
-	val list = state.clueTouched(state.hands(clue.target), clue)
-	ClueAction(giver, clue.target, list, clue.base)
 
 /** Returns all player indices between the start (inclusive) and end (exclusive) in play order. */
 def playersUntil(numPlayers: Int, start: Int, `end`: Int) =

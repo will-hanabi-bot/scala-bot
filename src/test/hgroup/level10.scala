@@ -4,7 +4,7 @@ import cats.effect.unsafe.implicits.global
 
 import scala_bot.basics._
 import scala_bot.test.{fullyKnown, hasInfs, hasStatus, Player, preClue, setup, takeTurn}, Player._
-import scala_bot.hgroup.{evalAction, HGroup}
+import scala_bot.hgroup.{_evalAction, HGroup}
 
 import scala_bot.utils.{pipe, tap}
 import scala_bot.logger.{Logger, LogLevel}
@@ -241,7 +241,7 @@ class GentlemansDiscards extends munit.FunSuite:
 			init = preClue(Alice, 5, Seq("2"))
 		)
 
-		assert(evalAction(game, DiscardAction(Alice.ordinal, game.state.hands(Alice.ordinal)(4), -1, -1, false)) < 0)
+		assert(_evalAction(game, DiscardAction(Alice.ordinal, game.state.hands(Alice.ordinal)(4), -1, -1, false)) < 0)
 
 	test("correctly interprets a play clue after gd"):
 		val game = setup(HGroup.atLevel(10), Vector(

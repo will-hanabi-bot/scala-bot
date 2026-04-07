@@ -222,7 +222,7 @@ private def alternativeClue(game: Reactor, clueTarget: Int, playOnly: Boolean = 
 						val poss = IdentitySet.from(state.variant.touchPossibilities(clue.base))
 
 						state.isPlayable(state.deck(playTarget).id().get) &&
-							(newlyTouched.forall(o => !state.isBasicTrash(state.deck(o).id().get)) ||
+							(newlyTouched.forall(o => state.isUseful(state.deck(o).id().get)) ||
 								newlyTouched.forall(common.thoughts(_).possible.intersect(poss).forall(state.isBasicTrash)))
 					case ClueKind.Rank =>
 						!playOnly &&
@@ -232,7 +232,7 @@ private def alternativeClue(game: Reactor, clueTarget: Int, playOnly: Boolean = 
 							val targetIndex = hand.zipWithIndex.indexWhere((o, i) => i > focusPos && !state.deck(o).clued)
 
 							state.isBasicTrash(state.deck(hand(targetIndex)).id().get) &&
-							newlyTouched.forall(o => !state.isBasicTrash(state.deck(o).id().get))
+							newlyTouched.forall(o => state.isUseful(state.deck(o).id().get))
 						}
 			}
 
@@ -251,7 +251,7 @@ def badStable(prev: Reactor, game: Reactor, action: ClueAction, interp: ClueInte
 		prev.meta(o).status != CardStatus.CalledToDiscard &&
 		(state.isCritical(state.deck(o).id().get) ||
 			(stall &&
-				!state.isBasicTrash(state.deck(o).id().get) &&
+				state.isUseful(state.deck(o).id().get) &&
 				alt.isDefined))
 
 	if interp == ClueInterp.Mistake then

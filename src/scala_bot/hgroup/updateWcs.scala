@@ -310,10 +310,10 @@ def resolveRetained(prev: HGroup, game: HGroup, action: Action, wc: WaitingConne
 		wc.connections.exists: conn =>
 			conn.order == connOrder &&
 			conn.ids.exists: i =>
-				!state.isBasicTrash(i) && !prev.state.isPlayable(i)
+				state.isUseful(i) && !prev.state.isPlayable(i)
 
 	if unplayableWcs.nonEmpty then
-		Log.info(s"$name didn't play into unplayable ${wc.currConn.kind}: ${unplayableWcs.map(w => s"${state.logId(w.inference)} ${w.connections.find(_.ids.exists(i => !state.isBasicTrash(i) && !prev.state.isPlayable(i))).map(_.ids.map(state.logId))}")}")
+		Log.info(s"$name didn't play into unplayable ${wc.currConn.kind}: ${unplayableWcs.map(w => s"${state.logId(w.inference)} ${w.connections.find(_.ids.exists(i => state.isUseful(i) && !prev.state.isPlayable(i))).map(_.ids.map(state.logId))}")}")
 		return UpdateResult.Keep
 
 	val hiddenWc = game.waiting.find: wc =>
@@ -355,7 +355,7 @@ def resolveRetained(prev: HGroup, game: HGroup, action: Action, wc: WaitingConne
 			game.isBlindPlaying(o) &&
 			game.xmeta(o).turnFinessed.exists(_ < wc.turn) &&
 			game.common.thoughts(o).inferred.exists: i =>
-				!state.isBasicTrash(i) && !state.isPlayable(i)
+				state.isUseful(i) && !state.isPlayable(i)
 
 	if olderUnplayableFinesse then
 		Log.info(s"allowing $name to clue, need to wait for unplayable older finesse")

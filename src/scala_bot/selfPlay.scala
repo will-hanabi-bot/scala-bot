@@ -50,7 +50,7 @@ def simulateGame[G <: Game](gs: Seq[G], deck: Vector[Identity])(using ops: GameO
 
 			val newGames = games.map: game =>
 				val state = game.state
-				val action = performToAction(state, perform, currentPlayerIndex, Some(deck))
+				val action = perform.toAction(state, currentPlayerIndex, Some(deck))
 
 				game.handleAction(action).when(!(_).state.ended):
 					_.when(_.state.nextCardOrder < deck.length): g =>
@@ -79,7 +79,7 @@ def simulateGame[G <: Game](gs: Seq[G], deck: Vector[Identity])(using ops: GameO
 
 	val initial = (games, Vector.empty[PerformAction])
 	val (finalGames, actions) = Iterator.iterate(initial)(advance)
-		.dropWhile((games, _) => !games.head.state.ended).next
+		.dropWhile((games, _) => !games.head.state.ended).next()
 
 	val game = finalGames.head
 	val state = game.state

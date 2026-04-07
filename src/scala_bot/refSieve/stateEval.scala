@@ -172,7 +172,7 @@ def advance(orig: RefSieve, game: RefSieve, offset: Int): Double =
 				Log.info(s"${state.names(playerIndex)} discarding ${state.logId(id)}")
 				advance(orig, game.simulate(action), offset + 1)
 
-def evalAction(game: RefSieve, action: Action): Double =
+def _evalAction(game: RefSieve, action: Action): Double =
 	Log.highlight(Console.GREEN, s"===== Predicting value for ${action.fmt(game.state)} =====")
 	val state = game.state
 	val hypoGame = game.simulate(action)

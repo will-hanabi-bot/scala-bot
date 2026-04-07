@@ -263,6 +263,10 @@ object Action:
 			case "gameOver" => Some(GameOverAction.fromJSON(json))
 			case _     => None
 
+	def fromClue(state: State, clue: Clue, giver: Int): ClueAction =
+		val list = state.clueTouched(state.hands(clue.target), clue)
+		ClueAction(giver, clue.target, list, clue.base)
+
 /** Returns an updated action list after trying to insert the action on the specified turn.
   * Does nothing if that turn already contains the action.
   *
@@ -382,6 +386,44 @@ enum PerformAction:
 			case Terminate(target, value) =>
 				ujson.Obj("tableID" -> tableID, "type" -> 4, "target" -> target, "value" -> value)
 
+	def toAction(state: State, playerIndex: Int, deck: Option[IndexedSeq[Identity]] = None) =
+		val deckId = (order: Int) =>
+			state.deck.lift(order).map(_.id()).flatten.orElse(deck.flatMap(d => d(order).id()))
+
+		val clueTouched = (orders: Seq[Int], clue: BaseClue) =>
+			orders.filter(deckId(_).map(state.variant.cardTouched(_, clue)).getOrElse(false))
+
+		this match
+			case PerformAction.Play(target) =>
+				deckId(target) match
+					case Some(id) =>
+						if state.isPlayable(id) then
+							PlayAction(playerIndex, target, id.suitIndex, id.rank)
+						else
+							DiscardAction(playerIndex, target, id.suitIndex, id.rank, true)
+					case None =>
+						DiscardAction(playerIndex, target, -1, -1, true)
+
+			case PerformAction.Discard(target) =>
+				deckId(target) match
+					case Some(id) =>
+						DiscardAction(playerIndex, target, id.suitIndex, id.rank, false)
+					case None =>
+						DiscardAction(playerIndex, target, -1, -1, false)
+
+			case PerformAction.Colour(target, value) =>
+				val clue = BaseClue(ClueKind.Colour, value)
+				val list = clueTouched(state.hands(target), clue)
+				ClueAction(playerIndex, target, list, clue)
+
+			case PerformAction.Rank(target, value) =>
+				val clue = BaseClue(ClueKind.Rank, value)
+				val list = clueTouched(state.hands(target), clue)
+				ClueAction(playerIndex, target, list, clue)
+
+			case PerformAction.Terminate(target, value) =>
+				GameOverAction(value, target)
+
 object PerformAction:
 	def fromJSON(json: ujson.Value): PerformAction =
 		val actionType = json("type").num.toInt
@@ -394,3 +436,29 @@ object PerformAction:
 			case 2 => PerformAction.Colour(target, value)
 			case 3 => PerformAction.Rank(target, value)
 			case 4 => PerformAction.Terminate(target, value)
+
+	def fromAction(action: Action): PerformAction =
+		action match
+			case ClueAction(_, target, _, clue) =>
+				if clue.kind == ClueKind.Colour then
+					PerformAction.Colour(target, clue.value)
+				else
+					PerformAction.Rank(target, clue.value)
+
+			case DiscardAction(_, order, _, _, failed) =>
+				if failed then
+					PerformAction.Play(order)
+				else
+					PerformAction.Discard(order)
+
+			case PlayAction(_, order, _, _) =>
+				PerformAction.Play(order)
+
+			case _ =>
+				throw new Error(s"can't convert non-performed action $action to a PerformAction!")
+
+	def fromClue(clue: Clue): PerformAction =
+		val Clue(kind, value, target) = clue
+		kind match
+			case ClueKind.Colour => PerformAction.Colour(target, value)
+			case ClueKind.Rank   => PerformAction.Rank(target, value)

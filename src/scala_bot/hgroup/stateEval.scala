@@ -26,7 +26,7 @@ def getResult(game: HGroup, hypo: HGroup, action: ClueAction): Double =
 	val badTrash = state.hands.flatten.find: o =>
 		!meta(o).trash && hypo.meta(o).trash &&
 		state.deck(o).id().exists: id =>
-			!state.isBasicTrash(id) && visibleFind(game.state, game.players(giver), id, excludeOrder = o).isEmpty
+			state.isUseful(id) && visibleFind(game.state, game.players(giver), id, excludeOrder = o).isEmpty
 
 	if badTrash.isDefined then
 		Log.warn(s"clue ${clue.fmt(state, target)} results in ${state.logId(badTrash.get)} ${badTrash.get} looking trash!")
@@ -264,7 +264,7 @@ def advance(orig: HGroup, game: HGroup, offset: Int): Double =
 				Log.info(s"${state.names(playerIndex)} discarding trash ${state.logId(id)}")
 				advance(orig, game.simulate(action), offset + 1)
 
-def evalAction(game: HGroup, action: Action): Double =
+def _evalAction(game: HGroup, action: Action): Double =
 	Log.highlight(Console.GREEN, s"===== Predicting value for ${action.fmt(game.state)} =====")
 	val state = game.state
 

@@ -3,7 +3,6 @@ package scala_bot.basics
 import scala_bot.TableOptions
 import scala_bot.utils._
 import scala.util.matching.Regex
-import scala.util.hashing.MurmurHash3
 
 case class State(
 	turnCount: Int = 0,
@@ -29,26 +28,14 @@ case class State(
 	numPlayers: Int,
 	names: Vector[String],
 	hands: Vector[Vector[Int]],
-	deck: Vector[Card] = Vector(),
+	deck: Vector[Card],
+	holders: Vector[Int],
 
 	ourPlayerIndex: Int,
 	actionList: Vector[List[Action]] = Vector(),
 	currentPlayerIndex: Int = 0,
 	options: TableOptions
 ):
-	lazy val hash =
-		val deckInts = Array.ofDim[Int](deck.length)
-		loop(0, _ < deck.length, _ + 1): i =>
-			val card = deck(i)
-
-			deckInts(i) =
-				if card.suitIndex != -1 && card.rank != -1 then
-					card.suitIndex * 5 + (card.rank - 1)
-				else
-					0
-
-		MurmurHash3.caseClassHash((hands, deckInts, clueTokens, halfClueToken, endgameTurns))
-
 	def withDiscard(id: Identity, order: Int) =
 		val Identity(suitIndex, rank) = id
 		val newStacks = discardStacks.updated(suitIndex,
@@ -177,11 +164,9 @@ case class State(
 		count
 
 	def holderOf(order: Int): Int =
-		loop(0, _ < numPlayers, _ + 1): i =>
-			if hands(i).fastExists(_ == order) then
-				return i
-
-		throw new IllegalArgumentException(s"Tried to get holder of $order, hands were $hands!")
+		holders.lift(order) match
+			case Some(playerIndex) => playerIndex
+			case None => throw new IllegalArgumentException(s"Tried to get holder of $order but it hasn't been drawn yet!")
 
 	def inStartingHand(order: Int)=
 		order < numPlayers * HAND_SIZE(numPlayers)
@@ -273,6 +258,8 @@ object State:
 
 			names = names,
 			hands = Vector.fill(names.length)(Vector()),
+			deck = Vector.empty,
+			holders = Vector.empty,
 
 			ourPlayerIndex = ourPlayerIndex,
 			options = options)

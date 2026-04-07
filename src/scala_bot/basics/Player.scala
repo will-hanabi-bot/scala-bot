@@ -424,7 +424,7 @@ case class Player(
 					val order = link.target
 					val id = state.deck(order).id()
 
-					if id.isEmpty || !state.isBasicTrash(id.get) then
+					if id.isEmpty || state.isUseful(id.get) then
 						play(link.target)
 
 		this.copy(

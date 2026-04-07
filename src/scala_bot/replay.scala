@@ -97,11 +97,11 @@ def processGame[G <: Game](game: G, data: GameData, index: Int)(using ops: GameO
 						if playerIndex == index then -1 else deck(order).rank
 					))
 		.pipe:
-			actions.foldLeft(_): (acc, action) =>
+			actions.foldLeft(_): (acc, perform) =>
 				val playerIndex = acc.state.currentPlayerIndex
-				acc.handleAction(performToAction(acc.state, action, playerIndex, Some(deck)))
+				acc.handleAction(perform.toAction(acc.state, playerIndex, Some(deck)))
 					.when(_.state.nextCardOrder < deck.length): a =>
-						action match
+						perform match
 							case PerformAction.Play(_) | PerformAction.Discard(_) =>
 								val order = a.state.nextCardOrder
 								a.handleAction(DrawAction(
@@ -111,7 +111,7 @@ def processGame[G <: Game](game: G, data: GameData, index: Int)(using ops: GameO
 									if playerIndex == index then -1 else deck(order).rank
 								))
 							case _ => a
-					.when(a => action.isInstanceOf[PerformAction.Play] && a.state.strikes == 3):
+					.when(p => perform.isInstanceOf[PerformAction.Play] && p.state.strikes == 3):
 						_.handleAction(GameOverAction(0, playerIndex))
 					.pipe: g =>
 						val nextPlayerIndex = g.state.nextPlayerIndex(g.state.currentPlayerIndex)
