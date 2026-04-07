@@ -66,7 +66,7 @@ object main extends IOApp:
 									for
 										acc <- buffer.getAndUpdate(_ => "")
 										full = acc + text
-										_   <- client.handleMsg(full).start
+										_   <- client.handleMsg(full)
 										_   <- loop
 									yield ()
 

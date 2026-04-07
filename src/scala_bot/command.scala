@@ -5,7 +5,6 @@ import cats.syntax.all._
 import upickle.default._
 
 import scala.concurrent.duration._
-import scala.util.{Failure, Success, Try}
 
 import scala_bot.basics._
 import scala_bot.console.{ConsoleCmd, NavArg}
@@ -14,7 +13,7 @@ import scala_bot.logger._
 import scala_bot.refSieve.RefSieve
 import scala_bot.hgroup.HGroup
 
-val BOT_VERSION = "v0.9.3 (scala-bot)"
+val BOT_VERSION = "v0.9.3a (scala-bot)"
 
 case class ChatMessage(
 	msg: String,
@@ -349,15 +348,19 @@ class BotClient(queue: Queue[IO, String], gameRef: Ref[IO, Option[Game]])(using 
 
 			msg match
 				case pattern(id, conv, level) if Convention.from(conv).isDefined =>
-					sendPM(who, s"Analyzing... (may take up to 60s)") *>
-					IO.blocking:
-						Try(fetchAnalyzeGame(List(s"id=$id", s"convention=$conv", s"level=$level")))
-					.flatMap: res =>
-						res match
-							case Success(comments) =>
-								comments.toList.traverse_(sendPM(who, _))
-							case Failure(reason) =>
-								sendPM(who, s"Failed to analyze: $reason.")
+					val args = List(
+						Some(s"id=$id"),
+						Some(s"convention=$conv"),
+						Option.when(level != null)(s"level=$level")
+					).flatten
+
+					val analyzeIO = IO.blocking(fetchAnalyzeGame(args))
+						.flatMap: comments =>
+							comments.toList.traverse_(sendPM(who, _))
+						.handleErrorWith: reason =>
+							sendPM(who, s"Failed to analyze: $reason.")
+
+						sendPM(who, "Analyzing... (may take up to 60s)") *> analyzeIO.start.void
 				case _ =>
 					sendPM(who, s"Couldn't parse command. Format is /analyze <id> <convention> [level].")
 
