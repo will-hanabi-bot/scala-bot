@@ -153,7 +153,7 @@ def transferWCs(ctx: DiscardContext, result: DiscardResult): HGroup =
 						Log.info(s"rewriting wc ${state.logConns(wc.connections, wc.inference)}")
 						val order =
 							if orders.exists(game.unknown1) then
-								game.order1s(orders, noFilter = true).head
+								game.order1s(orders).head
 							else
 								orders.head
 

@@ -222,6 +222,13 @@ object RefSieve:
 				prev.common.thoughts(o).possible == game.common.thoughts(o).possible
 
 			if noInfo then
+				if prev.common.hypoPlays.contains(intent) && game.common.thoughts(intent).possible.intersect(state.trashSet).nonEmpty then
+					val badFix = giver == state.ourPlayerIndex && !game.me.orderTrash(game, intent)
+
+					return game.withThought(intent)(t => t.copy(inferred = t.possible.intersect(state.trashSet)))
+						.withMeta(intent)(_.copy(trash = true))
+						.withMove(if badFix then ClueInterp.Mistake else ClueInterp.Fix)
+
 				// No-Info Double Bluff
 				return game.findFinesse(action.target) match
 					case Some(f1) =>

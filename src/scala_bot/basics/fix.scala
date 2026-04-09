@@ -5,12 +5,12 @@ import scala_bot.utils._
 enum FixResult:
 	/** A "conventional" fix clue, indicating either trash or a duplicate (or both). */
 	case Normal(cluedResets: Seq[Int], duplicateReveals: Seq[Int])
-	/** A fix clue that gives no new information. */
-	case NoNewInfo(fixes: Seq[Int])
+	/** A fix clue that gives no new information. The convention must decide which order is fixed (based on play order). */
+	case NoNewInfo
 	/** Not a fix clue. */
 	case None
 
-/** Returns a [[FixResult]] describing whether a fix clue was just given..
+/** Returns a [[FixResult]] describing whether a fix clue was just given.
   *
   * @param prev   The game state before the clue.
   * @param game   The game state after the clue (and associated elim).
@@ -18,7 +18,6 @@ enum FixResult:
   */
 def checkFix(prev: Game, game: Game, action: ClueAction): FixResult =
 	val list = action.list
-	val prevPlayables = prev.common.thinksPlayables(prev, action.target)
 
 	val (cluedResets, duplicateReveals) = list.foldRight((List[Int](), List[Int]())) { case (order, (cluedResets, duplicateReveals)) =>
 		lazy val duplicated = prev.state.deck(order).clued && list.exists: o =>
@@ -38,17 +37,7 @@ def checkFix(prev: Game, game: Game, action: ClueAction): FixResult =
 	}
 
 	if cluedResets.nonEmpty || duplicateReveals.nonEmpty then
-		return FixResult.Normal(cluedResets, duplicateReveals)
-
-	val noNewInfoFixes = list.filter: o =>
-		!prev.meta(o).focused &&
-		prevPlayables.contains(o) &&
-		list.forall(prev.state.deck(_).clued) &&
-		prev.common.thoughts(o).possible == game.common.thoughts(o).possible &&
-		game.common.thoughts(o).possible.exists(game.state.isBasicTrash)
-
-	if noNewInfoFixes.nonEmpty then
-		FixResult.NoNewInfo(noNewInfoFixes)
+		FixResult.Normal(cluedResets, duplicateReveals)
 	else
 		FixResult.None
 

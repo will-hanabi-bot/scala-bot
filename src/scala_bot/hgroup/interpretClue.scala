@@ -69,7 +69,7 @@ def checkHFix(ctx: ClueContext): Option[HGroup] =
 					val old1s = list.filter: o =>
 						prev.common.thoughts(o).inferred.forall(_.rank == 1) &&
 						!prev.common.thoughts(o).possible.forall(_.rank == 1)
-					val oldOrdered1s = prev.order1s(old1s, noFilter = true)
+					val oldOrdered1s = prev.order1s(old1s)
 					val fixedOrder = oldOrdered1s.head
 
 					if state.deck(fixedOrder).id().forall(_.rank == clue.value) then
@@ -92,29 +92,11 @@ def checkHFix(ctx: ClueContext): Option[HGroup] =
 						Log.error("looked like pink fix but didn't match possible interpretations?")
 						None
 
-		case FixResult.None => None
-
 		case FixResult.Normal(cluedResets, duplicateReveals) =>
 			Log.info(s"fix clue! not inferring anything else $cluedResets $duplicateReveals")
 			Some(game.withMove(ClueInterp.Fix))
 
-		case FixResult.NoNewInfo(fixes) =>
-			if game.level < Level.Fix then
-				Log.info("looked like out-of-level no-info fix!")
-				Some(game.withMove(ClueInterp.Mistake))
-			else
-				Log.info(s"no info fix clue on $fixes! not inferring anything else")
-
-				val fixTarget = Option.when(clue == BaseClue(ClueKind.Rank, 1)):
-					prev.order1s(list.filter(prev.unknown1), noFilter = true).headOption
-				.flatten.getOrElse(focus)
-
-				val badFix = giver == state.ourPlayerIndex && !game.me.orderTrash(game, fixTarget)
-
-				Some(game
-					.withThought(fixTarget)(t => t.copy(inferred = t.possible.intersect(state.trashSet)))
-					.withMeta(fixTarget)(_.copy(trash = true))
-					.withMove(if badFix then ClueInterp.Mistake else ClueInterp.Fix))
+		case _ => None
 
 def interpClue(ctx: ClueContext): HGroup =
 	val ClueContext(prev, game, action) = ctx
@@ -198,16 +180,30 @@ def interpClue(ctx: ClueContext): HGroup =
 				)
 			.withMove(ClueInterp.Fix)
 
-	val uselessReclue = prev.state.deck(focus).clued &&
-		!positional && {
+	if prev.state.deck(focus).clued && !positional then
+		if game.level >= Level.Fix then
+			val fixTarget = Option.when(clue == BaseClue(ClueKind.Rank, 1)):
+				prev.order1s(list.filter(prev.unknown1)).headOption
+			.flatten.getOrElse(focus)
+
+			if prev.common.hypoPlays.contains(fixTarget) && common.thoughts(fixTarget).possible.intersect(state.trashSet).nonEmpty then
+				Log.info(s"no info fix clue! not inferring anything else")
+
+				val badFix = giver == state.ourPlayerIndex && !game.me.orderTrash(game, fixTarget)
+
+				return game
+					.withThought(fixTarget)(t => t.copy(inferred = t.possible.intersect(state.trashSet)))
+					.withMeta(fixTarget)(_.copy(trash = true))
+					.withMove(if badFix then ClueInterp.Mistake else ClueInterp.Fix)
+
+		val uselessReclue =
 			prev.common.hypoPlays.contains(focus) ||
 			game.me.thoughts(focus).id().exists: id =>
 				prev.common.hypoStacks(id.suitIndex) >= id.rank
-		}
 
-	if uselessReclue then
-		Log.warn("nonsensical burn!")
-		return game.withMove(ClueInterp.Useless)
+		if uselessReclue then
+			Log.warn("nonsensical burn!")
+			return game.withMove(ClueInterp.Useless)
 
 	val trashPush = chop && game.common.orderKt(game, focus)
 

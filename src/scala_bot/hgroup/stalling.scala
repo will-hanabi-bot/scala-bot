@@ -114,8 +114,11 @@ def isStall(ctx: ClueContext, severity: Int): Option[StallInterp] =
 def alternativeClue(ctx: ClueContext, maxStall: Int) =
 	val ClueContext(prev, game, action) = ctx
 	val ClueAction(giver, target, list, clue) = action
+	val state = game.state
 	val origClue = Clue(clue.kind, clue.value, target)
 	val origFocus = ctx.focusResult.focus
+
+	var foundFPE: Option[Identity] = None
 
 	def satisfied(hypo: HGroup, action: ClueAction) =
 		val (badTouch, _, _) = badTouchResult(game, hypo, action)
@@ -123,13 +126,31 @@ def alternativeClue(ctx: ClueContext, maxStall: Int) =
 
 		hypo.lastMove.get.matchesP:
 			case ClueInterp.Play =>
-				playables.exists(!game.state.deck(_).clued) &&
+				playables.exists(!state.deck(_).clued) &&
 				badTouch.isEmpty &&
 				// Can't expect them to clue a possible clued dupe in their hand or our hand
-				!playables.forall(game.state.deck(_).id().exists: id =>
-					(game.state.hands(giver) ++ game.state.ourHand).exists: o =>
+				!playables.forall(state.deck(_).id().exists: id =>
+					(state.hands(giver) ++ state.ourHand).exists: o =>
 						game.isTouched(o) && game.players(giver).thoughts(o).inferred.contains(id)
-				)
+				) &&
+				!game.findFinesse(action.target).exists: finesse =>
+					val fpe =
+						game.level >= Level.Stalling &&
+						maxStall == 0 &&		// Must have been a 5 Stall
+						playables.contains(finesse) &&
+						state.clueTokens > 1
+
+					fpe &&
+					state.deck(finesse).id().exists: finesseId =>
+						foundFPE match
+							case Some(id) if id != finesseId =>
+								Log.info(s"found FPE previously, not allowing FPE on ${action.target}")
+								false
+							case Some(_) => true	// Same id
+							case _ =>
+								Log.info(s"FPE on ${state.names(action.target)}'s ${state.logId(finesseId)}")
+								foundFPE = Some(finesseId)
+								true
 
 			case ClueInterp.Save =>
 				true
@@ -141,8 +162,6 @@ def alternativeClue(ctx: ClueContext, maxStall: Int) =
 						hypo.level >= 2 && !hypo.stalled5 && STALL_INDICES(interp) < maxStall
 
 					case i => STALL_INDICES(i) < maxStall
-
-	val state = game.state
 
 	val seenBy =
 		for

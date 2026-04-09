@@ -19,7 +19,7 @@ class Playing1s extends munit.FunSuite:
 		)
 		.pipe(takeTurn("Bob clues 1 to Alice (slots 3,4)"))
 
-		val ordered1s = game.order1s(game.state.hands(Alice.ordinal))
+		val ordered1s = game.order1s(game.state.hands(Alice.ordinal).filter(game.unknown1))
 		assertEquals(ordered1s, List(1, 2))
 
 	test("orders fresh 1s"):
@@ -30,7 +30,7 @@ class Playing1s extends munit.FunSuite:
 		.pipe(takeTurn("Alice bombs b4 (slot 1)"))
 		.pipe(takeTurn("Bob clues 1 to Alice (slots 1,4)"))
 
-		val ordered1s = game.order1s(game.state.hands(Alice.ordinal))
+		val ordered1s = game.order1s(game.state.hands(Alice.ordinal).filter(game.unknown1))
 		assertEquals(ordered1s, List(10, 1))
 
 	test("orders chop focus"):
@@ -41,7 +41,7 @@ class Playing1s extends munit.FunSuite:
 		.pipe(takeTurn("Alice bombs b4 (slot 1)"))
 		.pipe(takeTurn("Bob clues 1 to Alice (slots 1,2,5)"))
 
-		val ordered1s = game.order1s(game.state.hands(Alice.ordinal))
+		val ordered1s = game.order1s(game.state.hands(Alice.ordinal).filter(game.unknown1))
 		assertEquals(ordered1s, Seq(0, 10, 3))
 
 	test("doesn't prompt playable 1s"):
@@ -88,7 +88,7 @@ class Playing1s extends munit.FunSuite:
 		)
 		.pipe(takeTurn("Alice clues 1 to Bob"))
 
-		val ordered1s = game.order1s(game.state.hands(Bob.ordinal))
+		val ordered1s = game.order1s(game.state.hands(Bob.ordinal).filter(game.unknown1))
 		assertEquals(ordered1s, Seq(8, 9, 5))
 
 	test("orders 1s correctly when only cluing chop moved cards"):
@@ -103,7 +103,7 @@ class Playing1s extends munit.FunSuite:
 		)
 		.pipe(takeTurn("Alice clues 1 to Bob"))
 
-		val ordered1s = game.order1s(game.state.hands(Bob.ordinal))
+		val ordered1s = game.order1s(game.state.hands(Bob.ordinal).filter(game.unknown1))
 		assertEquals(ordered1s, Seq(6, 5))
 
 class Sarcastic extends munit.FunSuite:

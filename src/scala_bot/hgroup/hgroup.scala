@@ -86,7 +86,7 @@ case class HGroup(
 	assumePlays: Boolean = true
 ) extends Game:
 	override def filterPlayables(player: Player, playerIndex: Int, orders: Seq[Int], assume: Boolean = true) =
-		val ordered1s = this.order1s(orders.filter(this.unknown1), noFilter = true)
+		val ordered1s = this.order1s(orders.filter(this.unknown1))
 
 		orders.filter: o =>
 			// if player.orderKp(this, o) then
@@ -220,12 +220,8 @@ case class HGroup(
 
 		clues.nonEmpty && clues.forall(_.isEq(BaseClue(ClueKind.Rank, 1)))
 
-	def order1s(orders: Seq[Int], noFilter: Boolean = false) =
-		val unknown1s = if noFilter then orders else
-			orders.filter: o =>
-				unknown1(o) && common.thoughts(o).possible.forall(_.rank == 1)
-
-		unknown1s.sortBy: o =>
+	def order1s(orders: Seq[Int]) =
+		orders.sortBy: o =>
 			if cluedOnChop.contains(o) then
 				-100 - o
 			else if meta(o).cm then

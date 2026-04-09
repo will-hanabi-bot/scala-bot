@@ -150,7 +150,7 @@ def checkOcm(prev: HGroup, action: PlayAction | DiscardAction) =
 		case PlayAction(p, o, _, _) => (p, o)
 		case DiscardAction(p, o, _, _, _) => (p, o)
 
-	val ordered1s = prev.order1s(state.hands(playerIndex))
+	val ordered1s = prev.order1s(state.hands(playerIndex).filter(prev.unknown1))
 	val offset = ordered1s.indexOf(order)
 	val target = (playerIndex + offset) % state.numPlayers
 

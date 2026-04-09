@@ -140,18 +140,31 @@ case class EndgameSolver[G <: Game](
 
 		Log.info(s"remaining ids: ${remainingIds.fmt2(state)}")
 
-		def impossibleArr(ids: Vector[Identity], id: Identity, order: Int, tryFilter: Boolean) =
+		def impossibleArr(ids: Vector[Identity], id: Identity, order: Int, tryFilter: Boolean): Boolean =
 			val thought = game.me.thoughts(order)
 
-			state.deck(order).id().exists(_ != id) ||
-			!thought.possible.contains(id) ||
-			(tryFilter && !game.validArr(id, order)) ||
+			if state.deck(order).id().exists(_ != id) || !thought.possible.contains(id) then
+				return true
+
+			if tryFilter && !game.validArr(id, order) then
+				Log.info(s"arranging: conventionally unlikely to assign ${state.logId(id)} to $order, ignoring")
+				return true
+
 			// We cannot assign a trash id if it is linked for a non-trash id and all other orders are already trash
-			(state.isBasicTrash(id) && linkedOrders.contains(order) && game.me.links.exists: l =>
-				val orders = l.getOrders
-				l.promise.exists(state.isUseful) && orders.contains(order) && orders.forall: o =>
-					o == order ||
-					ids.zipWithIndex.exists((id2, i) => o == unknownOwn(i) && state.isBasicTrash(id2)))
+			val linked = Option.when(state.isBasicTrash(id) && linkedOrders.contains(order)):
+				game.me.links.find: l =>
+					val orders = l.getOrders
+					l.promise.exists(state.isUseful) && orders.contains(order) && orders.forall: o =>
+						o == order ||
+						ids.zipWithIndex.exists((id2, i) => o == unknownOwn(i) && state.isBasicTrash(id2))
+			.flatten
+
+			linked match
+				case Some(link) =>
+					Log.info(s"arranging: $order is linked to ${link.getOrders} for ${state.logId(link.promise.get)} but others are already trash, can't assign ${state.logId(id)}")
+					return true
+				case None =>
+					return false
 
 		def expandArr(arrangement: Arrangement, tryFilter: Boolean): Iterable[Arrangement] =
 			if Instant.now.isAfter(deadline) then
@@ -167,10 +180,11 @@ case class EndgameSolver[G <: Game](
 					val newProb = prob * missing / totalCards
 					Arrangement(newIds, newProb, newRemaining)
 
-		val initialArr = Iterator.single(Arrangement(Vector.empty, Frac.one, remainingIds))
-		val allArrs = Iterator.iterate(initialArr)(_.flatMap(expandArr(_, true))).drop(unknownOwn.length).next()
+		val initialArr = Arrangement(Vector.empty, Frac.one, remainingIds)
+		val allArrs = Iterator.iterate(Iterator.single(initialArr))(_.flatMap(expandArr(_, true))).drop(unknownOwn.length).next()
 			.when(!_.hasNext): _ =>
-				Iterator.iterate(initialArr)(_.flatMap(expandArr(_, false))).drop(unknownOwn.length).next()
+				Log.highlight(Console.YELLOW, s"trying again with no filter")
+				Iterator.iterate(Iterator.single(initialArr))(_.flatMap(expandArr(_, false))).drop(unknownOwn.length).next()
 
 		if Instant.now.isAfter(deadline) then
 			Logger.setLevel(level)

@@ -266,6 +266,72 @@ class Stalling extends munit.FunSuite:
 		// Alice should 5 Stall on Cathy, since Bob's 5 is farther away from chop.
 		assertEquals(game.takeAction.unsafeRunSync(), PerformAction.Rank(Cathy.ordinal, 5))
 
+	test("respects FPE for 5 stalls"):
+		val game = setup(HGroup.atLevel(9), Vector(
+			Vector("xx", "xx", "xx", "xx", "xx"),
+			Vector("r1", "y4", "r5", "g2", "r3"),
+			Vector("y5", "r4", "b3", "b4", "b1")
+		),
+			starting = Cathy
+		)
+		.pipe(takeTurn("Cathy clues 5 to Alice (slot 3)"))
+
+		assertEquals(game.lastMove, Some(ClueInterp.Stall))
+
+	test("doesn't use FPE to end early game"):
+		val game = setup(HGroup.atLevel(9), Vector(
+			Vector("xx", "xx", "xx", "xx", "xx"),
+			Vector("r1", "y4", "g4", "b4", "p4"),
+			Vector("r4", "y4", "g4", "b4", "p4")
+		),
+			starting = Cathy
+		)
+		.pipe(takeTurn("Cathy clues 5 to Alice (slot 5)"))
+
+		assert(game.earlyGameClue(Alice.ordinal).nonEmpty)
+
+	test("considers an FPE"):
+		val game = setup(HGroup.atLevel(9), Vector(
+			Vector("xx", "xx", "xx", "xx", "xx"),
+			Vector("r4", "y4", "g5", "b4", "p3"),
+			Vector("r1", "y4", "g4", "b4", "p4")
+		),
+			clueTokens = 5
+		)
+
+		// 5 Stalling saves p3 for 1 round.
+		assertEquals(game.takeAction.unsafeRunSync(), PerformAction.Rank(Bob.ordinal, 5))
+
+	test("doesn't consider FPE when there is a save clue"):
+		val game = setup(HGroup.atLevel(9), Vector(
+			Vector("xx", "xx", "xx", "xx", "xx"),
+			Vector("r4", "y4", "g5", "b4", "p3"),
+			Vector("r1", "y4", "g4", "b4", "p5")
+		),
+			clueTokens = 5
+		)
+		.pipe(takeTurn("Alice clues 5 to Bob"))
+
+		assertEquals(game.lastMove, Some(ClueInterp.Mistake))
+
+	test("allows a 5 Stall FPE outside of early game"):
+		val game = setup(HGroup.atLevel(9), Vector(
+			Vector("xx", "xx", "xx", "xx"),
+			Vector("y5", "r5", "b5", "g5"),
+			Vector("y4", "p5", "r4", "r3"),
+			Vector("b1", "g4", "b4", "b3")
+		),
+			init = _.copy(inEarlyGame = false)
+		)
+		.pipe(takeTurn("Alice clues 5 to Bob"))
+
+		val fpe = takeTurn("Bob clues 5 to Cathy")(game)
+		assertEquals(fpe.lastMove, Some(ClueInterp.Stall))
+
+		// But doesn't allow a locked hand stall
+		val finesse = takeTurn("Bob clues red to Cathy")(game)
+		assertEquals(finesse.lastMove, Some(ClueInterp.Play))
+
 	test("respects potentially having a clue in their hand when interpreting a stall"):
 		val game = setup(HGroup.atLevel(9), Vector(
 			Vector("xx", "xx", "xx", "xx", "xx"),
