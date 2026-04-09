@@ -137,40 +137,36 @@ def advance(orig: RefSieve, game: RefSieve, offset: Int): Double =
 		_forceClue(orig, game, offset, only = Some(bob))
 
 	else
+		def tryDiscard(order: Int) =
+			val id = state.deck(order).id().get
+			val Identity(suitIndex, rank) = id
+			val action = DiscardAction(playerIndex, order, suitIndex, rank)
+
+			Log.info(s"${state.names(playerIndex)} discarding ${state.logId(id)} but might clue")
+
+			val dcValue = advance(orig, game.simulate(action), offset + 1)
+
+			if state.clueTokens < 2 then dcValue else
+				val clueValue = _forceClue(orig, game, offset)
+
+				val clueProb = if offset == 1 then
+					if common.thinksLoaded(game, bob) then
+						0.2
+					else if bobChop.isDefined then
+						if state.isBasicTrash(state.deck(bobChop.get).id().get) then 0.2 else 0.7
+					else
+						0.5
+				else
+					0.8
+
+				clueProb * clueValue + (1.0 - clueProb) * dcValue
+
 		urgentDc.orElse(trash.headOption) match
 			case None =>
 				val chop = game.chop(playerIndex).getOrElse(throw new Exception(s"Player ${state.names(playerIndex)} not locked but no chop! ${state.hands(playerIndex).map(state.deck(_))}"))
-				val id = state.deck(chop).id().get
-				val action = DiscardAction(playerIndex, chop, id.suitIndex, id.rank)
-				val dcGame = game.simulate(action)
+				tryDiscard(chop)
 
-				val clueProb =
-					if state.numPlayers == 2 then
-						0
-					else if offset == 1 then
-						if common.thinksLoaded(game, bob) then
-							0.2
-						else if bobChop.isDefined then
-							if state.isBasicTrash(state.deck(bobChop.get).id().get) then 0.2 else 0.7
-						else
-							0.5
-					else
-						0.8
-
-				if state.clueTokens > 2 && clueProb > 0 then
-					Log.info(s"${state.names(playerIndex)} discarding ${state.logId(id)} but might clue $clueProb")
-					clueProb * _forceClue(orig, game, offset) + (1.0 - clueProb) * advance(orig, dcGame, offset + 1)
-				else
-					Log.info(s"${state.names(playerIndex)} discarding ${state.logId(id)}")
-					advance(orig, dcGame, offset + 1)
-
-			case Some(order) =>
-				val id = state.deck(order).id().get
-				val Identity(suitIndex, rank) = id
-				val action = DiscardAction(playerIndex, order, suitIndex, rank)
-
-				Log.info(s"${state.names(playerIndex)} discarding ${state.logId(id)}")
-				advance(orig, game.simulate(action), offset + 1)
+			case Some(order) => tryDiscard(order)
 
 def _evalAction(game: RefSieve, action: Action): Double =
 	Log.highlight(Console.GREEN, s"===== Predicting value for ${action.fmt(game.state)} =====")

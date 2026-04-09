@@ -120,7 +120,7 @@ def genArrs(game: Game, remaining: RemainingMap, clueOnly: Boolean): (List[GameA
 	val state = game.state
 	val undrawn = GameArr(Frac.one, remaining, None)
 
-	assert(remaining.values.summing(_.missing) == state.cardsLeft, s"genArr failed ${remaining.fmt2(state)} ${state.cardsLeft}")
+	assert(remaining.values.sum == state.cardsLeft, s"genArr failed ${remaining.fmt2(state)} ${state.cardsLeft}")
 
 	val drawn =
 		if clueOnly then
@@ -134,12 +134,12 @@ def genArrs(game: Game, remaining: RemainingMap, clueOnly: Boolean): (List[GameA
 		else
 			val drawnArrs =
 				val (usefulArrs, trashArr) = remaining.foldLeft((List.empty[GameArr], GameArr(Frac.zero, remaining, None))):
-					case ((acc, trashArr), (id, RemainingEntry(missing, _))) if state.isBasicTrash(id) =>
+					case ((acc, trashArr), (id, missing)) if state.isBasicTrash(id) =>
 						val newProb = Frac(missing, state.cardsLeft)
 						val newRemaining = remaining.rem(id)
 						(acc, trashArr.copy(prob = trashArr.prob + newProb, remaining = newRemaining, drew = Some(id)))
 
-					case ((acc, trashArr), (id, RemainingEntry(missing, _))) =>
+					case ((acc, trashArr), (id, missing)) =>
 						val newProb = Frac(missing, state.cardsLeft)
 						val newRemaining = remaining.rem(id)
 						(GameArr(newProb, newRemaining, Some(id)) +: acc, trashArr)

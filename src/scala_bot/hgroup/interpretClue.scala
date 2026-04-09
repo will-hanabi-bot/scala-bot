@@ -63,7 +63,7 @@ def checkHFix(ctx: ClueContext): Option[HGroup] =
 							acc.withThought(o)(t => t.copy(
 								inferred = t.possible.difference(state.playableSet)
 							))
-						).copy(lastMove = Some(ClueInterp.Fix)))
+						).withMove(ClueInterp.Fix))
 
 				else
 					val old1s = list.filter: o =>
@@ -84,7 +84,7 @@ def checkHFix(ctx: ClueContext): Option[HGroup] =
 										acc
 									else
 										acc.withThought(o)(t => t.copy(inferred = t.possible))
-							.copy(lastMove = Some(ClueInterp.Fix))
+							.withMove(ClueInterp.Fix)
 
 						Some(newGame)
 
@@ -96,12 +96,12 @@ def checkHFix(ctx: ClueContext): Option[HGroup] =
 
 		case FixResult.Normal(cluedResets, duplicateReveals) =>
 			Log.info(s"fix clue! not inferring anything else $cluedResets $duplicateReveals")
-			Some(game.copy(lastMove = Some(ClueInterp.Fix)))
+			Some(game.withMove(ClueInterp.Fix))
 
 		case FixResult.NoNewInfo(fixes) =>
 			if game.level < Level.Fix then
 				Log.info("looked like out-of-level no-info fix!")
-				Some(game.copy(lastMove = Some(ClueInterp.Mistake)))
+				Some(game.withMove(ClueInterp.Mistake))
 			else
 				Log.info(s"no info fix clue on $fixes! not inferring anything else")
 
@@ -114,7 +114,7 @@ def checkHFix(ctx: ClueContext): Option[HGroup] =
 				Some(game
 					.withThought(fixTarget)(t => t.copy(inferred = t.possible.intersect(state.trashSet)))
 					.withMeta(fixTarget)(_.copy(trash = true))
-					.copy(lastMove = Some(if badFix then ClueInterp.Mistake else ClueInterp.Fix)))
+					.withMove(if badFix then ClueInterp.Mistake else ClueInterp.Fix))
 
 def interpClue(ctx: ClueContext): HGroup =
 	val ClueContext(prev, game, action) = ctx
@@ -136,7 +136,7 @@ def interpClue(ctx: ClueContext): HGroup =
 			Log.warn(s"asymmetric! only ${thinksStall.map(state.names)} think stall")
 
 			if giver == state.ourPlayerIndex then
-				return game.copy(lastMove = Some(ClueInterp.Mistake))
+				return game.withMove(ClueInterp.Mistake)
 
 		else if thinksStall.size == state.numPlayers then
 			Log.info(s"stalling situation $interp")
@@ -147,10 +147,8 @@ def interpClue(ctx: ClueContext): HGroup =
 				// Pink promise on stalls
 				.when(_.state.includesVariant(PINKISH) && clue.kind == ClueKind.Rank):
 					_.withThought(focus)(t => t.copy(inferred = t.inferred.filter(_.rank == clue.value)))
-				.copy(
-					lastMove = Some(ClueInterp.Stall),
-					stallInterp = Some(interp)
-				)
+				.copy(stallInterp = Some(interp))
+				.withMove(ClueInterp.Stall)
 
 	val distributionIds = distributionClue(prev, game, action, focus)
 
@@ -165,7 +163,7 @@ def interpClue(ctx: ClueContext): HGroup =
 					reset = false
 				)
 			.withMeta(focus)(_.copy(focused = true))
-			.copy(lastMove = Some(ClueInterp.Distribution))
+			.withMove(ClueInterp.Distribution)
 
 	if game.level >= Level.BasicCM && !state.inEndgame then
 		interpretTcm(ctx) match
@@ -174,7 +172,7 @@ def interpClue(ctx: ClueContext): HGroup =
 
 		interpret5cm(ctx) match
 			case None => ()
-			case Some(cm5) => return performCM(game, cm5).copy(lastMove = Some(evaluateCM(ctx, cm5)))
+			case Some(cm5) => return performCM(game, cm5).withMove(evaluateCM(ctx, cm5))
 
 	val pinkTrashFix = state.includesVariant(PINKISH) &&
 		!positional && clue.kind == ClueKind.Rank &&
@@ -198,7 +196,7 @@ def interpClue(ctx: ClueContext): HGroup =
 						!suit.suitType.pinkish ||
 						game.state.isBasicTrash(Identity(suitIndex, clue.value))
 				)
-			.copy(lastMove = Some(ClueInterp.Fix))
+			.withMove(ClueInterp.Fix)
 
 	val uselessReclue = prev.state.deck(focus).clued &&
 		!positional && {
@@ -209,13 +207,13 @@ def interpClue(ctx: ClueContext): HGroup =
 
 	if uselessReclue then
 		Log.warn("nonsensical burn!")
-		return game.copy(lastMove = Some(ClueInterp.Useless))
+		return game.withMove(ClueInterp.Useless)
 
 	val trashPush = chop && game.common.orderKt(game, focus)
 
 	if trashPush && game.level <= Level.TrashMoves then
 		Log.warn("out-of-level trash push! interpreting burn")
-		return game.copy(lastMove = Some(ClueInterp.Useless))
+		return game.withMove(ClueInterp.Useless)
 
 	def validSave(inf: Identity) =
 		state.isUseful(inf) &&
@@ -259,7 +257,7 @@ def interpClue(ctx: ClueContext): HGroup =
 		if noSelf then
 			if simplest.isEmpty then
 				Log.warn("no inferences!")
-				game.copy(lastMove = Some(ClueInterp.Mistake))
+				game.withMove(ClueInterp.Mistake)
 			else
 				Log.info(s"simplest focus possibilities [${simplest.map(fp => state.logId(fp.id)).mkString(",")}]")
 				resolveClue(ctx, simplest)
@@ -289,7 +287,7 @@ def interpClue(ctx: ClueContext): HGroup =
 
 			if simplestOwn.isEmpty then
 				Log.warn("no inferences!")
-				game.copy(lastMove = Some(ClueInterp.Mistake))
+				game.withMove(ClueInterp.Mistake)
 			else
 				resolveClue(ctx, simplestOwn, if savePoss.nonEmpty then Nil else ownFps.filter(fp => !simplestOwn.contains(fp) && !fp.symmetric))
 	}
@@ -297,12 +295,10 @@ def interpClue(ctx: ClueContext): HGroup =
 		val newCtx = ctx.copy(game = g)
 		interpretTccm(newCtx) match
 			case Some(tccm) if stall.isEmpty || thinksStall.isEmpty =>
-				performCM(g, tccm).copy(
-					lastMove = Some(evaluateCM(newCtx, tccm))
-				)
+				performCM(g, tccm).withMove(evaluateCM(newCtx, tccm))
 			case Some(_) =>
 				Log.info("stalling situation, tempo clue stall!")
-				g.copy(lastMove = Some(ClueInterp.Stall), stallInterp = Some(StallInterp.Tempo))
+				g.withMove(ClueInterp.Stall).copy(stallInterp = Some(StallInterp.Tempo))
 			case _ =>
 				g
 
@@ -312,4 +308,4 @@ def interpClue(ctx: ClueContext): HGroup =
 			acc.withThought(o)(t => t.copy(inferred = t.inferred.filter(_.rank == 1)))
 
 	.when(g => unacceptableClue(prev, g, action)): g =>
-		g.copy(lastMove = Some(ClueInterp.Mistake))
+		g.withMove(ClueInterp.Mistake)

@@ -22,69 +22,50 @@ val TIMEOUT = Left("timeout")
 def indent(depth: Int) =
 	(0 until depth).map(_ => "  ").mkString
 
-case class RemainingEntry(missing: Int, all: Boolean)
-
-type RemainingMap = Map[Identity, RemainingEntry]
+type RemainingMap = Map[Identity, Int]
 
 extension (remaining: RemainingMap)
 	def hash: Int =
 		remaining.foldLeft(0):
-			case (acc, (id, RemainingEntry(missing, _))) =>
+			case (acc, (id, missing)) =>
 				val ord = id.toOrd
 				acc + (ord * ord * ord * ord) + missing
 
 	def rem(id: Identity) =
-		remaining(id).missing match
+		remaining(id) match
 			case 1 => remaining.removed(id)
-			case m => remaining.updated(id, remaining(id).copy(missing = m - 1))
+			case m => remaining.updated(id, m - 1)
 
 	def fmt2(state: State): String =
-		remaining.map((id, entry) => s"${state.logId(id)} (missing ${entry.missing})").mkString(", ")
+		remaining.map((id, entry) => s"${state.logId(id)} (missing $entry)").mkString(", ")
 
 def findRemainingIds(game: Game) =
 	val state = game.state
 
-	val initial = (Map[Identity, Int](), List[(Int, Option[Identity])](), Map[Identity, Vector[Int]]())
+	val initial = (Map[Identity, Int](), List[(Int, Option[Identity])]())
 	val (seenIds, ownIds) = (0 until state.numPlayers).foldLeft(initial): (a, i) =>
 		state.hands(i).foldLeft(a): (acc, order) =>
-			val (seenIds, ownIds, inferIds) = acc
+			val (seenIds, ownIds) = acc
 			// Identify all the cards we know for sure
 			game.me.thoughts(order).id() match
 				case Some(id) =>
-					val newSeen = seenIds.updated(id, seenIds.lift(id).map(_ + 1).getOrElse(1))
+					val newSeen = seenIds.updated(id, seenIds.getOrElse(id, 0) + 1)
 					val newOwn = if i == state.ourPlayerIndex then (order, Some(id)) +: ownIds else ownIds
-					(newSeen, newOwn, inferIds)
+					(newSeen, newOwn)
 
 				case None if i == state.ourPlayerIndex =>
-					game.me.thoughts(order).id() match
-						case Some(id) =>
-							val newInfer = inferIds.updated(id, inferIds.lift(id).map(_ :+ order).getOrElse(Vector(order)))
-							(seenIds, ownIds, newInfer)
-						case None =>
-							val newOwn = (order, None) +: ownIds
-							(seenIds, newOwn, inferIds)
+					val newOwn = (order, None) +: ownIds
+					(seenIds, newOwn)
 
 				case None => acc
-
-	.pipe: (seen, own, infers) =>
-		infers.foldLeft((seen, own)) { case (acc, (id, orders)) =>
-			val (seenIds, ownIds) = acc
-			val seen = seenIds.lift(id).getOrElse(0)
-			val tooMany = seen + orders.length + state.baseCount(id.toOrd) > state.cardCount(id.toOrd)
-
-			val newSeen = if tooMany then seenIds else seenIds.updated(id, seen + orders.length)
-			val newOwn = orders.foldLeft(ownIds)((a, o) => (o, Option.when(!tooMany)(id)) +: a)
-			(newSeen, newOwn)
-		}
 
 	val remainingIds = (
 		for
 			id <- state.variant.allIds
-			total = state.cardCount(id.toOrd)
-			missing = total - state.baseCount(id.toOrd) - seenIds.getOrElse(id, 0)
+			missing = state.cardCount(id.toOrd) - state.baseCount(id.toOrd) - seenIds.getOrElse(id, 0)
 				if missing > 0
 		yield
-			(id, RemainingEntry(missing, missing == total))
+			(id, missing)
 	).toMap
 
 	(remainingIds, ownIds)
@@ -128,7 +109,7 @@ case class EndgameSolver[G <: Game](
 		val deadline = Instant.now().plus(timeout)
 		val (remainingIds, ownIds) = findRemainingIds(game)
 
-		if remainingIds.count((id, v) => state.isUseful(id) && v.all) > 3 then
+		if remainingIds.count((id, v) => state.isUseful(id) && v == state.cardCount(id.toOrd)) > 3 then
 			val missingIds = remainingIds.keys.filter(state.isUseful).map(state.logId).mkString(",")
 			return Left(s"couldn't find any $missingIds!")
 
@@ -177,10 +158,10 @@ case class EndgameSolver[G <: Game](
 				return Seq(arrangement)
 
 			val Arrangement(ids, prob, remaining) = arrangement
-			val totalCards = remaining.values.summing(_.missing)
+			val totalCards = remaining.values.sum
 
 			remaining.collect:
-				case (id, RemainingEntry(missing, _)) if !impossibleArr(ids, id, unknownOwn(ids.length), tryFilter) =>
+				case (id, missing) if !impossibleArr(ids, id, unknownOwn(ids.length), tryFilter) =>
 					val newRemaining = remaining.rem(id)
 					val newIds = ids :+ id
 					val newProb = prob * missing / totalCards
@@ -477,8 +458,8 @@ case class EndgameSolver[G <: Game](
 			val dcActions = if ignoreDc then Nil else
 				ops.findAllDiscards(game, playerTurn).map(tryAction).flatten
 
-			// If every hand other than ours is trash, try discarding before cluing
-			if state.hands.zipWithIndex.forall((hand, i) => i == playerTurn || hand.forall(o => state.isBasicTrash(state.deck(o).id().get))) then
+			// If pace is high or every hand other than ours is trash, try discarding before cluing
+			if state.pace >= state.numPlayers || state.hands.zipWithIndex.forall((hand, i) => i == playerTurn || hand.forall(o => state.isBasicTrash(state.deck(o).id().get))) then
 				playActions.concat(dcActions).concat(clueActions)
 			else
 				playActions.concat(clueActions).concat(dcActions)

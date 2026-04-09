@@ -53,7 +53,7 @@ case class GameUpdates(
 	catchup: Option[Boolean] = None,
 	notes: Option[Map[Int, Note]] = None,
 	lastActions: Option[Vector[Option[Action]]] = None,
-	lastMove: Option[Option[Interp]] = None,
+	moveHistory: Option[Vector[Interp]] = None,
 	queuedCmds: Option[List[(String, String)]] = None,
 	nextInterp: Option[Option[Interp]] = None,
 	rewindDepth: Option[Int] = None,
@@ -92,7 +92,7 @@ trait Game:
 	/** The last game action taken by each player, if they exist. */
 	def lastActions: Vector[Option[Action]]
 	/** The interpretation of the most recent move, if it exists. */
-	def lastMove: Option[Interp]
+	def moveHistory: Vector[Interp]
 	/** Commands that are queued to be sent to hanab.live (e.g. to play a specific card). */
 	def queuedCmds: List[(String, String)]
 	/** What the next clue should be interpreted as. Used when rewinding after a particular interpretation is demonstrated. */
@@ -117,6 +117,8 @@ trait Game:
 	  */
 	def validArr(@annotation.unused id: Identity, @annotation.unused order: Int) =
 		true
+
+	def lastMove: Option[Interp] = moveHistory.lastOption
 
 trait GameOps[G <: Game]:
 	/** Returns a copy of the game state, but restarted from the beginning.
@@ -175,6 +177,9 @@ extension[G <: Game](game: G)
 		ops.copyWith(game, GameUpdates(catchup = Some(true)))
 			.pipe(f)
 			.pipe(ops.copyWith(_, GameUpdates(catchup = Some(false))))
+
+	def withMove(interp: Interp)(using ops: GameOps[G]): G =
+		ops.copyWith(game, GameUpdates(moveHistory = Some(game.moveHistory :+ interp)))
 
 	/** Returns an updated copy of the game after interpreting the given action. */
 	def handleAction(action: Action)(using ops: GameOps[G]): G =

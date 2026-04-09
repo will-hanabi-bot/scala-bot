@@ -78,7 +78,7 @@ def findKnownConn(ctx: ClueContext, id: Identity, ignore: Set[Int], findOwn: Boo
 
 	// Visible and going to be played (excludes giver)
 	val playableConns = for
-		playerIndex <- (0 until state.numPlayers) if playerIndex != giver
+		playerIndex <- (0 until state.numPlayers).view if playerIndex != giver
 		playables = state.hands(playerIndex).filter(validPlayable(playerIndex, _))
 		order <- playables if state.deck(order).matches(id, assume = game.allowFindOwn && findOwn) && game.isTouched(order)
 	yield
@@ -92,13 +92,13 @@ def findKnownConn(ctx: ClueContext, id: Identity, ignore: Set[Int], findOwn: Boo
 		PlayableConn(playerIndex, order, id, linked = playables.toList, insertingInto = insertingInto)
 
 	val playLinkedConns = for
-		playerIndex <- (0 until state.numPlayers) if playerIndex != giver
+		playerIndex <- (0 until state.numPlayers).view if playerIndex != giver
 		order <- state.hands(playerIndex).find(validLinkedPlay) if state.deck(order).matches(id, assume = game.allowFindOwn && findOwn)
 	yield
 		PlayableConn(playerIndex, order, id, linked = List(order))
 
 	val previouslyPlayable = for
-		playerIndex <- (0 until state.numPlayers) if playerIndex != giver
+		playerIndex <- (0 until state.numPlayers).view if playerIndex != giver
 		order <- state.hands(playerIndex).find: o =>
 			prev.state.deck(o).clued &&
 			prev.common.hypoPlays.contains(o) &&
@@ -425,11 +425,8 @@ def findConnecting(ctx: ClueContext, id: Identity, connCtx: ConnectContext, opts
 		else
 			(1 until state.numPlayers).map(i => (giver - i + state.numPlayers) % state.numPlayers)
 
-	connPlayerOrder.zipWithIndex.view.map { (reacting, i) =>
+	connPlayerOrder.zipWithIndex.findSome: (reacting, i) =>
 		findSingleConn(ctx, reacting, id, connCtx, opts.copy(noLayer = mustPassback && i == 0))
-	}
-	.find(_.isDefined)
-	.flatten
 
 def connect(ctx: ClueContext, id: Identity, looksDirect: Boolean, thinksStall: Set[Int], assumeTruth: Boolean = false, ignoreKnown: Set[Int] = Set.empty, findOwn: Option[Int] = None, preferOwn: Boolean = false): Option[FocusPossibility] =
 	val ClueContext(prev, game, action) = ctx

@@ -17,7 +17,7 @@ def interpretTransfer(ctx: DiscardContext, holder: Int, dupe: Option[Int]): (Dis
 			Log.info("discarded dupe of own hand")
 		else
 			Log.warn(s"discarded useful ${state.logId(id)} but dupe was in their own hand!")
-		return (DiscardResult.Mistake, false)
+		return (DiscardResult.None, false)
 
 	val cluedTargets = state.hands(holder).filter(o => game.isTouched(o) && validTransfer(game, id)(o))
 
@@ -104,9 +104,12 @@ def checkUsefulDcH(ctx: DiscardContext): (DiscardResult, Boolean) =
 
 	Log.info("interpreting useful dc!")
 
-	val dupe = (0 until state.numPlayers).view.flatMap { i =>
+	if prev.common.thinksLocked(prev, playerIndex) && !prev.state.canClue then
+		Log.highlight(Console.CYAN, s"locked sacrifice!")
+		return (DiscardResult.None, false)		// no dda after sacrifice?
+
+	val dupe = (0 until state.numPlayers).findSome: i =>
 		state.hands(i).find(state.deck(_).matches(id)).map(i -> _)
-	}.headOption
 
 	dupe match
 		case Some((dupeHolder, dupeOrder)) =>
@@ -191,7 +194,7 @@ def interpretUsefulDcH(ctx: DiscardContext): Option[HGroup] =
 	Option.when(valid):
 		(checkUsefulDcH(ctx) match
 			case (DiscardResult.None, _) =>
-				game.copy(lastMove = Some(DiscardInterp.None), dda = None)
+				game.withMove(DiscardInterp.None).copy(dda = None)
 
 			case (DiscardResult.Mistake, dda) =>
 				game.copy(
@@ -199,9 +202,9 @@ def interpretUsefulDcH(ctx: DiscardContext): Option[HGroup] =
 						wc.connections.exists(_.order == order) ||
 						wc.focus == order
 					,
-					lastMove = Some(DiscardInterp.Mistake),
 					dda = Option.when(dda)(id)
 				)
+				.withMove(DiscardInterp.Mistake)
 
 			case (DiscardResult.GentlemansDiscard(targets), _) =>
 				targets.foldLeft((game, game.state)):
@@ -222,27 +225,23 @@ def interpretUsefulDcH(ctx: DiscardContext): Option[HGroup] =
 				.pipe: g =>
 					val newCtx = ctx.copy(game = g)
 					transferWCs(newCtx, DiscardResult.GentlemansDiscard(targets))
-				.copy(
-					lastMove = Some(DiscardInterp.GentlemansDiscard),
-					dda = None
-				)
+				.withMove(DiscardInterp.GentlemansDiscard)
+				.copy(dda = None)
 
 			case (DiscardResult.Baton(order), _) =>
 				game.withThought(order)(_.copy(inferred = IdentitySet.single(id)))
 					.withMeta(order)(_.copy(status = CardStatus.Sarcastic))
-					.copy(
-						lastMove = Some(DiscardInterp.Sarcastic),
-						dda = None
-					)
+					.withMove(DiscardInterp.Sarcastic)
+					.copy(dda = None)
 
 			case (DiscardResult.Sarcastic(orders), _) =>
 				game.copy(
 					common = if !orders.forall(game.state.deck(_).clued) then game.common else game.common.copy(
 						links = Link.Sarcastic(orders, id) +: game.common.links
 					),
-					lastMove = Some(DiscardInterp.Sarcastic),
 					dda = None
 				)
+				.withMove(DiscardInterp.Sarcastic)
 				.pipe: g =>
 					val newCtx = ctx.copy(game = g)
 					transferWCs(newCtx, DiscardResult.Sarcastic(orders))
@@ -307,10 +306,10 @@ def interpretSdcm(ctx: DiscardContext): Option[HGroup] =
 		if (status == DcStatus.Scream || status == DcStatus.Shout) && bobChop.isEmpty then
 			Log.warn(s"interpreted scream/shout but ${state.names(bob)} has no chop! interpreting mistake")
 			game.copy(
-				lastMove = Some(DiscardInterp.Mistake),
 				dcStatus = DcStatus.None,
 				dda = Some(Identity(action.suitIndex, action.rank))
 			)
+			.withMove(DiscardInterp.Mistake)
 
 		else
 			val bobChopId = bobChop.flatMap(state.deck(_).id())
@@ -327,9 +326,9 @@ def interpretSdcm(ctx: DiscardContext): Option[HGroup] =
 
 			game.copy(
 				dcStatus = status,
-				lastMove = Some(if mistake then DiscardInterp.Mistake else DiscardInterp.Emergency),
 				dda = Some(Identity(action.suitIndex, action.rank))
 			)
+			.withMove(if mistake then DiscardInterp.Mistake else DiscardInterp.Emergency)
 			.when(_ => status != DcStatus.Generation): h =>
 				h.withMeta(bobChop.get)(_.copy(status = CardStatus.ChopMoved))
 
@@ -359,7 +358,10 @@ private def checkPosDc(ctx: DiscardContext): Option[IndexedSeq[(Int, Vector[Iden
 	val thought = prev.common.thoughts(order)
 	val slot = prev.state.hands(playerIndex).indexOf(order) + 1
 
-	val expectedDc = prev.common.thinksTrash(prev, playerIndex).headOption.orElse(prev.chop(playerIndex))
+	val expectedDc = prev.common.thinksTrash(prev, playerIndex)
+		.filter(state.deck(_).clued)
+		.headOption
+		.orElse(prev.chop(playerIndex))
 
 	// Locked hand, blind played a chop moved card that could be good, discarded expected card
 	val unintended = expectedDc.forall: o =>
@@ -448,7 +450,7 @@ def interpretPosDc(ctx: DiscardContext): Option[HGroup] =
 					focus = focus,
 					inference = state.deck(focus).id().getOrElse(Identity(0, 1))
 				) +: g.waiting,
-				lastMove = Some(DiscardInterp.Positional),
 				dcStatus = DcStatus.None,
 				dda = None
 			)
+			.withMove(DiscardInterp.Positional)

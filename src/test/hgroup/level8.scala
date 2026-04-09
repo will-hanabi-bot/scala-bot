@@ -162,6 +162,30 @@ class PositionalDiscards extends munit.FunSuite:
 
 		hasStatus(game, Alice, 3, CardStatus.None)
 
+	test("doesn't play when discarding chop from multiple unclued trash"):
+		val game = setup(HGroup.atLevel(8), Vector(
+			Vector("xx", "xx", "xx", "xx", "xx"),
+			Vector("r1", "r1", "p5", "r3", "b1")
+		),
+			playStacks = Some(Vector(5, 5, 4, 4, 4)),
+			discarded = Vector(
+				"y1", "y2", "y3", "y4",
+				"g1", "g2", "g3", "g4",
+				"b1", "b2", "b3", "b4",
+				"p1", "p2", "p3"
+			),	// Missing: r2, r4, r5, y1, y5, g5, b5, p4
+			clueTokens = 1,
+			init = _.copy(inEarlyGame = false)
+		)
+		.tap: g =>
+			assertEquals(g.state.cardsLeft, 3)
+		.pipe(takeTurn("Alice clues 5 to Bob"))
+		.pipe(takeTurn("Bob plays p5", "r4"))
+		.pipe(takeTurn("Alice discards y1 (slot 5)"))
+		.pipe(takeTurn("Bob discards b1", "b5"))
+
+		hasStatus(game, Alice, 5, CardStatus.None)
+
 	test("recognizes a pos dc on the last player"):
 		val game = setup(HGroup.atLevel(8), Vector(
 			Vector("xx", "xx", "xx", "xx"),

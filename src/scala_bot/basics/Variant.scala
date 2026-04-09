@@ -57,11 +57,11 @@ case class Variant(
 		val suit = suits(suitIndex)
 
 		if clue.kind == ClueKind.Colour then
-			if suit.suitType.whitish then
-				return false
-
 			if suit.suitType.rainbowish then
 				return true
+
+			if suit.suitType.whitish then
+				return false
 
 			if specialRank.contains(rank) then
 				if rainbowS then
@@ -75,6 +75,9 @@ case class Variant(
 
 			suits(suitIndex) == colourableSuits(clue.value)
 		else
+			if suit.suitType.pinkish then
+				return true
+
 			if suit.suitType.brownish then
 				return false
 
@@ -87,9 +90,6 @@ case class Variant(
 
 				if deceptiveS then
 					return (suitIndex % 4) + (if rank == 1 then 2 else 1) == clue.value
-
-			if suit.suitType.pinkish then
-				return true
 
 			rank == clue.value
 

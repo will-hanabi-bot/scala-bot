@@ -34,7 +34,7 @@ case class Reactor(
 	future: Vector[IdentitySet] = Vector(),
 	catchup: Boolean = false,
 	notes: Map[Int, Note] = Map(),
-	lastMove: Option[Interp] = None,
+	moveHistory: Vector[Interp] = Vector.empty,
 	queuedCmds: List[(String, String)] = Nil,
 	nextInterp: Option[Interp] = None,
 	noRecurse: Boolean = false,
@@ -151,7 +151,7 @@ object Reactor:
 				catchup = updates.catchup.getOrElse(game.catchup),
 				notes = updates.notes.getOrElse(game.notes),
 				lastActions = updates.lastActions.getOrElse(game.lastActions),
-				lastMove = updates.lastMove.getOrElse(game.lastMove),
+				moveHistory = updates.moveHistory.getOrElse(game.moveHistory),
 				queuedCmds = updates.queuedCmds.getOrElse(game.queuedCmds),
 				nextInterp = updates.nextInterp.getOrElse(game.nextInterp),
 				rewindDepth = updates.rewindDepth.getOrElse(game.rewindDepth),
@@ -233,7 +233,7 @@ object Reactor:
 					if interp.isEmpty then
 						Log.warn("interpreted mistake!")
 
-					interpGame.copy(lastMove = Some(interp.getOrElse(ClueInterp.Mistake)))
+					interpGame.withMove(interp.getOrElse(ClueInterp.Mistake))
 
 			val signalledPlays = interpretedGame.state.hands.flatten.filter: o =>
 				prev.meta(o).status != CardStatus.CalledToPlay && interpretedGame.meta(o).status == CardStatus.CalledToPlay
@@ -244,7 +244,7 @@ object Reactor:
 			eliminatedGame
 				.when(_ => playsAfterElim.length < signalledPlays.length): g =>
 					Log.warn(s"lost play signal on ${signalledPlays.filterNot(playsAfterElim.contains)} after elim!")
-					g.copy(lastMove = Some(ClueInterp.Mistake))
+					g.withMove(ClueInterp.Mistake)
 				.when(_ => prev.state.canClue):
 					resetZcs
 				.when(!_.state.canClue):
@@ -289,29 +289,27 @@ object Reactor:
 						case None if usefulDc  =>
 							interpretUsefulDc(g, action) match
 								case DiscardResult.None =>
-									g.copy(lastMove = Some(DiscardInterp.None))
+									g.withMove(DiscardInterp.None)
 
 								case DiscardResult.Mistake =>
-									g.copy(lastMove = Some(DiscardInterp.Mistake))
+									g.withMove(DiscardInterp.Mistake)
 
 								case DiscardResult.GentlemansDiscard(targets) =>
 									val target = targets.head
 									g.copy(
-										common = g.common.withThought(target)(_.copy(
-											inferred = IdentitySet.single(id)
-										)),
+										common = g.common.withThought(target):
+											_.copy(inferred = IdentitySet.single(id))
+										,
 										meta = g.meta.updated(target, g.meta(target).copy(
 											status = CardStatus.GentlemansDiscard
-										)),
-										lastMove = Some(DiscardInterp.GentlemansDiscard)
+										))
 									)
+									.withMove(DiscardInterp.GentlemansDiscard)
+
 								case DiscardResult.Sarcastic(orders) =>
-									g.copy(
-										common = g.common.copy(
-											links = Link.Sarcastic(orders, id) +: g.common.links
-										),
-										lastMove = Some(DiscardInterp.Sarcastic)
-									)
+									g.copy(common = g.common.copy(links = Link.Sarcastic(orders, id) +: g.common.links))
+										.withMove(DiscardInterp.Sarcastic)
+
 								case DiscardResult.Baton(_) =>
 									throw new Error("baton unsupported!")
 						case None => g
@@ -366,6 +364,7 @@ object Reactor:
 			val nextPlayerIndex = state.nextPlayerIndex(state.ourPlayerIndex)
 
 			val urgentAction = state.ourHand.find(game.meta(_).urgent).flatMap: urgent =>
+				Log.info(s"urgent $urgent")
 				val urgentBobSave =
 					state.canClue &&
 					game.waiting.exists: wc =>

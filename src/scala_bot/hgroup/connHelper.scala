@@ -423,8 +423,10 @@ def resolveClue(ctx: ClueContext, fps: Seq[FocusPossibility], ambiguousOwn: Seq[
 			c.isInstanceOf[PromptConn] ||
 			c.isInstanceOf[FinesseConn]
 
-		g.copy(
-			waiting = g.waiting ++ allFps.filterNot(_.ambiguous).collect {
+		val (ambiguousFps, unambiguousFps) = allFps.partition(_.ambiguous)
+
+		val newWcs = g.waiting ++
+			unambiguousFps.collect:
 				case fp if requiresWc(fp) => WaitingConnection(
 					fp.connections,
 					giver,
@@ -435,8 +437,9 @@ def resolveClue(ctx: ClueContext, fps: Seq[FocusPossibility], ambiguousOwn: Seq[
 					symmetric = fp.symmetric,
 					ambiguousSelf = !simplestFps.contains(fp)	// If it's too complicated, it could be an ambiguous connection
 				)
-			} ++ (ambiguousOwn ++ allFps.filter(_.ambiguous)).filter(_.connections.nonEmpty).map: fp =>
-				WaitingConnection(
+			++
+			(ambiguousOwn ++ ambiguousFps).collect:
+				case fp if fp.connections.nonEmpty => WaitingConnection(
 					fp.connections,
 					giver,
 					target,
@@ -444,10 +447,13 @@ def resolveClue(ctx: ClueContext, fps: Seq[FocusPossibility], ambiguousOwn: Seq[
 					focus,
 					fp.id,
 					ambiguousSelf = true
-				),
-			lastMove = Some(interp),
+				)
+
+		g.copy(
+			waiting = newWcs,
 			cluedOnChop = if chop then g.cluedOnChop + focus else g.cluedOnChop
 		)
+		.withMove(interp)
 	.when(_ => undoScream): g =>
 		Log.highlight(Console.CYAN, "undoing sdcm due to immediate save clue!")
 

@@ -64,7 +64,7 @@ case class HGroup(
 	future: Vector[IdentitySet],
 	catchup: Boolean = false,
 	notes: Map[Int, Note] = Map(),
-	lastMove: Option[Interp] = None,
+	moveHistory: Vector[Interp] = Vector.empty,
 	queuedCmds: List[(String, String)] = Nil,
 	nextInterp: Option[Interp] = None,
 	noRecurse: Boolean = false,
@@ -498,7 +498,7 @@ object HGroup:
 				catchup = updates.catchup.getOrElse(game.catchup),
 				notes = updates.notes.getOrElse(game.notes),
 				lastActions = updates.lastActions.getOrElse(game.lastActions),
-				lastMove = updates.lastMove.getOrElse(game.lastMove),
+				moveHistory = updates.moveHistory.getOrElse(game.moveHistory),
 				queuedCmds = updates.queuedCmds.getOrElse(game.queuedCmds),
 				nextInterp = updates.nextInterp.getOrElse(game.nextInterp),
 				rewindDepth = updates.rewindDepth.getOrElse(game.rewindDepth),
@@ -540,13 +540,11 @@ object HGroup:
 
 				if !game.allowFindOwn && lostWcs(prev, pre) then
 					Log.warn("removed wc! mistake")
-					pre.copy(lastMove = Some(ClueInterp.Mistake))
+					pre.withMove(ClueInterp.Mistake)
 				else
 					val interpreted = interpClue(ClueContext(prev, pre, action))
-					val updatedPre = pre.copy(
-						lastMove = interpreted.lastMove,
-						importantAction = interpreted.importantAction
-					)
+					val updatedPre = pre.copy(importantAction = interpreted.importantAction)
+						.withMove(interpreted.lastMove.get)
 
 					refreshWCs(prev, updatedPre, action)
 						.cond(_.waiting.length < pre.waiting.length && !game.noRecurse) { g =>
@@ -591,9 +589,9 @@ object HGroup:
 				refreshedGame.copy(
 					inEarlyGame = game.inEarlyGame && !endEarlyGame,
 					dcStatus = DcStatus.None,
-					dda = Some(Identity(suitIndex, rank)),
-					lastMove = Some(DiscardInterp.None)
+					dda = Some(Identity(suitIndex, rank))
 				)
+				.withMove(DiscardInterp.None)
 			.elim()
 			.when(g => g.level < Level.Stalling || g.dda.exists(id => id.suitIndex == -1 || id.rank == -1 || g.state.isBasicTrash(id))):
 				_.copy(dda = None)
@@ -609,18 +607,17 @@ object HGroup:
 					.when(_.level >= Level.BasicCM && rank == 1): g =>
 						checkOcm(prev, action) match
 							case None =>
-								g.copy(lastMove = Some(PlayInterp.None))
+								g.withMove(PlayInterp.None)
 							case Some(orders) =>
 								val chop = orders.min
 								val mistake = game.state.deck(chop).id().exists: id =>
-									game.state.isBasicTrash(id) ||
-									id.rank <= 2
+									game.state.isBasicTrash(id) || id.rank == 1
 
 								if mistake then
 									Log.warn("bad ocm!")
 
-								performCM(g, orders).copy(lastMove =
-									if mistake then Some(PlayInterp.Mistake) else Some(PlayInterp.OrderCM))
+								performCM(g, orders).withMove:
+									if mistake then PlayInterp.Mistake else PlayInterp.OrderCM
 					.copy(
 						dcStatus = DcStatus.None,
 						dda = None
@@ -706,7 +703,7 @@ object HGroup:
 						val chop = game.chop(state.ourPlayerIndex)
 
 						val inDDA = game.level >= Level.Stalling &&
-							game.state.numPlayers >= 2 &&
+							game.state.numPlayers > 2 &&
 							game.dda.exists(id => state.isCritical(id) && game.chop(state.ourPlayerIndex).exists(me.thoughts(_).possible.contains(id)))
 
 						val canDiscardChop =

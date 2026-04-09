@@ -52,19 +52,17 @@ def handleTcm(ctx: ClueContext, tcm: Seq[Int], notStall: Boolean) =
 	if newObvious.exists(!oldObvious.contains(_)) then
 		if game.level < Level.TempoClues then
 			Log.info("preferring tempo clue that provides trash!")
-			game.copy(lastMove = Some(ClueInterp.Reveal))
+			game.withMove(ClueInterp.Reveal)
 		else
 			interpretTccm(ctx) match
 				case Some(tccm) if notStall =>
 					Log.info("preferring TCCM over TCM!")
-					performCM(game, tccm).copy(
-						lastMove = Some(evaluateCM(ctx, tccm))
-					)
+					performCM(game, tccm).withMove(evaluateCM(ctx, tccm))
 				case Some(_) =>
 					Log.info("stalling situation, tempo clue stall!")
-					game.copy(lastMove = Some(ClueInterp.Stall), stallInterp = Some(StallInterp.Tempo))
+					game.withMove(ClueInterp.Stall).copy(stallInterp = Some(StallInterp.Tempo))
 				case _ =>
-					game.copy(lastMove = Some(ClueInterp.Reveal))
+					game.withMove(ClueInterp.Reveal)
 	else
 		// All newly cards are trash
 		list.foldLeft(game): (acc, order) =>
@@ -105,7 +103,7 @@ def handleTcm(ctx: ClueContext, tcm: Seq[Int], notStall: Boolean) =
 				case ClueInterp.Discard if badTCM => ClueInterp.Mistake
 				case x => x
 
-			g.copy(lastMove = Some(lastMove))
+			g.withMove(lastMove)
 
 /**
   * Checks whether a 5's Chop Move was performed.
@@ -188,10 +186,10 @@ def interpretBombOcm(ctx: DiscardContext): Option[HGroup] =
 				Log.warn("ocm on trash!")
 
 			performCM(game, orders).copy(
-				lastMove = if mistake then Some(PlayInterp.Mistake) else Some(PlayInterp.OrderCM),
 				dcStatus = DcStatus.None,
 				dda = Some(Identity(action.suitIndex, action.rank))
 			)
+			.withMove(if mistake then PlayInterp.Mistake else PlayInterp.OrderCM)
 
 def interpretTccm(ctx: ClueContext): Option[List[Int]] =
 	val ClueContext(prev, game, action) = ctx

@@ -152,8 +152,15 @@ def advance(orig: Reactor, game: Reactor, offset: Int): Double =
 		advance(orig, game.simulate(action), offset + 1)
 
 	else
-		def tryDiscard(dcValue: Double) =
-			if state.clueTokens <= 2 then dcValue else
+		def tryDiscard(order: Int) =
+			val id = state.deck(order).id().get
+			val action = DiscardAction(playerIndex, order, id.suitIndex, id.rank)
+
+			Log.info(s"${state.names(playerIndex)} discarding ${state.logId(id)} but might clue")
+
+			val dcValue = advance(orig, game.simulate(action), offset + 1)
+
+			if state.clueTokens < 2 then dcValue else
 				val clueValue = _forceClue(orig, game, offset)
 
 				val clueProb = if offset == 1 then
@@ -177,20 +184,9 @@ def advance(orig: Reactor, game: Reactor, offset: Int): Double =
 				val chop = game.chop(playerIndex)
 					.orElse(game.zcsTurn.map(_ => game.players(playerIndex).lockedDiscard(game.state, playerIndex))) 	// In ZCS, a player may have no valid discard while not being "locked".
 					.getOrElse(throw new Exception(s"Player ${state.names(playerIndex)} not locked but no chop! ${state.hands(playerIndex).map(meta(_).status)}"))
-				val id = state.deck(chop).id().get
-				val action = DiscardAction(playerIndex, chop, id.suitIndex, id.rank)
-				val dcGame = game.simulate(action)
+				tryDiscard(chop)
 
-				Log.info(s"${state.names(playerIndex)} discarding ${state.logId(id)} but might clue")
-				tryDiscard(advance(orig, dcGame, offset + 1))
-
-			case Some(order) =>
-				val id = state.deck(order).id().get
-				val Identity(suitIndex, rank) = id
-				val action = DiscardAction(playerIndex, order, suitIndex, rank)
-
-				Log.info(s"${state.names(playerIndex)} discarding ${state.logId(id)} but might clue")
-				tryDiscard(advance(orig, game.simulate(action), offset + 1))
+			case Some(order) => tryDiscard(order)
 
 def _evalAction(game: Reactor, action: Action): Double =
 	Log.highlight(Console.GREEN, s"===== Predicting value for ${action.fmt(game.state)} =====")
@@ -224,7 +220,9 @@ def _evalAction(game: Reactor, action: Action): Double =
 			val trash = game.me.orderKt(game, order) || game.meta(order).status == CardStatus.CalledToDiscard
 			val chop = game.chop(state.holderOf(order))
 
-			if trash then
+			if state.inEndgame then
+				-1.0
+			else if trash then
 				0
 			else if chop.contains(order) then
 				-0.25

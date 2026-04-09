@@ -24,7 +24,7 @@ case class RefSieve(
 	future: Vector[IdentitySet],
 	catchup: Boolean = false,
 	notes: Map[Int, Note] = Map(),
-	lastMove: Option[Interp] = None,
+	moveHistory: Vector[Interp] = Vector.empty,
 	queuedCmds: List[(String, String)] = Nil,
 	nextInterp: Option[Interp] = None,
 	noRecurse: Boolean = false,
@@ -155,7 +155,7 @@ object RefSieve:
 				catchup = updates.catchup.getOrElse(game.catchup),
 				notes = updates.notes.getOrElse(game.notes),
 				lastActions = updates.lastActions.getOrElse(game.lastActions),
-				lastMove = updates.lastMove.getOrElse(game.lastMove),
+				moveHistory = updates.moveHistory.getOrElse(game.moveHistory),
 				queuedCmds = updates.queuedCmds.getOrElse(game.queuedCmds),
 				nextInterp = updates.nextInterp.getOrElse(game.nextInterp),
 				rewindDepth = updates.rewindDepth.getOrElse(game.rewindDepth),
@@ -241,13 +241,13 @@ object RefSieve:
 
 								game.withMeta(f1)(_.copy(status = CardStatus.CalledToPlay))
 									.withMeta(f2)(_.copy(status = CardStatus.CalledToPlay))
-									.copy(lastMove = if validNI(f1, f2) then Some(ClueInterp.Play) else Some(ClueInterp.Mistake))
+									.withMove(if validNI(f1, f2) then ClueInterp.Play else ClueInterp.Mistake)
 							case None =>
 								game.withMeta(f1)(_.copy(status = CardStatus.CalledToPlay))
 									.withMeta(list.max)(_.copy(status = CardStatus.CalledToPlay))
-									.copy(lastMove = if validNI(f1, list.max) then Some(ClueInterp.Play) else Some(ClueInterp.Mistake))
+									.withMove(if validNI(f1, list.max) then ClueInterp.Play else ClueInterp.Mistake)
 					case None =>
-						game.copy(lastMove = Some(ClueInterp.Mistake))
+						game.withMove(ClueInterp.Mistake)
 
 			lazy val focus = determineFocus(ctx, push = trashPush || clue.kind == ClueKind.Colour)
 			lazy val cluedGame = game.withMeta(focus)(_.copy(focused = true)).elim()
@@ -316,7 +316,7 @@ object RefSieve:
 			if interp.isEmpty then
 				Log.warn("interpreted mistake!")
 
-			newGame.copy(lastMove = Some(interp.getOrElse(ClueInterp.Mistake))).elim().check2pPtd(prev, action)
+			newGame.withMove(interp.getOrElse(ClueInterp.Mistake)).elim().check2pPtd(prev, action)
 
 		def interpretDiscard(prev: RefSieve, game: RefSieve, action: DiscardAction): RefSieve =
 			val state = game.state
@@ -326,29 +326,29 @@ object RefSieve:
 			if !failed && prev.state.deck(order).clued && suitIndex != -1 && rank != -1 && state.isUseful(id) then
 				interpretUsefulDc(game, action) match
 					case DiscardResult.None =>
-						game.copy(lastMove = Some(DiscardInterp.None))
+						game.withMove(DiscardInterp.None)
 
 					case DiscardResult.Mistake =>
-						game.copy(lastMove = Some(DiscardInterp.Mistake))
+						game.withMove(DiscardInterp.Mistake)
 
 					case DiscardResult.GentlemansDiscard(targets) =>
 						val target = targets.head
 						game.copy(
-							common = game.common.withThought(target)(_.copy(
-								inferred = IdentitySet.single(id)
-							)),
+							common = game.common.withThought(target):
+								_.copy(inferred = IdentitySet.single(id))
+							,
 							meta = game.meta.updated(target, game.meta(target).copy(
 								status = CardStatus.GentlemansDiscard
-							)),
-							lastMove = Some(DiscardInterp.GentlemansDiscard)
+							))
 						)
+						.withMove(DiscardInterp.GentlemansDiscard)
+
 					case DiscardResult.Sarcastic(orders) =>
 						game.copy(
-							common = game.common.copy(
-								links = Link.Sarcastic(orders, id) +: game.common.links
-							),
-							lastMove = Some(DiscardInterp.Sarcastic)
+							common = game.common.copy(links = Link.Sarcastic(orders, id) +: game.common.links)
 						)
+						.withMove(DiscardInterp.Sarcastic)
+
 					case DiscardResult.Baton(_) =>
 						throw new Error("baton unsupported!")
 			else

@@ -193,9 +193,9 @@ def reactDiscard(prev: Reactor, game: Reactor, playerIndex: Int, order: Int, wc:
 			game.rewind(turn, InterpAction(ClueInterp.Reactive)) match
 				case Right(newGame) =>
 					if newGame.lastMove == Some(ClueInterp.Mistake) then
-						newGame.copy(lastMove = Some(DiscardInterp.Mistake))
+						newGame.withMove(DiscardInterp.Mistake)
 					else
-						newGame.copy(lastMove = Some(DiscardInterp.None))
+						newGame.withMove(DiscardInterp.None)
 				case Left(err) =>
 					Log.warn(s"Failed to rewind a response inversion! $err")
 					game
