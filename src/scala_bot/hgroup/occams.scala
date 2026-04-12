@@ -15,13 +15,15 @@ def nextUnknown(fp: FocusPossibility, skipPast: Option[Connection] = None): Opti
 		case _ => true
 
 def fpSimplicity(fp: FocusPossibility, playerIndex: Int, ourPlayerIndex: Int): Int =
+	val nextUnknownConn = nextUnknown(fp)
 	// Note that us prompting/finessing on a clue to someone else is as "complicated"
 	// as them self-finessing, since we always wait for them to demonstrate first.
-	if nextUnknown(fp).exists(c => c.reacting != playerIndex && c.reacting != ourPlayerIndex) then
+	if nextUnknownConn.exists(c => c.reacting != playerIndex && c.reacting != ourPlayerIndex) then
 		0
 	else
-		val blindPlays = fp.connections.count(_.isInstanceOf[FinesseConn])
-		val prompts = fp.connections.count(_.isInstanceOf[PromptConn])
+		val consecutiveConns = nextUnknownConn.fold(Nil)(conn => fp.connections.dropWhile(_ != conn).takeWhile(c => c.reacting == playerIndex || c.reacting == ourPlayerIndex))
+		val blindPlays = consecutiveConns.count(_.isInstanceOf[FinesseConn])
+		val prompts = consecutiveConns.count(_.isInstanceOf[PromptConn])
 
 		10 * blindPlays + prompts
 
@@ -93,7 +95,7 @@ def occamsRazor(ctx: ClueContext, fps: Seq[FocusPossibility], playerIndex: Int, 
 					c.reacting == playerIndex &&
 					nextUnknown(fp).exists(_.order == c.order)
 
-		simplest ++ sameSelfStart
+		simplest ++ sameSelfStart.map(_.copy(complicated = true))
 
 	.pipe: simplest =>
 		simplest.filterNot: fp =>

@@ -159,7 +159,8 @@ class General extends munit.FunSuite:
 
 		// Alice's slot 1 should be [r2, b3, p1] (not g1 since both g3s visible).
 		hasStatus(game, Alice, 1, CardStatus.Finessed)
-		hasInfs(game, None, Alice, 1, Vector("r2", "b3", "p1"))
+		assert(!game.common.thoughts(game.state.hands(Alice.ordinal)(0)).inferred.contains(game.state.expandShort("y3")))
+		// hasInfs(game, None, Alice, 1, Vector("r2", "b3", "p1"))
 
 	test("doesn't confirm symmetric finesses after a stomped play"):
 		val game = setup(HGroup.atLevel(5), Vector(

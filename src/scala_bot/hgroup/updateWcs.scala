@@ -58,11 +58,11 @@ def unplayableAlt(game: HGroup, action: Action, wc: WaitingConnection) =
 				action.matchesP:
 					case PlayAction(_, _, suitIndex, rank) => i.prev.contains(Identity(suitIndex, rank))
 
-private def revert(g: HGroup, order: Int, ids: List[Identity]) =
+private def revert(g: HGroup, order: Int, ids: List[Identity], forceReset: Boolean = false) =
 	val newInferred = g.common.thoughts(order).inferred.difference(ids)
 	// Log.info(s"reverting, removing ${ids.map(g.state.logId)} from $order: now [${newInferred.fmt(g.state)}]")
 
-	if newInferred.isEmpty then
+	if newInferred.isEmpty || forceReset then
 		g.withThought(order): t =>
 			t.copy(
 				inferred = t.oldInferred.mapO(_.intersect(t.possible)).getOrElse(t.possible),
@@ -176,7 +176,7 @@ def refreshWCs(prev: HGroup, game: HGroup, action: Action, beforeClueInterp: Boo
 					if shared || conn.isInstanceOf[KnownConn] || conn.isInstanceOf[PlayableConn] then
 						acc
 					else
-						revert(acc, conn.order, conn.ids)
+						revert(acc, conn.order, conn.ids, forceReset = conn.matchesP { case f: FinesseConn => f.bluff })
 	.pipe: g =>
 		remFocuses.foldLeft(g): (acc, focus) =>
 			val sameFocusWcs = retainWCs.filter(_.focus == focus)
@@ -184,6 +184,8 @@ def refreshWCs(prev: HGroup, game: HGroup, action: Action, beforeClueInterp: Boo
 			if sameFocusWcs.nonEmpty && sameFocusWcs.forall(wc => wc.symmetric || wc.ambiguousSelf) then
 				val turn = sameFocusWcs.head.turn
 				val action = acc.state.actionList(turn).collectFirst { case a: ClueAction => a }.get
+
+				// TODO: Only write the next-simplest connections, not all of them?
 				val ambiguousWcs = sameFocusWcs.filter(_.ambiguousSelf)
 
 				Log.error(s"assigning previously-ambiguous connections on $focus to ${ambiguousWcs.map(w => g.state.logId(w.inference))}")

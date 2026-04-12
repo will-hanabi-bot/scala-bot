@@ -24,6 +24,7 @@ class TrueClues extends munit.FunSuite:
 
 		hasStatus(game, Alice, 1, CardStatus.Finessed)
 		hasInfs(game, None, Alice, 1, Vector("b1"))
+		hasStatus(game, Cathy, 2, CardStatus.None)
 
 	test("understands a direct play if the bluff isn't played into"):
 		val game = setup(HGroup.atLevel(11), Vector(

@@ -472,8 +472,8 @@ case class EndgameSolver[G <: Game](
 			val dcActions = if ignoreDc then Nil else
 				ops.findAllDiscards(game, playerTurn).map(tryAction).flatten
 
-			// If pace is high or every hand other than ours is trash, try discarding before cluing
-			if state.pace >= state.numPlayers || state.hands.zipWithIndex.forall((hand, i) => i == playerTurn || hand.forall(o => state.isBasicTrash(state.deck(o).id().get))) then
+			// If no playables are visible, try discarding before cluing
+			if state.hands.zipWithIndex.forall((hand, i) => i == playerTurn || hand.forall(o => !state.isPlayable(state.deck(o).id().get))) then
 				playActions.concat(dcActions).concat(clueActions)
 			else
 				playActions.concat(clueActions).concat(dcActions)

@@ -190,7 +190,7 @@ case class Player(
 			false
 		else
 			val infer =
-				(playerIndex != state.ourPlayerIndex || state.strikes != 2 || game.meta(order).focused || game.isBlindPlaying(order)) &&
+				// (playerIndex != state.ourPlayerIndex || state.strikes != 2 || game.meta(order).focused || game.isBlindPlaying(order)) &&
 				game.meta(order).status != CardStatus.CalledToDiscard
 
 			val poss = if infer then thoughts(order).possibilities else thoughts(order).possible
@@ -229,8 +229,11 @@ case class Player(
 		game.state.hands(playerIndex).forall: order =>
 			val status = game.meta(order).status
 
-			game.state.deck(order).clued ||
-			(status != CardStatus.None && status != CardStatus.CalledToDiscard)
+			game.state.deck(order).clued || (
+				status != CardStatus.None &&
+				status != CardStatus.CalledToDiscard &&
+				!(status == CardStatus.Finessed && game.meta(order).hidden)
+			)
 
 	def obviousLoaded(game: Game, playerIndex: Int) =
 		obviousPlayables(game, playerIndex).nonEmpty || thinksTrash(game, playerIndex).nonEmpty
@@ -349,6 +352,7 @@ case class Player(
 				ops.copyWith(game, GameUpdates(noRecurse = Some(true), common = Some(this)))
 			else
 				ops.copyWith(game, GameUpdates(noRecurse = Some(true), players = Some(game.players.updated(playerIndex, this))))
+		.pipe(ops.cleanHypo)
 
 		var unknownPlays = BitSet.empty
 		var played = BitSet.empty

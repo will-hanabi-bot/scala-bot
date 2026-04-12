@@ -1,5 +1,7 @@
 package tests.hgroup.level3
 
+import cats.effect.unsafe.implicits.global
+
 import scala_bot.basics._
 import scala_bot.test.{fullyKnown, hasInfs, Player, setup, takeTurn}, Player._
 import scala_bot.hgroup.HGroup
@@ -183,6 +185,41 @@ class Sarcastic extends munit.FunSuite:
 
 		hasInfs(game, None, Alice, 4, Vector("r2"))
 
+	test("plays into a prompt after a sarcastic discard"):
+		val game = setup(HGroup.atLevel(3), Vector(
+			Vector("xx", "xx", "xx", "xx", "xx"),
+			Vector("g4", "b5", "b4", "r4", "r1"),
+			Vector("y4", "y3", "p2", "g3", "g2")
+		),
+			starting = Bob,
+			playStacks = Some(Vector(0, 0, 1, 0, 0)),
+			clueTokens = 6,
+			init = fullyKnown(Cathy, 5, "g2")
+		)
+		.pipe(takeTurn("Bob clues 2 to Alice (slots 4,5)"))
+		.pipe(takeTurn("Cathy discards g2", "g1"))			 // Alice has g2 among her two clued 2s
+		.pipe(takeTurn("Alice clues red to Bob"))
+
+		.pipe(takeTurn("Bob plays r1", "g3"))
+		.pipe(takeTurn("Cathy clues green to Bob"))
+
+		hasInfs(game, None, Alice, 4, Vector("g2"))
+		assertEquals(game.common.thinksPlayables(game, Alice.ordinal), Vector(game.state.hands(Alice.ordinal)(3)))
+
+	test("discards chop when a sarcastic discard can't be done"):
+		val game = setup(HGroup.atLevel(3), Vector(
+			Vector("xx", "xx", "xx", "xx", "xx"),
+			Vector("g4", "r2", "b4", "r4", "r4"),
+			Vector("g4", "y4", "b4", "p4", "p4")
+		),
+			starting = Cathy,
+			playStacks = Some(Vector(0, 2, 2, 2, 2)),
+			clueTokens = 6
+		)
+		.pipe(takeTurn("Cathy clues 2 to Alice (slot 5)"))
+
+		assertEquals(game.takeAction.unsafeRunSync(), PerformAction.Discard(game.state.hands(Alice.ordinal)(3)))
+
 class FixClues extends munit.FunSuite:
 	override def beforeAll() = Logger.setLevel(LogLevel.Off)
 
@@ -207,3 +244,23 @@ class FixClues extends munit.FunSuite:
 
 		// Alice's 2 must have connected to r1.
 		hasInfs(game, None, Alice, 3, Vector("r2"))
+
+	test("interprets a fix with no new info"):
+		val game = setup(HGroup.atLevel(3), Vector(
+			Vector("xx", "xx", "xx", "xx", "xx"),
+			Vector("y4", "b4", "g4", "r4", "p4"),
+			Vector("y4", "b4", "g4", "r4", "p4")
+		),
+			playStacks = Some(Vector(1, 1, 0, 0, 0)),
+			clueTokens = 4,
+			starting = Cathy
+		)
+		.pipe(takeTurn("Cathy clues 1 to Alice (slots 2,3,4)"))
+		.pipe(takeTurn("Alice plays p1 (slot 4)"))
+		.pipe(takeTurn("Bob discards p4", "y3"))
+
+		.pipe(takeTurn("Cathy clues 1 to Alice (slots 3,4)"))
+
+		// The no-info clue fixes slot 4, while slot 3 remains playable.
+		assertEquals(game.common.thinksPlayables(game, Alice.ordinal), Vector(game.state.hands(Alice.ordinal)(2)))
+		assertEquals(game.common.thinksTrash(game, Alice.ordinal), Vector(game.state.hands(Alice.ordinal)(3)))

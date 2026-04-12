@@ -1,6 +1,7 @@
 package scala_bot.hgroup
 
 import scala_bot.basics._
+// import scala_bot.logger.Log
 
 def validBluff(game: HGroup, action: ClueAction, blind: Identity, truth: Identity, reacting: Int, connected: Set[Int], symmetric: Boolean = false) =
 	val state = game.state
@@ -11,7 +12,7 @@ def validBluff(game: HGroup, action: ClueAction, blind: Identity, truth: Identit
 		(clue.kind == ClueKind.Rank && clue.value != blind.rank + 1) ||
 		blind.next.forall(!game.common.thoughts(focus).possible.contains(_))
 
-	lazy val interferes = state.hands(reacting).exists: o =>
+	lazy val interferes = state.hands(reacting).find: o =>
 		game.players(reacting).thoughts(o).possible.contains(truth) &&
 		(game.isBlindPlaying(o) || game.meta(o).status == CardStatus.GentlemansDiscard)
 
@@ -20,7 +21,7 @@ def validBluff(game: HGroup, action: ClueAction, blind: Identity, truth: Identit
 	connected.size == 1 &&
 	disconnect &&
 	!(clue.kind == ClueKind.Colour && reacting == target) &&	// not self-colour bluff
-	!interferes
+	interferes.isEmpty
 
 /** Returns whether the colour clue could be a save on the given identity. */
 def colourSave(prev: HGroup, action: ClueAction, id: Identity, focus: Int): Boolean =

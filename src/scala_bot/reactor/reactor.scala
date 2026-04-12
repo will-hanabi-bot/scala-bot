@@ -41,9 +41,10 @@ case class Reactor(
 	rewindDepth: Int = 0,
 	inProgress: Boolean = false,
 
-	goodTouch: Boolean = false,
 	zcsTurn: Option[Int] = None
 ) extends Game:
+	val goodTouch = false
+
 	override def filterPlayables(player: Player, playerIndex: Int, orders: Seq[Int], assume: Boolean = true) =
 		// if orders.nonEmpty then
 		// 	Log.info(s"$orders ${orders.map(player.thoughts(_).id(infer = true))} ${orders.map(meta(_).signalTurn)}")
@@ -528,55 +529,51 @@ object Reactor:
 			val level = Logger.level
 			Logger.setLevel(LogLevel.Off)
 
-			def filterClues(clues: Seq[Clue]): Seq[Clue] =
-				val (nonTrashClues, trashClues) = clues.foldLeft((List.empty[Clue], List.empty[Clue])): (acc, clue) =>
-					val (nonTrash, trash) = acc
-					val list = state.clueTouched(state.hands(clue.target), clue)
-					val action = ClueAction(giver, clue.target, list, clue.base)
+			var addedUselessClue = false
 
-					// Only touches previously-clued trash
-					if list.forall(o => state.deck(o).clued && state.isBasicTrash(state.deck(o).id().get)) then
-						(nonTrash, clue +: trash)
+			def clueValue(clue: Clue): Double =
+				val list = state.clueTouched(state.hands(clue.target), clue)
+				val action = ClueAction(giver, clue.target, list, clue.base)
+
+				// Only touches previously-clued trash
+				if list.forall(o => state.deck(o).clued && state.isBasicTrash(state.deck(o).id().get)) then
+					if addedUselessClue then
+						return -1
 					else
-						Log.highlight(Console.GREEN, s"===== Predicting value for ${clue.fmt(state)} =====")
-						val hypoGame = game.simulateClue(action, log = true)
+						addedUselessClue = true
+						return 0
 
-						if hypoGame.lastMove == Some(ClueInterp.Mistake) then
-							(nonTrash, trash)
-						else
-							val useful =
-								getResult(game, hypoGame, action) > -1 &&
-								hypoGame.lastMove != Some(ClueInterp.Mistake) &&
-								(hypoGame.lastMove == Some(ClueInterp.Reactive) || state.hands(clue.target).exists: o =>
-									game.deckIds(o).forall(state.isUseful) &&
-									hypoGame.state.deck(o).clued &&
-									hypoGame.common.thoughts(o).possible.length < game.common.thoughts(o).possible.length)
+				Log.highlight(Console.GREEN, s"===== Predicting value for ${clue.fmt(state)} =====")
+				val hypoGame = game.simulateClue(action, log = true)
 
-							if useful then
-								(nonTrash :+ clue, trash)
-							else
-								(nonTrash, trash :+ clue)
+				if hypoGame.lastMove == Some(ClueInterp.Mistake) then
+					return -1
 
-				nonTrashClues ++ trashClues.take(1)
+				val clueResult = getResult(game, hypoGame, action)
+				val useful =
+					clueResult > -1 &&
+					(hypoGame.lastMove == Some(ClueInterp.Reactive) || state.hands(clue.target).exists: o =>
+						game.deckIds(o).forall(state.isUseful) &&
+						hypoGame.state.deck(o).clued &&
+						hypoGame.common.thoughts(o).possible.length < game.common.thoughts(o).possible.length)
+
+				if useful then
+					clueResult
+				else if addedUselessClue then
+					return -1
+				else
+					addedUselessClue = true
+					return 0
 
 			val allClues =
 				(for
 					target <- (0 until state.numPlayers) if target != giver
 					clue   <- state.allValidClues(target)
+					value = clueValue(clue) if value >= 0
 				yield
-					clue)
-				.pipe(filterClues)
-				.sortBy: clue =>
-					val list = state.clueTouched(state.hands(clue.target), clue)
-					val nonTrash = list.filterNot(o => state.isBasicTrash(state.deck(o).id().get))
-
-					// Prefer not cluing trash, previously clued cards, and no-info clues
-					if nonTrash.isEmpty then
-						99
-					else
-						-nonTrash.count(!state.deck(_).clued) * 5 +					// unclued non-trash cards
-						-nonTrash.count(!state.deck(_).clues.exists(_.isEq(clue)))	// fill-ins
-				.map(PerformAction.fromClue)
+					(clue, value))
+				.sortBy((_, value) => -value)
+				.map((clue, _) => PerformAction.fromClue(clue))
 
 			Logger.setLevel(level)
 			allClues

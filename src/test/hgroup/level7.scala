@@ -43,6 +43,21 @@ class ScreamDiscards extends munit.FunSuite:
 		// Alice should play slot 5.
 		assertEquals(game.takeAction.unsafeRunSync(), PerformAction.Play(game.state.hands(Alice.ordinal)(4)))
 
+	test("will sdcm for a delayed playable"):
+		val game = setup(HGroup.atLevel(7), Vector(
+			Vector("xx", "xx", "xx", "xx", "xx"),
+			Vector("r4", "r2", "g4", "b4", "r3"),
+			Vector("g1", "b3", "y4", "y3", "p3")
+		),
+			starting = Cathy,
+			playStacks = Some(Vector(1, 0, 0, 0, 0)),
+			clueTokens = 1
+	)
+		.pipe(takeTurn("Cathy clues red to Alice (slot 5)"))
+
+		// Alice should play slot 5.
+		assertEquals(game.takeAction.unsafeRunSync(), PerformAction.Discard(game.state.hands(Alice.ordinal)(3)))
+
 	test("doesn't sdcm when target is loaded"):
 		val game = setup(HGroup.atLevel(7), Vector(
 			Vector("xx", "xx", "xx", "xx", "xx"),
@@ -116,7 +131,7 @@ class ShoutDiscards extends munit.FunSuite:
 	test("performs a shout discard"):
 		val game = setup(HGroup.atLevel(7), Vector(
 			Vector("xx", "xx", "xx", "xx", "xx"),
-			Vector("r4", "r2", "g4", "p1", "g3"),
+			Vector("r4", "r2", "g4", "p1", "g5"),
 			Vector("g1", "b3", "r3", "y3", "p3")
 		),
 			starting = Cathy,

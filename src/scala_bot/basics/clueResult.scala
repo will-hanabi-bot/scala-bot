@@ -34,6 +34,25 @@ def elimResult(prev: Game, game: Game, hand: IndexedSeq[Int], list: Seq[Int]) =
 			(newTouched, fill, elim)
 	}
 
+/** Returns the player indices who are respnsible for saving a particular id.
+  * @param game   The current game state.
+  * @param id     The identity to save.
+  * @param except The player holding the id, who cannot save themselves (obviously).
+  */
+def dupeResponsibility(game: Game, id: Identity, except: Int) =
+	val state = game.state
+
+	def potentialDupes(playerIndex: Int) =
+		state.hands(playerIndex).count: o =>
+			state.deck(o).clued &&
+			game.common.thoughts(o).inferred.contains(id)
+
+	val dupes = (0 until state.numPlayers).filter(_ != except).map(potentialDupes)
+	val minDupe = dupes.min
+
+	dupes.zipWithIndex.collect:
+		case (ds, i) if ds == minDupe => i
+
 /** Computes bad-touch-related statistics of the clue.
   * @return A tuple of the orders that were bad touched, known trash, and dupes that could have been clued by someone else.
   */

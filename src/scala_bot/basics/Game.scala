@@ -139,6 +139,12 @@ trait GameOps[G <: Game]:
 	/** Called between every play, clue and discard. */
 	def updateTurn(game: G, action: TurnAction): G
 
+	/** A hook that returns a "cleaned-up" version of the game before updating hypo stacks.
+	  * Typically, this involves removing symmetric waiting connections.
+	  */
+	def cleanHypo(game: G): G =
+		game
+
 	/** A hook that returns the updated game state after a play in particular. */
 	def refreshAfterPlay(@annotation.unused prev: G, game: G, @annotation.unused action: PlayAction): G =
 		game

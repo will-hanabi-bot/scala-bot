@@ -123,10 +123,12 @@ case class FocusPossibility(
 	interp: Interp,
 	/** $symmetricDesc */
 	symmetric: Boolean = false,
-	/** ambiguousDesc */
+	/** $ambiguousDesc */
 	ambiguous: Boolean = false,
 	/** Whether this is a save clue. */
 	save: Boolean = false,
+	/** Whether this requires extra plays from us (revealing a different suit than we expected). */
+	complicated: Boolean = false
 ):
 	/** Returns true if the first connection is a bluff. */
 	def isBluff =

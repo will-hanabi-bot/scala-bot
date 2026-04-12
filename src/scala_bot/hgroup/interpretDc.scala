@@ -12,12 +12,35 @@ def interpretTransfer(ctx: DiscardContext, holder: Int, dupe: Option[Int]): (Dis
 	val DiscardAction(playerIndex, order, suitIndex, rank, _) = action
 	val id = Identity(suitIndex, rank)
 
+	/** Tries to find a third copy of a card. */
+	def findThird: Option[(Int, Int)] =
+		if holder == state.ourPlayerIndex then
+			None
+		else
+			val other = for
+				otherHolder <- ((holder + 1) until state.numPlayers).view
+				otherDupe   <- state.hands(otherHolder).find(state.deck(_).matches(id))
+			yield
+				(otherHolder, otherDupe)
+
+			other.headOption
+
 	if playerIndex == holder then
 		if dupe.exists(game.players(holder).thoughts(_).matches(id, infer = true)) then
 			Log.info("discarded dupe of own hand")
+			return (DiscardResult.None, false)
+
+		else if state.cardCount(id.toOrd) - state.baseCount(id.toOrd) > 1 then
+			findThird match
+				case Some((otherHolder, otherDupe)) =>
+					return interpretTransfer(ctx, otherHolder, Some(otherDupe))
+				case None if holder != state.ourPlayerIndex =>
+					return interpretTransfer(ctx, state.ourPlayerIndex, None)
+				case _ =>
+					return (DiscardResult.Mistake, true)
 		else
 			Log.warn(s"discarded useful ${state.logId(id)} but dupe was in their own hand!")
-		return (DiscardResult.None, false)
+			return (DiscardResult.None, false)
 
 	val cluedTargets = state.hands(holder).filter(o => game.isTouched(o) && validTransfer(game, id)(o))
 
@@ -47,12 +70,7 @@ def interpretTransfer(ctx: DiscardContext, holder: Int, dupe: Option[Int]): (Dis
 
 			findGD(state, Set.empty) match
 				case None =>
-					// Try looking for a third copy
-					val other = ((holder + 1) until state.numPlayers).view.flatMap { i =>
-						state.hands(i).find(state.deck(_).matches(id)).map(i -> _)
-					}.headOption
-
-					other match
+					findThird match
 						case Some((otherHolder, otherDupe)) =>
 							interpretTransfer(ctx, otherHolder, Some(otherDupe))
 
@@ -296,26 +314,39 @@ def interpretSdcm(ctx: DiscardContext): Option[HGroup] =
 	val DiscardContext(prev, game, action) = ctx
 	val state = game.state
 
-	if game.level < Level.LastResorts || state.inEndgame then
+	if state.inEndgame then
 		return None
 
 	val bob = state.nextPlayerIndex(action.playerIndex)
 	val bobChop = game.chop(bob)
 
-	checkSdcm(prev, action).map: status =>
-		if (status == DcStatus.Scream || status == DcStatus.Shout) && bobChop.isEmpty then
+	checkSdcm(prev, action).flatMap: status =>
+		if game.level < Level.LastResorts then
+			// Only allow generation and screaming for criticals when out-of-level
+			val mistake = status.matchesP:
+				case DcStatus.Scream => bobChop.flatMap(state.deck(_).id()).exists(!state.isCritical(_))
+				case DcStatus.Shout => true
+
+			if mistake then
+				Log.warn(s"interpreted out-of-level ${status.toString().toLowerCase()} but not emergency!")
+				Some(game.withMove(DiscardInterp.Mistake))
+			else
+				Log.warn(s"interpreted out-of-level ${status.toString().toLowerCase()} in an emergency!")
+				None
+
+		else if (status == DcStatus.Scream || status == DcStatus.Shout) && bobChop.isEmpty then
 			Log.warn(s"interpreted scream/shout but ${state.names(bob)} has no chop! interpreting mistake")
-			game.copy(
+			Some(game.copy(
 				dcStatus = DcStatus.None,
 				dda = Some(Identity(action.suitIndex, action.rank))
 			)
-			.withMove(DiscardInterp.Mistake)
+			.withMove(DiscardInterp.Mistake))
 
 		else
 			val bobChopId = bobChop.flatMap(state.deck(_).id())
 			val mistake = status.matchesP:
 				case DcStatus.Scream =>
-					bobChopId.exists(i => !state.isPlayable(i) && !state.isCritical(i))
+					bobChopId.exists(i => prev.common.hypoStacks(i.suitIndex) + 1 != i.rank && !state.isCritical(i))
 				case DcStatus.Shout =>
 					bobChopId.exists(state.isBasicTrash)
 
@@ -324,13 +355,13 @@ def interpretSdcm(ctx: DiscardContext): Option[HGroup] =
 			else
 				Log.info(s"interpreting ${status.toString().toLowerCase()}!")
 
-			game.copy(
+			Some(game.copy(
 				dcStatus = status,
 				dda = Some(Identity(action.suitIndex, action.rank))
 			)
 			.withMove(if mistake then DiscardInterp.Mistake else DiscardInterp.Emergency)
 			.when(_ => status != DcStatus.Generation): h =>
-				h.withMeta(bobChop.get)(_.copy(status = CardStatus.ChopMoved))
+				h.withMeta(bobChop.get)(_.copy(status = CardStatus.ChopMoved)))
 
 private def playablePoss(game: HGroup, playerIndex: Int, discarder: Int) =
 	val state = game.state

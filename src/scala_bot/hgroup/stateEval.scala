@@ -52,7 +52,7 @@ def getResult(game: HGroup, hypo: HGroup, action: ClueAction): Double =
 			return -100
 
 	val (newTouched, fill, elim) = elimResult(game, hypo, hypo.state.hands(target), list)
-	val (badTouch, trash, _) = badTouchResult(game, hypo, action)
+	val (badTouch, trash, avoidableDupe) = badTouchResult(game, hypo, action)
 	val (_, playables) = playablesResult(game, hypo)
 
 	if playables.isEmpty && hypo.lastMove == Some(ClueInterp.Play) then
@@ -72,22 +72,27 @@ def getResult(game: HGroup, hypo: HGroup, action: ClueAction): Double =
 		if badTouch.length > 0 then
 			-badTouch.length * 4
 		else
-			3 * List(0.0, 0.125, 0.25, 0.35, 0.45, 0.55)(newTouched.length)
+			2 * List(0.0, 0.125, 0.25, 0.35, 0.45, 0.55)(newTouched.length)
 
 	val precision = (list.summing(o => -0.001 * hypo.common.thoughts(o).inferred.length)) / list.length
 
 	val untouchedPlays = playables.count(!hypo.state.deck(_).clued)
 
+	val pangOfGuilt = if state.clueTokens > 1 && target != state.nextPlayerIndex(state.ourPlayerIndex) && game.findFinesse(target).contains(focus) then -0.25 else 0
+
 	val playablesS = playables.map(state.logId(_)).mkString(", ")
-	Log.info(s"good touch: $goodTouch, playables: [$playablesS], duped: $dupedPlayables, trash: ${trash.length}, fill: ${fill.length}, elim: ${elim.length}, bad touch: $badTouch, ${hypo.lastMove}")
+	Log.info(s"good touch: $goodTouch, playables: [$playablesS], duped: $dupedPlayables, trash: ${trash.length}, fill: ${fill.length}, elim: ${elim.length}, bad touch: $badTouch, avoidDupe: $avoidableDupe, ${hypo.lastMove}")
 
 	val value = goodTouch +
-		(playables.length - 2.0 * dupedPlayables) +
+		(if playables.nonEmpty then 0.5 else 0) +
+		-dupedPlayables +
 		0.2 * untouchedPlays +
 		(if state.inEndgame then 0.01 else 0.1) * revealedTrash +
 		(if state.inEndgame then 0.2 else 0.1) * fill.length +
 		(if state.inEndgame then 0.1 else 0.05) * elim.length +
 		-0.1 * badTouch.length +
+		-2 * avoidableDupe +
+		pangOfGuilt +
 		precision
 
 	hypo.lastMove match
@@ -133,11 +138,16 @@ def advance(orig: HGroup, game: HGroup, offset: Int): Double =
 		evalGame(orig, game)
 
 	else if allPlayables.nonEmpty then
+		val unknown1s = allPlayables.filter(game.unknown1)
+		val next1 = game.order1s(unknown1s).headOption
 		val playables = allPlayables.find(meta(_).urgent) match
 			case Some(order) => List(order)
 			case None => allPlayables.filter: o =>
-				// Only consider playing the leftmost of similarly-possible cards
-				!allPlayables.exists(p => p > o && common.thoughts(p).possible == common.thoughts(o).possible)
+				if unknown1s.contains(o) then
+					next1.contains(o)
+				else
+					// Only consider playing the leftmost of similarly-possible cards
+					!allPlayables.exists(p => p > o && common.thoughts(p).possible == common.thoughts(o).possible)
 
 		val finessed = playables.find(meta(_).status == CardStatus.Finessed)
 
@@ -248,8 +258,14 @@ def advance(orig: HGroup, game: HGroup, offset: Int): Double =
 					val dcVal = advance(orig, dcGame, offset + 1)
 
 					if clueVal < evalGame(orig, game) then
-						Log.info(s"no visible clue available for ${state.names(playerIndex)}, lowering clue prob to 0")
-						dcVal
+						val drewNew = state.hands.zipWithIndex.indexWhere((hand, i) => i != state.ourPlayerIndex && hand.exists(state.deck(_).id().isEmpty))
+
+						if drewNew != -1 then
+							Log.info(s"no visible clue available for ${state.names(playerIndex)} but ${state.names(drewNew)} may have drawn something")
+							0.2 * clueVal + 0.8 * dcVal
+						else
+							Log.info(s"no visible clue available for ${state.names(playerIndex)}, lowering clue prob to 0")
+							dcVal
 					else
 						clueProb * clueVal + (1.0 - clueProb) * dcVal
 				else
@@ -272,17 +288,18 @@ def _evalAction(game: HGroup, action: Action): Double =
 		case clue: ClueAction =>
 			val hypoGame = game.copy(allowFindOwn = false).simulate(action)
 			val clueValue = getResult(game, hypoGame, clue)
-			val mult =
-				if !game.me.thinksPlayables(game, state.ourPlayerIndex).isEmpty then
-					if state.inEndgame then 0.1 else 0.25
-				else
-					0.5
 
 			if hypoGame.lastMove == Some(ClueInterp.Mistake) || clueValue == -100 then
 				(ClueInterp.Mistake, -100.0)
 			else
 				val bonus = if hypoGame.lastMove == Some(ClueInterp.Fix) then 0.5 else 0
-				val best = mult * clueValue + advance(game, hypoGame, 1)
+				val value =
+					if game.me.thinksPlayables(game, state.ourPlayerIndex).nonEmpty && state.inEndgame then
+						-1 + 0.5 * clueValue
+					else
+						0.5 * clueValue
+				Log.info(s"initial clue value: $value")
+				val best = value + advance(game, hypoGame, 1)
 
 				Log.info(f"${action.fmt(state)}%s: $best%.2f (${hypoGame.lastMove}%s) + $bonus")
 				(hypoGame.lastMove.get, best + bonus)
@@ -358,18 +375,24 @@ def _evalAction(game: HGroup, action: Action): Double =
 		Log.info(f"${action.fmt(state)}%s: $value%.2f ($lastMove%s)")
 		value
 
-def evalState(state: State): Double =
+def evalState(state: State, inEndgame: Boolean): Double =
 	// The first 2 * (# suits) pts are worth 1.5.
-	val scoreVal: Double = state.score.min(2 * state.variant.suits.length) * 0.5 + state.score
+	val scoreVal: Double =
+		if inEndgame then
+			2 * state.score
+		else
+			state.score.min(2 * state.variant.suits.length) * 0.5 + state.score
 
-	val clueVal: Double = state.clueTokens match
-		case 0 					 => -0.25
-		case _ if !state.canClue => -0.25
-		case c if c > 6 		 => 3 + (c - 6) * 0.25
-		case c 					 => c / 2.0
+	val clueVal: Double =
+		if inEndgame then 0 else
+			state.clueTokens match
+			case 0 					 => 0
+			case _ if !state.canClue => 0
+			case c if c > 6 		 => 3 + (c - 6) * 0.25
+			case c 					 => c / 2.0
 
 	val scoreLoss = state.variant.suits.length * 5 - state.maxScore
-	val dcCritVal = -10 * scoreLoss
+	val dcCritVal = -20 * scoreLoss
 
 	val strikesVal = state.strikes match
 		case 1 => -2.5
@@ -386,9 +409,9 @@ def evalGame(orig: HGroup, game: HGroup): Double =
 	if state.score == state.maxScore && state.score == orig.state.maxScore then
 		return 100
 
-	val stateVal = evalState(state)
+	val stateVal = evalState(state, inEndgame = orig.state.inEndgame)
 
-	val futureVal = game.common.hypoPlays.summing: order =>
+	val futureVal = (if orig.inEarlyGame then 2 else 1) * game.common.hypoPlays.summing: order =>
 		game.me.thoughts(order).id(infer = true) match
 			case None => 0.4
 			case Some(id) =>
@@ -410,16 +433,30 @@ def evalGame(orig: HGroup, game: HGroup): Double =
 			state.deck(o).matches(id) ||
 			game.me.thoughts(o).matches(id, infer = true) && game.meta(o).focused
 
+		lazy val potentialOwn = !dupeResponsibility(orig, id, orig.state.holderOf(discarded.head)).contains(state.ourPlayerIndex)
+
 		if state.isBasicTrash(id) || id.rank == 5 || discarded.isEmpty then
 			0
 		else if duplicated then
 			-0.01
+		else if potentialOwn then
+			-0.01
 		else
 			id.rank match
-				case 1 => -math.pow(discarded.length, 2)
+				case 1 => -math.pow(state.discardStacks(id.suitIndex)(id.rank - 1).length, 2)
 				case 2 => -6
-				case 3 => -1.75
+				case 3 => -1.5
 				case _ => -0.5
+
+	val touchVal = state.hands.flatten.summing: o =>
+		if !state.deck(o).clued && game.meta(o).status == CardStatus.None then
+			0
+		else if game.common.orderTrash(game, o) then
+			0.05
+		else
+			state.deck(o).id() match
+				case Some(id) if state.isBasicTrash(id) => -0.1
+				case _ => Array(0.0, 0.1, 0.07, 0.05, 0.04, 0.03)(game.common.thoughts(o).inferred.length.min(5))
 
 	val lockedPenalty = (0 until state.numPlayers).summing: playerIndex =>
 		if !game.players(playerIndex).thinksLocked(game, playerIndex) then 0 else
@@ -427,11 +464,11 @@ def evalGame(orig: HGroup, game: HGroup): Double =
 				case c if c > 4 => -1
 				case _ => -2
 
-	val endgamePenalty = orig.state.endgameTurns.fold(0): turns =>
-		val finalScore = (0 until turns).foldLeft(orig.state.playStacks) { (stacks, i) =>
+	val endgamePenalty = if orig.state.endgameTurns.isEmpty then 0 else state.endgameTurns.fold(0): turns =>
+		val finalScore = (0 until turns).foldLeft(state.playStacks) { (stacks, i) =>
 			val playerIndex = (orig.state.currentPlayerIndex + i + 1) % state.numPlayers
 
-			orig.state.hands(playerIndex).map(orig.state.deck(_).id()).flatten.find(orig.state.isPlayable).fold(stacks): id =>
+			state.hands(playerIndex).map(state.deck(_).id()).flatten.find(state.isPlayable).fold(stacks): id =>
 				stacks.updated(id.suitIndex, id.rank)
 		}.sum
 
@@ -449,5 +486,5 @@ def evalGame(orig: HGroup, game: HGroup): Double =
 		game.state.discardStacks(id.suitIndex)(id.rank - 1).length > orig.state.discardStacks(id.suitIndex)(id.rank - 1).length &&
 		visibleFind(game.state, game.me, id, infer = true).forall(!game.isTouched(_))
 
-	Log.info(s"state: $stateVal, future: $futureVal, bdr: $bdrVal badCM: $badCM plays dc'd: $playablesDiscarded locked: $lockedPenalty${if endgamePenalty != 0 then s" endgame penalty: ${endgamePenalty}" else ""}")
-	stateVal + futureVal + bdrVal + badCM + playablesDiscarded + lockedPenalty + endgamePenalty
+	Log.info(s"state: $stateVal, future: $futureVal, bdr: $bdrVal touch: $touchVal badCM: $badCM plays dc'd: $playablesDiscarded locked: $lockedPenalty${if endgamePenalty != 0 then s" endgame penalty: ${endgamePenalty}" else ""}")
+	stateVal + futureVal + bdrVal + touchVal + badCM + playablesDiscarded + lockedPenalty + endgamePenalty

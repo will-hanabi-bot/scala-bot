@@ -212,7 +212,7 @@ def evalState(state: State): Double =
 		case c 					 => c / 2.0
 
 	val scoreLoss = state.variant.suits.length * 5 - state.maxScore
-	val dcCritVal = -8 * scoreLoss
+	val dcCritVal = -20 * scoreLoss
 
 	val strikesVal = state.strikes match
 		case 1 => -1.5

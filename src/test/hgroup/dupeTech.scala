@@ -1,5 +1,7 @@
 package tests.hgroup
 
+import cats.effect.unsafe.implicits.global
+
 import scala_bot.basics._
 import scala_bot.test.{fullyKnown, hasInfs, hasStatus, Player, setup, takeTurn}, Player._
 import scala_bot.hgroup.HGroup
@@ -64,3 +66,30 @@ class DupeTech extends munit.FunSuite:
 		.pipe(takeTurn("Cathy plays r1", "g4"))
 
 		hasInfs(game, None, Alice, 5, Vector("y2"))
+
+	test("doesn't save a potentially duplicated 2"):
+		val game = setup(HGroup.atLevel(1), Vector(
+			Vector("xx", "xx", "xx", "xx", "xx"),
+			Vector("b1", "b4", "r4", "r4", "r2"),
+			Vector("g4", "g4", "y4", "y4", "p4")
+		),
+			starting = Bob
+		)
+		.pipe(takeTurn("Bob clues 2 to Alice (slots 4,5)"))
+		.pipe(takeTurn("Cathy clues blue to Bob"))
+
+		assert(game.takeAction.unsafeRunSync().isInstanceOf[PerformAction.Discard])
+
+	test("doesn't save a potentially duplicated 1"):
+		val game = setup(HGroup.atLevel(1), Vector(
+			Vector("xx", "xx", "xx", "xx", "xx"),
+			Vector("b1", "b4", "r4", "r4", "r1"),
+			Vector("g4", "g4", "y4", "y4", "p4")
+		),
+			starting = Bob
+		)
+		.pipe(takeTurn("Bob clues 1 to Alice (slots 4,5)"))
+		.pipe(takeTurn("Cathy clues blue to Bob"))
+
+		assertEquals(game.common.hypoStacks, Vector(0, 0, 0, 1, 0))
+		assertEquals(game.takeAction.unsafeRunSync(), PerformAction.Play(game.state.hands(Alice.ordinal)(4)))

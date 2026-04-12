@@ -187,7 +187,7 @@ def interpClue(ctx: ClueContext): HGroup =
 			.flatten.getOrElse(focus)
 
 			if prev.common.hypoPlays.contains(fixTarget) && common.thoughts(fixTarget).possible.intersect(state.trashSet).nonEmpty then
-				Log.info(s"no info fix clue! not inferring anything else")
+				Log.info(s"no info fix clue on $fixTarget! not inferring anything else")
 
 				val badFix = giver == state.ourPlayerIndex && !game.me.orderTrash(game, fixTarget)
 

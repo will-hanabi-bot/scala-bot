@@ -42,6 +42,20 @@ class General extends munit.FunSuite:
 		val (_, playables) = playablesResult(game, hypo)
 		assertEquals(playables.length, 1)
 
+	test("counts playables fake connecting on unknown plays"):
+		val game = setup(HGroup.atLevel(1), Vector(
+			Vector("xx", "xx", "xx", "xx", "xx"),
+			Vector("r1", "g4", "g4", "y4", "y4"),
+			Vector("p4", "b4", "b4", "r4", "r4")
+		),
+			starting = Bob
+		)
+		.pipe(takeTurn("Bob clues 1 to Alice (slots 4,5)"))
+
+		val hypo = takeTurn("Cathy clues red to Bob")(game)
+		val (_, playables) = playablesResult(game, hypo)
+		assertEquals(playables.length, 1)
+
 	test("doesn't clue a duplicate of a commonly unknown play"):
 		val game = setup(HGroup.atLevel(1), Vector(
 			Vector("xx", "xx", "xx", "xx"),

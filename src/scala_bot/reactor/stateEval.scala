@@ -76,7 +76,6 @@ def _forceClue(orig: Reactor, game: Reactor, offset: Int): Double =
 	if bob == state.ourPlayerIndex then
 		val nextGame = game.withState(s => s.copy(clueTokens = s.clueTokens - 1))
 		advance(orig, nextGame, offset + 1)
-
 	else
 		forceClue(game, giver, advance(orig, _, offset + 1), only = Some(bob))
 
@@ -176,7 +175,7 @@ def advance(orig: Reactor, game: Reactor, offset: Int): Double =
 				clueProb * clueValue + (1.0 - clueProb) * dcValue
 
 		urgentDc.orElse(trash.headOption) match
-			case None if offset == 1 && !game.withState(_.copy(currentPlayerIndex = playerIndex)).hasPtd =>
+			case _ if offset == 1 && !game.withState(_.copy(currentPlayerIndex = playerIndex)).hasPtd =>
 				Log.info(s"${state.names(playerIndex)} doesn't have ptd, must clue!")
 				_forceClue(orig, game, offset)
 

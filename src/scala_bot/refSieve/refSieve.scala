@@ -31,10 +31,11 @@ case class RefSieve(
 	rewindDepth: Int = 0,
 	inProgress: Boolean = false,
 
-	goodTouch: Boolean = true,
 	waiting: List[WaitingConnection] = Nil,
 	zcsTurn: Option[Int] = None
 ) extends Game:
+	val goodTouch = true
+
 	override def filterPlayables(player: Player, playerIndex: Int, orders: Seq[Int], assume: Boolean): Seq[Int] =
 		orders.filter: o =>
 			!player.links.exists(l => l.getOrders.contains(o) && l.getOrders.max != o)
@@ -487,8 +488,11 @@ object RefSieve:
 				if useless then
 					addedUselessClue = true
 
+				if hypo.common.hypoScore > game.common.hypoScore then
+					return -3
+
 				// Newly-touched useful card
-				if list.exists(o => !state.deck(o).clued && state.isUseful(state.deck(o).id().get)) then
+				else if list.exists(o => !state.deck(o).clued && state.isUseful(state.deck(o).id().get)) then
 					-2
 				// Useful fill-in, or got a playable
 				else if list.exists(usefulFill(hypo, _)) || hypo.common.hypoScore > game.common.hypoScore then

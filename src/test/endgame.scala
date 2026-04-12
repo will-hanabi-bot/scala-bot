@@ -259,7 +259,7 @@ class Endgame extends munit.FunSuite:
 
 		assertEquals(game.state.cardsLeft, 1)
 
-		EndgameSolver(monteCarlo = false).solve(game) match
+		EndgameSolver(monteCarlo = true).solve(game) match
 			case Left(msg) => throw new Exception(s"Game should be winnable! $msg")
 			case Right((perform, winrate)) =>
 				assertEquals(winrate, Frac.one)
@@ -298,3 +298,31 @@ class Endgame extends munit.FunSuite:
 			case Right((_, winrate)) =>
 				// We only lose if b4 is on the bottom.
 				assert(winrate > Frac(2, 3), s"got winrate $winrate, expected > 2/3")
+
+	test("ends an endgame as quickly as possible"):
+		val game = setup(Reactor.apply, Vector(
+			Vector("xx", "xx", "xx", "xx", "xx"),
+			Vector("o5", "o1", "g4", "r1", "y1"),
+			Vector("o1", "g1", "b4", "b2", "b5"),
+		),
+			playStacks = Some(Vector(5, 5, 5, 4, 4)),
+			discarded =  Vector(
+				"y1", "y2",
+				"g1", "g2", "g3",
+				"o2", "o3", "o4"
+			),	// Missing: r2, y4, y3, b3, b1, b1, r4
+			clueTokens = 5,
+			variant = TestVariant.Omni5,
+			init = fullyKnown[Reactor](Cathy, 5, "b5")
+		)
+
+		assertEquals(game.state.cardsLeft, 4)
+
+		EndgameSolver().solve(game) match
+			case Left(msg) => throw new Exception(s"Game should be winnable! $msg")
+			case Right((perform, winrate)) =>
+				assertEquals(winrate, Frac.one)
+				assert(perform match
+					case p: PerformAction.Colour => p.target == Bob.ordinal
+					case _ => false
+				)

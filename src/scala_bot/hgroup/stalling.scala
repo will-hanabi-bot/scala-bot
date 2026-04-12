@@ -135,6 +135,7 @@ def alternativeClue(ctx: ClueContext, maxStall: Int) =
 				) &&
 				!game.findFinesse(action.target).exists: finesse =>
 					val fpe =
+						target != state.nextPlayerIndex(giver) &&	// FPE can't be on Bob (no one can finesse)
 						game.level >= Level.Stalling &&
 						maxStall == 0 &&		// Must have been a 5 Stall
 						playables.contains(finesse) &&

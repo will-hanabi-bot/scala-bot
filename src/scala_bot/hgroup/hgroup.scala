@@ -71,7 +71,6 @@ case class HGroup(
 	rewindDepth: Int = 0,
 	inProgress: Boolean = false,
 
-	goodTouch: Boolean = true,
 	level: Int = 1,
 	waiting: List[WaitingConnection] = Nil,
 	stalled5: Boolean = false,
@@ -85,6 +84,8 @@ case class HGroup(
 	allowFindOwn: Boolean = true,
 	assumePlays: Boolean = true
 ) extends Game:
+	val goodTouch = true
+
 	override def filterPlayables(player: Player, playerIndex: Int, orders: Seq[Int], assume: Boolean = true) =
 		val ordered1s = this.order1s(orders.filter(this.unknown1))
 
@@ -115,13 +116,13 @@ case class HGroup(
 					wc.connections.tail.exists(c => c.order == o && c.hidden)
 				}
 
-			val unorderedPink1 = state.includesVariant(PINKISH) && ordered1s.nonEmpty && ordered1s.tail.contains(o)
+			val unordered1 = (state.includesVariant(PINKISH) || this.level < Level.BasicCM) && ordered1s.nonEmpty && ordered1s.tail.contains(o)
 
 			((assume && !xmeta(o).fStatus.contains(FStatus.PossiblyOn(state.ourPlayerIndex))) || isDefinite(o)) &&
 			!possibleFocusDupe &&
 			!olderFinesseExists &&
 			!unrevealedHidden &&
-			!unorderedPink1 &&
+			!unordered1 &&
 			!waiting.find(_.connections.exists(_.order == o)).exists(this.potentialClandestineWc(playerIndex, o, _).isDefined)
 
 	override def validArr(id: Identity, order: Int): Boolean =
@@ -150,6 +151,11 @@ case class HGroup(
 		state.hands(playerIndex).findLast: o =>
 			!state.deck(o).clued &&
 			(meta(o).status == CardStatus.None || !isDefinite(o))
+		// If no chop seems to exist on someone other than us and they have hidden finesses to play, return the last finessed card instead.
+		.when(_.isEmpty && playerIndex != state.ourPlayerIndex && state.hands(playerIndex).exists(o => meta(o).status == CardStatus.Finessed && meta(o).hidden)): _ =>
+			state.hands(playerIndex).findLast: o =>
+				!state.deck(o).clued &&
+				meta(o).status == CardStatus.Finessed
 
 	/** Returns how far a card is from chop. A card on chop is 0-away. */
 	def chopDistance(playerIndex: Int, order: Int) =
@@ -709,7 +715,7 @@ object HGroup:
 							!hasEarlyGameClue &&
 							!inDDA &&
 							{
-								((!state.canClue || allPlays.isEmpty) && allDiscards.isEmpty) ||
+								((!state.canClue || allPlays.isEmpty) && allDiscards.forall(_._3 == -100)) ||
 								state.clueTokens == 0 ||
 								(state.clueTokens == 1 && valid1ClueScream(game, state.nextPlayerIndex(state.ourPlayerIndex)))
 							}
@@ -737,6 +743,15 @@ object HGroup:
 		def updateTurn(game: HGroup, action: TurnAction) =
 			game
 
+		override def cleanHypo(game: HGroup) =
+			game.waiting.foldLeft(game): (acc, wc) =>
+				if !wc.symmetric then acc else
+					revert(acc, wc.focus, List(wc.inference))
+						.pipe: g =>
+							g.copy(players = g.players.map: player =>
+								player.withThought(wc.focus)(t => t.copy(inferred = t.inferred.difference(wc.inference)))
+							)
+
 		override def refreshAfterPlay(prev: HGroup, game: HGroup, action: PlayAction) =
 			refreshWCs(prev, game, action, elim = false, hypo = Some(-1))
 
@@ -746,41 +761,51 @@ object HGroup:
 			val level = Logger.level
 			Logger.setLevel(LogLevel.Off)
 
-			def filterClues(clues: Seq[Clue]): Seq[Clue] =
-				val (nonTrashClues, trashClues) = clues.partition: clue =>
-					val list = state.clueTouched(state.hands(clue.target), clue)
+			var addedUselessClue = false
 
-					list.exists: o =>
-						state.deck(o).id().exists(state.isUseful)
+			def clueValue(clue: Clue): Double =
+				val list = state.clueTouched(state.hands(clue.target), clue)
+				val action = ClueAction(giver, clue.target, list, clue.base)
 
-				if nonTrashClues.isEmpty then
-					trashClues.take(1)
+				// Only touches previously-clued trash
+				if list.forall(o => state.deck(o).clued && state.isBasicTrash(state.deck(o).id().get)) then
+					if addedUselessClue then
+						return -99
+					else
+						addedUselessClue = true
+						return 0
+
+				Log.highlight(Console.GREEN, s"===== Predicting value for ${clue.fmt(state)} =====")
+				val hypoGame = game.simulate(action)
+
+				if hypoGame.lastMove == Some(ClueInterp.Mistake) then
+					return -99
+
+				val clueResult = getResult(game, hypoGame, action)
+				val useful =
+					clueResult > -10 &&		// A "useless" clue is already given a -10 mod from clueResult
+					state.hands(clue.target).exists: o =>
+						game.deckIds(o).forall(state.isUseful) &&
+						hypoGame.state.deck(o).clued &&
+						hypoGame.common.thoughts(o).possible.length < game.common.thoughts(o).possible.length
+
+				if useful then
+					clueResult
+				else if addedUselessClue then
+					return -99
 				else
-					val validClues = nonTrashClues.filter: clue =>
-						val hypo = game.simulate(ClueAction(giver, clue.target, state.clueTouched(state.hands(clue.target), clue), clue.base))
-						hypo.lastMove != Some(ClueInterp.Mistake)
-
-					validClues ++ trashClues.take(1)
+					addedUselessClue = true
+					return 0
 
 			val allClues =
 				(for
 					target <- (0 until state.numPlayers) if target != giver
 					clue   <- state.allValidClues(target)
+					value = clueValue(clue) if value > -10
 				yield
-					clue)
-				.pipe(filterClues)
-				.sortBy: clue =>
-					val list = state.clueTouched(state.hands(clue.target), clue)
-					val focus = game.determineFocus(game, ClueAction(giver, clue.target, list, clue.base)).focus
-
-					// Prefer not cluing trash and not previously clued cards
-					if state.deck(focus).id().exists(state.isBasicTrash) || game.common.orderPlayable(game, focus) || game.common.orderTrash(game, focus) then
-						10
-					else if state.deck(focus).clued then
-						5
-					else
-						0
-				.map(PerformAction.fromClue)
+					(clue, value))
+				.sortBy((_, value) => -value)
+				.map((clue, _) => PerformAction.fromClue(clue))
 
 			Logger.setLevel(level)
 			allClues

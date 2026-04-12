@@ -13,7 +13,7 @@ import scala_bot.logger._
 import scala_bot.refSieve.RefSieve
 import scala_bot.hgroup.HGroup
 
-val BOT_VERSION = "v0.9.5 (scala-bot)"
+val BOT_VERSION = "v0.10.0 (scala-bot)"
 
 case class ChatMessage(
 	msg: String,
@@ -143,6 +143,7 @@ class BotClient(queue: Queue[IO, String], gameRef: Ref[IO, Option[Game]])(using 
 									val meta = game.meta(order)
 									val flags = List(
 										Option.when(meta.focused)("focused"),
+										Option.when(meta.hidden)("hidden"),
 										Option.when(meta.trash)("trash"),
 										Option.when(meta.urgent)("urgent"),
 										Option.when(player.thoughts(order).reset)("reset")

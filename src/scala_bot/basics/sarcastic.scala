@@ -24,50 +24,57 @@ def interpretUsefulDc(game: Game, action: DiscardAction): DiscardResult =
 
 	Log.info("interpreting useful dc!")
 
-	state.hands.flatten.find(state.deck(_).matches(id)) match
-		case Some(dupe) =>
-			val holder = state.holderOf(dupe)
+	def tryFinding(excluding: Set[Int] = Set.empty): DiscardResult =
+		state.hands.flatten.find(o => !excluding.contains(o) && state.deck(o).matches(id)) match
+			case Some(dupe) =>
+				val holder = state.holderOf(dupe)
 
-			if holder == playerIndex then
-				if game.players(playerIndex).thoughts(dupe).matches(id, infer = true) then
-					Log.info("discarded dupe of own hand")
+				if holder == playerIndex then
+					if state.cardCount(id.toOrd) - state.baseCount(id.toOrd) > 1 then
+						tryFinding(excluding = Set(dupe))
+					else if game.players(playerIndex).thoughts(dupe).matches(id, infer = true) then
+						Log.info("discarded dupe of own hand")
+						DiscardResult.None
+					else
+						Log.warn(s"discarded useful ${state.logId(id)} but dupe was in their own hand!")
+						DiscardResult.None
+
+				else if gd then
+					val target = state.hands(holder).findLast(common.thoughts(_).possible.contains(id)).get
+
+					if target != dupe then
+						Log.warn(s"transfer to $dupe was not to rightmost $target!")
+						DiscardResult.Mistake
+					else
+						Log.info(s"gd to ${state.names(holder)}'s $target")
+						DiscardResult.GentlemansDiscard(Seq(target))
 				else
-					Log.warn(s"discarded useful ${state.logId(id)} but dupe was in their own hand!")
-				DiscardResult.None
-			else if gd then
-				val target = state.hands(holder).findLast(common.thoughts(_).possible.contains(id)).get
+					val orders = state.hands(holder).filter(validTransfer(game, id))
+					Log.info(s"sarcastic to ${state.names(holder)}'s $orders")
+					DiscardResult.Sarcastic(orders)
 
-				if target != dupe then
-					Log.warn(s"transfer to $dupe was not to rightmost $target!")
+			case None if playerIndex == state.ourPlayerIndex =>
+				// We discarded a card that we don't see nor have the other copy of,
+				// but we trust that the team made a good decision.
+				if game.meta(order).status == CardStatus.CalledToDiscard then
+					DiscardResult.None
+				else
 					DiscardResult.Mistake
-				else
-					Log.info(s"gd to ${state.names(holder)}'s $target")
-					DiscardResult.GentlemansDiscard(Seq(target))
-			else
-				val orders = state.hands(holder).filter(validTransfer(game, id))
-				Log.info(s"sarcastic to ${state.names(holder)}'s $orders")
+
+			case None if gd =>
+				// Since we can't find it, we must be the target
+				state.ourHand.findLast(game.me.thoughts(_).possible.contains(id)) match
+					case Some(target) =>
+						Log.info(s"gd to our $target")
+						DiscardResult.GentlemansDiscard(Seq(target))
+
+					case None =>
+						Log.warn("looked like gd but we don't see it and impossible for us to have!")
+						DiscardResult.Mistake
+
+			case None =>
+				val orders = state.ourHand.filter(validTransfer(game, id))
+				Log.info(s"sarcastic to our $orders")
 				DiscardResult.Sarcastic(orders)
 
-		case None if playerIndex == state.ourPlayerIndex =>
-			// We discarded a card that we don't see nor have the other copy of,
-			// but we trust that the team made a good decision.
-			if game.meta(order).status == CardStatus.CalledToDiscard then
-				DiscardResult.None
-			else
-				DiscardResult.Mistake
-
-		case None if gd =>
-			// Since we can't find it, we must be the target
-			state.ourHand.findLast(game.me.thoughts(_).possible.contains(id)) match
-				case Some(target) =>
-					Log.info(s"gd to our $target")
-					DiscardResult.GentlemansDiscard(Seq(target))
-
-				case None =>
-					Log.warn("looked like gd but we don't see it and impossible for us to have!")
-					DiscardResult.Mistake
-
-		case None =>
-			val orders = state.ourHand.filter(validTransfer(game, id))
-			Log.info(s"sarcastic to our $orders")
-			DiscardResult.Sarcastic(orders)
+	tryFinding()

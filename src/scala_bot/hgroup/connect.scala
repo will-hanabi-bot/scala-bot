@@ -70,7 +70,7 @@ def findKnownConn(ctx: ClueContext, id: Identity, ignore: Set[Int], findOwn: Boo
 	val linkedConns = for
 		playerIndex <- (0 until state.numPlayers).view
 		order <- state.hands(playerIndex)
-		link <- common.links if validLink(link, order)
+		link <- common.links if validLink(link, order) && common.thoughts(order).inferred.difference(state.playableSet).isEmpty
 	yield
 		PlayableConn(playerIndex, order, id, linked = link.getOrders.toList)
 
