@@ -8,7 +8,6 @@ import scala_bot.fraction.Frac
 import scala_bot.utils._
 import scala_bot.logger._
 
-
 import scala.util.matching.Regex
 import java.time.Duration
 
