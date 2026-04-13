@@ -4,46 +4,47 @@ val BOT_VERSION = "v0.10.0 (scala-bot)"
 val MAX_H_LEVEL = 11
 
 enum Convention:
-	case Reactor, RefSieve, HGroup
+	case Reactor
+	case RefSieve
+	case HGroup(level: Int)
 
 	override def toString: String = this match
-		case Reactor  => "Reactor 1.0"
+		case Reactor	=> "Reactor 1.0"
 		case RefSieve => "Ref Sieve"
-		case HGroup   => "H-Group"
+		case HGroup(level)	 => s"H-Group $level"
+
+val reactorPattern = "Reactor".r.unanchored
+val refSievePattern = "RefSieve".r.unanchored
+val HGroupPattern = "HGroup (\\d+)".r.unanchored
+val HGroupPatternWithoutLevel = "HGroup".r.unanchored
+val levelOnlyPattern = "(\\d+)".r.unanchored
 
 object Convention:
-	def from(s: String): Option[Convention] = s match
-		case "Reactor" => Some(Convention.Reactor)
-		case "RefSieve" => Some(Convention.RefSieve)
-		case "HGroup" => Some(Convention.HGroup)
-		case _ => None
+	def makeH(level: Int): Either[String, Convention] =
+		if level < 1 || level > MAX_H_LEVEL then
+			Left("scala-bot can only play HGroup between levels 1-$MAX_H_LEVEL.")
+		else
+			Right(Convention.HGroup(level))
 
-case class Settings(convention: Convention, level: Option[Int] = None):
-	override def toString: String = convention match
-		case Convention.Reactor => Convention.Reactor.toString
-		case Convention.RefSieve => Convention.RefSieve.toString
-		case Convention.HGroup => s"${Convention.HGroup} ${level.getOrElse(1)}"
+	def from(s: String, parseLevel: Boolean = true): Either[String, Convention] = s match
+		case reactorPattern() => Right(Convention.Reactor)
+		case refSievePattern() => Right(Convention.RefSieve)
+		case HGroupPattern(level) if parseLevel => makeH(level.toInt)
+		case HGroupPatternWithoutLevel() if !parseLevel => makeH(1)
+		case levelOnlyPattern(level) => makeH(level.toInt)
+		case _ => Left("Unrecognized convention $s. Supported: HGroup, RefSieve, Reactor.")
 
-def infoNote(settings: Settings): String =
-	s"[INFO: $BOT_VERSION, ${settings}]"
+def infoNote(convention: Convention): String =
+	s"[INFO: $BOT_VERSION, ${convention}]"
 
-def parseSettingsFromNote(note: String): Option[Settings] =
+def parseConventionFromNote(note: String): Option[Convention] =
 	for
 		_ <- Option.when(note.startsWith("[INFO:"))(())
-		parts =  note.split("\\|", 2)
+		parts =	note.split("\\|", 2)
 		info <- parts.lift(0)
 		openIdx <- Some(info.indexOf('[')).filter(_ >= 0)
 		closeIdx <- Some(info.indexOf(']')).filter(_ >= 0)
 		bracket <- Some(info.substring(openIdx, closeIdx))
 		convStr <- bracket.split(",", 2).lift(1).map(_.trim)
-		settings <- convStr match
-			case s if s.startsWith(Convention.HGroup.toString) =>
-				s.drop(Convention.HGroup.toString.length).trim.toIntOption
-					.map(lvl => Settings(Convention.HGroup, Some(lvl)))
-			case s if s == Convention.RefSieve.toString =>
-				Some(Settings(Convention.RefSieve))
-			case s if s == Convention.Reactor.toString =>
-				Some(Settings(Convention.Reactor))
-			case _ =>
-				None
-	yield settings
+		convention <- Convention.from(convStr).toOption
+	yield convention

@@ -5,7 +5,6 @@ import cats.effect.IO
 import scala_bot.basics._
 import scala_bot.endgame.EndgameSolver
 import scala_bot.utils._
-import scala_bot.{Settings, Convention}
 import scala_bot.logger.{Log, Logger, LogLevel}
 import scala_bot.fraction.Frac
 
@@ -87,7 +86,6 @@ case class HGroup(
 ) extends Game:
 	val goodTouch = true
 
-	override def settings: Settings = Settings(Convention.HGroup, Some(level))
 	override def filterPlayables(player: Player, playerIndex: Int, orders: Seq[Int], assume: Boolean = true) =
 		val ordered1s = this.order1s(orders.filter(this.unknown1))
 
