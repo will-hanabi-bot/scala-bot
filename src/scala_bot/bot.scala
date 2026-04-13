@@ -43,9 +43,8 @@ def readEnv(args: Map[String, String]) =
 
 		lines.foldLeft(args): (acc, line) =>
 			val stripped = line.stripLeading()
-			val withoutComment = stripped.takeWhile(_ != '#').stripTrailing()
-			val withoutExport = withoutComment.stripPrefix("export ")
-			withoutExport.split("=", 2) match
+			if stripped.startsWith("#") then acc else
+			stripped.split("=", 2) match
 				case Array(key, value) => acc.updated(key.strip(), value.strip())
 				case Array(rest) if rest.isBlank => acc
 				case _ =>
