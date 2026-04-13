@@ -99,7 +99,7 @@ case class BotConfig(
 	botNamePrefixes: List[String] = Nil
 ):
 	def isBotName(name: String): Boolean =
-		botNamePrefixes.nonEmpty && botNamePrefixes.exists(name.startsWith)
+		botNamePrefixes.exists(name.startsWith)
 
 object BotConfig:
 	def fromEnv(env: Map[String, String]): BotConfig = BotConfig(
@@ -292,7 +292,7 @@ class BotClient(queue: Queue[IO, String], gameRef: Ref[IO, Option[Game]], config
 						leaveRoom()
 					else if config.leavePregameIfOnlyBots &&
 						!table.running &&
-						table.players.forall(name => config.isBotName(name)) then
+						table.players.forall(config.isBotName) then
 						Log.info("Leaving game. Only bots left in lobby.")
 						leaveRoom()
 					else IO.unit
