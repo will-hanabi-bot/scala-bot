@@ -227,7 +227,7 @@ class BotClient(queue: Queue[IO, String], gameRef: Ref[IO, Option[Game]], config
 							val maybeNewConvention = msg.notes.headOption.flatMap(parseConventionFromNote)
 							val game: Game = maybeNewConvention.flatMap: c =>
 									Option.when(c != convention):
-										Log.info(s"Restored settings from first card note: $c")
+										Log.info(s"restored settings from first card note: $c")
 										convention = c
 										newGameFromSettings(msg.tableID, g.base._1, c)
 								.getOrElse(g)
@@ -315,7 +315,7 @@ class BotClient(queue: Queue[IO, String], gameRef: Ref[IO, Option[Game]], config
 							.filter(t => t.players.contains(self.username))
 							.maxByOption(_.id)
 						myTable.fold(IO.unit): t =>
-							Log.info(s"Automatically reattending table with id ${t.id}")
+							Log.info(s"automatically reattending table with id ${t.id}")
 							sendCmd("tableReattend", ujson.write(ujson.Obj("tableID" -> t.id)))
 
 			case "tableStart" =>

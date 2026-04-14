@@ -9,11 +9,11 @@ enum Convention:
 	case HGroup(level: Int)
 
 	override def toString: String = this match
-		case Reactor	=> "Reactor 1.0"
-		case RefSieve => "Ref Sieve"
-		case HGroup(level)	 => s"H-Group $level"
+		case Reactor       => "Reactor1"
+		case RefSieve      => "RefSieve"
+		case HGroup(level) => s"H-Group $level"
 
-val reactorPattern = "Reactor".r.unanchored
+val reactorPattern = "Reactor1?".r.unanchored
 val refSievePattern = "RefSieve".r.unanchored
 val HGroupPattern = "HGroup (\\d+)".r.unanchored
 val HGroupPatternWithoutLevel = "HGroup".r.unanchored
@@ -26,13 +26,14 @@ object Convention:
 		else
 			Right(Convention.HGroup(level))
 
-	def from(s: String, parseLevel: Boolean = true): Either[String, Convention] = s match
-		case reactorPattern() => Right(Convention.Reactor)
-		case refSievePattern() => Right(Convention.RefSieve)
-		case HGroupPattern(level) if parseLevel => makeH(level.toInt)
-		case HGroupPatternWithoutLevel() if !parseLevel => makeH(1)
-		case levelOnlyPattern(level) => makeH(level.toInt)
-		case _ => Left("Unrecognized convention $s. Supported: HGroup, RefSieve, Reactor.")
+	def from(s: String, parseLevel: Boolean = true): Either[String, Convention] =
+		s match
+			case reactorPattern()                           => Right(Convention.Reactor)
+			case refSievePattern()                          => Right(Convention.RefSieve)
+			case HGroupPattern(level) if parseLevel         => makeH(level.toInt)
+			case HGroupPatternWithoutLevel() if !parseLevel => makeH(1)
+			case levelOnlyPattern(level)                    => makeH(level.toInt)
+			case _ => Left(s"Unrecognized convention $s. Supported: HGroup [level], RefSieve, Reactor1.")
 
 def infoNote(convention: Convention): String =
 	s"[INFO: $BOT_VERSION, ${convention}]"
