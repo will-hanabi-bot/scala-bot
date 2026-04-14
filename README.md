@@ -19,6 +19,9 @@ https://github.com/user-attachments/assets/665e7d78-7c8b-4f07-b4c3-9116ec2ec8ab
 - Download the latest JAR file from the Releases page.
 - Fill out the login details for the bot in an .env file. See .env.template for an example.
   - You'll need to create its account on hanab.live first.
+  - Optionally set `HANABI_BOT_NAME_PREFIXES` to a comma-separated list of name prefixes (e.g. `will-bot`) so the bot can detect when only bots are in a lobby or replay.
+  - Set `HANABI_LEAVE_PREGAME_IF_ONLY_BOTS=1` to auto-leave pregame if only bots remain.
+  - `HANABI_LEAVE_REPLAY_IF_ONLY_BOTS` is enabled by default; set to `0` to disable.
 - Run `java [JVM_OPTS] -jar scala-bot-<version>.jar index=<index>` to start the bot.
   - Some JVM options for reduced memory usage: `-Xms128m -Xmx192m -Xss256k -XX:MaxMetaspaceSize=96m -XX:ReservedCodeCacheSize=64m -XX:+UseSerialGC`.
 
@@ -71,3 +74,11 @@ The bot can play games with copies of itself using `scala-cli . --main-class sca
 	- `level=<level>` sets the level of the convention set (defaults to 1, if applicable).
 
 The final score for each seed as well as how each game terminated are logged to the console. JSON replays of each game are saved to a `seeds` folder, which can be loaded into hanab.live for viewing.
+
+## Environment variables reference
+
+| Variable | Default | Description |
+|---|---|---|
+| `HANABI_LEAVE_PREGAME_IF_ONLY_BOTS` | `0` | Auto-leave the pregame lobby when only bots remain. |
+| `HANABI_LEAVE_REPLAY_IF_ONLY_BOTS` | `1` | Auto-leave a shared replay when only bots are spectating. |
+| `HANABI_BOT_NAME_PREFIXES` | *(empty)* | Comma-separated prefixes identifying bot accounts (e.g. `will-bot,mybot`). Required for the two flags above to take effect. |

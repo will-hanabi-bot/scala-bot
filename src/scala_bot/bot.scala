@@ -42,9 +42,11 @@ def readEnv(args: Map[String, String]) =
 		val lines = fromFile("./.env").getLines()
 
 		lines.foldLeft(args): (acc, line) =>
-			line.split("=") match
-				case Array(key, value) => acc.updated(key, value)
-				case Array("") => acc
+			val stripped = line.stripLeading()
+			if stripped.startsWith("#") then acc else
+			stripped.split("=", 2) match
+				case Array(key, value) => acc.updated(key.strip(), value.strip())
+				case Array(rest) if rest.isBlank => acc
 				case _ =>
 					println(s"malformed line in .env: $line")
 					acc
@@ -54,6 +56,8 @@ def readEnv(args: Map[String, String]) =
 
 object main extends IOApp:
 	def run(args: List[String]) =
+		val parsedArgs = parseArgs(args)
+		val env = sys.env ++ readEnv(parsedArgs)
 		def useWebSocket(ws: WebSocket[IO]): IO[Unit] =
 			def receive(client: BotClient): IO[Unit] =
 				Ref.of[IO, String]("").flatMap: buffer =>
@@ -92,15 +96,12 @@ object main extends IOApp:
 				wsQueue  <- Queue.unbounded[IO, String]
 				consoleQ <- Queue.unbounded[IO, ConsoleCmd]
 				gameRef  <- Ref.of[IO, Option[Game]](None)
-				client   = new BotClient(wsQueue, gameRef)(using runtime)
+				client   = new BotClient(wsQueue, gameRef, BotConfig.fromEnv(env))(using runtime)
 				console  <- spawnConsole(consoleQ, client)
 				sender   <- startSender(ws, wsQueue)
 				_        <- IO { Variant.init() }
 				_        <- (console.join, receive(client)).parTupled.guaranteeCase(_ => sender.cancel)
 			yield ()
-
-		val parsedArgs = parseArgs(args)
-		val env = readEnv(parsedArgs)
 
 		val index = parsedArgs.getOrElse("index", "0").toInt
 		val username = env.lift(s"HANABI_USERNAME$index")

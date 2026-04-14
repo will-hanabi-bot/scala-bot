@@ -58,7 +58,7 @@ def fetchGame(args: Seq[String]) =
 		throw new IllegalArgumentException("Missing required argument 'index'!")
 
 	val index = indexR.get.toInt
-	val convention = conventionR.flatMap(Convention.from).getOrElse(Convention.Reactor)
+	val convention = conventionR.flatMap(s => Convention.from(s, parseLevel = false).toOption).getOrElse(Convention.Reactor)
 	val level = levelR.map(_.toInt).getOrElse(1)
 
 	val data @ GameData(players, deck, actions, options) = id match
@@ -79,7 +79,7 @@ def fetchGame(args: Seq[String]) =
 		case Convention.RefSieve =>
 			val game = RefSieve(0, state, false).copy(catchup = true)
 			processGame(game, data, index)
-		case Convention.HGroup =>
+		case Convention.HGroup(_) =>
 			val game = HGroup(0, state, false, level).copy(catchup = true)
 			processGame(game, data, index)
 

@@ -13,8 +13,6 @@ import scala_bot.logger._
 import scala_bot.refSieve.RefSieve
 import scala_bot.hgroup.HGroup
 
-val BOT_VERSION = "v0.10.0 (scala-bot)"
-
 case class ChatMessage(
 	msg: String,
 	who: String,
@@ -93,28 +91,51 @@ object GameActionListMessage:
 			json.obj("list").arr.map(Action.fromJSON).flatten.toSeq
 		)
 
-enum Convention:
-	case Reactor, RefSieve, HGroup
+case class NoteListPlayerMessage(tableID: Int, notes: Vector[String]) derives ReadWriter
 
-object Convention:
-	def from(s: String) = s match
-		case "Reactor" => Some(Convention.Reactor)
-		case "RefSieve" => Some(Convention.RefSieve)
-		case "HGroup" => Some(Convention.HGroup)
-		case _ => None
+case class BotConfig(
+	leavePregameIfOnlyBots: Boolean = false,
+	leaveReplayIfOnlyBots: Boolean = true,
+	botNamePrefixes: List[String] = Nil
+):
+	def isBotName(name: String): Boolean =
+		botNamePrefixes.exists(name.startsWith)
 
-case class Settings(convention: Convention, level: Int = 1):
-	def str = convention match
-		case Convention.Reactor => "Reactor 1.0"
-		case Convention.RefSieve => "Ref Sieve"
-		case Convention.HGroup => s"H-Group $level"
+object BotConfig:
+	def fromEnv(env: Map[String, String]): BotConfig = BotConfig(
+		leavePregameIfOnlyBots = env.getOrElse("HANABI_LEAVE_PREGAME_IF_ONLY_BOTS", "0") == "1",
+		leaveReplayIfOnlyBots = env.getOrElse("HANABI_LEAVE_REPLAY_IF_ONLY_BOTS", "1") == "1",
+		botNamePrefixes = env.getOrElse("HANABI_BOT_NAME_PREFIXES", "")
+			.split(",").map(_.trim).filter(_.nonEmpty).toList
+	)
 
-class BotClient(queue: Queue[IO, String], gameRef: Ref[IO, Option[Game]])(using runtime: IORuntime):
+class BotClient(queue: Queue[IO, String], gameRef: Ref[IO, Option[Game]], config: BotConfig = BotConfig())(using runtime: IORuntime):
 	private var info: Option[SelfData] = None
 	private var tableID: Option[Int] = None
 	private var gameStarted = false
+	private var restoredSettings = false
 	private var tables: Map[Int, Table] = Map()
-	private var settings: Settings = Settings(Convention.Reactor)
+	private var convention: Convention = Convention.Reactor
+
+	private def newGameFromSettings(tID: Int, state: State, convention: Convention): Game =
+		convention match
+			case Convention.Reactor => Reactor(tID, state, inProgress = true)
+			case Convention.RefSieve => RefSieve(tID, state, inProgress = true)
+			case Convention.HGroup(level) => HGroup(tID, state, inProgress = true, level = level)
+
+	private def writeInfoNote(msg: NoteListPlayerMessage, game: Game, convention: Convention): (IO[Unit], Game) =
+		def addInfoNote(game: Game, note: String): Game =
+			game match
+				case r: Reactor => r.copy(notes = r.notes + (0 -> Note(0, note, note)))
+				case r: RefSieve => r.copy(notes = r.notes + (0 -> Note(0, note, note)))
+				case h: HGroup => h.copy(notes = h.notes + (0 -> Note(0, note, note)))
+
+		val noteStr = infoNote(convention)
+		if !game.notes.contains(0) && game.inProgress && msg.notes.headOption.getOrElse("").isEmpty then
+			val io = sendCmd("note", ujson.write(ujson.Obj("tableID" -> msg.tableID, "order" -> 0, "note" -> noteStr)))
+			(io, addInfoNote(game, noteStr))
+		else
+			(IO.unit, game)
 
 	def debug(cmd: ConsoleCmd) = gameRef.get.flatMap:
 		case None => IO.println("no active game")
@@ -194,28 +215,59 @@ class BotClient(queue: Queue[IO, String], gameRef: Ref[IO, Option[Game]])(using 
 						IO.unit
 					case Some(action) => handleAction(action)
 
-			case "gameActionList" =>
-				val msg = GameActionListMessage.fromJSON(ujson.read(args))
+			case "noteListPlayer" =>
+				// If the settings have already been restored do nothing.
+				if restoredSettings then IO.unit
+				else
+					gameRef.get.flatMap:
+						case None => IO.unit
+						case Some(g) =>
+							// Restore bot level from the note on the first card after rejoin
+							val msg = upickle.read[NoteListPlayerMessage](ujson.read(args))
+							val maybeNewConvention = msg.notes.headOption.flatMap(parseConventionFromNote)
+							val game: Game = maybeNewConvention.flatMap: c =>
+									Option.when(c != convention):
+										Log.info(s"restored settings from first card note: $c")
+										convention = c
+										newGameFromSettings(msg.tableID, g.base._1, c)
+								.getOrElse(g)
+							// Write the note with the settings as early as possible.
+							// This does not fully protect against the note not being written if the bot crashes before this point.
+							val (noteIO, gameWithNote) = writeInfoNote(msg, game, convention)
+							gameRef.set(Some(gameWithNote)) *>
+							noteIO *>
+							IO { restoredSettings = true } *>
+							// This causes 'gameActionList' to be sent again and 'noteListPlayer'.
+							// This time around we can properly catch up with the game using the correct settings.
+							sendCmd("getGameInfo2", ujson.write(ujson.Obj("tableID" -> msg.tableID)))
 
-				gameRef.get.flatMap:
-					case None => throw new IllegalStateException("Game not initialized")
-					case Some(g) => g match
-						case r: Reactor => gameRef.set(Some(r.copy(catchup = true)))
-						case r: RefSieve => gameRef.set(Some(r.copy(catchup = true)))
-						case h: HGroup => gameRef.set(Some(h.copy(catchup = true)))
-				*>
-				msg.list.init.traverse_ : action =>
-					handleAction(GameActionMessage(msg.tableID, action))
-				*>
-				gameRef.update:
-					case Some(g2: Reactor) => Some(g2.copy(catchup = false))
-					case Some(g2: RefSieve) => Some(g2.copy(catchup = false))
-					case Some(g2: HGroup) => Some(g2.copy(catchup = false))
-					case other => other
-				*>
-				sendCmd("loaded", ujson.write(ujson.Obj("tableID" -> msg.tableID))) *>
-				IO.sleep(1000.millis) *>
-				handleAction(GameActionMessage(msg.tableID, msg.list.last))
+			// Received at the beginning of the game, as a list of all actions that have happened so far.
+			case "gameActionList" =>
+				// The settings have not been (attempted to be) restored so far.
+				// This will happen in 'noteListPlayer', which will then request the 'gameActionList' again.
+				if !restoredSettings then IO.unit
+				else
+					val msg = GameActionListMessage.fromJSON(ujson.read(args))
+
+					gameRef.get.flatMap:
+						case None => throw new IllegalStateException("Game not initialized")
+						case Some(g) => g match
+							case r: Reactor => gameRef.set(Some(r.copy(catchup = true)))
+							case r: RefSieve => gameRef.set(Some(r.copy(catchup = true)))
+							case h: HGroup => gameRef.set(Some(h.copy(catchup = true)))
+					*>
+					msg.list.init.traverse_ : action =>
+						handleAction(GameActionMessage(msg.tableID, action))
+					*>
+					gameRef.update:
+						case Some(g2: Reactor) => Some(g2.copy(catchup = false))
+						case Some(g2: RefSieve) => Some(g2.copy(catchup = false))
+						case Some(g2: HGroup) => Some(g2.copy(catchup = false))
+						case other => other
+					*>
+					sendCmd("loaded", ujson.write(ujson.Obj("tableID" -> msg.tableID))) *>
+					IO.sleep(1000.millis) *>
+					handleAction(GameActionMessage(msg.tableID, msg.list.last))
 
 			case "joined" =>
 				tableID = Some(ujson.read(args)("tableID").num.toInt)
@@ -232,13 +284,19 @@ class BotClient(queue: Queue[IO, String], gameRef: Ref[IO, Option[Game]])(using 
 			case "table" =>
 				val table = upickle.read[Table](args)
 
-				gameRef.get.flatMap:
-					// Only bots left in the replay
-					case Some(g) if table.id == g.tableID &&
+				if tableID.contains(table.id) then
+					if config.leaveReplayIfOnlyBots &&
 						table.sharedReplay &&
-						table.spectators.forall(_.name.startsWith("will-bot")) =>
+						table.spectators.forall(s => config.isBotName(s.name)) then
+						Log.info("Leaving game. Only bots left spectating.")
 						leaveRoom()
-					case _ => IO.unit
+					else if config.leavePregameIfOnlyBots &&
+						!table.running &&
+						table.players.forall(config.isBotName) then
+						Log.info("Leaving game. Only bots left in lobby.")
+						leaveRoom()
+					else IO.unit
+				else IO.unit
 				*>
 				IO { tables = tables + (table.id -> table) }
 
@@ -248,7 +306,17 @@ class BotClient(queue: Queue[IO, String], gameRef: Ref[IO, Option[Game]])(using 
 
 			case "tableList" =>
 				val list = upickle.read[List[Table]](args)
-				IO { tables = tables ++ list.map(t => t.id -> t) }
+				IO {
+					tables = tables ++ list.map(t => t.id -> t)
+					tables
+				}.flatMap: updatedTables =>
+					info.fold(IO.unit): self =>
+						val myTable = updatedTables.values
+							.filter(t => t.players.contains(self.username))
+							.maxByOption(_.id)
+						myTable.fold(IO.unit): t =>
+							Log.info(s"automatically reattending table with id ${t.id}")
+							sendCmd("tableReattend", ujson.write(ujson.Obj("tableID" -> t.id)))
 
 			case "tableStart" =>
 				val id = ujson.read(args)("tableID").num.toInt
@@ -273,6 +341,7 @@ class BotClient(queue: Queue[IO, String], gameRef: Ref[IO, Option[Game]])(using 
 		IO:
 			tableID = None
 			gameStarted = false
+			restoredSettings = false
 		*>
 		gameRef.set(None)
 
@@ -280,14 +349,11 @@ class BotClient(queue: Queue[IO, String], gameRef: Ref[IO, Option[Game]])(using 
 		val InitMessage(tID, playerNames, ourPlayerIndex, _, _, options) = data
 		val variant = Variant.getVariant(options.variantName)
 		val state = State(playerNames, ourPlayerIndex, variant, options)
+		val game = newGameFromSettings(tID, state, convention)
 
-		val game = settings.convention match
-			case Convention.Reactor  => Reactor(tID, state, inProgress = true)
-			case Convention.RefSieve => RefSieve(tID, state, inProgress = true)
-			case Convention.HGroup   => HGroup(tID, state, inProgress = true, settings.level)
-
-		IO { tableID = Some(tID) } *>
+		IO { tableID = Some(tID); restoredSettings = false } *>
 		gameRef.set(Some(game)) *>
+		// We will receive the 'noteListPlayer' next. This is when we can restore the settings.
 		sendCmd("getGameInfo2", ujson.write(ujson.Obj("tableID" -> tID)))
 
 	def handleChat(data: ChatMessage): IO[Unit] =
@@ -348,7 +414,7 @@ class BotClient(queue: Queue[IO, String], gameRef: Ref[IO, Option[Game]])(using 
 			val pattern = """/analyze (\d+) (\w+) ?(\d+)?""".r
 
 			msg match
-				case pattern(id, conv, level) if Convention.from(conv).isDefined =>
+				case pattern(id, conv, level) if Convention.from(conv, parseLevel = false).isRight =>
 					val args = List(
 						Some(s"id=$id"),
 						Some(s"convention=$conv"),
@@ -389,20 +455,8 @@ class BotClient(queue: Queue[IO, String], gameRef: Ref[IO, Option[Game]])(using 
 							case _: DrawAction => state.turnCount == 1
 							case _ => false)
 
-					val (turn1IO, nextGame) = action match
-						case TurnAction(num, _) if num == 1 && !newGame.notes.contains(0) =>
-							val note = s"[INFO: $BOT_VERSION, ${settings.str}]"
-							val noteIO = sendCmd("note", ujson.write(ujson.Obj("tableID" -> newGame.tableID, "order" -> 0, "note" -> note)))
-							val nextGame = newGame match
-								case r: Reactor  => r.copy(notes = r.notes + (0 -> Note(0, note, note)))
-								case r: RefSieve => r.copy(notes = r.notes + (0 -> Note(0, note, note)))
-								case h: HGroup   => h.copy(notes = h.notes + (0 -> Note(0, note, note)))
-							(noteIO, nextGame)
-
-						case _ => (IO.unit, newGame)
-
 					val actIO = IO.whenA(perform):
-						val suggestedActionIO = nextGame match
+						val suggestedActionIO = newGame match
 							case r: Reactor  => r.takeAction
 							case r: RefSieve => r.takeAction
 							case h: HGroup   => h.takeAction
@@ -411,16 +465,15 @@ class BotClient(queue: Queue[IO, String], gameRef: Ref[IO, Option[Game]])(using 
 							Log.highlight(Console.BLUE, s"Suggested action: ${suggestedAction.fmt(newGame, accordingTo = Some(newGame.me))}")
 							val arg = suggestedAction.json(tableID.get)
 
-							IO.whenA(nextGame.inProgress):
+							IO.whenA(newGame.inProgress):
 								IO.sleep(2.seconds) *> sendCmd("action", ujson.write(arg))
 
-					val x = nextGame match
+					val x = newGame match
 						case r: Reactor  => r.copy(queuedCmds = Nil)
 						case r: RefSieve => r.copy(queuedCmds = Nil)
 						case h: HGroup   => h.copy(queuedCmds = Nil)
 
 					gameRef.set(Some(x)) *>
-					turn1IO *>
 					queuedCmds.traverse_(sendCmd(_, _)) *>
 					actIO
 
@@ -429,38 +482,16 @@ class BotClient(queue: Queue[IO, String], gameRef: Ref[IO, Option[Game]])(using 
 			case true => (msg: String) => sendPM(data.who, msg)
 			case false => (msg: String) => sendChat(msg)
 
-		data.msg.split(" ") match
+		data.msg.split(" ", 2) match
 			case Array(_) =>
-				reply(s"Currently playing with ${settings.str} conventions.")
+				reply(s"Currently playing with ${convention} conventions.")
 
-			case Array(_, level) if level.toIntOption.isDefined =>
-				level.toIntOption match
-					case None => reply(s"Unrecognized level $level.")
-					case Some(l) if l < 1 || l > 11 =>
-						reply(s"scala-bot can only play HGroup between levels 1-11.")
-					case Some(l) =>
-						settings = settings.copy(convention = Convention.HGroup, level = l)
-						reply(s"Currently playing with ${settings.str} conventions.")
-
-			case Array(_, conv) => Convention.from(conv) match
-				case None => reply(s"Unrecognized convention $conv. Supported: HGroup, RefSieve, Reactor.")
-				case Some(c) =>
-					settings = settings.copy(convention = c)
-					reply(s"Currently playing with ${settings.str} conventions.")
-
-			case Array(_, conv, level) => Convention.from(conv) match
-				case None => reply(s"Unrecognized convention $conv. Supported: HGroup, RefSieve, Reactor.")
-				case Some(c) if conv == "HGroup" =>
-					level.toIntOption match
-						case None => reply(s"Unrecognized level $level.")
-						case Some(l) if l < 1 || l > 11 =>
-							reply(s"scala-bot can only play HGroup between levels 1-11.")
-						case Some(l) =>
-							settings = settings.copy(convention = c, level = l)
-							reply(s"Currently playing with ${settings.str} conventions.")
-				case Some(c) =>
-					settings = settings.copy(convention = c)
-					reply(s"Currently playing with ${settings.str} conventions ($conv doesn't support levels).")
+			case Array(_, convStr) =>
+				Convention.from(convStr) match
+					case Left(msg) => reply(msg)
+					case Right(c) =>
+						convention = c
+						reply(s"Currently playing with ${convention} conventions.")
 
 	def sendPM(recipient: String, msg: String) =
 		queue.offer(s"chatPM ${ujson.Obj(
