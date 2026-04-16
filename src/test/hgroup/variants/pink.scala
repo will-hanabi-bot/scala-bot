@@ -56,6 +56,18 @@ class PinkPromise extends munit.FunSuite:
 		// Slot 3 is promised to be a 5.
 		hasInfs(game, None, Alice, 3, Vector("r5", "y5", "g5", "b5", "i5"))
 
+	test("doesn't 5 stall on a pink card"):
+		val game = setup(HGroup.atLevel(2), Vector(
+			Vector("xx", "xx", "xx", "xx", "xx"),
+			Vector("g4", "i2", "b4", "y4", "b3")
+		),
+			clueTokens = 7,
+			variant = TestVariant.Pink5
+		)
+		.pipe(takeTurn("Alice clues 5 to Bob"))
+
+		assert(game.lastMove == Some(ClueInterp.Mistake))
+
 	test("understands a pink trash cm"):
 		val game = setup(HGroup.atLevel(4), Vector(
 			Vector("xx", "xx", "xx", "xx", "xx"),

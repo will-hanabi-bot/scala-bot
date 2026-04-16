@@ -584,16 +584,17 @@ object HGroup:
 			.orElse(interpretSdcm(ctx))
 			.orElse(interpretPosDc(ctx))
 			.getOrElse:
-				val endEarlyGame = !failed &&
-					!game.state.deck(order).clued &&
-					game.meta(order).status == CardStatus.None
-
 				refreshedGame.copy(
-					inEarlyGame = game.inEarlyGame && !endEarlyGame,
 					dcStatus = DcStatus.None,
 					dda = Some(Identity(suitIndex, rank))
 				)
 				.withMove(DiscardInterp.None)
+			.when(_.inEarlyGame): g =>
+				val endEarlyGame = !failed &&
+					!game.state.deck(order).clued &&
+					game.meta(order).status == CardStatus.None
+
+				g.copy(inEarlyGame = !endEarlyGame)
 			.elim()
 			.when(g => g.level < Level.Stalling || g.dda.exists(id => id.suitIndex == -1 || id.rank == -1 || g.state.isBasicTrash(id))):
 				_.copy(dda = None)

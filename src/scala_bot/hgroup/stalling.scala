@@ -33,7 +33,9 @@ def stallSeverity(game: HGroup, player: Player, giver: Int, infoPlayer: Option[P
 		game.level >= Level.Stalling && game.state.numPlayers > 2 && game.dda.exists: id =>
 			state.isCritical(id) &&
 			game.chop(giver).exists: chop =>
-				infoPlayer.getOrElse(player).thoughts(chop).possible.contains(id)
+				val usePlayer = infoPlayer.getOrElse(player)
+				usePlayer.thoughts(chop).possible.contains(id) &&
+				!visibleFind(state, usePlayer, id, infer = true).exists(game.isTouched)
 
 	if state.clueTokens == 8 && state.turnCount != 1 then
 		4
@@ -72,8 +74,9 @@ def isStall(ctx: ClueContext, severity: Int): Option[StallInterp] =
 		return None
 
 	val stall5 = clue.isEq(BaseClue(ClueKind.Rank, 5)) &&
+		state.deck(focus).id().forall(_.rank == 5) &&
 		focusNew &&
-		!prev.meta(focus).cm &&
+		prev.meta(focus).status == CardStatus.None &&
 		!chop
 
 	if stall5 then
@@ -120,8 +123,8 @@ def alternativeClue(ctx: ClueContext, maxStall: Int) =
 
 	var foundFPE: Option[Identity] = None
 
-	def satisfied(hypo: HGroup, action: ClueAction) =
-		val (badTouch, _, _) = badTouchResult(game, hypo, action)
+	def satisfied(hypo: HGroup, hypoAction: ClueAction) =
+		val (badTouch, _, _) = badTouchResult(game, hypo, hypoAction)
 		val (_, playables) = playablesResult(game, hypo)
 
 		hypo.lastMove.get.matchesP:
@@ -133,9 +136,9 @@ def alternativeClue(ctx: ClueContext, maxStall: Int) =
 					(state.hands(giver) ++ state.ourHand).exists: o =>
 						game.isTouched(o) && game.players(giver).thoughts(o).inferred.contains(id)
 				) &&
-				!game.findFinesse(action.target).exists: finesse =>
+				!game.findFinesse(hypoAction.target).exists: finesse =>
 					val fpe =
-						target != state.nextPlayerIndex(giver) &&	// FPE can't be on Bob (no one can finesse)
+						hypoAction.target != state.nextPlayerIndex(giver) &&	// Can't be Bob's finesse pos, since no one can finesse it
 						game.level >= Level.Stalling &&
 						maxStall == 0 &&		// Must have been a 5 Stall
 						playables.contains(finesse) &&
@@ -145,11 +148,11 @@ def alternativeClue(ctx: ClueContext, maxStall: Int) =
 					state.deck(finesse).id().exists: finesseId =>
 						foundFPE match
 							case Some(id) if id != finesseId =>
-								Log.info(s"found FPE previously, not allowing FPE on ${action.target}")
+								Log.info(s"found FPE previously, not allowing FPE on ${hypoAction.target}")
 								false
 							case Some(_) => true	// Same id
 							case _ =>
-								Log.info(s"FPE on ${state.names(action.target)}'s ${state.logId(finesseId)}")
+								Log.info(s"FPE on ${state.names(hypoAction.target)}'s ${state.logId(finesseId)}")
 								foundFPE = Some(finesseId)
 								true
 

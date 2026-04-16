@@ -2,13 +2,13 @@
 //> using jvm 25
 //> using options -opt -Wall -Wconf:msg=toString:s -feature
 //> using javaOpt -Xms128m -Xmx192m -Xss256k -XX:MaxMetaspaceSize=96m -XX:ReservedCodeCacheSize=64m -XX:+UseSerialGC
-//> using dep com.softwaremill.sttp.client4::core:4.0.21
-//> using dep com.softwaremill.sttp.client4::cats:4.0.21
+//> using dep com.softwaremill.sttp.client4::core:4.0.22
+//> using dep com.softwaremill.sttp.client4::cats:4.0.22
 //> using dep org.typelevel::cats-effect:3.7.0
 //> using dep com.lihaoyi::upickle:4.4.3
 //> using dep com.lihaoyi::requests:0.9.3
 //> using dep org.scala-lang.modules::scala-parallel-collections:1.2.0
-//> using test.dep org.scalameta::munit:1.2.4
+//> using test.dep org.scalameta::munit:1.3.0
 
 package scala_bot
 
@@ -17,6 +17,7 @@ import cats.effect.kernel.Ref
 import cats.effect.std.Queue
 import sttp.client4.*
 import sttp.client4.httpclient.cats.HttpClientCatsBackend
+import sttp.client4.SttpClientException.{ConnectException, ReadException}
 import sttp.client4.ws.async.*
 import sttp.ws.{WebSocket, WebSocketFrame}
 
@@ -131,7 +132,7 @@ object main extends IOApp:
 					yield ()
 
 					attempt.handleErrorWith:
-						case err @ (_: sttp.client4.SttpClientException.ReadException | _: WebSocketClosedException) if attemptNum < maxRetries =>
+						case err @ (_: ReadException | _: WebSocketClosedException | _: ConnectException) if attemptNum < maxRetries =>
 							connectedRef.getAndSet(false).flatMap: wasConnected =>
 								val nextAttemptNum = if wasConnected then 0 else attemptNum + 1
 								IO.println(s"Connection lost (attempt $attemptNum/$maxRetries): ${err.getMessage}") *>

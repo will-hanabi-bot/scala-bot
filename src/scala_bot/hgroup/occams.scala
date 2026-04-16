@@ -18,14 +18,20 @@ def fpSimplicity(fp: FocusPossibility, playerIndex: Int, ourPlayerIndex: Int): I
 	val nextUnknownConn = nextUnknown(fp)
 	// Note that us prompting/finessing on a clue to someone else is as "complicated"
 	// as them self-finessing, since we always wait for them to demonstrate first.
-	if nextUnknownConn.exists(c => c.reacting != playerIndex && c.reacting != ourPlayerIndex) then
+	if nextUnknownConn.forall(c => c.reacting != playerIndex && c.reacting != ourPlayerIndex) then
 		0
-	else
-		val consecutiveConns = nextUnknownConn.fold(Nil)(conn => fp.connections.dropWhile(_ != conn).takeWhile(c => c.reacting == playerIndex || c.reacting == ourPlayerIndex))
+	else if nextUnknownConn.exists(_.reacting == playerIndex) then
+		val consecutiveConns = nextUnknownConn.fold(Nil)(conn => fp.connections.dropWhile(_ != conn).takeWhile(_.reacting == playerIndex))
 		val blindPlays = consecutiveConns.count(_.isInstanceOf[FinesseConn])
 		val prompts = consecutiveConns.count(_.isInstanceOf[PromptConn])
 
 		10 * blindPlays + prompts
+	else
+		val consecutiveConns = nextUnknownConn.fold(Nil)(conn => fp.connections.dropWhile(_ != conn).takeWhile(_.reacting == ourPlayerIndex))
+		val blindPlays = consecutiveConns.count(_.isInstanceOf[FinesseConn])
+		val prompts = consecutiveConns.count(_.isInstanceOf[PromptConn])
+
+		1000 * blindPlays + 100 * prompts
 
 def filterFps(ctx: ClueContext, fps: Seq[FocusPossibility], target: Int) =
 	val ClueContext(_, game, action) = ctx

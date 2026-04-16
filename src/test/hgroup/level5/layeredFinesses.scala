@@ -310,3 +310,20 @@ class LayeredFinesses extends munit.FunSuite:
 		// If Alice rewinded and thought she had a playable b2 when she 5 Stalled,
 		// the 5 would be considered a play clue on [g5,b5].
 		hasInfs(game, None, Bob, 2, Vector("g5", "b5", "p5"))
+
+	test("doesn't react when a self-layered finesse is demonstrated"):
+		val game = setup(HGroup.atLevel(5), Vector(
+			Vector("xx", "xx", "xx", "xx", "xx"),
+			Vector("r4", "r4", "b4", "b4", "p4"),
+			Vector("r1", "g5", "g4", "y4", "p4")
+		),
+			starting = Bob,
+			clueTokens = 7,
+			playStacks = Some(Vector(0, 0, 3, 0, 0)),
+			init = _.copy(inEarlyGame = false)
+		)
+		.pipe(takeTurn("Bob clues 5 to Cathy"))
+		.pipe(takeTurn("Cathy plays r1", "r1"))
+
+		// Alice is not finessed.
+		hasStatus(game, Alice, 1, CardStatus.None)
