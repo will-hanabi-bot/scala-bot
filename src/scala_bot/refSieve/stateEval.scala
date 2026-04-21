@@ -52,8 +52,20 @@ def getResult(game: RefSieve, hypo: RefSieve, action: ClueAction): Double =
 
 			val untouchedPlays = playables.count(!hypo.state.deck(_).clued)
 
+			val lockedTouch = if state.numPlayers == 2 && game.common.thinksLocked(game, state.nextPlayerIndex(target)) then
+				state.hands(target).summing: o =>
+					val card = hypo.state.deck(o)
+					if card.clued then 0 else card.id().fold(0.0): id =>
+						if state.isCritical(id) then
+							-0.2
+						else if id.rank == 2 then
+							-0.1
+						else
+							0
+			else 0
+
 			val playablesS = playables.map(state.logId(_)).mkString(", ")
-			Log.info(s"good touch: $goodTouch, playables: $playablesS, duped: $dupedPlayables, trash: ${trash.length}, fill: ${fill.length}, elim: ${elim.length}, bad touch: $badTouch, ${hypo.lastMove}")
+			Log.info(s"good touch: $goodTouch, playables: $playablesS, duped: $dupedPlayables, trash: ${trash.length}, fill: ${fill.length}, elim: ${elim.length}, bad touch: $badTouch, locked: $lockedTouch, ${hypo.lastMove}")
 
 			val value = goodTouch +
 				- 2.0 * dupedPlayables +
@@ -61,12 +73,12 @@ def getResult(game: RefSieve, hypo: RefSieve, action: ClueAction): Double =
 				(if state.inEndgame then 0.01 else 0.1) * revealedTrash +
 				(if state.inEndgame then 0.2 else 0.1) * fill.length +
 				(if state.inEndgame then 0.1 else 0.05) * elim.length +
-				-0.1 * badTouch.length
+				-0.1 * badTouch.length +
+				lockedTouch
 
 			hypo.lastMove match
 				case Some(ClueInterp.Mistake)  => value - 10
 				case Some(ClueInterp.Fix)      => value + 1
-				case Some(ClueInterp.Reactive) => value + 1
 				case _ => value
 
 def advanceGame(game: RefSieve, action: Action) =
@@ -116,7 +128,22 @@ def advance(orig: RefSieve, game: RefSieve, offset: Int): Double =
 
 			if player.thoughts(order).id(infer = true).isDefined then Left(value) else Right(value)
 
-		math.min(knownPlays.maxOption.getOrElse(99.9), unknownPlays.minOption.getOrElse(99.9))
+		val playValue = math.min(knownPlays.maxOption.getOrElse(99.9), unknownPlays.minOption.getOrElse(99.9))
+
+		// In 2p, unlocked player may dc LH PTD rather than playing
+		if offset == 1 && state.numPlayers == 2 && game.common.thinksLocked(game, state.ourPlayerIndex) then
+			val dc = trash.headOption.getOrElse:
+				game.chop(playerIndex).getOrElse:
+					game.players(playerIndex).lockedDiscard(state, playerIndex)
+
+			val id = state.deck(dc).id().get
+			val Identity(suitIndex, rank) = id
+			val action = DiscardAction(playerIndex, dc, suitIndex, rank)
+
+			val dcValue = advance(orig, game.simulate(action), offset + 1)
+			0.5 * dcValue + 0.5 * playValue
+		else
+			playValue
 
 	else if player.thinksLocked(game, playerIndex) then
 		if !state.canClue then
@@ -188,7 +215,38 @@ def _evalAction(game: RefSieve, action: Action): Double =
 			getResult(game, hypoGame, clue) * mult - 0.5
 
 		case PlayAction(_, _, suitIndex, rank) =>
-			if suitIndex == -1 || rank == -1 then 1.5 else 0.02 * (5 - rank)
+			val nextPlayer = state.nextPlayerIndex(state.ourPlayerIndex)
+
+			// Partner is still locked after the play
+			if state.numPlayers == 2 && hypoGame.common.thinksLocked(hypoGame, nextPlayer) then
+				val unlockability = hypoGame.state.hands(nextPlayer).maximizing(0.0): o =>
+					state.deck(o).id() match
+						case Some(id) if id.suitIndex == suitIndex => 0.02 * (5 + hypoGame.me.hypoStacks(suitIndex) - id.rank)
+						case _ => 0
+
+				// Unlockable
+				if unlockability != 0 then
+					unlockability
+				else
+					0.02 * (5 - rank)
+			else if suitIndex == -1 || rank == -1 then
+				1.5
+			else
+				0.02 * (5 - rank)
+
+		case DiscardAction(_, order, suitIndex, rank, _) =>
+			if game.meta(order).status == CardStatus.PermissionToDiscard then
+				-0.1
+			else if hypoGame.lastMove != Some(DiscardInterp.Sacrifice) then
+				0
+			else
+				if rank != -1 then
+					2.5 * Array(0, 0, -3, -1.5, -1, -20)(rank)
+				else
+					val poss = hypoGame.me.thoughts(order).possibilities
+					poss.toList.summing: id =>
+						2.5 * Array(0, 0, -3, -1.5, -1, -20)(id.rank)
+					/ poss.length
 
 		case _ => 0
 
@@ -275,10 +333,9 @@ def evalGame(orig: RefSieve, game: RefSieve): Double =
 		val prevDiscarded = orig.state.discardStacks(id.suitIndex)(id.rank - 1)
 		val discarded = state.discardStacks(id.suitIndex)(id.rank - 1).filterNot(prevDiscarded.contains)
 
-		lazy val duplicated = state.hands.flatten.exists { o =>
+		lazy val duplicated = state.hands.flatten.exists: o =>
 			state.deck(o).matches(id) ||
-			game.me.thoughts(o).matches(id, infer = true) && game.meta(o).focused
-		}
+			(game.me.thoughts(o).matches(id, infer = true) && game.meta(o).focused)
 
 		if state.isBasicTrash(id) || id.rank == 5 || discarded.isEmpty then
 			0
@@ -289,7 +346,17 @@ def evalGame(orig: RefSieve, game: RefSieve): Double =
 				case 1 => -math.pow(discarded.length, 2)
 				case 2 => -3
 				case 3 => -1.5
-				case _ => -1
+				case _ => if state.numPlayers == 2 then -0.25 else -1
+
+	val touchVal = state.hands.flatten.summing: o =>
+		if !state.deck(o).clued && game.meta(o).status == CardStatus.None then
+			0
+		else if game.common.orderTrash(game, o) then
+			0.005
+		else
+			state.deck(o).id() match
+				case Some(id) if state.isBasicTrash(id) => -0.1
+				case _ => Array(0.0, 0.01, 0.007, 0.005, 0.004, 0.003)(game.common.thoughts(o).inferred.length.min(5))
 
 	val lockedPenalty = (0 until state.numPlayers).summing: playerIndex =>
 		if !game.players(playerIndex).thinksLocked(game, playerIndex) then 0 else
@@ -315,5 +382,5 @@ def evalGame(orig: RefSieve, game: RefSieve): Double =
 
 		if badPtd.isDefined then -5 else 0
 
-	Log.info(s"state: $stateVal, future: $futureVal, bdr: $bdrVal locked: $lockedPenalty${if endgamePenalty != 0 then s" endgame penalty: ${endgamePenalty}" else ""}${if badPtdVal != 0 then s" badPtd!" else ""}")
-	stateVal + futureVal + bdrVal + endgamePenalty + badPtdVal
+	Log.info(s"state: $stateVal, future: $futureVal, bdr: $bdrVal touch: $touchVal locked: $lockedPenalty${if endgamePenalty != 0 then s" endgame penalty: ${endgamePenalty}" else ""}${if badPtdVal != 0 then s" badPtd!" else ""}")
+	stateVal + futureVal + bdrVal + touchVal + endgamePenalty + badPtdVal

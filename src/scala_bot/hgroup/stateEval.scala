@@ -316,10 +316,13 @@ def _evalAction(game: HGroup, action: Action): Double =
 				(hypoGame.lastMove.get, best + bonus)
 
 		case PlayAction(playerIndex, order, _, _) =>
-			game.me.thoughts(order).inferred.toList.foldLeftOpt[(Interp, Double)]((PlayInterp.None, 0.0)):
-				case ((_, value), i) =>
-					Log.highlight(Console.GREEN, s"playing ${state.logId(i)}")
-					val hypoGame = game.copy(allowFindOwn = false).simulate(PlayAction(playerIndex, order, i.suitIndex, i.rank))
+			val uniqueInfs = game.me.thoughts(order).inferred.toList.filterNot: id =>
+				visibleFind(state, game.me, id, cond = (playerIndex, _) => playerIndex != state.ourPlayerIndex).exists(state.deck(_).clued)
+
+			uniqueInfs.foldLeftOpt[(Interp, Double)]((PlayInterp.None, 0.0)):
+				case ((_, value), id) =>
+					Log.highlight(Console.GREEN, s"playing ${state.logId(id)}")
+					val hypoGame = game.copy(allowFindOwn = false).simulate(PlayAction(playerIndex, order, id.suitIndex, id.rank))
 
 					if hypoGame.lastMove == Some(PlayInterp.Mistake) then
 						Left((PlayInterp.Mistake, -100.0))
@@ -329,7 +332,7 @@ def _evalAction(game: HGroup, action: Action): Double =
 						Log.info(f"${action.fmt(state)}%s: $best%.2f (${hypoGame.lastMove}%s) + $bonus")
 						Right((hypoGame.lastMove.get, value + best + bonus))
 			.pipe: (lastMove, value) =>
-				(lastMove, value / game.me.thoughts(order).inferred.length)
+				(lastMove, value / uniqueInfs.length)
 
 		case DiscardAction(_, order, suitIndex, rank, _) if (suitIndex != -1 && rank != -1) || game.me.orderTrash(game, order) =>
 			val hypoGame = game.copy(allowFindOwn = false).simulate(action)

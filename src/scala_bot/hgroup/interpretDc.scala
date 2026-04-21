@@ -290,6 +290,7 @@ private def checkSdcm(prev: HGroup, action: DiscardAction): Option[DcStatus] =
 		}
 
 	val shout = common.thinksPlayables(prev, playerIndex).nonEmpty &&
+		prev.me.thinksPlayables(prev, playerIndex).nonEmpty &&
 		prev.players(playerIndex).thinksTrash(prev, playerIndex).contains(order)
 
 	val result = if scream then DcStatus.Scream else DcStatus.Shout

@@ -110,7 +110,7 @@ case class Player(
 
 	def isDuped(game: Game, id: Identity, order: Int) =
 		val candidates = if game.goodTouch then
-			game.state.hands.flatten.filter(game.state.deck(_).clued)
+			game.state.hands.flatten.filter(game.isTouched)
 		else
 			game.state.hands(game.state.holderOf(order))
 
@@ -219,7 +219,12 @@ case class Player(
 
 	def discardable(game: Game, playerIndex: Int) =
 		game.state.hands(playerIndex).filter: order =>
-			orderTrash(game, order) || thoughts(order).possibilities.forall(isSieved(game, _, order))
+			orderTrash(game, order) ||
+			thoughts(order).possibilities.forall(isSieved(game, _, order)) || {
+				game.common.thinksLocked(game, playerIndex) &&
+				game.state.deck(order).clued &&
+				thoughts(order).possibilities.intersect(game.state.criticalSet).isEmpty
+			}
 
 	def thinksLoaded(game: Game, playerIndex: Int) =
 		thinksPlayables(game, playerIndex).nonEmpty || thinksTrash(game, playerIndex).nonEmpty
@@ -309,8 +314,8 @@ case class Player(
 
 		leastCrits.maxBy { (order, percent) =>
 			thoughts(order).possibilities.summing2: p =>
-				val critDistance = (if percent == 1 then p.rank * 5 else 0) + p.rank - hypoStacks(p.suitIndex)
-				if critDistance < 0 then 5 else critDistance
+				if state.isBasicTrash(p) then 5 else
+					(if percent == 1 then p.rank * 5 else 0) + p.rank - hypoStacks(p.suitIndex)
 		}._1
 
 	/** Returns the card most likely to be playable, breaking ties by leftmost.

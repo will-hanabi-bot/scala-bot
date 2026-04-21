@@ -459,6 +459,7 @@ case class EndgameSolver[G <: Game](
 				break(Nil)
 
 			val ignoreDc = state.pace == 0 ||
+				state.clueTokens == 8 ||
 				playables.exists: p =>
 					game.players(playerTurn).thoughts(p).id(infer = true).exists: id =>
 						// Always play a 5 over dc

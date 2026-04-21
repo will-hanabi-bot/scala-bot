@@ -6,6 +6,7 @@ import scala_bot.basics._
 import scala_bot.endgame.EndgameSolver
 import scala_bot.utils._
 import scala_bot.logger.{Log, Logger, LogLevel}
+import scala_bot.fraction.Frac
 
 enum UpdateResult:
 	case Remove
@@ -32,7 +33,8 @@ case class RefSieve(
 	inProgress: Boolean = false,
 
 	waiting: List[WaitingConnection] = Nil,
-	zcsTurn: Option[Int] = None
+	zcsTurn: Option[Int] = None,
+	lockedShifts: Vector[Int]
 ) extends Game:
 	val goodTouch = true
 
@@ -121,6 +123,53 @@ case class RefSieve(
 		else
 			this
 
+	/** Determines the unlocked card (if it exists), given a play action. */
+	def unlockPromise(prev: RefSieve, action: PlayAction): Option[Int] =
+		val PlayAction(playerIndex, order, suitIndex, rank) = action
+
+		if prev.common.thoughts(order).id(infer = true).isEmpty then
+			Log.highlight(Console.CYAN, s"playing unknown card, not unlocking")
+			return None
+
+		val oldestPlay = prev.common.thinksPlayables(prev, playerIndex)
+			.sortBy(o => prev.meta(o).signalTurn.getOrElse(prev.meta(o).reasoning.last))
+			.headOption
+
+		if this.common.thinksTrash(this, playerIndex).isEmpty && oldestPlay.contains(order) then
+			Log.highlight(Console.CYAN, s"playing oldest/only safe playable, not unlocking")
+			return None
+
+		val lockedHandR = state.hands(state.nextPlayerIndex(playerIndex)).reverse
+		val knownUnlock = lockedHandR.find: o =>
+			this.common.thoughts(o).matches(Identity(suitIndex, rank), infer = true)
+
+		if knownUnlock.isDefined then
+			Log.highlight(Console.CYAN, s"known unlock ${knownUnlock.get}")
+			return knownUnlock
+
+		val lockedShifts = this.lockedShifts(order)
+
+		Identity(suitIndex, rank).next match
+			case Some(nextId) =>
+				if state.hands(playerIndex).exists(this.common.thoughts(_).matches(nextId, infer = true)) then
+					Log.highlight(Console.CYAN, "unlocked player may be playing into their own hand, waiting")
+					None
+				else
+					val (possibleMatches, nonMatches) = lockedHandR.partition: o =>
+						state.deck(o).clued &&
+						this.common.thoughts(o).inferred.contains(nextId)
+
+					if lockedShifts < possibleMatches.length then
+						Some(possibleMatches(lockedShifts))
+					else
+						nonMatches.filter(o => this.common.thoughts(o).inferred.intersect(state.playableSet).nonEmpty)
+							.lift(lockedShifts - possibleMatches.length)
+			case None =>
+				val possiblyPlayable = lockedHandR.filter: o =>
+					this.common.thoughts(o).inferred.intersect(state.playableSet).nonEmpty
+
+				possiblyPlayable.lift(lockedShifts)
+
 object RefSieve:
 	private def init(
 		tableID: Int,
@@ -137,7 +186,8 @@ object RefSieve:
 		deckIds = Vector.fill(state.variant.totalCards)(None),
 		future = Vector.fill(state.variant.totalCards)(state.allIds),
 		lastActions = Vector.fill(state.numPlayers)(None),
-		inProgress = inProgress
+		inProgress = inProgress,
+		lockedShifts = Vector.fill(state.variant.totalCards)(0)
 	)
 
 	def apply(tableID: Int, state: State, inProgress: Boolean) =
@@ -176,7 +226,8 @@ object RefSieve:
 
 				deckIds = if keepDeck then game.deckIds else Vector.fill(game.state.variant.totalCards)(None),
 				future = if keepDeck then game.future else Vector.fill(game.state.variant.totalCards)(game.state.allIds),
-				lastActions = Vector.fill(game.state.numPlayers)(None)
+				lastActions = Vector.fill(game.state.numPlayers)(None),
+				lockedShifts = Vector.fill(game.state.variant.totalCards)(0)
 			)
 
 		def interpretClue(_prev: RefSieve, _game: RefSieve, action: ClueAction): RefSieve =
@@ -200,6 +251,9 @@ object RefSieve:
 
 			val ctx = ClueContext(prev, game, action)
 
+			if state.numPlayers == 2 && game.common.thinksLocked(game, giver) then
+				return interpretLockedClue(ctx).elim()
+
 			val fix = checkFix(prev, game, action).isInstanceOf[FixResult.Normal]
 			val trashPush = !fix && newlyTouched.forall(game.common.orderKt(game, _))
 
@@ -213,6 +267,7 @@ object RefSieve:
 								inferred = t.inferred.intersect(ids),
 								reset = false
 							)
+						.elim()
 					case None => ()
 
 			val prevPlayables = prev.common.thinksPlayables(prev, target)
@@ -229,9 +284,10 @@ object RefSieve:
 					return game.withThought(intent)(t => t.copy(inferred = t.possible.intersect(state.trashSet)))
 						.withMeta(intent)(_.copy(trash = true))
 						.withMove(if badFix then ClueInterp.Mistake else ClueInterp.Fix)
+						.elim()
 
 				// No-Info Double Bluff
-				return game.findFinesse(action.target) match
+				return (game.findFinesse(action.target) match
 					case Some(f1) =>
 						def validNI(o1: Int, o2: Int) =
 							val valid = for
@@ -256,6 +312,7 @@ object RefSieve:
 									.withMove(if validNI(f1, list.max) then ClueInterp.Play else ClueInterp.Mistake)
 					case None =>
 						game.withMove(ClueInterp.Mistake)
+				).elim()
 
 			lazy val focus = determineFocus(ctx, push = trashPush || clue.kind == ClueKind.Colour)
 			lazy val cluedGame = game.withMeta(focus)(_.copy(focused = true)).elim()
@@ -302,18 +359,22 @@ object RefSieve:
 					refPlay(ctx)
 
 				else if fix || (loaded && !(clue.kind == ClueKind.Colour && newPlayables.forall(newlyTouched.contains))) then
-					Log.info(s"revealed a safe action${if fix then " (fix)" else ""}, not continuing")
+					if newPlayables.forall(state.deck(_).id().exists(!state.isPlayable(_))) then
+						Log.warn(s"clue makes unplayable cards look playable!")
+						(None, game)
+					else
+						Log.info(s"revealed a safe action${if fix then " (fix)" else ""}, not continuing")
 
-					val newGame = cluedGame
-						.when(_ => !fix && clue.kind == ClueKind.Rank && newPlayables.forall(newlyTouched.contains)): g =>
-							// Playable rank clue
-							val focus = newlyTouched.max
-							g.withMeta(focus)(_.copy(focused = true))
-						.pipe: g =>
-							newPlayables.foldLeft(g): (acc, p) =>
-								acc.withMeta(p)(_.signal(state.turnCount))
+						val newGame = cluedGame
+							.when(_ => !fix && clue.kind == ClueKind.Rank && newPlayables.forall(newlyTouched.contains)): g =>
+								// Playable rank clue
+								val focus = newlyTouched.max
+								g.withMeta(focus)(_.copy(focused = true))
+							.pipe: g =>
+								newPlayables.foldLeft(g): (acc, p) =>
+									acc.withMeta(p)(_.signal(state.turnCount))
 
-					(Some(ClueInterp.Reveal), newGame)
+						(Some(ClueInterp.Reveal), newGame)
 
 				else if clue.kind == ClueKind.Colour then
 					refPlay(ctx)
@@ -331,41 +392,79 @@ object RefSieve:
 			val DiscardAction(playerIndex, order, suitIndex, rank, failed) = action
 			val id = Identity(suitIndex, rank)
 
-			if !failed && prev.state.deck(order).clued && suitIndex != -1 && rank != -1 && state.isUseful(id) then
-				interpretUsefulDc(game, action) match
-					case DiscardResult.None =>
-						game.withMove(DiscardInterp.None)
+			if !failed && prev.state.deck(order).clued then
+				val sacrifice = prev.common.thinksLocked(prev, playerIndex) ||
+					(prev.common.thinksLocked(prev, state.nextPlayerIndex(playerIndex)) && prev.state.hands(playerIndex).forall(game.isSaved))
 
-					case DiscardResult.Mistake =>
-						game.withMove(DiscardInterp.Mistake)
+				if sacrifice then
+					Log.info(s"sacrifice dc!")
+					game.withMove(DiscardInterp.Sacrifice)
+				else if suitIndex != -1 && rank != -1 && state.isUseful(id) then
+					interpretUsefulDc(game, action) match
+						case DiscardResult.None =>
+							game.withMove(DiscardInterp.None)
 
-					case DiscardResult.GentlemansDiscard(targets) =>
-						val target = targets.head
-						game.copy(
-							common = game.common.withThought(target):
-								_.copy(inferred = IdentitySet.single(id))
-							,
-							meta = game.meta.updated(target, game.meta(target).copy(
-								status = CardStatus.GentlemansDiscard
-							))
-						)
-						.withMove(DiscardInterp.GentlemansDiscard)
+						case DiscardResult.Mistake =>
+							game.withMove(DiscardInterp.Mistake)
 
-					case DiscardResult.Sarcastic(orders) =>
-						game.copy(
-							common = game.common.copy(links = Link.Sarcastic(orders, id) +: game.common.links)
-						)
-						.withMove(DiscardInterp.Sarcastic)
+						case DiscardResult.GentlemansDiscard(targets) =>
+							val target = targets.head
+							game.copy(
+								common = game.common.withThought(target):
+									_.copy(inferred = IdentitySet.single(id))
+								,
+								meta = game.meta.updated(target, game.meta(target).copy(
+									status = CardStatus.GentlemansDiscard
+								))
+							)
+							.withMove(DiscardInterp.GentlemansDiscard)
 
-					case DiscardResult.Baton(_) =>
-						throw new Error("baton unsupported!")
+						case DiscardResult.Sarcastic(orders) =>
+							game.copy(
+								common = game.common.copy(links = Link.Sarcastic(orders, id) +: game.common.links)
+							)
+							.withMove(DiscardInterp.Sarcastic)
+
+						case DiscardResult.Baton(_) =>
+							throw new Error("baton unsupported!")
+				else
+					game
 			else
 				game
+			.when(g => g.state.numPlayers == 2 && g.common.thinksLocked(g, state.nextPlayerIndex(playerIndex))): g =>
+				val playables = g.common.thinksPlayables(g, playerIndex).filter(g.common.thoughts(_).id(infer = true).isDefined)
+
+				if playables.nonEmpty then
+					Log.info(s"locked shifting $playables")
+
+				// Discarding while holding a known playable and partner is locked
+				playables.foldLeft(g): (acc, o) =>
+					acc.copy(lockedShifts = acc.lockedShifts.updated(o, acc.lockedShifts(o) + 1))
 			.elim()
 			.check2pPtd(prev, action)
 
 		def interpretPlay(prev: RefSieve, game: RefSieve, action: PlayAction): RefSieve =
-			game.reinterpPlay(prev, action).getOrElse(game.check2pPtd(prev, action)).elim()
+			game.reinterpPlay(prev, action)
+				.getOrElse(game.check2pPtd(prev, action))
+				.when(g => g.state.numPlayers == 2 && g.state.pace > 2 && g.common.thinksLocked(g, g.state.nextPlayerIndex(action.playerIndex))): g =>
+					// Unlock promise
+					g.unlockPromise(prev, action) match
+						case None =>
+							Log.info(s"failed to unlock")
+							val playables = g.common.thinksPlayables(g, action.playerIndex).filter(g.common.thoughts(_).id(infer = true).isDefined)
+
+							if playables.nonEmpty then
+								Log.info(s"locked shifting $playables")
+
+							// Shift all other playables
+							playables.foldLeft(g): (acc, o) =>
+								acc.copy(lockedShifts = acc.lockedShifts.updated(o, acc.lockedShifts(o) + 1))
+						case Some(order) =>
+							g.withThought(order): t =>
+								t.copy(inferred = t.inferred.intersect(g.state.playableSet))
+							.tap: g =>
+								Log.info(s"unlocking $order as [${g.common.strInfs(g.state, order)}]")
+				.elim()
 
 		def takeAction(game: RefSieve): IO[PerformAction] =
 			val (state, me) = (game.state, game.me)
@@ -379,9 +478,13 @@ object RefSieve:
 							case Left(err) =>
 								Log.info(s"couldn't solve endgame: $err")
 								None
-							case Right((perform, _)) =>
-								Log.info(s"endgame solved!")
-								Some(perform)
+							case Right((perform, winrate)) =>
+								if winrate < Frac(1, 100) then
+									Log.info(s"winrate below 1% (${winrate.toString}), skipping")
+									None
+								else
+									Log.info(s"endgame solved!")
+									Some(perform)
 				else
 					IO.pure(None)
 
@@ -403,9 +506,18 @@ object RefSieve:
 						val action = PlayAction(state.ourPlayerIndex, o, me.thoughts(o).id(infer = true))
 						(PerformAction.Play(o), action)
 
+					lazy val pace0Stall = state.pace == 0 && {
+						allPlays.nonEmpty || {
+							allClues.nonEmpty &&
+							game.state.remScore < game.state.variant.suits.length &&
+							game.state.hands.flatten.exists(o => state.deck(o).id().exists(state.isPlayable))
+						}
+					}
+
 					val cantDiscard = state.clueTokens == 8 ||
 						game.mustClue(state.ourPlayerIndex) ||
-						(state.pace == 0 && (allClues.nonEmpty || allPlays.nonEmpty))
+						pace0Stall
+
 					Log.info(s"can discard: ${!cantDiscard}")
 
 					val allDiscards = if cantDiscard then Nil else

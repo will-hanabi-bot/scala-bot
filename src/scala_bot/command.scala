@@ -250,24 +250,26 @@ class BotClient(queue: Queue[IO, String], gameRef: Ref[IO, Option[Game]], config
 					val msg = GameActionListMessage.fromJSON(ujson.read(args))
 
 					gameRef.get.flatMap:
-						case None => throw new IllegalStateException("Game not initialized")
-						case Some(g) => g match
-							case r: Reactor => gameRef.set(Some(r.copy(catchup = true)))
-							case r: RefSieve => gameRef.set(Some(r.copy(catchup = true)))
-							case h: HGroup => gameRef.set(Some(h.copy(catchup = true)))
-					*>
-					msg.list.init.traverse_ : action =>
-						handleAction(GameActionMessage(msg.tableID, action))
-					*>
-					gameRef.update:
-						case Some(g2: Reactor) => Some(g2.copy(catchup = false))
-						case Some(g2: RefSieve) => Some(g2.copy(catchup = false))
-						case Some(g2: HGroup) => Some(g2.copy(catchup = false))
-						case other => other
-					*>
-					sendCmd("loaded", ujson.write(ujson.Obj("tableID" -> msg.tableID))) *>
-					IO.sleep(1000.millis) *>
-					handleAction(GameActionMessage(msg.tableID, msg.list.last))
+						case None => IO.unit // throw new IllegalStateException("Game not initialized")
+						case Some(g) =>
+							val setAction = g match
+								case r: Reactor => gameRef.set(Some(r.copy(catchup = true)))
+								case r: RefSieve => gameRef.set(Some(r.copy(catchup = true)))
+								case h: HGroup => gameRef.set(Some(h.copy(catchup = true)))
+
+							setAction *>
+							msg.list.init.traverse_ : action =>
+								handleAction(GameActionMessage(msg.tableID, action))
+							*>
+							gameRef.update:
+								case Some(g2: Reactor) => Some(g2.copy(catchup = false))
+								case Some(g2: RefSieve) => Some(g2.copy(catchup = false))
+								case Some(g2: HGroup) => Some(g2.copy(catchup = false))
+								case other => other
+							*>
+							sendCmd("loaded", ujson.write(ujson.Obj("tableID" -> msg.tableID))) *>
+							IO.sleep(1000.millis) *>
+							handleAction(GameActionMessage(msg.tableID, msg.list.last))
 
 			case "joined" =>
 				tableID = Some(ujson.read(args)("tableID").num.toInt)
@@ -437,7 +439,7 @@ class BotClient(queue: Queue[IO, String], gameRef: Ref[IO, Option[Game]], config
 	def handleAction(data: GameActionMessage): IO[Unit] =
 		val action = data.action
 		gameRef.get.flatMap:
-			case None => throw new IllegalStateException("Game not initialized")
+			case None => IO.unit //throw new IllegalStateException("Game not initialized")
 			case Some(g) =>
 				IO:
 					g match

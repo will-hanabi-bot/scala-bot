@@ -368,7 +368,7 @@ case class HGroup(
 				case None        => throw new Error("No focus found!")
 
 	def earlyGameClue(giver: Int): Option[Clue] =
-		if noRecurse || !inEarlyGame || !state.canClue || level < Level.IntermediateFinesses then
+		if noRecurse || !inEarlyGame || !state.canClue then
 			return None
 
 		val allClues = for
@@ -381,16 +381,16 @@ case class HGroup(
 			val action = Action.fromClue(state, clue, giver)
 			val focus = determineFocus(this, action).focus
 			val focusCard = state.deck(focus)
+			val focusId = focusCard.id().get
 
 			meta(focus).status != CardStatus.Finessed &&
 			!focusCard.clued &&
-			focusCard.id().exists(state.isUseful) && {
+			state.isUseful(focusId) && {
 				val hypo = this.copy(noRecurse = true, allowFindOwn = false).simulateClue(action)
 
 				hypo.lastMove.matchesP:
 					case Some(ClueInterp.Save) =>
-						// Can't guarantee others will give a 2 save
-						giver == state.ourPlayerIndex || !state.deck(focus).id().exists(id => id.rank == 2 && !state.isCritical(id))
+						state.isCritical(focusId) || dupeResponsibility(this, focusId, action.target).contains(giver)
 
 					case Some(ClueInterp.Stall) =>
 						hypo.stallInterp == Some(StallInterp.Stall5) &&
@@ -682,7 +682,7 @@ object HGroup:
 							!(state.clueTokens == 1 && valid1ClueScream(game, state.nextPlayerIndex(state.ourPlayerIndex)))
 
 						if hasEarlyGameClue then
-							Log.highlight(Console.YELLOW,"must give clue in early game!")
+							Log.highlight(Console.YELLOW,s"must clue in early game! (found ${earlyGameClue.get.fmt(state)})")
 
 						val allPlays = playableOrders.map: o =>
 							val action = PlayAction(state.ourPlayerIndex, o, me.thoughts(o).id(infer = true, partial = true))

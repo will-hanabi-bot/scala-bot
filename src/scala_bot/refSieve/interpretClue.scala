@@ -60,7 +60,10 @@ def refDiscard(ctx: ClueContext): (Option[ClueInterp], RefSieve) =
 	val hand = state.hands(clueTarget)
 
 	val focus = determineFocus(ctx, push = false)
-	val targetIndex = hand.indexWhere(o => o < focus && !state.deck(o).clued)
+	val targetIndex = hand.indexWhere: o =>
+		val status = game.meta(o).status
+
+		o < focus && !state.deck(o).clued && (status == CardStatus.None || status == CardStatus.ChopMoved)
 
 	if targetIndex == -1 then
 		if prev.common.thinksLocked(prev, action.giver) || prev.state.clueTokens == 8 then
@@ -176,3 +179,46 @@ def resolvePlay(ctx: ClueContext, targetOrder: Int, focusPoss: Seq[FocusPossibil
 			by = Some(action.giver))
 		.reason(game.state.turnCount)
 		.signal(game.state.turnCount)
+
+def interpretLockedClue(ctx: ClueContext) =
+	val ClueContext(prev, game, action) = ctx
+	val state = game.state
+	val ClueAction(giver, target, list, clue) = action
+
+	val lhPtd = state.hands(target).find(!game.isSaved(_))
+	val prevTrash = game.common.thinksTrash(game, target)
+
+	def writeLhPtd(g: RefSieve) =
+		lhPtd.fold(g): order =>
+			Log.info(s"writing locked hand ptd for $order")
+			g.withMeta(order)(_.copy(status = CardStatus.PermissionToDiscard, by = Some(giver)))
+
+	Log.info(s"interpreting locked clue!")
+
+	if clue.kind == ClueKind.Rank then
+		if prevTrash.nonEmpty then
+			Log.info(s"target had previous trash $prevTrash, rank stall")
+			game
+		else if list.exists(!prev.state.deck(_).clued) then
+			refDiscard(ctx)	match
+				case (Some(ClueInterp.Stall), _) => writeLhPtd(game)
+				case (_, newGame) => newGame
+		else
+			writeLhPtd(game)
+	else
+		val slot1 = state.hands(target).head
+
+		game.when(_ => list.contains(slot1)):
+			_.withThought(slot1): t =>
+				val delayedPlays = game.common.hypoStacks.zipWithIndex.map((stack, suitIndex) => Identity(suitIndex, stack + 1)).filter(state.isUseful)
+				t.copy(inferred = t.inferred.intersect(delayedPlays))
+			.withMeta(slot1):
+				_.copy(status = CardStatus.CalledToPlay, by = Some(giver))
+			.tap: g =>
+				Log.info(s"slot 1 play on $slot1, new infs [${g.common.strInfs(g.state, slot1)}]")
+		.cond(_.common.thinksTrash(game, target).nonEmpty) { g =>
+			Log.info(s"target had previous trash $prevTrash, colour stall")
+			g
+		} {
+			writeLhPtd
+		}

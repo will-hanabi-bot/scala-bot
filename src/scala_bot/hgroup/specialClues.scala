@@ -88,7 +88,7 @@ def rankSave(prev: HGroup, action: ClueAction, id: Identity, focus: Int): Boolea
 	val Identity(suitIndex, rank) = id
 	val thought = prev.common.thoughts(focus)
 
-	if !thought.possible.contains(id) || state.isBasicTrash(id) then
+	if !thought.possible.contains(id) || state.isBasicTrash(id) || state.deck(focus).id().exists(_.rank != rank) then
 		return false
 
 	// Don't consider save on k3,k4 (or dark i3,i4) with rank
