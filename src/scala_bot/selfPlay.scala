@@ -113,8 +113,7 @@ def selfPlay(args: String*) =
 	val numGames = parsedArgs.getOrElse("games", "1").toInt
 	val seed = parsedArgs.getOrElse("seed", "0").toInt
 	val variantName = parsedArgs.getOrElse("variant", "No Variant")
-	val convention = parsedArgs.lift("convention").flatMap(s => Convention.from(s, parseLevel = false).toOption).getOrElse(Convention.Reactor)
-	val level = parsedArgs.getOrElse("level", "1").toInt
+	val convention = parsedArgs.lift("convention").flatMap(Convention.from(_).toOption).getOrElse(Convention.Reactor)
 	val numPlayers = parsedArgs.getOrElse("players", "3").toInt
 
 	if !Files.exists(Paths.get("seeds")) then
@@ -134,7 +133,7 @@ def selfPlay(args: String*) =
 		val GameSummary(score, result, actions, notes) = convention match
 			case Convention.Reactor  => simulateGame(states.map(Reactor(0, _, false)), shuffledDeck)
 			case Convention.RefSieve => simulateGame(states.map(RefSieve(0, _, false)), shuffledDeck)
-			case Convention.HGroup(_)   => simulateGame(states.map(HGroup(0, _, false, level)), shuffledDeck)
+			case Convention.HGroup(level)   => simulateGame(states.map(HGroup(0, _, false, level)), shuffledDeck)
 
 		val actionsJSON = actions.map(_.json(tableID = 0))
 		val data = ujson.Obj(

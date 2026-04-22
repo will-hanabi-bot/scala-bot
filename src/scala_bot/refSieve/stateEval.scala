@@ -244,7 +244,7 @@ def _evalAction(game: RefSieve, action: Action): Double =
 					2.5 * Array(0, 0, -3, -1.5, -1, -20)(rank)
 				else
 					val poss = hypoGame.me.thoughts(order).possibilities
-					poss.toList.summing: id =>
+					poss.summing2: id =>
 						2.5 * Array(0, 0, -3, -1.5, -1, -20)(id.rank)
 					/ poss.length
 

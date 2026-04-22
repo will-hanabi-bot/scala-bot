@@ -19,6 +19,7 @@ extension(ids: IdentitySet)
 		val bit = java.lang.Long.numberOfTrailingZeros(ids)
 		Identity.fromOrd(bit)
 
+	/** Returns true if the set is of size 1, containing only this identity. */
 	inline def isExactly(id: Identity): Boolean =
 		length == 1 && head == id
 
@@ -140,15 +141,18 @@ extension(ids: IdentitySet)
 			res = numeric.plus(res, f(i))
 		res
 
+	/** If empty, returns alternative, otherwise returns this. */
 	inline def whenEmpty(inline alternative: => IdentitySet) =
 		if ids.isEmpty then alternative else ids
 
+	/** Returns a new IdentitySet containing all identities in both this set and the other set. */
 	inline def intersect(other: IdentitySet): IdentitySet =
 		ids & other
 
 	inline def intersect(other: Iterable[Identity]): IdentitySet =
 		ids & IdentitySet.from(other)
 
+	/** Returns a new IdentitySet containing all identities in either this set or the other set. */
 	inline def union(other: IdentitySet): IdentitySet =
 		ids | other
 
@@ -158,6 +162,7 @@ extension(ids: IdentitySet)
 	inline def union(other: Iterable[Identity]): IdentitySet =
 		ids | IdentitySet.from(other)
 
+	/** Returns a new IdentitySet containing all identities in this set that aren't in the other set. */
 	inline def difference(other: IdentitySet): IdentitySet =
 		ids & ~other
 
@@ -184,9 +189,11 @@ extension(ids: IdentitySet)
 object IdentitySet:
 	inline def empty: IdentitySet = 0L
 
+	/** Creates an IdentitySet of size 1, containing this identity. */
 	inline def single(id: Identity): IdentitySet =
 		1L << id.toOrd
 
+	/** Creates an IdentitySet from an iterable sequence of identities. */
 	inline def from(ids: Iterable[Identity]): IdentitySet =
 		ids.foldLeft(0L) { (acc, id) => acc | IdentitySet.single(id) }
 

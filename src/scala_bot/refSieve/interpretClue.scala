@@ -191,7 +191,10 @@ def interpretLockedClue(ctx: ClueContext) =
 	def writeLhPtd(g: RefSieve) =
 		lhPtd.fold(g): order =>
 			Log.info(s"writing locked hand ptd for $order")
-			g.withMeta(order)(_.copy(status = CardStatus.PermissionToDiscard, by = Some(giver)))
+			g.withMeta(order):
+				_.copy(status = CardStatus.PermissionToDiscard, by = Some(giver))
+					.reason(state.turnCount)
+					.signal(state.turnCount)
 
 	Log.info(s"interpreting locked clue!")
 
@@ -214,6 +217,8 @@ def interpretLockedClue(ctx: ClueContext) =
 				t.copy(inferred = t.inferred.intersect(delayedPlays))
 			.withMeta(slot1):
 				_.copy(status = CardStatus.CalledToPlay, by = Some(giver))
+					.reason(state.turnCount)
+					.signal(state.turnCount)
 			.tap: g =>
 				Log.info(s"slot 1 play on $slot1, new infs [${g.common.strInfs(g.state, slot1)}]")
 		.cond(_.common.thinksTrash(game, target).nonEmpty) { g =>

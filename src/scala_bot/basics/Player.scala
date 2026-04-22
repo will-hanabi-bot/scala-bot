@@ -45,21 +45,28 @@ case class PlayLink(
 
 case class Player(
 	playerIndex: Int,
+	/** The display name of the player (their username on hanab.live). */
 	name: String,
+	/** The set of possible identities a newly drawn card could be. Changes as more cards become visible to this player. */
 	allPossible: IdentitySet,
+	/** The play stacks if all delayed playable cards were played. */
 	hypoStacks: Vector[Int],
 
 	isCommon: Boolean,
 	thoughts: Vector[Thought] = Vector(),
-	allInferred: IdentitySet,
 
 	links: List[Link] = Nil,
 	playLinks: List[PlayLink] = Nil,
+	/** The set of orders that are known playable, without knowing their identities. */
 	unknownPlays: BitSet = BitSet.empty,
+	/** The set of orders that are known delayed playable. */
 	hypoPlays: BitSet = BitSet.empty,
+	/** The total number of hypo plays that are from links (and thus aren't assigned to particular orders). */
 	linkedPlays: Int = 0,
 
+	/** The set of orders whose inferences have been modified since the last call to elim(). */
 	dirty: BitSet = BitSet.empty,
+	/** Maps each identity (by ordinal) to the orders known to be that identity. */
 	certainMap: Vector[List[MatchEntry]]
 ):
 	def withThought(order: Int)(f: Thought => Thought) =
@@ -76,6 +83,7 @@ case class Player(
 	def strPoss(state: State, order: Int) =
 		thoughts(order).possible.toList.sortBy(_.toOrd).map(state.logId).mkString(",")
 
+	/** Returns the order in the hand "referred to" by the given order. By default, refers to the left. */
 	def refer(game: Game, hand: Vector[Int], order: Int, left: Boolean = false) =
 		val offset = if left then -1 else 1
 		val index = hand.indexOf(order)
@@ -90,13 +98,14 @@ case class Player(
 		game.state.hands(playerIndex).find: o =>
 			!game.state.deck(o).clued && game.meta(o).status == CardStatus.None
 
-	def isSieved(game: Game, id: Identity, order: Int) =
+	/** Returns true if the given identity has been "sieved" (visible and will never go on chop). */
+	def isSieved(game: Game, id: Identity, excludeOrder: Int) =
 		(0 until game.state.numPlayers).exists: playerIndex =>
 			val loaded = thinksLoaded(game, playerIndex)
 			val chop = chopNewest(game, playerIndex)
 
 			game.state.hands(playerIndex).exists: o =>
-				o != order && thoughts(o).matches(id, infer = true) &&
+				o != excludeOrder && thoughts(o).matches(id, infer = true) &&
 				(if loaded then
 					game.meta(o).status != CardStatus.CalledToDiscard
 				else
@@ -104,29 +113,35 @@ case class Player(
 		||
 		links.exists:
 			case Link.Unpromised(orders, ids) =>
-				!orders.contains(order) && ids.contains(id)
+				!orders.contains(excludeOrder) && ids.contains(id)
 			case link =>
-				!link.getOrders.contains(order) && link.promise.contains(id)
+				!link.getOrders.contains(excludeOrder) && link.promise.contains(id)
 
-	def isDuped(game: Game, id: Identity, order: Int) =
+	/** Returns true if the given identity has been "duplicated", excluding the given order.
+	  * For conventions without good touch, the duplicate must be in the same hand.
+	  * Otherwise, the duplicate must be additionally touched.
+	  */
+	def isDuped(game: Game, id: Identity, excludeOrder: Int) =
 		val candidates = if game.goodTouch then
 			game.state.hands.flatten.filter(game.isTouched)
 		else
-			game.state.hands(game.state.holderOf(order))
+			game.state.hands(game.state.holderOf(excludeOrder))
 
 		candidates.exists: o =>
-			o != order &&
+			o != excludeOrder &&
 			thoughts(o).matches(id, infer = true) &&
 			// Not sharing a link
 			!links.exists:
 				case Link.Unpromised(orders, ids) =>
-					orders.contains(order) && orders.contains(o) && ids.contains(id)
+					orders.contains(excludeOrder) && orders.contains(o) && ids.contains(id)
 				case link =>
-					link.getOrders.contains(order) && link.getOrders.contains(o) && link.promise.contains(id)
+					link.getOrders.contains(excludeOrder) && link.getOrders.contains(o) && link.promise.contains(id)
 
-	def isTrash(game: Game, id: Identity, order: Int) =
-		game.state.isBasicTrash(id) || isDuped(game, id, order)
+	/** Returns true if the given identity is either basic trash or duplicated (see [[Player.isDuped]]).*/
+	def isTrash(game: Game, id: Identity, excludeOrder: Int) =
+		game.state.isBasicTrash(id) || isDuped(game, id, excludeOrder)
 
+	/** Returns true if this order is "kt" (see [[Player.orderKt]]) or has permission to discard (may not actually be trash). */
 	def orderTrash(game: Game, order: Int) =
 		val meta = game.meta(order)
 		val thought = thoughts(order)
@@ -145,6 +160,7 @@ case class Player(
 		else
 			conventionalTrash || thought.possibilities.forall(isTrash(game, _, order))
 
+	/** Returns true if this order is known trash, conventonally promised trash, or duplicated in the same hand. */
 	def orderKt(game: Game, order: Int) =
 		val thought = thoughts(order)
 
@@ -158,6 +174,9 @@ case class Player(
 		sameHandDupe
 		// (thought.inferred.isEmpty && thought.reset)
 
+	/** Returns true if this order is known playable or conventionally promised playable.
+	  * @param excludeTrash If true, trash identities are excluded from the inferences.
+	  */
 	def orderKp(game: Game, order: Int, excludeTrash: Boolean = false): Boolean =
 		val state = game.state
 		val thought = thoughts(order)
@@ -181,6 +200,9 @@ case class Player(
 					possPlayable(thought.possible) ||
 					thought.infoLock.existsO(possPlayable)
 
+	/** Returns true if this order is obviously playable (see [[Player.orderKp]]) or inferred to be playable.
+	  * @param excludeTrash If true, trash identities are excluded from the inferences.
+	  */
 	def orderPlayable(game: Game, order: Int, excludeTrash: Boolean = false) =
 		val state = game.state
 
@@ -198,10 +220,12 @@ case class Player(
 
 			p.nonEmpty && p.intersect(state.playableSet) == p
 
+	/** Returns the known playable and conventionally promised playable orders in the given player's hand. */
 	def obviousPlayables(game: Game, playerIndex: Int) =
 		game.state.hands(playerIndex).filter(orderKp(game, _))
 			.pipe(game.filterPlayables(this, playerIndex, _))
 
+	/** Returns the obvious and inferred playable orders in the given player's hand. (See [[orderPlayable]].) */
 	def thinksPlayables(game: Game, playerIndex: Int, excludeTrash: Boolean = false, assume: Boolean = true) =
 		game.state.hands(playerIndex).filter(o => orderPlayable(game, o, excludeTrash = excludeTrash && game.isTouched(o)))
 			.pipe: playables =>
@@ -214,9 +238,11 @@ case class Player(
 			.pipe:
 				game.filterPlayables(this, playerIndex, _, assume)
 
+	/** Returns the trash orders in the given player's hand. (See [[Player.orderTrash]].) */
 	def thinksTrash(game: Game, playerIndex: Int) =
 		game.state.hands(playerIndex).filter(orderTrash(game, _))
 
+	/** Returns the orders that could be discarded from the player's hand (may not be trash).*/
 	def discardable(game: Game, playerIndex: Int) =
 		game.state.hands(playerIndex).filter: order =>
 			orderTrash(game, order) ||
@@ -226,9 +252,11 @@ case class Player(
 				thoughts(order).possibilities.intersect(game.state.criticalSet).isEmpty
 			}
 
+	/** Returns true if the given player has at least one playable or trash order in their hand. */
 	def thinksLoaded(game: Game, playerIndex: Int) =
 		thinksPlayables(game, playerIndex).nonEmpty || thinksTrash(game, playerIndex).nonEmpty
 
+	/** Returns true if the player is not loaded and all of their cards are touched. */
 	def thinksLocked(game: Game, playerIndex: Int) =
 		!thinksLoaded(game, playerIndex) &&
 		game.state.hands(playerIndex).forall: order =>
@@ -240,9 +268,11 @@ case class Player(
 				!(status == CardStatus.Finessed && game.meta(order).hidden)
 			)
 
+	/** Returns true if the given player has at least one obvious playable or trash in their hand. */
 	def obviousLoaded(game: Game, playerIndex: Int) =
 		obviousPlayables(game, playerIndex).nonEmpty || thinksTrash(game, playerIndex).nonEmpty
 
+	/** Returns true if the given player is not obviously loaded and all of their cards are touched. */
 	def obviousLocked(game: Game, playerIndex: Int) =
 		!obviousLoaded(game, playerIndex) &&
 		game.state.hands(playerIndex).forall: order =>
@@ -251,6 +281,7 @@ case class Player(
 			game.state.deck(order).clued ||
 			(status != CardStatus.None && status != CardStatus.CalledToDiscard)
 
+	/** Returns whether the given order is a valid prompt for the given identity. */
 	def validPrompt(prev: Game, order: Int, id: Identity, connected: Set[Int] = Set(), forcePink: Boolean = false) =
 		val state = prev.state
 		val card = state.deck(order)
@@ -276,6 +307,12 @@ case class Player(
 				!misranked && prev.knownAs(order, PINKISH)
 		)
 
+	/** Returns the order in the given player's hand that would be prompted for the given identity, if it exists.
+	  * @param connected  The orders that are already connected in this connection (and thus can't be used).
+	  * @param ignore     Orders that cannot be used.
+	  * @param forcePink  Whether to force a prompt for a pink identity, even if the Pink Prompt Rank Exception applies.
+	  * @param rightmost  Whether to prompt from the right (defaults to false).
+	  */
 	def findPrompt(prev: Game, playerIndex: Int, id: Identity, connected: Set[Int] = Set(), ignore: Set[Int] = Set(), forcePink: Boolean = false, rightmost: Boolean = false) =
 		val state = prev.state
 		val hand = state.hands(playerIndex).when(_ => rightmost)(_.reverse)
@@ -349,8 +386,10 @@ case class Player(
 			case Link.Unpromised(orders, ids) =>
 				if orders.length > ids.iter.summing(unknownIds(state, _)) then orders else Nil
 
+	/** Returns the predicted score if all delayed playable cards are played. */
 	def hypoScore = hypoStacks.sum + unknownPlays.size - linkedPlays
 
+	/** Returns a new Player with the hypo stacks (and hypo plays, unknown plays, etc.) updated based on current information. */
 	def updateHypoStacks[G <: Game](game: G)(using ops: GameOps[G]): Player =
 		var hypo =
 			if isCommon then
@@ -456,6 +495,5 @@ object Player:
 			allPossible = allPossible,
 			hypoStacks = hypoStacks,
 			isCommon = playerIndex == -1,
-			allInferred = allPossible,
 			certainMap = Vector.fill(allPossible.length)(Nil)
 		)

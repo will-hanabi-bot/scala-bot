@@ -303,12 +303,12 @@ object RefSieve:
 							case Some(f2) =>
 								Log.info(s"no-info double bluff on $f1 and $f2!")
 
-								game.withMeta(f1)(_.copy(status = CardStatus.CalledToPlay))
-									.withMeta(f2)(_.copy(status = CardStatus.CalledToPlay))
+								game.withMeta(f1)(_.copy(status = CardStatus.CalledToPlay).reason(state.turnCount).signal(state.turnCount))
+									.withMeta(f2)(_.copy(status = CardStatus.CalledToPlay).reason(state.turnCount).signal(state.turnCount))
 									.withMove(if validNI(f1, f2) then ClueInterp.Play else ClueInterp.Mistake)
 							case None =>
-								game.withMeta(f1)(_.copy(status = CardStatus.CalledToPlay))
-									.withMeta(list.max)(_.copy(status = CardStatus.CalledToPlay))
+								game.withMeta(f1)(_.copy(status = CardStatus.CalledToPlay).reason(state.turnCount).signal(state.turnCount))
+									.withMeta(list.max)(_.copy(status = CardStatus.CalledToPlay).reason(state.turnCount).signal(state.turnCount))
 									.withMove(if validNI(f1, list.max) then ClueInterp.Play else ClueInterp.Mistake)
 					case None =>
 						game.withMove(ClueInterp.Mistake)

@@ -49,7 +49,7 @@ object GameData:
 def fetchGame(args: Seq[String]) =
 	val parsedArgs = parseArgs(args)
 
-	val List(id, indexR, file, conventionR, levelR) = List("id", "index", "file", "convention", "level").map(parsedArgs.lift(_))
+	val List(id, indexR, file, conventionR) = List("id", "index", "file", "convention").map(parsedArgs.lift(_))
 
 	if id.isEmpty && file.isEmpty then
 		throw new IllegalArgumentException("Must provide either id or file argument.")
@@ -58,8 +58,7 @@ def fetchGame(args: Seq[String]) =
 		throw new IllegalArgumentException("Missing required argument 'index'!")
 
 	val index = indexR.get.toInt
-	val convention = conventionR.flatMap(s => Convention.from(s, parseLevel = false).toOption).getOrElse(Convention.Reactor)
-	val level = levelR.map(_.toInt).getOrElse(1)
+	val convention = conventionR.flatMap(Convention.from(_).toOption).getOrElse(Convention.Reactor)
 
 	val data @ GameData(players, deck, actions, options) = id match
 		case Some(id) => GameData.fetchId(id)
@@ -79,7 +78,7 @@ def fetchGame(args: Seq[String]) =
 		case Convention.RefSieve =>
 			val game = RefSieve(0, state, false).copy(catchup = true)
 			processGame(game, data, index)
-		case Convention.HGroup(_) =>
+		case Convention.HGroup(level) =>
 			val game = HGroup(0, state, false, level).copy(catchup = true)
 			processGame(game, data, index)
 

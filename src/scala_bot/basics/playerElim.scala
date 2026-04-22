@@ -119,8 +119,7 @@ extension (p: Player)
 			res = res.merge(innerResult)
 
 		res.copy(player = res.player.copy(
-			allPossible = res.player.allPossible.difference(eliminated),
-			allInferred = res.player.allInferred.difference(eliminated)))
+			allPossible = res.player.allPossible.difference(eliminated)))
 
 	/**
 	 * The "sudoku" emathy operation, involving 2 parts:

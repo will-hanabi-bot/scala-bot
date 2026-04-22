@@ -10,54 +10,44 @@ https://github.com/user-attachments/assets/665e7d78-7c8b-4f07-b4c3-9116ec2ec8ab
 
 ## Bot features
 
-- Supports all the basic variants (Black, Rainbow, White, Prism, Pink, Brown + blends).
+- Supports all the basic variants: Black, Rainbow, White, Prism, Pink, Brown, and blends.
 - Takes notes during the game on what it thinks each player knows about their own hand.
 - Can analyze completed games on hanab.live and offer suggested actions.
 
 ## Running locally
-- To host the bot locally, you'll need [JVM 25](https://www.oracle.com/ca-en/java/technologies/downloads/#java25) or later.
-- Download the latest JAR file from the Releases page.
-- Fill out the login details for the bot in an .env file. See .env.template for an example.
+- Ensure you have [JVM 25](https://www.oracle.com/ca-en/java/technologies/downloads/#java25) or later.
+- Download the latest JAR file from the [Releases page](https://github.com/will-hanabi-bot/scala-bot/releases).
+- Fill out the login details for the bot in an .env file. See the example .env.template file and the [reference](#environment-variables-reference).
   - You'll need to create its account on hanab.live first.
-  - Optionally set `HANABI_BOT_NAME_PREFIXES` to a comma-separated list of name prefixes (e.g. `will-bot`) so the bot can detect when only bots are in a lobby or replay.
-  - Set `HANABI_LEAVE_PREGAME_IF_ONLY_BOTS=1` to auto-leave pregame if only bots remain.
-  - `HANABI_LEAVE_REPLAY_IF_ONLY_BOTS` is enabled by default; set to `0` to disable.
 - Run `java [JVM_OPTS] -jar scala-bot-<version>.jar index=<index>` to start the bot.
-  - Some JVM options for reduced memory usage: `-Xms128m -Xmx192m -Xss256k -XX:MaxMetaspaceSize=96m -XX:ReservedCodeCacheSize=64m -XX:+UseSerialGC`.
+  - Suggested JVM options for reduced memory usage: `-Xms128m -Xmx192m -Xss256k -XX:MaxMetaspaceSize=96m -XX:ReservedCodeCacheSize=64m -XX:+UseSerialGC`.
 
-## Local development
-
-- You'll need to have Scala installed. There are instructions [here](https://www.scala-lang.org/download/).
-- Clone the repository to your own computer. There are lots of tutorials online on using Git if you don't know how that works.
-- Run `scala-cli . --main-class scala_bot.main -- index=<index>` to start the bot.
-- Debug logs will show up in the console, providing more information about what the bot thinks about every action.
-	- `hand <playerName> [observerName]` will display the information on that player's hand from a particular perspective.
-        - If no observer name is provided, the hand will be logged from the common knowledge perspective.
-- `make build` will package a JAR file based on the current state of the repository.
+## Contributing
+Noticed a bug, have an idea for a feature, or want to help with development? See the [contribution guide](./CONTRIBUTING.md).
 
 ## Supported commands
 
 Send a PM to the bot on hanab.live (`/pm <HANABI_USERNAME> <message>`) to interact with it.
-- `/join [password]` to join your current lobby. The bot will remain in your table until it is kicked with `/leave`.
-- `/rejoin` to rejoin a game that has already started (e.g. if it disconnected).
+- `/join [password]` to join your lobby.
+- `/rejoin` to rejoin a game that has already started, if it had disconnected.
 - `/leave` to kick the bot from your table.
-- `/settings [convention=Reactor,RefSieve,HGroup] [level=1-11]` to modify the convention set.
-- `/analyze <replayId> <convention> [level]` to provide a list of potential mistakes and suggested actions in the given replay.
-- `/version` to get the current version of the bot.
+- `/settings [convention]` to modify the convention set. For example, `/settings HGroup11` sets the bot to H-Group level 11.
+  - Supported conventions: `RefSieve`, `Reactor1`, `HGroup[1-11]`
+- `/analyze <replayId> <convention>` to provide a list of potential mistakes and suggested actions in the given replay.
+- `/version` to get the version the bot is running.
 - `/help` to get a link back to this page.
 
-Some commands can be sent inside a room to affect all bots that have joined.
+Some commands can be sent inside the room's chat to affect all bots that have joined.
 - `/leaveall` to kick all bots from the table.
 - `/setall` to set the same settings for all bots at the table.
 
 ## Watching replays
 
-A replay from hanab.live or from a file (in JSON) can be simulated using `scala-cli . --main-class scala_bot.replay -- <options>`.
+A replay from hanab.live or from a file (in JSON) can be loaded using `scala-cli . --main-class scala_bot.replay -- <options>`.
 - `id=<id>` indicates the ID of the hanab.live replay to load.
 - `file=<filePath>` indicates the path to the JSON replay to load (relative from the root directory).
 - `index=<index>` sets the index of the player the bot will simulate as (defaults to 0).
-- `convention=<conventionName>` sets the convention set (defaults to Reactor 1.0).
-	- `level=<level>` sets the level of the convention set (defaults to 1, if applicable).
+- `convention=<convention>` sets the convention set (defaults to Reactor 1.0).
 
 In a replay, the following commands are also supported (in addition to `hand`):
 - `navigate <turn>` to travel to a specific turn.
@@ -68,10 +58,9 @@ In a replay, the following commands are also supported (in addition to `hand`):
 The bot can play games with copies of itself using `scala-cli . --main-class scala_bot.selfPlay [-- <options>]`. Possible options:
 - `games=<numGames>` sets the number of games to play (defaults to 1).
 - `seed=<seed>` sets the seed of the first game to be played (defaults to 0).
-    - The seeding algorithm is different from the one used on hanab.live.
+    - A seed can be a number or a string, but the seeding algorithm is different from the one used on hanab.live.
 - `players=<numPlayers>` sets the number of players.
-- `convention=<conventionName>` sets the convention set (defaults to Reactor 1.0).
-	- `level=<level>` sets the level of the convention set (defaults to 1, if applicable).
+- `convention=<convention>` sets the convention set (defaults to Reactor 1.0).
 
 The final score for each seed as well as how each game terminated are logged to the console. JSON replays of each game are saved to a `seeds` folder, which can be loaded into hanab.live for viewing.
 

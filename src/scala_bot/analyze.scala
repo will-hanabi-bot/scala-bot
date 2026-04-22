@@ -13,13 +13,12 @@ import cats.effect.{ExitCode, IO, IOApp, unsafe}, unsafe.IORuntime
 def fetchAnalyzeGame(args: Seq[String])(using runtime: IORuntime) =
 	val parsedArgs = parseArgs(args)
 
-	val List(id, file, conventionR, levelR) = List("id", "file", "convention", "level").map(parsedArgs.lift(_))
+	val List(id, file, conventionR) = List("id", "file", "convention").map(parsedArgs.lift(_))
 
 	if id.isEmpty && file.isEmpty then
 		throw new IllegalArgumentException("Must provide either id or file argument.")
 
-	val convention = conventionR.flatMap(Convention.from(_, parseLevel = false).toOption).getOrElse(Convention.Reactor)
-	val level = levelR.map(_.toInt).getOrElse(1)
+	val convention = conventionR.flatMap(Convention.from(_).toOption).getOrElse(Convention.Reactor)
 
 	val data @ GameData(players, deck, actions, options) = id match
 		case Some(id) => GameData.fetchId(id)
@@ -36,7 +35,7 @@ def fetchAnalyzeGame(args: Seq[String])(using runtime: IORuntime) =
 		case Convention.RefSieve =>
 			val game = RefSieve(0, state, false).copy(catchup = true)
 			analyzeGame(game, data)
-		case Convention.HGroup(_) =>
+		case Convention.HGroup(level) =>
 			val game = HGroup(0, state, false, level).copy(catchup = true)
 			analyzeGame(game, data)
 

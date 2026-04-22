@@ -416,7 +416,7 @@ class BotClient(queue: Queue[IO, String], gameRef: Ref[IO, Option[Game]], config
 			val pattern = """/analyze (\d+) (\w+) ?(\d+)?""".r
 
 			msg match
-				case pattern(id, conv, level) if Convention.from(conv, parseLevel = false).isRight =>
+				case pattern(id, conv, level) if Convention.from(conv).isRight =>
 					val args = List(
 						Some(s"id=$id"),
 						Some(s"convention=$conv"),
