@@ -31,7 +31,7 @@ private def reactiveContext(prev: Reactor, game: Reactor, action: ClueAction, re
 
 	(possibleConns, knownPlays, hypoState)
 
-def interpretReactiveColour(prev: Reactor, game: Reactor, action: ClueAction, focusSlot: Int, reacter: Int, inverted: Boolean): (Option[ClueInterp], Reactor) =
+def interpretReactiveColour(prev: Reactor, game: Reactor, action: ClueAction, focusSlot: Int, reacter: Int, looksStable: Boolean): (Option[ClueInterp], Reactor) =
 	val ClueAction(giver = giver, target = receiver, clue = _, list = _) = action
 	val state = game.state
 	val (possibleConns, knownPlays, hypoState) = reactiveContext(prev, game, action, reacter)
@@ -54,22 +54,21 @@ def interpretReactiveColour(prev: Reactor, game: Reactor, action: ClueAction, fo
 	playTargets.view.flatMap { case (_, index) =>
 		val targetSlot = index + 1
 		val reactSlot = calcSlot(focusSlot, targetSlot)
-		lazy val prevTrash = prev.common.thinksTrash(prev, reacter)
 
 		state.hands(reacter).lift(reactSlot - 1) match
 			case None =>
 				Log.warn(s"Reacter doesn't have slot $reactSlot!")
 				None
-			case Some(reactOrder) if prevTrash.contains(reactOrder) || (inverted && prevTrash.isEmpty && reactSlot == 1) =>
+			case Some(reactOrder) if prev.common.thinksTrash(prev, reacter).contains(reactOrder) && looksStable && prev.common.obviousPlayables(prev, reacter).isEmpty =>
 				Log.warn(s"attempted dc+play would result in reacter naturally discarding ${state.logId(reactOrder)} $reactOrder!")
 				None
 			case Some(reactOrder) if game.common.thoughts(reactOrder).possible.forall(state.isCritical) =>
 				Log.warn(s"attempted dc+play would result in reacter discarding known critical ${state.logId(reactOrder)} $reactOrder!")
 				None
 			case Some(reactOrder) =>
-				val newCommon = game.common.withThought(reactOrder) { t =>
+				val newCommon = game.common.withThought(reactOrder): t =>
 					t.copy(oldInferred = t.inferred.toOpt)
-				}
+
 				val (interp, newGame) = targetDiscard(game.copy(common = newCommon), action, reactOrder, urgent = true)
 				interp match
 					case None => Some(None, newGame)
@@ -178,7 +177,7 @@ def interpretReactiveRank(prev: Reactor, game: Reactor, action: ClueAction, focu
 
 		state.hands(reacter).lift(reactSlot - 1) match
 			case None =>
-				Log.warn(s"Reacter doesn't have slot $reactSlot!")
+				Log.warn(s"reacter doesn't have slot $reactSlot!")
 				None
 			case Some(reactOrder) if prevPlays.contains(reactOrder) =>
 				Log.warn(s"attempted play+play would result in reacter naturally playing ${state.logId(reactOrder)} $reactOrder!")

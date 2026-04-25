@@ -1,4 +1,4 @@
-package tests.reactor.mistakes
+package tests.reactor
 
 import scala_bot.reactor.Reactor
 import scala_bot.basics._

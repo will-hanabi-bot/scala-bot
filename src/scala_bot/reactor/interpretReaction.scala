@@ -184,10 +184,12 @@ def reactDiscard(prev: Reactor, game: Reactor, playerIndex: Int, order: Int, wc:
 		game
 	else if inverted then
 		// We were waiting for a response inversion and they reacted unnaturally
-		val unnatural = if knownTrash.isEmpty then
-			prev.chop(reacter).forall(_ != order)
-		else
-			!knownTrash.contains(order)
+		val unnatural = prev.common.obviousPlayables(game, reacter).nonEmpty || {
+			if knownTrash.isEmpty then
+				prev.chop(reacter).forall(_ != order)
+			else
+				!knownTrash.contains(order)
+		}
 
 		if unnatural then
 			game.rewind(turn, InterpAction(ClueInterp.Reactive)) match

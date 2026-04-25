@@ -198,6 +198,31 @@ class LayeredFinesses extends munit.FunSuite:
 		// Slot 3 should be known as the missing r1.
 		hasInfs(game, None, Alice, 3, Vector("r1"))
 
+	test("gracefully handles a complex non-matching clue revealing a layered finesse"):
+		val game = setup(HGroup.atLevel(5), Vector(
+			Vector("xx", "xx", "xx", "xx", "xx"),
+			Vector("g3", "b5", "r4", "y1", "p4"),
+			Vector("p3", "r2", "g4", "p5", "b4")
+		),
+			starting = Cathy,
+			discarded = Vector("y3"),
+			init = fullyKnown(Cathy, 2, "r2")
+		)
+		.pipe(takeTurn("Cathy clues red to Bob"))		// r4 layered finesse (Alice plays r1, r3)
+		.pipe(takeTurn("Alice plays b1 (slot 1)"))		// expecting r1
+		.pipe(takeTurn("Bob clues 3 to Alice (slots 1,4,5)"))	// y3 save
+
+		.pipe(takeTurn("Cathy discards b4", "b1"))
+		.tap: g =>
+			// The revealed card should be known y3.
+			hasInfs(g, None, Alice, 4, Vector("r3"))
+
+			hasStatus(g, Alice, 2, CardStatus.Finessed)
+			hasStatus(g, Alice, 3, CardStatus.Finessed)
+		.pipe(takeTurn("Alice plays r1 (slot 2)"))
+
+		hasStatus(game, Alice, 3, CardStatus.Finessed)
+
 	test("plays into a layered finesse with self-connecting cards"):
 		val game = setup(HGroup.atLevel(5), Vector(
 			Vector("xx", "xx", "xx", "xx", "xx"),

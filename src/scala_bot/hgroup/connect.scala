@@ -82,14 +82,7 @@ def findKnownConn(ctx: ClueContext, id: Identity, ignore: Set[Int], findOwn: Boo
 		playables = state.hands(playerIndex).filter(validPlayable(playerIndex, _))
 		order <- playables if state.deck(order).matches(id, assume = game.allowFindOwn && findOwn) && game.isTouched(order)
 	yield
-		val insertingInto = if !game.meta(order).hidden then None else
-			val orders = state.hands(playerIndex)
-				.dropWhile(o => o > order || game.meta(o).status != CardStatus.Finessed)
-				.filter(o => game.meta(o).status == CardStatus.Finessed && !game.meta(o).hidden)
-
-			if orders.isEmpty then None else Some(orders)
-
-		PlayableConn(playerIndex, order, id, linked = playables.toList, insertingInto = insertingInto)
+		PlayableConn(playerIndex, order, id, linked = playables.toList)
 
 	val playLinkedConns = for
 		playerIndex <- (0 until state.numPlayers).view if playerIndex != giver
@@ -258,7 +251,7 @@ def findUnknownConnecting(ctx: ClueContext, reacting: Int, id: Identity, connect
 			potentialFinesse
 
 	finesse.flatMap(state.deck(_).id()) match
-		case None if finesse.exists(game.future(_).length == 1) =>
+		case _ if finesse.exists(game.future(_).length == 1) =>
 			val actualId = game.future(finesse.get).head
 
 			val fKind = if actualId == id then

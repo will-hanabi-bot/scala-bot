@@ -96,10 +96,9 @@ def occamsRazor(ctx: ClueContext, fps: Seq[FocusPossibility], playerIndex: Int, 
 		val sameSelfStart = fps.filter: fp =>
 			!simplest.contains(fp) &&
 			simplest.exists: s =>
-				s.connections.exists: c =>
-					c.isInstanceOf[FinesseConn] &&
-					c.reacting == playerIndex &&
-					nextUnknown(fp).exists(_.order == c.order)
+				s.connections.existsM:
+					case c: FinesseConn => c.reacting == playerIndex && nextUnknown(fp).exists(_.order == c.order)
+					case c: PlayableConn => c.insertingInto.nonEmpty && c.reacting == playerIndex && nextUnknown(fp).exists(_.order == c.order)
 
 		simplest ++ sameSelfStart.map(_.copy(complicated = true))
 

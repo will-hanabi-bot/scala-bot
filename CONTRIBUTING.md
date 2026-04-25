@@ -45,11 +45,11 @@ scala-bot has several main modules:
 - `analyze` loads a completed game and logs turns where it would have done something different
 
 Debugging is typically done with the `replay` module. During a replay, logs will show up in the console, detailing what the bot thinks about every action. Two commands can be entered into the console while the program is running:
-	- `hand <playerName> [observerName]` displays the information on that player's hand from a particular perspective.
-		- If no observer name is provided, the hand is logged from the common knowledge perspective.
-	- `navigate <turn>` travels to a specific turn.
-		- If it is the bot's turn, it will provide a suggestion on what it would do.
-		- Instead of a turn number, `+` (next turn), `++` (next turn of the same player), `-`, and `--` can also be used.
+- `hand <playerName> [observerName]` displays the information on that player's hand from a particular perspective.
+	- If no observer name is provided, the hand is logged from the common knowledge perspective.
+- `navigate <turn>` travels to a specific turn.
+	- If it is the bot's turn, it will provide a suggestion on what it would do.
+	- Instead of a turn number, `+` (next turn), `++` (next turn of the same player), `-`, and `--` can also be used.
 
 I've written a blog post explaining some of the features [here](https://willflame.mataroa.blog/blog/debugging-my-hanabi-bot/).
 
@@ -61,7 +61,7 @@ There are a suite of tests in the `src/test/` folder.
 - Tests in a particular folder can be run using `scala-cli test <path>`. To run all of them, use `scala-cli test .`.
 - Pass `--test-only <testPattern>` to only run tests matching a particular pattern.
 	- For example, `scala-cli test . --test-only "tests.hgroup.level8.PositionalMisplays*` only runs the tests in the `PositionalMisplays` class in `test/hgroup/level8.scala`.
-- To run a particular test in a class, add `.only` to the test name.
+- To run a particular test in a class, append `.only` to the test name.
 	- For example, `test("doesn't eliminate from a possibly-fake finesse".only):`
 - By default, debug logs are disabled during tests. To enable them, comment out the `beforeAll()` definition at the beginning of the class.
 

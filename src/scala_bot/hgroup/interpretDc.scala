@@ -26,21 +26,23 @@ def interpretTransfer(ctx: DiscardContext, holder: Int, dupe: Option[Int]): (Dis
 			other.headOption
 
 	if playerIndex == holder then
-		if dupe.exists(game.players(holder).thoughts(_).matches(id, infer = true)) then
-			Log.info("discarded dupe of own hand")
-			return (DiscardResult.None, false)
+		val result =
+			if dupe.exists(game.players(holder).thoughts(_).matches(id, infer = true)) then
+				Log.info("discarded dupe of own hand")
+				(DiscardResult.None, false)
 
-		else if state.cardCount(id.toOrd) - state.baseCount(id.toOrd) > 1 then
-			findThird match
-				case Some((otherHolder, otherDupe)) =>
-					return interpretTransfer(ctx, otherHolder, Some(otherDupe))
-				case None if holder != state.ourPlayerIndex =>
-					return interpretTransfer(ctx, state.ourPlayerIndex, None)
-				case _ =>
-					return (DiscardResult.Mistake, true)
-		else
-			Log.warn(s"discarded useful ${state.logId(id)} but dupe was in their own hand!")
-			return (DiscardResult.None, false)
+			else if state.cardCount(id.toOrd) - state.baseCount(id.toOrd) > 1 then
+				findThird match
+					case Some((otherHolder, otherDupe)) =>
+						interpretTransfer(ctx, otherHolder, Some(otherDupe))
+					case None if holder != state.ourPlayerIndex =>
+						interpretTransfer(ctx, state.ourPlayerIndex, None)
+					case _ =>
+						(DiscardResult.Mistake, true)
+			else
+				Log.warn(s"discarded useful ${state.logId(id)} but dupe was in their own hand!")
+				(DiscardResult.None, false)
+		return result
 
 	val cluedTargets = state.hands(holder).filter(o => game.isTouched(o) && validTransfer(game, id)(o))
 

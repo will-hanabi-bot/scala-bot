@@ -1,10 +1,10 @@
-package tests.reactor.reactive
+package tests.reactor
 
 import cats.effect.unsafe.implicits.global
 
 import scala_bot.reactor.Reactor
 import scala_bot.basics._
-import scala_bot.test.{hasInfs, hasStatus, Player, preClue, setup, takeTurn}, Player._
+import scala_bot.test.{fullyKnown, hasInfs, hasStatus, Player, preClue, setup, takeTurn}, Player._
 
 import scala_bot.utils.{pipe, tap}
 import scala_bot.logger.{Logger, LogLevel}
@@ -294,3 +294,22 @@ class Reactive extends munit.FunSuite:
 
 		// Alice's slot 4 is called to discard (4 + 3 = 2)
 		hasStatus(game, Alice, 4, CardStatus.CalledToDiscard)
+
+	test("it considers discarding kt to be a reaction"):
+		val game = setup(Reactor.apply, Vector(
+			Vector("xx", "xx", "xx", "xx", "xx"),
+			Vector("b1", "r5", "b2", "b3", "g4"),
+			Vector("g5", "g2", "r2", "b1", "y3"),
+		),
+			clueTokens = 7,
+			starting = Cathy,
+			playStacks = Some(Vector(1, 0, 0, 0, 0)),
+			init = fullyKnown(Alice, 4, "r1")
+		)
+		.pipe(takeTurn("Cathy clues green to Bob"))
+		.tap: g =>
+			// Alice's slot 4 is called to discard, even though she would already be discarding it.
+			hasStatus(g, Alice, 4, CardStatus.CalledToDiscard)
+		.pipe(takeTurn("Alice discards g1 (slot 4)"))
+
+		hasStatus(game, Bob, 1, CardStatus.CalledToPlay)

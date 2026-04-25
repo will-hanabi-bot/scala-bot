@@ -1,4 +1,4 @@
-package tests.reactor.ptd
+package tests.reactor
 
 import scala_bot.basics._
 import scala_bot.test.{Player, setup, takeTurn}, Player._

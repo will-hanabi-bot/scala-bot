@@ -87,9 +87,9 @@ def assignConns(game: HGroup, action: ClueAction, fps: Seq[FocusPossibility], fo
 
 				val finesseIds = // Option.when(idUncertain):
 					if isBluff then currPlayableIds else
-						// Allow connecting on self blind plays (except hidden ones)
+						// Allow connecting on self blind plays (allow hidden ones since they can actually allow more plays)
 						state.hands(conn.reacting).foldLeft(state.playableSet): (acc, order) =>
-							if !g.isBlindPlaying(order) || g.meta(order).hidden then acc else
+							if !g.isBlindPlaying(order) then acc else
 								acc.union(acc.flatMap(_.next))
 						.filter(state.isUseful)
 
@@ -415,7 +415,6 @@ def resolveClue(ctx: ClueContext, fps: Seq[FocusPossibility], ambiguousOwn: Seq[
 							val nextReact = nextReacting(fp, i)
 
 							conn.linked.length >= 1 &&
-							conn.insertingInto.isEmpty &&
 							!allFps.exists: fp2 =>
 								fp2 != fp && {
 									val matchingIndex = fp2.connections.indexWhere:

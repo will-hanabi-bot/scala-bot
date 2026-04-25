@@ -73,11 +73,12 @@ def _forceClue(orig: Reactor, game: Reactor, offset: Int): Double =
 	val giver = (state.ourPlayerIndex + offset) % state.numPlayers
 	val bob = state.nextPlayerIndex(giver)
 
+	// They can always give an equal or better clue than what we can see
 	if bob == state.ourPlayerIndex then
 		val nextGame = game.withState(s => s.copy(clueTokens = s.clueTokens - 1))
-		advance(orig, nextGame, offset + 1)
+		advance(orig, nextGame, offset + 1) + 0.5
 	else
-		forceClue(game, giver, advance(orig, _, offset + 1), only = Some(bob))
+		forceClue(game, giver, advance(orig, _, offset + 1), only = Some(bob)) + 0.5
 
 def advance(orig: Reactor, game: Reactor, offset: Int): Double =
 	val (state, common, meta) = (game.state, game.common, game.meta)
@@ -126,6 +127,7 @@ def advance(orig: Reactor, game: Reactor, offset: Int): Double =
 		if strikes > 0 && strikes < playables.length then
 			playActions.min
 		else
+			Log.info(s"also seeing if they can clue instead!")
 			playActions.max.max(_forceClue(orig, game, offset))
 
 	else if player.obviousLocked(game, playerIndex) then
@@ -208,7 +210,7 @@ def _evalAction(game: Reactor, action: Action): Double =
 			result * (if result > 0 then mult else 1) - 0.5
 
 		case PlayAction(_, order, suitIndex, rank) =>
-			if !game.state.inEndgame && game.me.discardable(game, state.ourPlayerIndex).contains(order) then
+			if !game.state.inEndgame && visibleFind(state, game.me, Identity(suitIndex, rank), excludeOrder = order).exists(game.isTouched) then
 				-0.25
 			else if suitIndex == -1 || rank == -1 then
 				1.5
@@ -242,16 +244,17 @@ def _evalAction(game: Reactor, action: Action): Double =
 		Log.info(f"${action.fmt(state)}%s: $best%.2f (${hypoGame.lastMove}%s)")
 		best
 
-def evalState(state: State): Double =
+def evalState(state: State, inEndgame: Boolean): Double =
 	// The first 2 * (# suits) pts are worth 1.5.
 	val scoreVal: Double = state.score.min(2 * state.variant.suits.length) * 0.5 + state.score
 
-	val clueVal: Double = state.clueTokens match
-		case 0 					 => -0.5
-		case 1					 => 0
-		case _ if !state.canClue => -0.25
-		case c if c > 6 		 => 3 + (c - 6) * 0.25
-		case c 					 => c / 2.0
+	val clueVal: Double =
+		if inEndgame then 0 else
+			state.clueTokens match
+			case 0 					 => 0
+			case _ if !state.canClue => 0
+			case c if c > 6 		 => 3 + (c - 6) * 0.25
+			case c 					 => c / 2.0
 
 	val scoreLoss = state.variant.suits.length * 5 - state.maxScore
 	val dcCritVal = -20 * scoreLoss
@@ -271,7 +274,7 @@ def evalGame(orig: Reactor, game: Reactor): Double =
 	if state.score == orig.state.maxScore then
 		return 100
 
-	val stateVal = evalState(state)
+	val stateVal = evalState(state, inEndgame = orig.state.inEndgame)
 
 	val futureVal = state.hands.flatten.summing: order =>
 		game.meta(order).status match

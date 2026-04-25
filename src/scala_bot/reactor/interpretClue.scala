@@ -31,7 +31,7 @@ def interpretStable(prev: Reactor, game: Reactor, action: ClueAction, stall: Boo
 		.onClue(action)
 		.elim()
 
-		interpretReactive(prev, hypoGame, action, bob, inverted = true)
+		interpretReactive(prev, hypoGame, action, bob, looksStable = true)
 	else
 		(interp, newGame)
 
@@ -280,7 +280,7 @@ def badStable(prev: Reactor, game: Reactor, action: ClueAction, interp: ClueInte
 	else
 		false
 
-def interpretReactive(prev: Reactor, game: Reactor, action: ClueAction, reacter: Int, inverted: Boolean): (Option[ClueInterp], Reactor) =
+def interpretReactive(prev: Reactor, game: Reactor, action: ClueAction, reacter: Int, looksStable: Boolean): (Option[ClueInterp], Reactor) =
 	val state = game.state
 	val ClueAction(giver = giver, target = receiver, clue = clue, list = _) = action
 
@@ -306,7 +306,7 @@ def interpretReactive(prev: Reactor, game: Reactor, action: ClueAction, reacter:
 		(Some(ClueInterp.Reactive), newGame)
 	else
 		clue.kind match
-			case ClueKind.Colour => interpretReactiveColour(prev, newGame, action, focusSlot, reacter, inverted)
+			case ClueKind.Colour => interpretReactiveColour(prev, newGame, action, focusSlot, reacter, looksStable)
 			case ClueKind.Rank   => interpretReactiveRank(prev, newGame, action, focusSlot, reacter)
 
 def delayedPlays(game: Reactor, giver: Int, receiver: Int, stable: Boolean) =

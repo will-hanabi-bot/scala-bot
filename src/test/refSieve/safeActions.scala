@@ -76,3 +76,37 @@ class SafeActions extends munit.FunSuite:
 			case PerformAction.Colour(1, 4) => false
 			case _ => true
 		)
+
+	test("it interprets a gd"):
+		val game = setup(RefSieve.apply, Vector(
+			Vector("xx", "xx", "xx", "xx", "xx"),
+			Vector("y1", "r2", "g1", "g2", "p2"),
+			Vector("r3", "p4", "g5", "y4", "r4"),
+		),
+			init = fullyKnown(Bob, 1, "y1"),
+			starting = Bob,
+			clueTokens = 6
+		)
+		.pipe(takeTurn("Bob discards y1", "y4"))
+
+		hasStatus(game, Alice, 5, CardStatus.GentlemansDiscard)
+		hasInfs(game, None, Alice, 5, Vector("y1"))
+		assert(game.common.obviousPlayables(game, Alice.ordinal).contains(0))
+
+	test("it interprets a layered gd"):
+		val game = setup(RefSieve.apply, Vector(
+			Vector("xx", "xx", "xx", "xx", "xx"),
+			Vector("r3", "r2", "g1", "g2", "p2"),
+			Vector("y1", "p4", "g5", "y4", "r4"),
+		),
+			init = fullyKnown(Cathy, 1, "y1"),
+			starting = Cathy,
+			clueTokens = 6
+		)
+		.pipe(takeTurn("Cathy discards y1", "y4"))
+		.pipe(takeTurn("Alice plays b1 (slot 5)"))
+
+		// The card originally in slot 4 has moved to slot 5.
+		hasStatus(game, Alice, 5, CardStatus.GentlemansDiscard)
+		hasInfs(game, None, Alice, 5, Vector("y1"))
+		assert(game.common.obviousPlayables(game, Alice.ordinal).contains(1))

@@ -408,15 +408,21 @@ object RefSieve:
 							game.withMove(DiscardInterp.Mistake)
 
 						case DiscardResult.GentlemansDiscard(targets) =>
-							val target = targets.head
-							game.copy(
-								common = game.common.withThought(target):
-									_.copy(inferred = IdentitySet.single(id))
-								,
-								meta = game.meta.updated(target, game.meta(target).copy(
-									status = CardStatus.GentlemansDiscard
-								))
-							)
+							targets.foldLeft((game, game.state)):
+								case ((acc, hypoState), o) =>
+									val hidden = o != targets.last
+									val inferred = if hidden then hypoState.playableSet else IdentitySet.single(id)
+									val newState = game.me.thoughts(o).id().fold(hypoState): i =>
+										hypoState.withPlay(i)
+
+									acc.copy(
+										common = acc.common.withThought(o)(_.copy(inferred = inferred)),
+										meta = acc.meta.updated(o, game.meta(o).copy(
+											status = CardStatus.GentlemansDiscard,
+											hidden = hidden
+										))
+									) -> newState
+							._1
 							.withMove(DiscardInterp.GentlemansDiscard)
 
 						case DiscardResult.Sarcastic(orders) =>
