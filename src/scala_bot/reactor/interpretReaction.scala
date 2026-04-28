@@ -15,11 +15,11 @@ private def calcTargetSlot(prev: Reactor, game: Reactor, order: Int, wc: Reactor
 
 	receiverHand.lift(targetSlot - 1) match
 		case None =>
-			Log.warn(s"Receiver no longer has slot $targetSlot!")
+			Log.warn(s"receiver no longer has slot $targetSlot!")
 			None
 		case Some(receiveOrder) =>
 			if !game.state.hands(receiver).contains(receiveOrder) then
-				Log.warn(s"Receiver no longer has order $receiveOrder!")
+				Log.warn(s"receiver no longer has order $receiveOrder!")
 				None
 			else
 				Some((reactSlot, targetSlot))
@@ -177,11 +177,8 @@ def reactDiscard(prev: Reactor, game: Reactor, playerIndex: Int, order: Int, wc:
 	val ReactorWC(_, reacter, receiver, receiverHand, clue, focusSlot, inverted, turn) = wc
 	lazy val knownTrash = prev.common.thinksTrash(prev, reacter)
 
-	// TODO: We don't always overwrite lastMove here, but we need to be able to tell if
-	// rewinding an unnatural discard caused the clue to become incorrectly interpreted.
-
 	if playerIndex != reacter then
-		game
+		game.withMove(DiscardInterp.None)
 	else if inverted then
 		// We were waiting for a response inversion and they reacted unnaturally
 		val unnatural = prev.common.obviousPlayables(game, reacter).nonEmpty || {
@@ -193,16 +190,12 @@ def reactDiscard(prev: Reactor, game: Reactor, playerIndex: Int, order: Int, wc:
 
 		if unnatural then
 			game.rewind(turn, InterpAction(ClueInterp.Reactive)) match
-				case Right(newGame) =>
-					if newGame.lastMove == Some(ClueInterp.Mistake) then
-						newGame.withMove(DiscardInterp.Mistake)
-					else
-						newGame.withMove(DiscardInterp.None)
+				case Right(newGame) => newGame
 				case Left(err) =>
-					Log.warn(s"Failed to rewind a response inversion! $err")
-					game
+					Log.warn(s"failed to rewind a response inversion! $err")
+					game.withMove(DiscardInterp.None)
 		else
-			game
+			game.withMove(DiscardInterp.None)
 	else
 		calcTargetSlot(prev, game, order, wc).fold(game): (reactSlot, targetSlot) =>
 			val (newCommon, newMeta) = clue.kind match
@@ -216,6 +209,7 @@ def reactDiscard(prev: Reactor, game: Reactor, playerIndex: Int, order: Int, wc:
 			val action = if clue.kind == ClueKind.Colour then "play" else "dc"
 			Log.info(s"reactive dc+$action, reacter ${state.names(reacter)} (slot $reactSlot) receiver ${state.names(receiver)} (slot $targetSlot), focus slot $focusSlot (order ${state.hands(receiver)(targetSlot - 1)})")
 			game.copy(common = newCommon, meta = newMeta)
+		.withMove(DiscardInterp.None)
 
 def reactPlay(prev: Reactor, game: Reactor, playerIndex: Int, order: Int, wc: ReactorWC) =
 	val state = game.state

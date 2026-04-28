@@ -107,7 +107,7 @@ private def tryStable(prev: Reactor, game: Reactor, action: ClueAction, stall: B
 		val prevPlayables = prev.common.obviousPlayables(prev, target)
 			.concat(connectableSimple(prev, prev.players(giver), nextPlayerIndex, target)).distinct
 		val playables = common.obviousPlayables(g, target)
-			.concat(connectableSimple(g, g.players(giver), nextPlayerIndex, target)).distinct
+			.concat(connectableSimple(g.withMove(ClueInterp.Play), g.players(giver), nextPlayerIndex, target)).distinct
 
 		Log.info(s"playables $playables, prev_playables $prevPlayables")
 
@@ -184,6 +184,7 @@ private def tryStable(prev: Reactor, game: Reactor, action: ClueAction, stall: B
 			val brownishTcm =
 				state.includesVariant(BROWNISH) &&
 				clue.kind == ClueKind.Rank &&
+				!prev.common.obviousLoaded(game, target) &&
 				state.variant.suits.zipWithIndex.exists: (suit, suitIndex) =>
 					suit.suitType.brownish && state.playStacks(suitIndex) + 1 < state.maxRanks(suitIndex) &&
 					!newlyTouched.contains(state.hands(target)(0))

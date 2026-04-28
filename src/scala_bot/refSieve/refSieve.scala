@@ -359,8 +359,8 @@ object RefSieve:
 					refPlay(ctx)
 
 				else if fix || (loaded && !(clue.kind == ClueKind.Colour && newPlayables.forall(newlyTouched.contains))) then
-					if newPlayables.forall(state.deck(_).id().exists(!state.isPlayable(_))) then
-						Log.warn(s"clue makes unplayable cards look playable!")
+					if newPlayables.nonEmpty && newPlayables.forall(state.deck(_).id().exists(!state.isPlayable(_))) then
+						Log.warn(s"clue makes unplayable cards $newPlayables look playable!")
 						(None, game)
 					else
 						Log.info(s"revealed a safe action${if fix then " (fix)" else ""}, not continuing")
@@ -374,7 +374,7 @@ object RefSieve:
 								newPlayables.foldLeft(g): (acc, p) =>
 									acc.withMeta(p)(_.signal(state.turnCount))
 
-						(Some(ClueInterp.Reveal), newGame)
+						(Some(if fix then ClueInterp.Fix else ClueInterp.Reveal), newGame)
 
 				else if clue.kind == ClueKind.Colour then
 					refPlay(ctx)
@@ -434,9 +434,9 @@ object RefSieve:
 						case DiscardResult.Baton(_) =>
 							throw new Error("baton unsupported!")
 				else
-					game
+					game.withMove(DiscardInterp.None)
 			else
-				game
+				game.withMove(DiscardInterp.None)
 			.when(g => g.state.numPlayers == 2 && g.common.thinksLocked(g, state.nextPlayerIndex(playerIndex))): g =>
 				val playables = g.common.thinksPlayables(g, playerIndex).filter(g.common.thoughts(_).id(infer = true).isDefined)
 
@@ -450,27 +450,28 @@ object RefSieve:
 			.check2pPtd(prev, action)
 
 		def interpretPlay(prev: RefSieve, game: RefSieve, action: PlayAction): RefSieve =
-			game.reinterpPlay(prev, action)
-				.getOrElse(game.check2pPtd(prev, action))
-				.when(g => g.state.numPlayers == 2 && g.state.pace > 2 && g.common.thinksLocked(g, g.state.nextPlayerIndex(action.playerIndex))): g =>
-					// Unlock promise
-					g.unlockPromise(prev, action) match
-						case None =>
-							Log.info(s"failed to unlock")
-							val playables = g.common.thinksPlayables(g, action.playerIndex).filter(g.common.thoughts(_).id(infer = true).isDefined)
+			game.reinterpPlay(prev, action).getOrElse:
+				game.check2pPtd(prev, action)
+					.when(g => g.state.numPlayers == 2 && g.state.pace > 2 && g.common.thinksLocked(g, g.state.nextPlayerIndex(action.playerIndex))): g =>
+						// Unlock promise
+						g.unlockPromise(prev, action) match
+							case None =>
+								Log.info(s"failed to unlock")
+								val playables = g.common.thinksPlayables(g, action.playerIndex).filter(g.common.thoughts(_).id(infer = true).isDefined)
 
-							if playables.nonEmpty then
-								Log.info(s"locked shifting $playables")
+								if playables.nonEmpty then
+									Log.info(s"locked shifting $playables")
 
-							// Shift all other playables
-							playables.foldLeft(g): (acc, o) =>
-								acc.copy(lockedShifts = acc.lockedShifts.updated(o, acc.lockedShifts(o) + 1))
-						case Some(order) =>
-							g.withThought(order): t =>
-								t.copy(inferred = t.inferred.intersect(g.state.playableSet))
-							.tap: g =>
-								Log.info(s"unlocking $order as [${g.common.strInfs(g.state, order)}]")
-				.elim()
+								// Shift all other playables
+								playables.foldLeft(g): (acc, o) =>
+									acc.copy(lockedShifts = acc.lockedShifts.updated(o, acc.lockedShifts(o) + 1))
+							case Some(order) =>
+								g.withThought(order): t =>
+									t.copy(inferred = t.inferred.intersect(g.state.playableSet))
+								.tap: g =>
+									Log.info(s"unlocking $order as [${g.common.strInfs(g.state, order)}]")
+					.withMove(PlayInterp.None)
+					.elim()
 
 		def takeAction(game: RefSieve): IO[PerformAction] =
 			val (state, me) = (game.state, game.me)
@@ -535,7 +536,7 @@ object RefSieve:
 								game.chop(state.ourPlayerIndex).toVector
 							else
 								Vector.empty
-						val discardOrders = (expectedDiscards ++ me.discardable(game, state.ourPlayerIndex)).distinct
+						val discardOrders = (expectedDiscards ++ me.discardable(game, state.ourPlayerIndex, allowLockedSacrifice = state.numPlayers == 2)).distinct
 
 						Log.info(s"discardable $discardOrders")
 						discardOrders.map: o =>

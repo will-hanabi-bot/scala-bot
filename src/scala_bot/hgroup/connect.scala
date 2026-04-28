@@ -251,18 +251,21 @@ def findUnknownConnecting(ctx: ClueContext, reacting: Int, id: Identity, connect
 			potentialFinesse
 
 	finesse.flatMap(state.deck(_).id()) match
-		case _ if finesse.exists(game.future(_).length == 1) =>
-			val actualId = game.future(finesse.get).head
+		case _ if finesse.exists(o => game.future(o).length < game.common.thoughts(o).possible.length) =>
+			val futureIds = game.future(finesse.get).intersect(state.playableSet)
 
-			val fKind = if actualId == id then
-				FinesseKind.True
-			else if opts.assumeTruth || !validBluff(game, action, actualId, id, reacting, connected) then
-				FinesseKind.Hidden
+			if futureIds.isEmpty then
+				Log.warn(s"future knowledge of ${finesse.get} is [${game.future(finesse.get).fmt(state)}], but all unplayable!")
+				None
 			else
-				FinesseKind.Bluff
+				val fKind = if futureIds.isExactly(id) then
+					FinesseKind.True
+				else if opts.assumeTruth || !futureIds.exists(validBluff(game, action, _, id, reacting, connected)) then
+					FinesseKind.Hidden
+				else
+					FinesseKind.Bluff
 
-			Option.when(state.isPlayable(actualId)):
-				FinesseConn(reacting, finesse.get, List(actualId), fKind)
+				Some(FinesseConn(reacting, finesse.get, futureIds.toList, fKind))
 
 		case None if finesse.isDefined && knownLayeredIds.isDefined =>
 			Some(FinesseConn(reacting, finesse.get, knownLayeredIds.get.toList, FinesseKind.Hidden))

@@ -4,7 +4,7 @@ import cats.effect.unsafe.implicits.global
 
 import scala_bot.refSieve.RefSieve
 import scala_bot.basics._
-import scala_bot.test.{fullyKnown, hasInfs, hasStatus, Player, setup, takeTurn}, Player._
+import scala_bot.test.{fullyKnown, hasInfs, hasStatus, Player, preClue, setup, takeTurn}, Player._
 
 import scala_bot.utils.pipe
 import scala_bot.logger.{Logger, LogLevel}
@@ -110,3 +110,20 @@ class SafeActions extends munit.FunSuite:
 		hasStatus(game, Alice, 5, CardStatus.GentlemansDiscard)
 		hasInfs(game, None, Alice, 5, Vector("y1"))
 		assert(game.common.obviousPlayables(game, Alice.ordinal).contains(1))
+
+	test("it counts dupes as bad touch"):
+		val game = setup(RefSieve.apply, Vector(
+			Vector("xx", "xx", "xx", "xx", "xx"),
+			Vector("b1", "r4", "g3", "r1", "r4"),
+			Vector("y3", "y3", "g4", "g4", "b3"),
+		),
+			playStacks = Some(Vector(3, 0, 0, 0, 0)),
+			init = preClue(Bob, 5, Seq("4")),
+			clueTokens = 7
+		)
+
+		val hypo = takeTurn("Alice clues red to Bob")(game)
+		val (badTouch, trash, _) = badTouchResult(game, hypo, hypo.state.actionList.last(0).asInstanceOf[ClueAction])
+
+		assertEquals(badTouch, List(8, 6))
+		assert(trash.isEmpty)

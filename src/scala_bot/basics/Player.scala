@@ -130,6 +130,7 @@ case class Player(
 		candidates.exists: o =>
 			o != excludeOrder &&
 			thoughts(o).matches(id, infer = true) &&
+			game.state.deck(o).matches(id, assume = true) &&		// card must actually match
 			// Not sharing a link
 			!links.exists:
 				case Link.Unpromised(orders, ids) =>
@@ -243,10 +244,11 @@ case class Player(
 		game.state.hands(playerIndex).filter(orderTrash(game, _))
 
 	/** Returns the orders that could be discarded from the player's hand (may not be trash).*/
-	def discardable(game: Game, playerIndex: Int) =
+	def discardable(game: Game, playerIndex: Int, allowLockedSacrifice: Boolean = false) =
 		game.state.hands(playerIndex).filter: order =>
 			orderTrash(game, order) ||
 			thoughts(order).possibilities.forall(isSieved(game, _, order)) || {
+				allowLockedSacrifice &&
 				game.common.thinksLocked(game, playerIndex) &&
 				game.state.deck(order).clued &&
 				thoughts(order).possibilities.intersect(game.state.criticalSet).isEmpty

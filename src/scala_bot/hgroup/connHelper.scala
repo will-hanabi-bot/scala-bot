@@ -22,13 +22,15 @@ def assignConns(game: HGroup, action: ClueAction, fps: Seq[FocusPossibility], fo
 
 	// Don't assign symmetric/ambiguous/save connections
 	val toAssign = fps.filterNot(fp => fp.symmetric || fp.ambiguous || fp.save || fp.complicated)
+	val modified = scala.collection.mutable.Set.empty[Int]
+	val shifted = scala.collection.mutable.Set.empty[Int]
 
-	toAssign.foldLeft((Set.empty[Int], game)) { case ((m, a), fp) =>
+	toAssign.foldLeft(game): (a, fp) =>
 		val connsToAssign = fp.connections.filter:
 			case p: PlayableConn if fp.isBluff && !mustBluffPlayables.contains(p.order) => false
 			case _ => true
 
-		connsToAssign.foldLeft((m, a)) { case ((modified, acc), conn) =>
+		connsToAssign.foldLeft(a): (acc, conn) =>
 			val connI = fp.connections.indexOf(conn)
 			Log.info(s"assigning connection ${state.logConn(conn)}")
 			val isBluff = conn.matchesP { case f: FinesseConn => f.bluff }
@@ -169,19 +171,22 @@ def assignConns(game: HGroup, action: ClueAction, fps: Seq[FocusPossibility], fo
 						if target == state.ourPlayerIndex then
 							// Write the shifted connections when we insert into our own layered finesse
 							insertOrders.foldLeft(g): (acc, order) =>
-								val finesse = g.findFinesse(f.reacting).getOrElse(throw new Error(s"tried to insert into $order but they had no finesse position!"))
-								Log.info(s"shifting finesse to $finesse for old ids [${game.common.strInfs(state, order)}]")
+								if shifted.contains(order) then acc else
+									val finesse = g.findFinesse(f.reacting).getOrElse(throw new Error(s"tried to insert into $order but they had no finesse position!"))
+									Log.info(s"shifting finesse to $finesse for old ids [${game.common.strInfs(state, order)}]")
 
-								acc.withThought(finesse): t =>
-									t.copy(inferred = t.inferred.intersect(game.common.thoughts(order).inferred))
-								.withMeta(finesse)(_.copy(status = CardStatus.Finessed).reason(state.turnCount))
-								.withXMeta(finesse):
-									_.copy(
-										idUncertain = true,
-										fStatus = Nil,
-										finesseIds = game.xmeta(order).finesseIds,
-										turnFinessed = Some(state.turnCount)
-									)
+									shifted += order
+
+									acc.withThought(finesse): t =>
+										t.copy(inferred = t.inferred.intersect(game.common.thoughts(order).inferred))
+									.withMeta(finesse)(_.copy(status = CardStatus.Finessed).reason(state.turnCount))
+									.withXMeta(finesse):
+										_.copy(
+											idUncertain = true,
+											fStatus = Nil,
+											finesseIds = game.xmeta(order).finesseIds,
+											turnFinessed = Some(state.turnCount)
+										)
 						else
 							// Otherwise, the receiver now knows the layer exists, so it's not hidden anymore
 							state.hands(conn.reacting).foldLeft(g): (acc, order) =>
@@ -194,9 +199,8 @@ def assignConns(game: HGroup, action: ClueAction, fps: Seq[FocusPossibility], fo
 			.withMeta(conn.order)(_.reason(state.turnCount))
 
 			// TODO: Finesses while finessed?
-			(modified + conn.order, newGame)
-		}
-	}._2
+			modified += conn.order
+			newGame
 
 def importantFinesse(state: State, action: ClueAction, fps: Seq[FocusPossibility]) =
 	val ClueAction(giver, target, _, _) = action

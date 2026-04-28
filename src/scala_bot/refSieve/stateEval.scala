@@ -34,7 +34,7 @@ def getResult(game: RefSieve, hypo: RefSieve, action: ClueAction): Double =
 		case Some(ClueInterp.Reveal) if playables.isEmpty && trash.nonEmpty && trash.forall(state.deck(_).clued) =>
 			Log.warn(s"clue ${clue.fmt(state, target)} only reveals new trash but isn't a trash push!")
 			-100
-		case Some(i) if i != ClueInterp.Reactive && badTouch.nonEmpty && newTouched.forall(badTouch.contains) && playables.isEmpty =>
+		case Some(i) if i != ClueInterp.Fix && badTouch.nonEmpty && newTouched.forall(badTouch.contains) && playables.isEmpty =>
 			Log.warn(s"clue ${clue.fmt(state, target)} only bad touches and gets no playables! ${common.hypoPlays}")
 			-100
 		case _ =>
@@ -65,7 +65,7 @@ def getResult(game: RefSieve, hypo: RefSieve, action: ClueAction): Double =
 			else 0
 
 			val playablesS = playables.map(state.logId(_)).mkString(", ")
-			Log.info(s"good touch: $goodTouch, playables: $playablesS, duped: $dupedPlayables, trash: ${trash.length}, fill: ${fill.length}, elim: ${elim.length}, bad touch: $badTouch, locked: $lockedTouch, ${hypo.lastMove}")
+			Log.info(s"good touch: $goodTouch, playables: $playablesS, duped: $dupedPlayables, trash: $revealedTrash, fill: ${fill.length}, elim: ${elim.length}, bad touch: $badTouch, locked: $lockedTouch, ${hypo.lastMove}")
 
 			val value = goodTouch +
 				- 2.0 * dupedPlayables +
@@ -186,7 +186,11 @@ def advance(orig: RefSieve, game: RefSieve, offset: Int): Double =
 				else
 					0.8
 
-				clueProb * clueValue + (1.0 - clueProb) * dcValue
+				if clueValue < dcValue then
+					Log.info(s"won't assume ${state.names(playerIndex)} will clue! too low value")
+					dcValue
+				else
+					clueProb * clueValue + (1.0 - clueProb) * dcValue
 
 		urgentDc.orElse(trash.headOption) match
 			case None =>
@@ -198,67 +202,95 @@ def advance(orig: RefSieve, game: RefSieve, offset: Int): Double =
 def _evalAction(game: RefSieve, action: Action): Double =
 	Log.highlight(Console.GREEN, s"===== Predicting value for ${action.fmt(game.state)} =====")
 	val state = game.state
-	val hypoGame = game.simulate(action)
 
-	val mistake = hypoGame.lastMove.matchesP:
-		case Some(ClueInterp.Mistake) if action.isInstanceOf[ClueAction] => true
-		case Some(DiscardInterp.Mistake) if action.isInstanceOf[DiscardAction] => true
-
-	val value = action match
-		case _ if mistake => -100
-
+	val (lastMove, value) = action match
 		case clue: ClueAction =>
-			val mult = if !game.me.thinksPlayables(game, state.ourPlayerIndex).isEmpty then
-				if state.inEndgame then 0.1 else 0.25
-			else
-				0.5
-			getResult(game, hypoGame, clue) * mult - 0.5
+			val hypoGame = game.simulate(action)
 
-		case PlayAction(_, _, suitIndex, rank) =>
+			if hypoGame.lastMove == Some(ClueInterp.Mistake) then
+				(ClueInterp.Mistake, -100.0)
+			else
+				val mult = if !game.me.thinksPlayables(game, state.ourPlayerIndex).isEmpty then
+					if state.inEndgame then 0.1 else 0.25
+				else
+					0.5
+
+				val initial = getResult(game, hypoGame, clue) * mult - 0.5
+				Log.info(s"initial clue value: $initial")
+
+				val value = initial + advance(game, hypoGame, 1)
+				(hypoGame.lastMove.get, value)
+
+		case PlayAction(_, _, suitIndex, rank) if suitIndex != -1 && rank != -1 =>
+			val hypoGame = game.simulate(action)
 			val nextPlayer = state.nextPlayerIndex(state.ourPlayerIndex)
 
-			// Partner is still locked after the play
-			if state.numPlayers == 2 && hypoGame.common.thinksLocked(hypoGame, nextPlayer) then
-				val unlockability = hypoGame.state.hands(nextPlayer).maximizing(0.0): o =>
-					state.deck(o).id() match
-						case Some(id) if id.suitIndex == suitIndex => 0.02 * (5 + hypoGame.me.hypoStacks(suitIndex) - id.rank)
-						case _ => 0
+			val initial =
+				// Partner is still locked after the play
+				if state.numPlayers == 2 && hypoGame.common.thinksLocked(hypoGame, nextPlayer) then
+					val unlockability = hypoGame.state.hands(nextPlayer).maximizing(0.0): o =>
+						state.deck(o).id() match
+							case Some(id) if id.suitIndex == suitIndex => 0.02 * (5 + hypoGame.me.hypoStacks(suitIndex) - id.rank)
+							case _ => 0
 
-				// Unlockable
-				if unlockability != 0 then
-					unlockability
+					// Unlockable
+					if unlockability != 0 then
+						unlockability
+					else
+						0.02 * (5 - rank)
+				else if suitIndex == -1 || rank == -1 then
+					1.5
 				else
 					0.02 * (5 - rank)
-			else if suitIndex == -1 || rank == -1 then
-				1.5
-			else
-				0.02 * (5 - rank)
+
+			val value = initial + advance(game, hypoGame, 1)
+			(hypoGame.lastMove.getOrElse(PlayInterp.None), value)
+
+		case PlayAction(playerIndex, order, _, _) =>
+			val uniqueInfs = game.me.thoughts(order).inferred.toList.filterNot: id =>
+				visibleFind(state, game.me, id, cond = (playerIndex, _) => playerIndex != state.ourPlayerIndex).exists(state.deck(_).clued)
+
+			uniqueInfs.foldLeftOpt[(Interp, Double)]((PlayInterp.None, 0.0)):
+				case ((_, value), id) =>
+					Log.highlight(Console.GREEN, s"playing ${state.logId(id)}")
+					val hypoGame = game.simulate(PlayAction(playerIndex, order, id.suitIndex, id.rank))
+
+					if hypoGame.lastMove == Some(PlayInterp.Mistake) then
+						Left((PlayInterp.Mistake, -100.0))
+					else
+						val best = advance(game, hypoGame, 1)
+						Log.info(f"${action.fmt(state)}%s: $best%.2f (${hypoGame.lastMove}%s)")
+						Right((hypoGame.lastMove.get, value + best))
+			.pipe: (lastMove, value) =>
+				(lastMove, value / uniqueInfs.length)
 
 		case DiscardAction(_, order, suitIndex, rank, _) =>
-			if game.meta(order).status == CardStatus.PermissionToDiscard then
-				-0.1
-			else if hypoGame.lastMove != Some(DiscardInterp.Sacrifice) then
-				0
-			else
-				if rank != -1 then
-					2.5 * Array(0, 0, -3, -1.5, -1, -20)(rank)
+			val hypoGame = game.simulate(action)
+			val initial =
+				if game.meta(order).status == CardStatus.PermissionToDiscard then
+					-0.1
+				else if hypoGame.lastMove != Some(DiscardInterp.Sacrifice) || (suitIndex != -1 && rank != -1) then
+					0	// discarding a known card will be handled by bdr value
 				else
-					val poss = hypoGame.me.thoughts(order).possibilities
-					poss.summing2: id =>
-						2.5 * Array(0, 0, -3, -1.5, -1, -20)(id.rank)
-					/ poss.length
+					if rank != -1 then
+						2.5 * Array(0, 0, -3, -1.5, -1, -20)(rank)
+					else
+						val poss = hypoGame.me.thoughts(order).possibilities
+						poss.summing2: id =>
+							2.5 * Array(0, 0, -3, -1.5, -1, -20)(id.rank)
+						/ poss.length
 
-		case _ => 0
+			val value = initial + advance(game, hypoGame, 1)
+			(hypoGame.lastMove.get, value)
+
+		case _ => throw new Error("impossible")
 
 	if value == -100 then
 		Log.info("mistake! -100")
 		-100
 	else
-		Log.info(f"starting value $value%.2f")
-
-		val best = value + advance(game, hypoGame, 1)
-		Log.info(f"${action.fmt(state)}%s: $best%.2f (${hypoGame.lastMove}%s)")
-		best
+		Log.info(f"${action.fmt(state)}%s: $value%.2f ($lastMove%s)")
+		value
 
 def evalState(state: State): Double =
 	val scoreVal: Double = state.score
@@ -343,7 +375,7 @@ def evalGame(orig: RefSieve, game: RefSieve): Double =
 			-0.1
 		else
 			id.rank match
-				case 1 => -math.pow(discarded.length, 2)
+				case 1 => -math.pow(state.discardStacks(id.suitIndex)(id.rank - 1).length, 2)
 				case 2 => -3
 				case 3 => -1.5
 				case _ => if state.numPlayers == 2 then -0.25 else -1

@@ -291,10 +291,10 @@ def interpClue(ctx: ClueContext): HGroup =
 		val newCtx = ctx.copy(game = g)
 		interpretTccm(newCtx) match
 			case Some(tccm) if stall.isEmpty || thinksStall.isEmpty =>
-				performCM(g, tccm).withMove(evaluateCM(newCtx, tccm))
+				performCM(g, tccm).withMove(evaluateCM(newCtx, tccm), overwrite = true)
 			case Some(_) =>
 				Log.info("stalling situation, tempo clue stall!")
-				g.withMove(ClueInterp.Stall).copy(stallInterp = Some(StallInterp.Tempo))
+				g.withMove(ClueInterp.Stall, overwrite = true).copy(stallInterp = Some(StallInterp.Tempo))
 			case _ =>
 				g
 
@@ -304,4 +304,4 @@ def interpClue(ctx: ClueContext): HGroup =
 			acc.withThought(o)(t => t.copy(inferred = t.inferred.filter(_.rank == 1)))
 
 	.when(g => unacceptableClue(prev, g, action)): g =>
-		g.withMove(ClueInterp.Mistake)
+		g.withMove(ClueInterp.Mistake, overwrite = true)

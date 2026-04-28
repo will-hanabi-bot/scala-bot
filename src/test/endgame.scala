@@ -303,13 +303,13 @@ class Endgame extends munit.FunSuite:
 		val game = setup(Reactor.apply, Vector(
 			Vector("xx", "xx", "xx", "xx", "xx"),
 			Vector("o5", "o1", "g4", "r1", "y1"),
-			Vector("o1", "g1", "b4", "b2", "b5"),
+			Vector("g2", "g3", "b4", "b2", "b5"),
 		),
 			playStacks = Some(Vector(5, 5, 5, 4, 4)),
 			discarded =  Vector(
 				"y1", "y2",
-				"g1", "g2", "g3",
-				"o2", "o3", "o4"
+				"g1", "g1",
+				"o1", "o2", "o3", "o4"
 			),	// Missing: r2, y4, y3, b3, b1, b1, r4
 			clueTokens = 5,
 			variant = TestVariant.Omni5,

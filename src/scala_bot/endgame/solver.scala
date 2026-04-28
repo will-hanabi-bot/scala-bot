@@ -473,8 +473,21 @@ case class EndgameSolver[G <: Game](
 			val dcActions = if ignoreDc then Nil else
 				ops.findAllDiscards(game, playerTurn).map(tryAction).flatten
 
+			// If we have less known crits than everyone else, prefer dc
+			// val preferDc =
+			// 	val ownCrits = state.ourHand.count(game.me.thoughts(_).possible.forall(state.isCritical))
+			// 	val minCrits = state.hands.zipWithIndex.minimizing(99): (hand, index) =>
+			// 		if index == state.ourPlayerIndex then
+			// 			99
+			// 		else
+			// 			hand.count(game.players(index).thoughts(_).possible.forall(state.isCritical))
+			// 	ownCrits < minCrits
+
+			val preferDc = state.hands.zipWithIndex.forall: (hand, i) =>
+				i == playerTurn || hand.forall(o => !state.isPlayable(state.deck(o).id().get))
+
 			// If no playables are visible, try discarding before cluing
-			if state.hands.zipWithIndex.forall((hand, i) => i == playerTurn || hand.forall(o => !state.isPlayable(state.deck(o).id().get))) then
+			if preferDc then
 				playActions.concat(dcActions).concat(clueActions)
 			else
 				playActions.concat(clueActions).concat(dcActions)

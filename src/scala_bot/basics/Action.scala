@@ -7,10 +7,9 @@ import scala_bot.logger.Log
   */
 sealed trait Action:
 	def fmt(state: State): String
-
 	def playerIndex: Int
-
 	def requiresDraw: Boolean
+	def isPlayerAction: Boolean
 
 /** @param clues The number of clues in the bank.
   * @param score The current score.
@@ -25,8 +24,8 @@ case class StatusAction(
 		s"Status! Clues: $clues, Score: $score/$maxScore"
 
 	def playerIndex = -1
-
 	def requiresDraw = false
+	def isPlayerAction = false
 
 object StatusAction:
 	def fromJSON(json: ujson.Value) =
@@ -47,8 +46,8 @@ case class TurnAction(
 		s"Turn $num (${state.names(currentPlayerIndex)})"
 
 	def playerIndex = currentPlayerIndex
-
 	def requiresDraw = false
+	def isPlayerAction = false
 
 object TurnAction:
 	def fromJSON(json: ujson.Value) =
@@ -75,8 +74,8 @@ case class ClueAction(
 		s"${state.names(giver)} clues $value to ${state.names(target)}"
 
 	def playerIndex = giver
-
 	def requiresDraw = false
+	def isPlayerAction = true
 
 object ClueAction:
 	def fromJSON(json: ujson.Value) =
@@ -111,6 +110,7 @@ case class DrawAction(
 		s"${state.names(playerIndex)} draws ${logId(state, suitIndex, rank)} ($order)"
 
 	def requiresDraw = false
+	def isPlayerAction = false
 
 object DrawAction:
 	def fromJSON(json: ujson.Value) =
@@ -136,6 +136,7 @@ case class PlayAction(
 		s"${state.names(playerIndex)} plays ${logId(state, suitIndex, rank)} ($order)"
 
 	def requiresDraw = true
+	def isPlayerAction = true
 
 object PlayAction:
 	def fromJSON(json: ujson.Value) =
@@ -171,6 +172,7 @@ case class DiscardAction(
 		s"${state.names(playerIndex)} $verb ${logId(state, suitIndex, rank)} ($order)"
 
 	def requiresDraw = true
+	def isPlayerAction = true
 
 object DiscardAction:
 	def fromJSON(json: ujson.Value) =
@@ -199,10 +201,9 @@ case class StrikeAction(
 	order: Int
 ) extends Action:
 	def fmt(state: State) = ""
-
 	def playerIndex = -1
-
 	def requiresDraw = false
+	def isPlayerAction = false
 
 object StrikeAction:
 	def fromJSON(json: ujson.Value) =
@@ -225,8 +226,8 @@ case class GameOverAction(
 	playerIndex: Int
 ) extends Action:
 	def fmt(state: State) = "Game over!"
-
 	def requiresDraw = false
+	def isPlayerAction = false
 
 object GameOverAction:
 	def fromJSON(json: ujson.Value) =
@@ -241,10 +242,9 @@ object GameOverAction:
   */
 case class InterpAction(interp: ClueInterp) extends Action:
 	def fmt(state: State) = ""
-
 	def playerIndex = -1
-
 	def requiresDraw = false
+	def isPlayerAction = false
 
 object InterpAction:
 	def fromJSON(json: ujson.Value) =

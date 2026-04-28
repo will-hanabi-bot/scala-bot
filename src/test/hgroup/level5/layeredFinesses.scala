@@ -352,3 +352,50 @@ class LayeredFinesses extends munit.FunSuite:
 
 		// Alice is not finessed.
 		hasStatus(game, Alice, 1, CardStatus.None)
+
+	test("shifts into a layered finesse properly"):
+		val game = setup(HGroup.atLevel(10), Vector(
+			Vector("xx", "xx", "xx", "xx", "xx"),
+			Vector("b4", "b3", "b2", "g2", "y5")
+		),
+			starting = Bob,
+			variant = Variant(1562, "White-Ones & Dark Prism (5 Suits)",
+				Vector("Red", "Yellow", "Green", "Blue", "Dark Prism"),
+				shorts = Some(Vector('r', 'y', 'g', 'b', 'i')),
+				specialRank = Some(1),
+				whiteS = true
+			)
+		)
+		.pipe(takeTurn("Bob clues green to Alice (slot 4)"))	// g1 self-finesse
+		.pipe(takeTurn("Alice clues 5 to Bob"))
+		.pipe(takeTurn("Bob clues yellow to Alice (slot 3)"))	// y1 self-finesse
+		.pipe(takeTurn("Alice plays r1 (slot 1)"))
+
+		hasStatus(game, Alice, 2, CardStatus.Finessed)
+		hasStatus(game, Alice, 5, CardStatus.Finessed)
+
+	test("handles a purge properly"):
+		setup(HGroup.atLevel(10), Vector(
+			Vector("xx", "xx", "xx", "xx", "xx"),
+			Vector("b4", "b3", "b2", "g4", "y5")
+		),
+			starting = Bob,
+			variant = Variant(1562, "White-Ones & Dark Prism (5 Suits)",
+				Vector("Red", "Yellow", "Green", "Blue", "Dark Prism"),
+				shorts = Some(Vector('r', 'y', 'g', 'b', 'i')),
+				specialRank = Some(1),
+				whiteS = true
+			)
+		)
+		.pipe(takeTurn("Bob clues green to Alice (slot 4)"))	// g1 self-finesse
+		.pipe(takeTurn("Alice clues 5 to Bob"))
+		.pipe(takeTurn("Bob clues yellow to Alice (slot 3)"))	// y1 self-finesse
+		.tap: g =>
+			assert(g.common.thinksPlayables(g, Alice.ordinal).contains(g.state.hands(Alice.ordinal)(0)))
+		.pipe(takeTurn("Alice plays r1 (slot 1)"))
+		.pipe(takeTurn("Bob discards g4", "y4"))
+		.tap: g =>
+			assert(g.common.thinksPlayables(g, Alice.ordinal).contains(g.state.hands(Alice.ordinal)(1)))
+		.pipe(takeTurn("Alice plays b1 (slot 2)"))
+
+		// It is now impossible to fulfill both the green and yellow finesses.

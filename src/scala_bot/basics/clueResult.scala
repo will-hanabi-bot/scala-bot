@@ -75,6 +75,14 @@ def badTouchResult(prev: Game, game: Game, action: ClueAction) =
 
 	val avoidableDupe = dupeScores(giver) - dupeScores.min
 
+	def areDupes(o1: Int, o2: Int, badTouch: List[Int], trash: List[Int]) =
+		o1 != o2 &&
+		state.deck(o1).clued && state.deck(o2).clued &&
+		game.me.thoughts(o1).matches(state.deck(o2)) &&
+		!badTouch.contains(o2) &&
+		!trash.contains(o2) &&
+		(game.common.thoughts(o1).id().isEmpty || game.common.thoughts(o2).id().isEmpty)
+
 	val inter = state.hands(target).foldRight((List[Int](), List[Int]())) { case (order, (badTouch, trash)) =>
 		if prev.state.deck(order).clued || !state.deck(order).clued then
 			(badTouch, trash)
@@ -82,21 +90,19 @@ def badTouchResult(prev: Game, game: Game, action: ClueAction) =
 			(badTouch, order +: trash)
 		else
 			state.deck(order).id() match
-				case Some(id) if state.isBasicTrash(id) =>
+				case Some(id) if state.isBasicTrash(id) || state.hands(target).exists(areDupes(order, _, badTouch, trash)) =>
 					(order +: badTouch, trash)
 				case _ => (badTouch, trash)
 	}
 
 	// Previously-finessed cards can be reset (and no longer touched) after the clue, so double-check for "duplicates".
 	val (badTouch, trash) = state.hands(target).foldRight(inter) { case (order, (badTouch, trash)) =>
-		lazy val duplicated =
+		val duplicated =
 			(!prev.state.deck(order).clued && state.deck(order).clued && !badTouch.contains(order) && !trash.contains(order)) &&
-			state.hands.zipWithIndex.exists: (hand, i) =>
+			state.hands.exists: hand =>
 				hand.exists: o =>
-					!trash.contains(o) &&
 					(prev.isTouched(o) || game.isTouched(o)) &&
-					game.me.thoughts(o).matches(state.deck(order), infer = true) &&
-					(i != target || o < order)
+					areDupes(order, o, badTouch, trash)
 
 		if duplicated then
 			(order +: badTouch, trash)

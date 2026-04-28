@@ -85,19 +85,16 @@ def interpretReactiveColour(prev: Reactor, game: Reactor, action: ClueAction, fo
 				.filter: (o, _) =>
 					!prevKt.contains(o) &&
 					(state.isBasicTrash(state.deck(o).id().get) ||
-						state.hands(receiver).exists(o2 => o2 != o && state.deck(o).matches(state.deck(o2)))) // duped in the same hand
+						state.hands(receiver).exists(o2 => o2 < o && state.deck(o).matches(state.deck(o2)))) // newer dupe in the same hand is trash
 				.sortBy: (o, _) =>
 					if prev.state.deck(o).clued then
-						0
-					else if state.hands(receiver).exists(o2 => o2 < o && prev.state.deck(o2).clued && state.deck(o).matches(state.deck(o2))) then
-						-1		// Unclued dupe, with a clued dupe
+						-1
 					else
 						1
 
-			val unknownDupes = state.hands(receiver).zipWithIndex
-				.filter: (o, _) =>
-					!prevKt.contains(o) &&
-					state.hands.flatten.exists(o2 => o2 != o && game.common.thoughts(o2).matches(state.deck(o), infer = true))
+			val unknownDupes = state.hands(receiver).zipWithIndex.filter: (o, _) =>
+				!prevKt.contains(o) &&
+				state.hands.flatten.exists(o2 => o2 != o && game.common.thoughts(o2).matches(state.deck(o), infer = true))
 
 			lazy val knownTrash = state.hands(receiver).zipWithIndex.filter: (o, _) =>
 				state.isBasicTrash(state.deck(o).id().get)

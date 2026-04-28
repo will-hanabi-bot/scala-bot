@@ -90,8 +90,23 @@ def interpretUsefulDc(game: Game, action: DiscardAction): DiscardResult =
 						DiscardResult.Mistake
 
 					case Some(orders) =>
-						Log.info(s"gd to our $orders")
-						DiscardResult.GentlemansDiscard(orders)
+						val linked = orders.length == 1 && {
+							val order = orders.head
+
+							state.deck(order).clued &&
+							game.common.orderPlayable(game, order)
+						}
+
+						if linked then
+							val matching = state.hands(state.ourPlayerIndex).filter: o =>
+								state.deck(o).clued &&
+								common.thoughts(o).possible.contains(id)
+
+							Log.info(s"gd (sarcastic) to our $matching")
+							DiscardResult.Sarcastic(matching)
+						else
+							Log.info(s"gd to our $orders")
+							DiscardResult.GentlemansDiscard(orders)
 
 			case None =>
 				val orders = state.ourHand.filter(validTransfer(game, id))

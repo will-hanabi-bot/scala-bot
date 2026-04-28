@@ -4,7 +4,7 @@ import cats.effect.unsafe.implicits.global
 
 import scala_bot.reactor.Reactor
 import scala_bot.basics._
-import scala_bot.test.{hasInfs, hasStatus, Player, setup, takeTurn, TestVariant}, Player._
+import scala_bot.test.{hasInfs, hasStatus, Player, preClue, setup, takeTurn, TestVariant}, Player._
 
 import scala_bot.utils.pipe
 import scala_bot.logger.{Logger, LogLevel}
@@ -47,6 +47,23 @@ class Variants extends munit.FunSuite:
 		// Alice does not have a playable.
 		assert(game.common.obviousPlayables(game, Alice.ordinal).isEmpty)
 		hasStatus(game, Alice, 1, CardStatus.None)
+
+	test("it doesn't brown tcm when it can't be saving a brown on chop"):
+		val game = setup(Reactor.apply, Vector(
+			Vector("xx", "xx", "xx", "xx", "xx"),
+			Vector("b1", "r1", "r4", "y4", "y4"),
+			Vector("g4", "g1", "g4", "b4", "b4")
+		),
+			playStacks = Some(Vector(1, 2, 1, 1, 2)),
+			variant = TestVariant.Brown5,
+			init = preClue(Alice, 5, Seq("1")),
+			starting = Cathy
+		)
+		.pipe(takeTurn("Cathy clues 1 to Alice (slots 2,4)"))
+
+		// Since Alice had a safe action, this is a trash push.
+		assertEquals(game.common.obviousPlayables(game, Alice.ordinal), Vector(game.state.hands(Alice.ordinal)(0)))
+		hasStatus(game, Alice, 1, CardStatus.CalledToPlay)
 
 	test("it uses value cluing for pink"):
 		val game = setup(Reactor.apply, Vector(

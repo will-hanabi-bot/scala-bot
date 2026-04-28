@@ -192,7 +192,7 @@ class Reactive extends munit.FunSuite:
 
 		assertEquals(game.takeAction.unsafeRunSync(), PerformAction.Play(game.state.hands(Alice.ordinal)(0)))
 
-	test("it doesnt play target an unclued dupe"):
+	test("it doesn't play target an unclued dupe"):
 		val game = setup(Reactor.apply, Vector(
 			Vector("xx", "xx", "xx", "xx", "xx"),
 			Vector("r3", "g2", "r2", "r3", "g5"),
@@ -208,7 +208,7 @@ class Reactive extends munit.FunSuite:
 		// We should discard slot 5 (so that Bob plays slot 2).
 		hasStatus(game, Alice, 5, CardStatus.CalledToDiscard)
 
-	test("it doesnt play target a discarding dupe"):
+	test("it doesn't play target a discarding dupe"):
 		val game = setup(Reactor.apply, Vector(
 			Vector("xx", "xx", "xx", "xx", "xx"),
 			Vector("r3", "g2", "y3", "r3", "g5"),
@@ -227,7 +227,7 @@ class Reactive extends munit.FunSuite:
 		// We should discard slot 4 (so that Bob plays the non-discarding dupe in slot 4).
 		hasStatus(game, Alice, 4, CardStatus.CalledToDiscard)
 
-	test("it doesnt dc target an unclued dupe"):
+	test("it targets an unclued dupe for dc"):
 		val game = setup(Reactor.apply, Vector(
 			Vector("xx", "xx", "xx", "xx", "xx"),
 			Vector("r3", "y1", "r2", "r3", "g5"),
@@ -241,6 +241,23 @@ class Reactive extends munit.FunSuite:
 
 		// We should play slot 4 (so that Bob discards slot 1).
 		hasStatus(game, Alice, 4, CardStatus.CalledToPlay)
+
+	test("it targets clued trash over unclued dupe for dc"):
+		val game = setup(Reactor.apply, Vector(
+			Vector("xx", "xx", "xx", "xx", "xx"),
+			Vector("r3", "y1", "r2", "r3", "g5"),
+			Vector("g1", "b5", "p2", "b1", "g4"),
+		),
+			starting = Cathy,
+			playStacks = Some(Vector(0, 1, 0, 0, 0)),
+			init =
+				preClue[Reactor](Bob, 2, Seq("yellow")) andThen
+				preClue[Reactor](Bob, 4, Seq("red"))
+		)
+		.pipe(takeTurn("Cathy clues green to Bob"))
+
+		// We should play slot 3 (so that Bob discards slot 2).
+		hasStatus(game, Alice, 3, CardStatus.CalledToPlay)
 
 	test("it reacts to a sacrifice"):
 		val game = setup(Reactor.apply, Vector(

@@ -1,4 +1,4 @@
-LATEST_VER=0.10.4
+LATEST_VER=0.10.5
 JVM_OPTS=-Xms128m -Xmx192m -Xss256k -XX:MaxMetaspaceSize=96m -XX:ReservedCodeCacheSize=64m -XX:+UseSerialGC
 NATIVE_IMAGE=
 

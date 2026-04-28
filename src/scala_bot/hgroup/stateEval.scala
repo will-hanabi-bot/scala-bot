@@ -266,6 +266,9 @@ def advance(orig: HGroup, game: HGroup, offset: Int): Double =
 						else
 							Log.info(s"no visible clue available for ${state.names(playerIndex)}, lowering clue prob to 0")
 							dcVal
+					else if clueVal < dcVal then
+						Log.info(s"won't assume ${state.names(playerIndex)} will clue! too low value")
+						dcVal
 					else
 						clueProb * clueVal + (1.0 - clueProb) * dcVal
 				else

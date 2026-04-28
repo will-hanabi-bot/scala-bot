@@ -174,7 +174,11 @@ def advance(orig: Reactor, game: Reactor, offset: Int): Double =
 				else
 					0.8
 
-				clueProb * clueValue + (1.0 - clueProb) * dcValue
+				if clueValue < dcValue then
+					Log.info(s"won't assume ${state.names(playerIndex)} will clue! too low value")
+					dcValue
+				else
+					clueProb * clueValue + (1.0 - clueProb) * dcValue
 
 		urgentDc.orElse(trash.headOption) match
 			case _ if offset == 1 && !game.withState(_.copy(currentPlayerIndex = playerIndex)).hasPtd =>

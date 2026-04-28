@@ -53,7 +53,7 @@ def refPlay(ctx: ClueContext, right: Boolean = false): (Option[ClueInterp], RefS
 				Log.info(s"ref play on ${state.names(clueTarget)}'s slot ${hand.indexOf(target) + 1} (focus $focus) infs ${result.common.strInfs(result.state, target)}")
 				(interp, result)
 
-def refDiscard(ctx: ClueContext): (Option[ClueInterp], RefSieve) =
+def refDiscard(ctx: ClueContext): (Some[ClueInterp], RefSieve) =
 	val ClueContext(prev, game, action) = ctx
 	val state = game.state
 	val clueTarget = action.target
@@ -201,17 +201,17 @@ def interpretLockedClue(ctx: ClueContext) =
 	if clue.kind == ClueKind.Rank then
 		if prevTrash.nonEmpty then
 			Log.info(s"target had previous trash $prevTrash, rank stall")
-			game
+			game.withMove(ClueInterp.Stall)
 		else if list.exists(!prev.state.deck(_).clued) then
 			refDiscard(ctx)	match
-				case (Some(ClueInterp.Stall), _) => writeLhPtd(game)
-				case (_, newGame) => newGame
+				case (Some(ClueInterp.Stall), _) => writeLhPtd(game).withMove(ClueInterp.Stall)
+				case (interp, newGame) => newGame.withMove(interp.get)
 		else
-			writeLhPtd(game)
+			writeLhPtd(game).withMove(ClueInterp.Stall)
 	else
 		val slot1 = state.hands(target).head
 
-		game.when(_ => list.contains(slot1)):
+		game.cond(_ => list.contains(slot1)) {
 			_.withThought(slot1): t =>
 				val delayedPlays = game.common.hypoStacks.zipWithIndex.map((stack, suitIndex) => Identity(suitIndex, stack + 1)).filter(state.isUseful)
 				t.copy(inferred = t.inferred.intersect(delayedPlays))
@@ -219,8 +219,12 @@ def interpretLockedClue(ctx: ClueContext) =
 				_.copy(status = CardStatus.CalledToPlay, by = Some(giver))
 					.reason(state.turnCount)
 					.signal(state.turnCount)
+			.withMove(ClueInterp.Play)
 			.tap: g =>
 				Log.info(s"slot 1 play on $slot1, new infs [${g.common.strInfs(g.state, slot1)}]")
+		} {
+			_.withMove(ClueInterp.Stall)
+		}
 		.cond(_.common.thinksTrash(game, target).nonEmpty) { g =>
 			Log.info(s"target had previous trash $prevTrash, colour stall")
 			g

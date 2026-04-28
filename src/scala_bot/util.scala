@@ -112,6 +112,13 @@ extension[A](it: Iterator[A])
 			currMax = numeric.max(currMax, f(it.next()))
 		currMax
 
+	/** Returns min(default, min of all elements transformed with the given function). */
+	def minimizing[N](default: N)(f: A => N)(using numeric: Numeric[N]) =
+		var currMin = default
+		while it.hasNext do
+			currMin = numeric.min(currMin, f(it.next()))
+		currMin
+
 extension [A](a: Iterable[A])
 	/** Returns true if any element causes the partial function to match and evaluate to true. */
 	def existsM(cond: PartialFunction[A, Boolean]): Boolean =
@@ -159,6 +166,16 @@ extension [A](a: Iterable[A])
 			currMax = numeric.max(currMax, f(it.next()))
 
 		currMax
+
+	/** Returns min(default, min of all elements transformed with the given function). */
+	def minimizing[N](default: N)(f: A => N)(using numeric: Numeric[N]) =
+		val it = a.iterator
+		var currMin = default
+
+		while it.hasNext do
+			currMin = numeric.min(currMin, f(it.next()))
+
+		currMin
 
 extension [A](seq: IndexedSeq[A])
 	inline def fastMap[B](inline f: A => B): IndexedSeq[B] =

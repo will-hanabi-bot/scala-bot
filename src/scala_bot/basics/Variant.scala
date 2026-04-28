@@ -146,27 +146,7 @@ object Variant:
 		id: Int,
 		name: String,
 		suitNames: Vector[String],
-		shorts: Vector[Char]
-	): Variant =
-		val suits = suitNames.zipWithIndex.map((name, i) => Suit(name, Some(shorts(i)), SuitType(name)))
-		val colourableSuits = suits.filterNot(suit => NO_COLOUR.matches(suit.name))
-
-		Variant(id, name, suits, shorts, colourableSuits,
-			criticalRank = None,
-			clueStarved = false,
-			specialRank = None,
-			rainbowS = false,
-			whiteS = false,
-			pinkS = false,
-			brownS = false,
-			deceptiveS = false,
-			scarce1s = false
-		)
-
-	def apply(
-		id: Int,
-		name: String,
-		suitNames: IndexedSeq[String],
+		shorts: Option[Vector[Char]] = None,
 		criticalRank: Option[Int] = None,
 		clueStarved: Boolean = false,
 		specialRank: Option[Int] = None,
@@ -177,42 +157,50 @@ object Variant:
 		deceptiveS: Boolean = false,
 		scarce1s: Boolean = false
 	): Variant =
-		val (suits, shortForms, colourableSuits) = suitNames.foldLeft((Vector.empty[Suit], Vector.empty[Char], Vector.empty[Suit])):
-			case ((suits, shortForms, colourableSuits), name) =>
-				val colour = Variant.colours.find(_.name == name)
+		val (suits, shortForms, colourableSuits) = shorts match
+			case Some(shortForms) =>
+				val suits = suitNames.zipWithIndex.map((name, i) => Suit(name, Some(shortForms(i)), SuitType(name)))
+				val colourableSuits = suits.filterNot(suit => NO_COLOUR.matches(suit.name))
+				(suits, shortForms, colourableSuits)
+			case None =>
+				suitNames.foldLeft((Vector.empty[Suit], Vector.empty[Char], Vector.empty[Suit])):
+					case ((suits, shortForms, colourableSuits), name) =>
+						val colour = Variant.colours.find(_.name == name)
 
-				val short: Char = name match
-					case "Black" => 'k'
-					case "Pink" => 'i'
-					case "Brown" => 'n'
-					case _ =>
-						val abbreviation = colour.flatMap(_.abbreviation).getOrElse(name.charAt(0).toLower)
-						if !shortForms.contains(abbreviation) then
-							abbreviation
+						val short: Char = name match
+							case "Black" => 'k'
+							case "Pink" => 'i'
+							case "Brown" => 'n'
+							case _ =>
+								val abbreviation = colour.flatMap(_.abbreviation).getOrElse(name.charAt(0).toLower)
+								if !shortForms.contains(abbreviation) then
+									abbreviation
+								else
+									name.toLowerCase.find(c => !shortForms.contains(c))
+										.getOrElse:
+											throw new IllegalArgumentException(s"No unused character found for suit '$name' in $suitNames!")
+
+						val suit = colour.getOrElse:
+							Suit(name, Some(short), SuitType(name))
+
+						if NO_COLOUR.matches(name) then
+							(suits :+ suit, shortForms :+ short, colourableSuits)
 						else
-							name.toLowerCase.find(c => !shortForms.contains(c))
-								.getOrElse:
-									throw new IllegalArgumentException(s"No unused character found for suit '$name' in $suitNames!")
+							(suits :+ suit, shortForms :+ short, colourableSuits :+ suit)
 
-				val suit = colour.getOrElse:
-					Suit(name, Some(short), SuitType(name))
-
-				if NO_COLOUR.matches(name) then
-					(suit +: suits, short +: shortForms, colourableSuits)
-				else
-					(suit +: suits, short +: shortForms, suit +: colourableSuits)
-
-		Variant(id, name, suits.reverse, shortForms.reverse, colourableSuits.reverse, criticalRank, clueStarved, specialRank, rainbowS, whiteS, pinkS, brownS, deceptiveS, scarce1s)
+		Variant(id, name, suits, shortForms, colourableSuits,
+			criticalRank,
+			clueStarved, specialRank, rainbowS, whiteS, pinkS, brownS, deceptiveS, scarce1s)
 
 	def fromJSON(json: ujson.Value) =
 		val obj = json.obj
 		Variant(
 			json("id").num.toInt,
 			json("name").str,
-			json("suits").arr.map(_.str).toIndexedSeq,
-			obj.get("criticalRank").map(_.num.toInt),
-			obj.get("clueStarved").map(_.bool).getOrElse(false),
-			obj.get("specialRank").map(_.num.toInt),
+			json("suits").arr.map(_.str).toVector,
+			criticalRank = obj.get("criticalRank").map(_.num.toInt),
+			clueStarved = obj.get("clueStarved").map(_.bool).getOrElse(false),
+			specialRank = obj.get("specialRank").map(_.num.toInt),
 			rainbowS = obj.get("specialRankAllClueColors").map(_.bool).getOrElse(false),
 			whiteS = obj.get("specialRankNoClueColors").map(_.bool).getOrElse(false),
 			pinkS = obj.get("specialRankAllClueRanks").map(_.bool).getOrElse(false),

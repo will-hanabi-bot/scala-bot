@@ -184,8 +184,16 @@ extension[G <: Game](game: G)
 			.pipe(f)
 			.pipe(ops.copyWith(_, GameUpdates(catchup = Some(false))))
 
-	def withMove(interp: Interp)(using ops: GameOps[G]): G =
-		ops.copyWith(game, GameUpdates(moveHistory = Some(game.moveHistory :+ interp)))
+	def withMove(interp: Interp, overwrite: Boolean = false)(using ops: GameOps[G]): G =
+		if !overwrite then
+			if game.moveHistory.length == game.state.actionList.count(_.exists(_.isPlayerAction)) then
+				throw new Error(s"trying to add move $interp to full move history (${game.moveHistory})")
+			else
+				ops.copyWith(game, GameUpdates(moveHistory = Some(game.moveHistory :+ interp)))
+		else if game.moveHistory.length < game.state.actionList.count(_.exists(_.isPlayerAction)) then
+			ops.copyWith(game, GameUpdates(moveHistory = Some(game.moveHistory :+ interp)))
+		else
+			ops.copyWith(game, GameUpdates(moveHistory = Some(game.moveHistory.updated(game.moveHistory.length - 1, interp))))
 
 	/** Returns an updated copy of the game after interpreting the given action. */
 	def handleAction(action: Action)(using ops: GameOps[G]): G =
@@ -193,6 +201,11 @@ extension[G <: Game](game: G)
 
 		if state.actionList.length < state.turnCount then
 			throw new IllegalStateException(s"Turn count ${state.turnCount}, actionList ${state.actionList.length} ${state.actionList}")
+
+		if action.isPlayerAction && game.moveHistory.length != game.state.actionList.count(_.exists(_.isPlayerAction)) then
+			println(s"failed, printing ${game.moveHistory}")
+			println(game.state.actionList.mkString("\n"))
+			throw new Error(s"trying to simulate ${action.fmt(state)}: expected move history (${game.moveHistory.length}) to be equal to action list (${game.state.actionList.count(_.exists(_.isPlayerAction))})!")
 
 		val newGame = withState(_.copy(actionList = addAction(state.actionList, action, state.turnCount)))
 
@@ -308,17 +321,19 @@ extension[G <: Game](game: G)
 		val playerIndex = action.playerIndex
 
 		val hypoGame = withCatchup:
-			_.handleAction(action)
-			.when(_ => action.requiresDraw): g =>
+			_.when(g => g.state.actionList.length > 1 && !g.state.actionList.last.exists(_.isInstanceOf[TurnAction])): g =>
 				g.handleAction(TurnAction(g.state.turnCount, playerIndex))
-				.when(_.state.cardsLeft > 0): g2 =>
-					val order = g2.state.nextCardOrder
+			.handleAction(action)
+			.when(action.requiresDraw && _.state.cardsLeft > 0): g =>
+				val order = g.state.nextCardOrder
 
-					val action = g2.deckIds.lift(order).flatten.orElse(draw) match
-						case Some(id) => DrawAction(playerIndex, order, id.suitIndex, id.rank)
-						case None     => DrawAction(playerIndex, order, -1, -1)
+				val action = g.deckIds.lift(order).flatten.orElse(draw) match
+					case Some(id) => DrawAction(playerIndex, order, id.suitIndex, id.rank)
+					case None     => DrawAction(playerIndex, order, -1, -1)
 
-					g2.handleAction(action)
+				g.handleAction(action)
+			.pipe: g =>
+				g.handleAction(TurnAction(g.state.turnCount, playerIndex))
 
 		Logger.setLevel(level)
 		hypoGame

@@ -219,7 +219,7 @@ object Reactor:
 							interpretStable(prev, g, action, stall = true)
 
 						case None =>
-							val reacter = (1 until state.numPlayers).view.map { i =>
+							val reacter = (1 until state.numPlayers).findSome: i =>
 								val playerIndex = (giver + i) % state.numPlayers
 
 								// The clue may reveal a new playable, or the clue may fix a bad-touched card that looked playable previously
@@ -233,7 +233,6 @@ object Reactor:
 								else
 									Log.info(s"${state.names(playerIndex)} has playables $playables, not reacter")
 									None
-							}.find(_.isDefined).flatten
 
 							val fixed = checkFix(prev, g, action) match
 								case FixResult.Normal(cluedResets, duplicateReveals) =>
@@ -270,7 +269,7 @@ object Reactor:
 			eliminatedGame
 				.when(_ => playsAfterElim.length < signalledPlays.length): g =>
 					Log.warn(s"lost play signal on ${signalledPlays.filterNot(playsAfterElim.contains)} after elim!")
-					g.withMove(ClueInterp.Mistake)
+					g.withMove(ClueInterp.Mistake, overwrite = true)
 				.when(_ => prev.state.canClue):
 					resetZcs
 				.when(!_.state.canClue):
@@ -344,7 +343,7 @@ object Reactor:
 
 								case DiscardResult.Baton(_) =>
 									throw new Error("baton unsupported!")
-						case None => g
+						case None => g.withMove(DiscardInterp.None)
 				.elim()
 				.when(_ => prev.state.canClue)(resetZcs)
 
@@ -357,6 +356,7 @@ object Reactor:
 						g.waiting match
 							case Some(wc) => reactPlay(prev, g, playerIndex, order, wc)
 							case None => g
+					.withMove(PlayInterp.None, overwrite = true)
 					.elim()
 					.when(_ => prev.state.canClue)(resetZcs)
 
@@ -583,11 +583,14 @@ object Reactor:
 
 				val clueResult = getResult(game, hypoGame, action)
 				val useful =
-					clueResult > -1 &&
-					(hypoGame.lastMove == Some(ClueInterp.Reactive) || state.hands(clue.target).exists: o =>
-						game.deckIds(o).forall(state.isUseful) &&
-						hypoGame.state.deck(o).clued &&
-						hypoGame.common.thoughts(o).possible.length < game.common.thoughts(o).possible.length)
+					clueResult > -1 && {
+						hypoGame.lastMove == Some(ClueInterp.Reactive) ||
+						hypoGame.common.hypoScore > game.common.hypoScore ||
+						state.hands(clue.target).exists: o =>
+							game.deckIds(o).forall(state.isUseful) &&
+							hypoGame.state.deck(o).clued &&
+							hypoGame.common.thoughts(o).possible.length < game.common.thoughts(o).possible.length
+					}
 
 				if useful then
 					clueResult

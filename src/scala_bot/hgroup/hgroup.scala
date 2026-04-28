@@ -410,6 +410,9 @@ case class HGroup(
 				&&
 				!waiting.find(_.connections.exists(_.order == o)).exists(this.potentialClandestineWc(playerIndex, o, _).isDefined)
 			}
+		.sortBy: o =>
+			// Discard leftmost clued trash (largest order), then rightmost unclued trash (smallest order)
+			if state.deck(o).clued then -o else o
 
 	/** Returns a potential clandestine finesse that may alter the id of the card with the given order.
 	  * @example See test "waits for a clandestine finesse to resolve".
@@ -551,7 +554,7 @@ object HGroup:
 					refreshWCs(prev, updatedPre, action)
 						.cond(_.waiting.length < pre.waiting.length && !game.noRecurse) { g =>
 							Log.highlight(Console.GREEN, "----- REINTERPRETING CLUE -----")
-							val res = interpClue(ClueContext(prev, g, action))
+							val res = interpClue(ClueContext(prev, g.copy(moveHistory = g.moveHistory.dropRight(1)), action))
 							Log.highlight(Console.GREEN, "----- DONE REINTERPRETING -----")
 							res
 						} {
@@ -607,7 +610,7 @@ object HGroup:
 			updatedGame.reinterpPlay(prev, action).getOrElse:
 				refreshWCs(prev, updatedGame, action)
 					.resetImportant(action.playerIndex)
-					.when(_.level >= Level.BasicCM && rank == 1): g =>
+					.cond(_.level >= Level.BasicCM && rank == 1) { g =>
 						checkOcm(prev, action) match
 							case None =>
 								g.withMove(PlayInterp.None)
@@ -621,6 +624,9 @@ object HGroup:
 
 								performCM(g, orders).withMove:
 									if mistake then PlayInterp.Mistake else PlayInterp.OrderCM
+					} {
+						_.withMove(PlayInterp.None)
+					}
 					.copy(
 						dcStatus = DcStatus.None,
 						dda = None
