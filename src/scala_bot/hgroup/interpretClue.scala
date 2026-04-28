@@ -104,6 +104,10 @@ def interpClue(ctx: ClueContext): HGroup =
 	val ClueAction(giver, target, list, clue) = action
 	val FocusResult(focus, chop, positional) = ctx.focusResult
 
+	if game.state.options.emptyClues && list.length == 0 then
+		Log.highlight(Console.YELLOW, "empty clue!")
+		return game.withMove(ClueInterp.Useless)
+
 	checkHFix(ctx) match
 		case Some(newGame) => return newGame
 		case _ => ()

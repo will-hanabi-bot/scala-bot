@@ -235,6 +235,10 @@ object RefSieve:
 			val ClueAction(giver, target, list, clue) = action
 			val newlyTouched = list.filter(!_prev.state.deck(_).clued)
 
+			if _game.state.options.emptyClues && list.length == 0 then
+				Log.highlight(Console.YELLOW, "empty clue!")
+				return _game.withMove(ClueInterp.Useless)
+
 			val (prev, game) = if state.numPlayers > 2 then (_prev, _game) else
 				list.foldLeft((_prev, _game)): (acc, o) =>
 					val (prev, game) = acc
@@ -267,6 +271,7 @@ object RefSieve:
 								inferred = t.inferred.intersect(ids),
 								reset = false
 							)
+						.withMove(ClueInterp.Distribution)
 						.elim()
 					case None => ()
 

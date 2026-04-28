@@ -211,7 +211,7 @@ def stallingSituation(ctx: ClueContext): Option[(StallInterp, Set[Int])] =
 
 	else
 		isStall(ctx, severity).map: stall =>
-			if game.noRecurse then
+			if game.noRecurse || game.state.numPlayers == 2 then
 				(stall, (0 until game.state.numPlayers).toSet)
 			else
 				val thinksStall = alternativeClue(ctx, STALL_TO_SEVERITY(stall))

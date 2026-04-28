@@ -486,7 +486,7 @@ extension[G <: Game](game: G)
 								DrawAction(playerIndex, order, -1, -1)
 						(g.handleAction(action), comments)
 
-					case PlayAction(_, _, _, _) | ClueAction(_, _, _, _) | DiscardAction(_, _, _, _, _) if action.playerIndex == index =>
+					case a if a.isPlayerAction && a.playerIndex == index =>
 						val suggestedPerform = g.takeAction.unsafeRunSync()
 
 						val newComments =

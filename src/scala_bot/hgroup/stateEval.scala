@@ -287,13 +287,13 @@ def _evalAction(game: HGroup, action: Action): Double =
 	Log.highlight(Console.GREEN, s"===== Predicting value for ${action.fmt(game.state)} =====")
 	val state = game.state
 
-	val (lastMove, value) = action match
+	val value = action match
 		case clue: ClueAction =>
 			val hypoGame = game.copy(allowFindOwn = false).simulate(action)
 			val clueValue = getResult(game, hypoGame, clue)
 
 			if hypoGame.lastMove == Some(ClueInterp.Mistake) || clueValue == -100 then
-				(ClueInterp.Mistake, -100.0)
+				-100.0
 			else
 				val bonus = if hypoGame.lastMove == Some(ClueInterp.Fix) then 0.5 else 0
 				val value =
@@ -304,73 +304,71 @@ def _evalAction(game: HGroup, action: Action): Double =
 				Log.info(s"initial clue value: $value")
 				val best = value + advance(game, hypoGame, 1)
 
-				Log.info(f"${action.fmt(state)}%s: $best%.2f (${hypoGame.lastMove}%s) + $bonus")
-				(hypoGame.lastMove.get, best + bonus)
+				Log.info(f"${action.fmt(state)}%s: $best%.2f (${hypoGame.lastMove.get}%s) + $bonus")
+				best + bonus
 
 		case PlayAction(playerIndex, order, suitIndex, rank) if suitIndex != -1 && rank != -1 =>
 			val hypoGame = game.copy(allowFindOwn = false).simulate(action)
 
 			if hypoGame.lastMove == Some(PlayInterp.Mistake) then
-				(PlayInterp.Mistake, -100.0)
+				-100.0
 			else
 				val bonus = if game.isBlindPlaying(order) then 1.0 else 0
 				val best = advance(game, hypoGame, 1)
-				Log.info(f"${action.fmt(state)}%s: $best%.2f (${hypoGame.lastMove}%s) + $bonus")
-				(hypoGame.lastMove.get, best + bonus)
+				Log.info(f"${action.fmt(state)}%s: $best%.2f (${hypoGame.lastMove.get}%s) + $bonus")
+				best + bonus
 
 		case PlayAction(playerIndex, order, _, _) =>
 			val uniqueInfs = game.me.thoughts(order).inferred.toList.filterNot: id =>
 				visibleFind(state, game.me, id, cond = (playerIndex, _) => playerIndex != state.ourPlayerIndex).exists(state.deck(_).clued)
 
-			uniqueInfs.foldLeftOpt[(Interp, Double)]((PlayInterp.None, 0.0)):
-				case ((_, value), id) =>
-					Log.highlight(Console.GREEN, s"playing ${state.logId(id)}")
-					val hypoGame = game.copy(allowFindOwn = false).simulate(PlayAction(playerIndex, order, id.suitIndex, id.rank))
+			uniqueInfs.foldLeftOpt(0.0): (value, id) =>
+				Log.highlight(Console.GREEN, s"playing ${state.logId(id)}")
+				val hypoGame = game.copy(allowFindOwn = false).simulate(PlayAction(playerIndex, order, id.suitIndex, id.rank))
 
-					if hypoGame.lastMove == Some(PlayInterp.Mistake) then
-						Left((PlayInterp.Mistake, -100.0))
-					else
-						val bonus = if game.isBlindPlaying(order) then 1.0 else 0
-						val best = advance(game, hypoGame, 1)
-						Log.info(f"${action.fmt(state)}%s: $best%.2f (${hypoGame.lastMove}%s) + $bonus")
-						Right((hypoGame.lastMove.get, value + best + bonus))
-			.pipe: (lastMove, value) =>
-				(lastMove, value / uniqueInfs.length)
+				if hypoGame.lastMove == Some(PlayInterp.Mistake) then
+					Left(-100.0)
+				else
+					val bonus = if game.isBlindPlaying(order) then 1.0 else 0
+					val best = advance(game, hypoGame, 1)
+					Log.info(f"${action.fmt(state)}%s: $best%.2f (${hypoGame.lastMove.get}%s) + $bonus")
+					Right(value + best + bonus)
+			.when(_ != -100):
+				_ / uniqueInfs.length
 
 		case DiscardAction(_, order, suitIndex, rank, _) if (suitIndex != -1 && rank != -1) || game.me.orderTrash(game, order) =>
 			val hypoGame = game.copy(allowFindOwn = false).simulate(action)
 
 			if hypoGame.lastMove == Some(DiscardInterp.Mistake) then
-				(DiscardInterp.Mistake, -100.0)
+				-100.0
 			else
 				val best = advance(game, hypoGame, 1)
-				Log.info(f"${action.fmt(state)}%s: $best%.2f (${hypoGame.lastMove}%s)")
-				(hypoGame.lastMove.get, best)
+				Log.info(f"${action.fmt(state)}%s: $best%.2f (${hypoGame.lastMove.get}%s)")
+				best
 
 		case DiscardAction(_, order, suitIndex, rank, _) if !state.deck(order).clued =>
 			val hypoGame = game.copy(allowFindOwn = false).simulate(action)
 
 			if hypoGame.lastMove == Some(DiscardInterp.Mistake) then
-				(DiscardInterp.Mistake, -100.0)
+				-100.0
 			else
 				val best = -0.5 + advance(game, hypoGame, 1)
-				Log.info(f"${action.fmt(state)}%s: $best%.2f (${hypoGame.lastMove}%s)")
-				(hypoGame.lastMove.get, best)
+				Log.info(f"${action.fmt(state)}%s: $best%.2f (${hypoGame.lastMove.get}%s)")
+				best
 
 		case DiscardAction(playerIndex, order, _, _, failed) =>
-			game.me.thoughts(order).inferred.toList.foldLeftOpt[(Interp, Double)]((DiscardInterp.None, 0.0)):
-				case ((_, value), i) =>
-					Log.highlight(Console.GREEN, s"discarding ${state.logId(i)}")
-					val hypoGame = game.copy(allowFindOwn = false).simulate(DiscardAction(playerIndex, order, i.suitIndex, i.rank, failed))
+			game.me.thoughts(order).inferred.toList.foldLeftOpt(0.0): (value, i) =>
+				Log.highlight(Console.GREEN, s"discarding ${state.logId(i)}")
+				val hypoGame = game.copy(allowFindOwn = false).simulate(DiscardAction(playerIndex, order, i.suitIndex, i.rank, failed))
 
-					if hypoGame.lastMove == Some(DiscardInterp.Mistake) then
-						Left((DiscardInterp.Mistake, -100.0))
-					else
-						val best = advance(game, hypoGame, 1)
-						Log.info(f"${action.fmt(state)}%s: $best%.2f (${hypoGame.lastMove}%s)")
-						Right((hypoGame.lastMove.get, best + value))
-			.pipe: (lastMove, value) =>
-				(lastMove, value / game.me.thoughts(order).inferred.length)
+				if hypoGame.lastMove == Some(DiscardInterp.Mistake) then
+					Left(-100.0)
+				else
+					val best = advance(game, hypoGame, 1)
+					Log.info(f"${action.fmt(state)}%s: $best%.2f (${hypoGame.lastMove.get}%s)")
+					Right(best + value)
+			.when(_ != -100):
+				_ / game.me.thoughts(order).inferred.length
 
 		case _ => throw new Error("impossible")
 
@@ -378,7 +376,6 @@ def _evalAction(game: HGroup, action: Action): Double =
 		Log.info("mistake! -100")
 		-100
 	else
-		Log.info(f"${action.fmt(state)}%s: $value%.2f ($lastMove%s)")
 		value
 
 def evalState(state: State, inEndgame: Boolean): Double =

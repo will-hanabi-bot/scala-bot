@@ -200,13 +200,17 @@ object Reactor:
 
 		def interpretClue(prev: Reactor, game: Reactor, action: ClueAction): Reactor =
 			val state = game.state
-			val ClueAction(giver, target, _, _) = action
+			val ClueAction(giver, target, list, _) = action
 
 			val interpretedGame = checkMissed(game, giver, 99)
 				.when(_.waiting.exists(_.reacter == giver)):
 					_.copy(waiting = None)
 				.pipe: g =>
 					val (interp, interpGame) = g.nextInterp match
+						case _ if g.state.options.emptyClues && list.length == 0 =>
+							Log.highlight(Console.YELLOW, "empty clue!")
+							(Some(ClueInterp.Useless), g)
+
 						case Some(interp) =>
 							Log.info(s"forcing rewinded interp $interp!")
 							if interp == ClueInterp.Reactive then

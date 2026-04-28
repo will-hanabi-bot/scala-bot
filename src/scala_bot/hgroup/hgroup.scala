@@ -368,7 +368,7 @@ case class HGroup(
 				case None        => throw new Error("No focus found!")
 
 	def earlyGameClue(giver: Int): Option[Clue] =
-		if noRecurse || !inEarlyGame || !state.canClue then
+		if noRecurse || !inEarlyGame || !state.canClue || state.numPlayers == 2 then
 			return None
 
 		val allClues = for
@@ -386,7 +386,7 @@ case class HGroup(
 			meta(focus).status != CardStatus.Finessed &&
 			!focusCard.clued &&
 			state.isUseful(focusId) && {
-				val hypo = this.copy(noRecurse = true, allowFindOwn = false).simulateClue(action)
+				val hypo = this.copy(noRecurse = true, allowFindOwn = false).simulateAction(action)
 
 				hypo.lastMove.matchesP:
 					case Some(ClueInterp.Save) =>

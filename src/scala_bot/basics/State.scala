@@ -97,7 +97,7 @@ case class State(
 	inline def remScore = maxScore - score
 
 	inline def pace = score + cardsLeft + numPlayers - maxScore
-	inline def inEndgame = pace < numPlayers || score >= maxScore - 5
+	inline def inEndgame = pace < numPlayers
 
 	inline def lastPlayerIndex(playerIndex: Int) =
 		(playerIndex + numPlayers - 1) % numPlayers

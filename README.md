@@ -34,8 +34,10 @@ Send a PM to the bot on hanab.live (`/pm <HANABI_USERNAME> <message>`) to intera
 - `/settings [convention]` to modify the convention set. For example, `/settings HGroup11` sets the bot to H-Group level 11.
   - Supported conventions: `RefSieve`, `Reactor1`, `HGroup[1-11]`
 - `/analyze <replayId> <convention>` to provide a list of potential mistakes and suggested actions in the given replay.
+- `/fastmode` toggles whether the bot plays with a human-like delay (default) or no delay at all.
+- `/doc` to get a link to the conventions used for the current settings.
 - `/version` to get the version the bot is running.
-- `/help` to get a link back to this page.
+- `/help` to get a list of supported commands and a link back to this page.
 
 Some commands can be sent inside the room's chat to affect all bots that have joined.
 - `/leaveall` to kick all bots from the table.

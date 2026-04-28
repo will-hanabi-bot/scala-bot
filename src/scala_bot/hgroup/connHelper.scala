@@ -237,7 +237,7 @@ def urgentSave(ctx: ClueContext): Boolean =
 	if !ctx.focusResult.chop then
 		return false
 
-	val earlyGameClue = game.earlyGameClue(action.target)
+	val earlyGameClue = game.withMove(ClueInterp.Save).earlyGameClue(action.target)
 
 	if earlyGameClue.isDefined then
 		// Log.info(s"${state.names(action.target)} could clue ${earlyGameClue.get.fmt(state)}, not urgent save")

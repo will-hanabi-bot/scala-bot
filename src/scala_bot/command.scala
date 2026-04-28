@@ -116,6 +116,7 @@ class BotClient(queue: Queue[IO, String], gameRef: Ref[IO, Option[Game]], config
 	private var restoredSettings = false
 	private var tables: Map[Int, Table] = Map()
 	private var convention: Convention = Convention.Reactor
+	private var fastMode: Boolean = false
 
 	private def newGameFromSettings(tID: Int, state: State, convention: Convention): Game =
 		convention match
@@ -272,8 +273,11 @@ class BotClient(queue: Queue[IO, String], gameRef: Ref[IO, Option[Game]], config
 							handleAction(GameActionMessage(msg.tableID, msg.list.last))
 
 			case "joined" =>
-				tableID = Some(ujson.read(args)("tableID").num.toInt)
-				IO { gameStarted = false }
+				IO:
+					tableID = Some(ujson.read(args)("tableID").num.toInt)
+					gameStarted = false
+				.flatMap: _ =>
+					sendChat("PM /help for help.")
 
 			case "init" =>
 				handleInit(upickle.read[InitMessage](args))
@@ -286,7 +290,7 @@ class BotClient(queue: Queue[IO, String], gameRef: Ref[IO, Option[Game]], config
 			case "table" =>
 				val table = upickle.read[Table](args)
 
-				if tableID.contains(table.id) then
+				IO.whenA(tableID.contains(table.id)):
 					if config.leaveReplayIfOnlyBots &&
 						table.sharedReplay &&
 						table.spectators.forall(s => config.isBotName(s.name)) then
@@ -298,7 +302,6 @@ class BotClient(queue: Queue[IO, String], gameRef: Ref[IO, Option[Game]], config
 						Log.info("Leaving game. Only bots left in lobby.")
 						leaveRoom()
 					else IO.unit
-				else IO.unit
 				*>
 				IO { tables = tables + (table.id -> table) }
 
@@ -367,8 +370,6 @@ class BotClient(queue: Queue[IO, String], gameRef: Ref[IO, Option[Game]], config
 				assignSettings(data, false)
 			else if msg.startsWith("/leaveall") then
 				leaveRoom()
-			else if msg.startsWith("/help") then
-				sendPM(data.who, "See https://github.com/will-hanabi-bot/scala-bot?tab=readme-ov-file#supported-commands for help.")
 			else
 				IO.unit
 
@@ -410,7 +411,7 @@ class BotClient(queue: Queue[IO, String], gameRef: Ref[IO, Option[Game]], config
 			sendPM(who, BOT_VERSION)
 
 		else if msg.startsWith("/help") then
-			sendPM(data.who, "See https://github.com/will-hanabi-bot/scala-bot?tab=readme-ov-file#supported-commands for help.")
+			sendHelp(data.who)
 
 		else if msg.startsWith("/analyze") then
 			val pattern = """/analyze (\d+) (\w+) ?(\d+)?""".r
@@ -431,7 +432,21 @@ class BotClient(queue: Queue[IO, String], gameRef: Ref[IO, Option[Game]], config
 
 						sendPM(who, "Analyzing... (may take up to 60s)") *> analyzeIO.start.void
 				case _ =>
-					sendPM(who, s"Couldn't parse command. Format is /analyze <id> <convention> [level].")
+					sendPM(who, s"Couldn't parse command. Format is /analyze <replayId> <convention>.")
+
+		else if msg.startsWith("/fastmode") then
+			sendPM(data.who, s"Fast mode is now ${if fastMode then "off" else "on"}.") *>
+			IO { fastMode = !fastMode }
+
+		else if msg.startsWith("/doc") then
+			convention match
+				case Convention.Reactor =>
+					sendPM(data.who, "Reactor 1.0: https://hanabi.wiki/conventions/reactor-1")
+				case Convention.RefSieve =>
+					sendPM(data.who, "General RS: https://hackmd.io/Ui6LXAK3TdC7AKSDcN20PQ") *>
+					sendPM(data.who, "2P RS: https://willflame14.github.io/rs-docs/intro")
+				case Convention.HGroup(level) =>
+					sendPM(data.who, "H-Group: https://hanabi.github.io/reference")
 
 		else
 			IO.unit
@@ -468,7 +483,10 @@ class BotClient(queue: Queue[IO, String], gameRef: Ref[IO, Option[Game]], config
 							val arg = suggestedAction.json(tableID.get)
 
 							IO.whenA(newGame.inProgress):
-								IO.sleep(2.seconds) *> sendCmd("action", ujson.write(arg))
+								IO.whenA(!fastMode):
+									IO.sleep(2.seconds)
+								*>
+								sendCmd("action", ujson.write(arg))
 
 					val x = newGame match
 						case r: Reactor  => r.copy(queuedCmds = Nil)
@@ -480,20 +498,25 @@ class BotClient(queue: Queue[IO, String], gameRef: Ref[IO, Option[Game]], config
 					actIO
 
 	def assignSettings(data: ChatMessage, pm: Boolean) =
-		val reply = pm match
-			case true => (msg: String) => sendPM(data.who, msg)
-			case false => (msg: String) => sendChat(msg)
+		val reply =
+			if pm then
+				(msg: String) => sendPM(data.who, msg)
+			else
+				(msg: String) => sendChat(msg)
 
 		data.msg.split(" ", 2) match
 			case Array(_) =>
-				reply(s"Currently playing with ${convention} conventions.")
+				reply(s"Currently playing with ${convention} conventions.${if fastMode then " [fast mode]" else ""}")
 
 			case Array(_, convStr) =>
 				Convention.from(convStr) match
 					case Left(msg) => reply(msg)
 					case Right(c) =>
 						convention = c
-						reply(s"Currently playing with ${convention} conventions.")
+						reply(s"Currently playing with ${convention} conventions.${if fastMode then " [fast mode]" else ""}")
+
+	def sendHelp(who: String) =
+		sendPM(who, "Commands: /analyze, /doc, /fastmode, /help, /join, /leave, /settings, /version. See https://github.com/will-hanabi-bot/scala-bot#supported-commands for more info.")
 
 	def sendPM(recipient: String, msg: String) =
 		queue.offer(s"chatPM ${ujson.Obj(

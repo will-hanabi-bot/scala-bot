@@ -37,11 +37,13 @@ object GameData:
 		val opts = data.obj.lift("options").map(_.objOpt).flatten
 		val variant = opts.map(_.lift("variant").map(_.str)).flatten
 		val deckPlays = opts.map(_.lift("deckPlays").map(_.bool)).flatten
+		val emptyClues = opts.map(_.lift("emptyClues").map(_.bool)).flatten
 
 		val options = TableOptions(
 			players.length,
 			variantName = variant.getOrElse("No Variant"),
-			deckPlays = deckPlays.getOrElse(false)
+			deckPlays = deckPlays.getOrElse(false),
+			emptyClues = emptyClues.getOrElse(false)
 		)
 
 		GameData(players, deck, actions, options)
