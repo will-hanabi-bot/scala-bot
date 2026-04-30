@@ -279,7 +279,7 @@ object RefSieve:
 			val prevLoaded = prev.common.thinksLoaded(prev, target)
 			val stalling = prev.common.thinksLocked(prev, giver) || prev.state.clueTokens == 8
 
-			val noInfo = state.numPlayers == 2 && !stalling && !state.inEndgame && list.forall: o =>
+			val noInfo = state.numPlayers == 2 && !stalling && !game.inEndgame && list.forall: o =>
 				prev.common.thoughts(o).possible == game.common.thoughts(o).possible
 
 			if noInfo then
@@ -482,7 +482,7 @@ object RefSieve:
 			val (state, me) = (game.state, game.me)
 
 			val solveEndgame =
-				if state.inEndgame && state.remScore <= state.variant.suits.length + 1 then
+				if game.inEndgame && state.remScore <= state.variant.suits.length + 1 then
 					IO.blocking:
 						Log.highlight(Console.MAGENTA, "trying to solve endgame...")
 

@@ -23,6 +23,24 @@ class GoodTouch extends munit.FunSuite:
 		hasInfs(game, None, Alice, 5, Vector("p5"))
 		assert(game.common.thinksTrash(game, Alice.ordinal).contains(game.state.hands(Alice.ordinal)(3)))
 
+	test("eliminates from focus (direct play)"):
+		val game = setup(HGroup.atLevel(1), Vector(
+			Vector("xx", "xx", "xx", "xx", "xx"),
+			Vector("g1", "i1", "g1", "i5", "i4")
+		),
+			starting = Bob,
+			playStacks = Some(Vector(5, 5, 5, 2, 1)),
+			variant = Variant(813, "Light Pink & Gray (5 Suits)",
+				Vector("Red", "Yellow", "Green", "Light Pink", "Gray"),
+				shorts = Some(Vector('r', 'y', 'g', 'i', 'a')))
+		)
+		.pipe(takeTurn("Bob clues 3 to Alice (slot 2)"))
+		.pipe(takeTurn("Alice plays i3 (slot 2)"))
+		.pipe(takeTurn("Bob clues 2 to Alice (slots 1,2)"))
+
+		hasInfs(game, None, Alice, 1, Vector("a2"))
+		assert(game.common.thinksPlayables(game, Alice.ordinal).contains(game.state.hands(Alice.ordinal)(0)))
+
 	test("doesn't count bad touch when focusing the last card"):
 		val game = setup(HGroup.atLevel(1), Vector(
 			Vector("xx", "xx", "xx", "xx", "xx"),

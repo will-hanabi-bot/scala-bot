@@ -333,7 +333,7 @@ def resolveClue(ctx: ClueContext, fps: Seq[FocusPossibility], ambiguousOwn: Seq[
 		else
 			simplestFps.filter(!_.ambiguous)
 
-	lazy val stompedWc = !state.inEndgame && game.waiting.exists: wc =>
+	lazy val stompedWc = !game.inEndgame && game.waiting.exists: wc =>
 		!wc.symmetric && !wc.ambiguousSelf &&
 		wc.connections.exists: conn =>
 			conn.order == focus ||

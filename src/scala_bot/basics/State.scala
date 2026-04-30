@@ -94,10 +94,11 @@ case class State(
 
 	inline def score = playStacks.fastSum
 	inline def maxScore = maxRanks.fastSum
+
+	/** The remaining score that can be achieved. */
 	inline def remScore = maxScore - score
 
 	inline def pace = score + cardsLeft + numPlayers - maxScore
-	inline def inEndgame = pace < numPlayers
 
 	inline def lastPlayerIndex(playerIndex: Int) =
 		(playerIndex + numPlayers - 1) % numPlayers

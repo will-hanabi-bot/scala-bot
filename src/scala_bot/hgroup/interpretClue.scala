@@ -151,7 +151,7 @@ def interpClue(ctx: ClueContext): HGroup =
 			.withMeta(focus)(_.copy(focused = true))
 			.withMove(ClueInterp.Distribution)
 
-	if game.level >= Level.BasicCM && !state.inEndgame then
+	if game.level >= Level.BasicCM && !game.inEndgame then
 		interpretTcm(ctx) match
 			case None => ()
 			case Some(tcm) => return handleTcm(ctx, tcm, stall.isEmpty || thinksStall.isEmpty)
@@ -237,8 +237,10 @@ def interpClue(ctx: ClueContext): HGroup =
 			(action.clue.kind == ClueKind.Colour || savePoss.nonEmpty || positional)
 
 		common.thoughts(focus).inferred.filter: inf =>
-			!game.invalidFocus(giver, clue, inf, ctx.focusResult) &&
-			visibleFind(state, game.players(target), inf, excludeOrder = focus).filter(o => state.deck(o).clued && !state.hands(giver).contains(o)).isEmpty &&
+			!prev.invalidFocus(giver, clue, inf, ctx.focusResult) &&
+			!visibleFind(state, game.players(target), inf, infer = true, excludeOrder = focus).exists: o =>
+				prev.state.deck(o).clued && !state.hands(giver).contains(o)
+			&&
 			!savePoss.exists(_.id == inf)
 		.flatMap:
 			connect(ctx, _, looksDirect, thinksStall)

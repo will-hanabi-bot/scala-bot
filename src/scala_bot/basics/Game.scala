@@ -106,6 +106,8 @@ trait Game:
 	/** Whether the convention set observes Good Touch Principle. */
 	def goodTouch: Boolean
 
+	def inEndgame: Boolean = state.pace < state.numPlayers
+
 	/** An extra filter function before returning from [[Player.thinksPlayables]]
 	  * (e.g. 1's to be played in a conventionally-specific order).
 	  */
@@ -235,14 +237,12 @@ extension[G <: Game](game: G)
 				ops.copyWith(newGame, GameUpdates(inProgress = Some(false)))
 
 			case turn @ TurnAction(num, currentPlayerIndex) =>
-				if currentPlayerIndex == -1 then	// game ended
-					newGame
-				else
-					newGame.withState(_.copy(
-						currentPlayerIndex = currentPlayerIndex,
-						turnCount = num + 1
-					))
-					.pipe(ops.updateTurn(_, turn).updateNotes())
+				newGame.withState(_.copy(
+					currentPlayerIndex = currentPlayerIndex,
+					turnCount = num + 1
+				))
+				.when(_ => currentPlayerIndex != -1):		// game hasn't ended yet
+					ops.updateTurn(_, turn).updateNotes()
 
 			case InterpAction(interp) =>
 				ops.copyWith(newGame, GameUpdates(nextInterp = Some(Some(interp))))
@@ -493,7 +493,7 @@ extension[G <: Game](game: G)
 							if suggestedPerform != PerformAction.fromAction(action) then
 								val suggestedAction = suggestedPerform.toAction(g.state, g.state.currentPlayerIndex, deck = Some(game.state.deck.map(_.id().get)))
 
-								if !g.state.inEndgame then
+								if !g.inEndgame then
 									val suggestedValue = ops.evalAction(g, suggestedAction)
 									val actualValue = ops.evalAction(g, action)
 									val diff = suggestedValue - actualValue

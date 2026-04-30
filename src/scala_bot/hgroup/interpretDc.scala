@@ -317,7 +317,7 @@ def interpretSdcm(ctx: DiscardContext): Option[HGroup] =
 	val DiscardContext(prev, game, action) = ctx
 	val state = game.state
 
-	if state.inEndgame then
+	if game.inEndgame then
 		return None
 
 	val bob = state.nextPlayerIndex(action.playerIndex)
@@ -443,7 +443,7 @@ def interpretPosDc(ctx: DiscardContext): Option[HGroup] =
 	val state = game.state
 	val slot = prev.state.hands(playerIndex).indexOf(order) + 1
 
-	if game.level < Level.Endgame || (!state.inEndgame && state.score < state.maxScore - 5) then
+	if game.level < Level.Endgame || (!game.inEndgame && state.remScore > 5) then
 		return None
 
 	checkPosDc(ctx).map: targets =>

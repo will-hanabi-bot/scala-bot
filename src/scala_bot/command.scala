@@ -20,6 +20,8 @@ case class ChatMessage(
 	recipient: String
 ) derives ReadWriter
 
+case class ChatList(list: Vector[ChatMessage]) derives ReadWriter
+
 case class GameActionMessage(
 	tableID: Int,
 	action: Action
@@ -117,6 +119,7 @@ class BotClient(queue: Queue[IO, String], gameRef: Ref[IO, Option[Game]], config
 	private var tables: Map[Int, Table] = Map()
 	private var convention: Convention = Convention.Reactor
 	private var fastMode: Boolean = false
+	private var lastJoinRequester: Option[String] = None
 
 	private def newGameFromSettings(tID: Int, state: State, convention: Convention): Game =
 		convention match
@@ -209,17 +212,25 @@ class BotClient(queue: Queue[IO, String], gameRef: Ref[IO, Option[Game]], config
 			case "chat" =>
 				handleChat(upickle.read[ChatMessage](ujson.read(args)))
 
+			case "chatList" =>
+				val msgs = upickle.read[ChatList](ujson.read(args)).list
+				val helpMsg = "PM /help for help."
+
+				val sendHelp = msgs.headOption.exists(msg => tableID.exists(id => msg.room == s"table${id}")) &&
+					!msgs.exists(_.msg == helpMsg)
+
+				IO.whenA(sendHelp):
+					sendChat(helpMsg)
+
 			case "gameAction" =>
 				GameActionMessage.fromJSON(ujson.read(args)) match
 					case None =>
-						IO.println(s"${Console.RED}failed to read gameAction $args${Console.RESET}") *>
-						IO.unit
+						IO.println(s"${Console.RED}failed to read gameAction $args${Console.RESET}")
 					case Some(action) => handleAction(action)
 
 			case "noteListPlayer" =>
 				// If the settings have already been restored do nothing.
-				if restoredSettings then IO.unit
-				else
+				IO.whenA(!restoredSettings):
 					gameRef.get.flatMap:
 						case None => IO.unit
 						case Some(g) =>
@@ -246,8 +257,7 @@ class BotClient(queue: Queue[IO, String], gameRef: Ref[IO, Option[Game]], config
 			case "gameActionList" =>
 				// The settings have not been (attempted to be) restored so far.
 				// This will happen in 'noteListPlayer', which will then request the 'gameActionList' again.
-				if !restoredSettings then IO.unit
-				else
+				IO.whenA(restoredSettings):
 					val msg = GameActionListMessage.fromJSON(ujson.read(args))
 
 					gameRef.get.flatMap:
@@ -276,8 +286,7 @@ class BotClient(queue: Queue[IO, String], gameRef: Ref[IO, Option[Game]], config
 				IO:
 					tableID = Some(ujson.read(args)("tableID").num.toInt)
 					gameStarted = false
-				.flatMap: _ =>
-					sendChat("PM /help for help.")
+					lastJoinRequester = None
 
 			case "init" =>
 				handleInit(upickle.read[InitMessage](args))
@@ -301,7 +310,8 @@ class BotClient(queue: Queue[IO, String], gameRef: Ref[IO, Option[Game]], config
 						table.players.forall(config.isBotName) then
 						Log.info("Leaving game. Only bots left in lobby.")
 						leaveRoom()
-					else IO.unit
+					else
+						checkSupportedSettings(table)
 				*>
 				IO { tables = tables + (table.id -> table) }
 
@@ -317,8 +327,9 @@ class BotClient(queue: Queue[IO, String], gameRef: Ref[IO, Option[Game]], config
 				}.flatMap: updatedTables =>
 					info.fold(IO.unit): self =>
 						val myTable = updatedTables.values
-							.filter(t => t.players.contains(self.username))
+							.filter(_.players.contains(self.username))
 							.maxByOption(_.id)
+
 						myTable.fold(IO.unit): t =>
 							Log.info(s"automatically reattending table with id ${t.id}")
 							sendCmd("tableReattend", ujson.write(ujson.Obj("tableID" -> t.id)))
@@ -330,6 +341,12 @@ class BotClient(queue: Queue[IO, String], gameRef: Ref[IO, Option[Game]], config
 				sendCmd("getGameInfo1", ujson.write(ujson.Obj("tableID" -> id)))
 
 			case "warning" =>
+				val msg = ujson.read(args)("warning").str
+
+				lastJoinRequester.fold(IO.unit): who =>
+					sendPM(who, msg) *>
+					IO { lastJoinRequester = None }
+				*>
 				IO { println(s"warn: $args") }
 
 			case "welcome" =>
@@ -386,6 +403,7 @@ class BotClient(queue: Queue[IO, String], gameRef: Ref[IO, Option[Game]], config
 				case Some(t) if t.passwordProtected =>
 					msg.split(" ").lift(1) match
 						case Some(password) =>
+							IO { lastJoinRequester = Some(who) } *>
 							sendCmd("tableJoin", ujson.write(ujson.Obj("tableID" -> t.id, "password" -> password)))
 						case None =>
 							sendPM(who, "Room is password protected, please provide a password.")
@@ -517,6 +535,22 @@ class BotClient(queue: Queue[IO, String], gameRef: Ref[IO, Option[Game]], config
 
 	def sendHelp(who: String) =
 		sendPM(who, "Commands: /analyze, /doc, /fastmode, /help, /join, /leave, /settings, /version. See https://github.com/will-hanabi-bot/scala-bot#supported-commands for more info.")
+
+	def checkSupportedSettings(table: Table): IO[Unit] =
+		val unsupportedOptions = List(
+			Option.when(table.options.detrimentalCharacters)("detrimentalChars"),
+			Option.when(table.options.oneExtraCard)("oneExtraCard"),
+			Option.when(table.options.oneLessCard)("oneLessCard"),
+		).flatten
+
+		val unsupportedVarPattern = """Blind|Mute|Ambiguous|Dual-Color|Synesthesia|Mix|Funnels|Chimneys|Matryoshka|Alternating|Odds|Cow|Duck|Orange|Reversed|Throw|Up or Down|Sudoku""".r.unanchored
+		val unsupportedVariants = unsupportedVarPattern.matches(table.options.variantName)
+
+		IO.whenA(unsupportedOptions.nonEmpty):
+			sendChat(s"This bot doesn't support the table options ${unsupportedOptions.mkString(", ")} and may crash or behave nonsensically.")
+		*>
+		IO.whenA(unsupportedVariants):
+			sendChat(s"This bot doesn't support the variant ${table.options.variantName} and may crash or behave nonsensically.")
 
 	def sendPM(recipient: String, msg: String) =
 		queue.offer(s"chatPM ${ujson.Obj(

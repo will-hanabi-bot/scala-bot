@@ -83,7 +83,7 @@ def distributionClue(prev: Game, game: Game, action: ClueAction, focus: Int): Op
 	val ClueAction(_, target, list, clue) = action
 	val thought = game.common.thoughts(focus)
 
-	if list.forall(prev.state.deck(_).clued) || (!state.inEndgame && state.remScore > state.variant.suits.length) then
+	if list.forall(prev.state.deck(_).clued) || (!game.inEndgame && state.remScore > state.variant.suits.length) then
 		return None
 
 	if state.deck(focus).id().exists(state.isBasicTrash) then

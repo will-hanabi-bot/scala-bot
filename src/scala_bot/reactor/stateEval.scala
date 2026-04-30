@@ -19,7 +19,7 @@ def getResult(game: Reactor, hypo: Reactor, action: ClueAction): Double =
 		meta(o).status != CardStatus.CalledToPlay && hypo.meta(o).status == CardStatus.CalledToPlay
 
 	val badPlayable = newPlayables.find(o =>
-		!(hypo.me.hypoPlays.contains(o) || (state.inEndgame && state.deck(o).id().exists(state.isPlayable))))
+		!(hypo.me.hypoPlays.contains(o) || (game.inEndgame && state.deck(o).id().exists(state.isPlayable))))
 
 	badPlayable match
 		case Some(badPlay) =>
@@ -27,7 +27,7 @@ def getResult(game: Reactor, hypo: Reactor, action: ClueAction): Double =
 			-100
 		case None =>
 			hypo.lastMove match
-				case Some(ClueInterp.Play) if playables.isEmpty && !state.inEndgame =>
+				case Some(ClueInterp.Play) if playables.isEmpty && !game.inEndgame =>
 					Log.warn(s"clue ${clue.fmt(state, target)} looks like ref play but gets no playables!")
 					-100
 				case Some(ClueInterp.Reveal) if playables.isEmpty && trash.nonEmpty && trash.forall(state.deck(_).clued) =>
@@ -57,9 +57,9 @@ def getResult(game: Reactor, hypo: Reactor, action: ClueAction): Double =
 					val value = goodTouch +
 						(playables.length - 2.0 * dupedPlayables) +
 						0.2 * untouchedPlays +
-						(if state.inEndgame then 0.01 else 0.05) * revealedTrash +
-						(if state.inEndgame then 0.1 else 0.05) * fill.length +
-						(if state.inEndgame then 0.05 else 0.02) * elim.length +
+						(if game.inEndgame then 0.01 else 0.05) * revealedTrash +
+						(if game.inEndgame then 0.1 else 0.05) * fill.length +
+						(if game.inEndgame then 0.05 else 0.02) * elim.length +
 						-0.1 * badTouch.length
 
 					hypo.lastMove match
@@ -76,7 +76,7 @@ def _forceClue(orig: Reactor, game: Reactor, offset: Int): Double =
 	// They can always give an equal or better clue than what we can see
 	if bob == state.ourPlayerIndex then
 		val nextGame = game.withState(s => s.copy(clueTokens = s.clueTokens - 1))
-		advance(orig, nextGame, offset + 1) + 0.5
+		advance(orig, nextGame, offset + 1) + 1.0
 	else
 		forceClue(game, giver, advance(orig, _, offset + 1), only = Some(bob)) + 0.5
 
@@ -207,14 +207,14 @@ def _evalAction(game: Reactor, action: Action): Double =
 
 		case clue: ClueAction =>
 			val mult = if game.me.obviousPlayables(game, state.ourPlayerIndex).nonEmpty then
-				if state.inEndgame then 0.1 else 0.25
+				if game.inEndgame then 0.1 else 0.25
 			else
 				0.5
 			val result = getResult(game, hypoGame, clue)
 			result * (if result > 0 then mult else 1) - 0.5
 
 		case PlayAction(_, order, suitIndex, rank) =>
-			if !game.state.inEndgame && visibleFind(state, game.me, Identity(suitIndex, rank), excludeOrder = order).exists(game.isTouched) then
+			if !game.inEndgame && visibleFind(state, game.me, Identity(suitIndex, rank), excludeOrder = order).exists(game.isTouched) then
 				-0.25
 			else if suitIndex == -1 || rank == -1 then
 				1.5
@@ -225,7 +225,7 @@ def _evalAction(game: Reactor, action: Action): Double =
 			val trash = game.me.orderKt(game, order) || game.meta(order).status == CardStatus.CalledToDiscard
 			val chop = game.chop(state.holderOf(order))
 
-			if state.inEndgame then
+			if game.inEndgame then
 				-1.0
 			else if trash then
 				0
@@ -278,7 +278,7 @@ def evalGame(orig: Reactor, game: Reactor): Double =
 	if state.score == orig.state.maxScore then
 		return 100
 
-	val stateVal = evalState(state, inEndgame = orig.state.inEndgame)
+	val stateVal = evalState(state, inEndgame = orig.inEndgame || orig.state.remScore < state.variant.suits.length)
 
 	val futureVal = state.hands.flatten.summing: order =>
 		game.meta(order).status match

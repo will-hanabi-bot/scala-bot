@@ -281,7 +281,7 @@ extension (p: Player)
 			val thought = p.thoughts(order)
 
 			!game.meta(order).trash &&
-			!thought.reset &&
+			// !thought.reset &&
 			!thought.id(symmetric = true).isDefined &&
 			!thought.inferred.isEmpty &&
 			thought.possible.difference(state.trashSet).nonEmpty &&

@@ -637,7 +637,7 @@ object HGroup:
 			val (state, me) = (game.state, game.me)
 
 			val solveEndgame =
-				if state.inEndgame && state.remScore <= state.variant.suits.length + 1 then
+				if game.inEndgame && state.remScore <= state.variant.suits.length + 1 then
 					IO.blocking:
 						Log.highlight(Console.MAGENTA, "trying to solve endgame...")
 
@@ -679,35 +679,34 @@ object HGroup:
 								val value = evalAction(game, action)
 								(perform, action, value)
 
-						val earlyGameClue = game.earlyGameClue(state.ourPlayerIndex)
-
-						// Log.info(s"early game clue? ${earlyGameClue.map(_.fmt(state))}")
-
-						val hasEarlyGameClue = earlyGameClue.isDefined &&
-							discardOrders.isEmpty &&
-							!(state.clueTokens == 1 && valid1ClueScream(game, state.nextPlayerIndex(state.ourPlayerIndex)))
-
-						if hasEarlyGameClue then
-							Log.highlight(Console.YELLOW,s"must clue in early game! (found ${earlyGameClue.get.fmt(state)})")
-
 						val allPlays = playableOrders.map: o =>
 							val action = PlayAction(state.ourPlayerIndex, o, me.thoughts(o).id(infer = true, partial = true))
 							val value = evalAction(game, action)
 							(PerformAction.Play(o), action, value)
 
-						val cantDiscard = state.clueTokens == 8 ||
-							// playableOrders.exists(game.meta(_).status == CardStatus.Finessed) ||
-							(state.pace == 0 && (allClues.exists(_._3 > 0) || allPlays.nonEmpty)) ||
+						val allDiscards = discardOrders.view.map: o =>
+							val action = DiscardAction(state.ourPlayerIndex, o, me.thoughts(o).id(infer = true))
+							val value = evalAction(game, action)
+							(PerformAction.Discard(o), action, value)
+
+						val earlyGameClue = game.earlyGameClue(state.ourPlayerIndex)
+
+						// Log.info(s"early game clue? ${earlyGameClue.map(_.fmt(state))}")
+
+						val hasEarlyGameClue = earlyGameClue.isDefined &&
+							!(state.clueTokens == 1 && valid1ClueScream(game, state.nextPlayerIndex(state.ourPlayerIndex))) &&
+							allDiscards.forall(_._3 == -100)
+
+						if hasEarlyGameClue then
+							Log.highlight(Console.YELLOW,s"must clue in early game! (found ${earlyGameClue.get.fmt(state)})")
+
+						val cantDiscard =
+							state.clueTokens == 8 ||
 							game.dcStatus != DcStatus.None ||
+							(state.pace == 0 && (allClues.exists(_._3 > 0) || allPlays.nonEmpty)) ||
 							hasEarlyGameClue
 
 						Log.info(s"can discard: ${!cantDiscard}")
-
-						val allDiscards = if cantDiscard then Nil else
-							discardOrders.map: o =>
-								val action = DiscardAction(state.ourPlayerIndex, o, me.thoughts(o).id(infer = true))
-								val value = evalAction(game, action)
-								(PerformAction.Discard(o), action, value)
 
 						val chop = game.chop(state.ourPlayerIndex)
 
@@ -824,7 +823,7 @@ object HGroup:
 				.getOrElse(game.players(playerIndex).lockedDiscard(game.state, playerIndex))
 
 			val targets =
-				if game.level >= Level.Endgame && game.state.inEndgame then
+				if game.level >= Level.Endgame && game.inEndgame then
 					// ALlow discarding any known trash
 					game.state.hands(playerIndex).filter(game.players(playerIndex).orderKt(game, _))
 						.when(_.isEmpty)(_ => Vector(expectedDc))

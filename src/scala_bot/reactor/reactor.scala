@@ -62,6 +62,9 @@ case class Reactor(
 		val infoLock = this.me.thoughts(order).infoLock
 		!infoLock.isDefined || infoLock.get.contains(id)
 
+	override inline def inEndgame: Boolean =
+		state.pace < state.numPlayers - 1
+
 	def chop(playerIndex: Int) =
 		state.hands(playerIndex).find:
 			meta(_).status == CardStatus.CalledToDiscard
@@ -219,7 +222,7 @@ object Reactor:
 							else
 								interpretStable(prev, g, action, stall = false)
 
-						case None if prev.common.obviousLocked(prev, giver) || state.inEndgame || prev.state.clueTokens == 8 =>
+						case None if prev.common.obviousLocked(prev, giver) || game.inEndgame || prev.state.clueTokens == 8 =>
 							interpretStable(prev, g, action, stall = true)
 
 						case None =>
@@ -439,7 +442,7 @@ object Reactor:
 							None
 
 			val solveEndgame =
-				if state.inEndgame && state.remScore <= state.variant.suits.length + 1 then
+				if game.inEndgame && state.remScore <= state.variant.suits.length + 1 then
 					IO.blocking:
 						Log.highlight(Console.MAGENTA, "trying to solve endgame...")
 

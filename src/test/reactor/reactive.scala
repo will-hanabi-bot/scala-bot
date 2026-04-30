@@ -259,6 +259,27 @@ class Reactive extends munit.FunSuite:
 		// We should play slot 3 (so that Bob discards slot 2).
 		hasStatus(game, Alice, 3, CardStatus.CalledToPlay)
 
+	test("it targets known trash over cross-hand dupe for dc"):
+		val game = setup(Reactor.apply, Vector(
+			Vector("xx", "xx", "xx", "xx", "xx"),
+			Vector("r4", "y1", "r2", "r3", "g5"),
+			Vector("g1", "b5", "p2", "b1", "r4"),
+		),
+			starting = Cathy,
+			playStacks = Some(Vector(0, 1, 0, 0, 0)),
+			init = fullyKnown[Reactor](Cathy, 5, "r4")
+		)
+		.pipe(takeTurn("Cathy clues green to Bob"))
+		.tap: g =>
+			// We should play slot 3 (so that Bob discards slot 2).
+			hasStatus(g, Alice, 3, CardStatus.CalledToPlay)
+		.pipe(takeTurn("Alice plays b1 (slot 3)"))
+		.pipe(takeTurn("Bob clues blue to Cathy"))
+		.pipe(takeTurn("Cathy clues green to Bob"))
+
+		// We should target y1 again instead of r4.
+		hasStatus(game, Alice, 3, CardStatus.CalledToPlay)
+
 	test("it reacts to a sacrifice"):
 		val game = setup(Reactor.apply, Vector(
 			Vector("xx", "xx", "xx", "xx", "xx"),

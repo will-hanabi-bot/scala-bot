@@ -17,7 +17,7 @@ def getResult(game: HGroup, hypo: HGroup, action: ClueAction): Double =
 		meta(o).status != CardStatus.Finessed && hypo.meta(o).status == CardStatus.Finessed
 
 	val badPlay = newPlayables.find: o =>
-		!(hypo.me.hypoPlays.contains(o) || (state.inEndgame && state.deck(o).id().exists(state.isPlayable)))
+		!(hypo.me.hypoPlays.contains(o) || (game.inEndgame && state.deck(o).id().exists(state.isPlayable)))
 
 	if badPlay.isDefined then
 		Log.warn(s"clue ${clue.fmt(state, target)} results in ${state.logId(badPlay.get)} ${badPlay.get} looking playable! ${hypo.me.hypoPlays}")
@@ -87,9 +87,9 @@ def getResult(game: HGroup, hypo: HGroup, action: ClueAction): Double =
 		(if playables.nonEmpty then 0.5 else 0) +
 		-dupedPlayables +
 		0.2 * untouchedPlays +
-		(if state.inEndgame then 0.01 else 0.1) * revealedTrash +
-		(if state.inEndgame then 0.2 else 0.1) * fill.length +
-		(if state.inEndgame then 0.1 else 0.05) * elim.length +
+		(if game.inEndgame then 0.01 else 0.1) * revealedTrash +
+		(if game.inEndgame then 0.2 else 0.1) * fill.length +
+		(if game.inEndgame then 0.1 else 0.05) * elim.length +
 		-0.1 * badTouch.length +
 		-2 * avoidableDupe +
 		pangOfGuilt +
@@ -297,7 +297,7 @@ def _evalAction(game: HGroup, action: Action): Double =
 			else
 				val bonus = if hypoGame.lastMove == Some(ClueInterp.Fix) then 0.5 else 0
 				val value =
-					if game.me.thinksPlayables(game, state.ourPlayerIndex).nonEmpty && state.inEndgame then
+					if game.me.thinksPlayables(game, state.ourPlayerIndex).nonEmpty && game.inEndgame then
 						-1 + 0.5 * clueValue
 					else
 						0.5 * clueValue
@@ -398,8 +398,8 @@ def evalState(state: State, inEndgame: Boolean): Double =
 	val dcCritVal = -20 * scoreLoss
 
 	val strikesVal = state.strikes match
-		case 1 => -2.5
-		case 2 => -4.5
+		case 1 => if inEndgame then -0.5 else -2.5
+		case 2 => if inEndgame then -1.5 else -4.5
 		case 3 => -100
 		case _ => 0
 
@@ -412,7 +412,7 @@ def evalGame(orig: HGroup, game: HGroup): Double =
 	if state.score == state.maxScore && state.score == orig.state.maxScore then
 		return 100
 
-	val stateVal = evalState(state, inEndgame = orig.state.inEndgame)
+	val stateVal = evalState(state, inEndgame = orig.inEndgame || orig.state.remScore < 5)
 
 	val futureVal = (if orig.inEarlyGame then 2 else 1) * game.common.hypoPlays.summing: order =>
 		game.me.thoughts(order).id(infer = true) match

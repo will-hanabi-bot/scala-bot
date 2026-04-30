@@ -19,7 +19,7 @@ def getResult(game: RefSieve, hypo: RefSieve, action: ClueAction): Double =
 		meta(o).status != CardStatus.CalledToPlay && hypo.meta(o).status == CardStatus.CalledToPlay
 
 	val badPlayable = newPlayables.find: o =>
-		!(hypo.me.hypoPlays.contains(o) || (state.inEndgame && state.deck(o).id().exists(state.isPlayable)))
+		!(hypo.me.hypoPlays.contains(o) || (game.inEndgame && state.deck(o).id().exists(state.isPlayable)))
 
 	badPlayable match
 		case Some(badPlay) =>
@@ -28,7 +28,7 @@ def getResult(game: RefSieve, hypo: RefSieve, action: ClueAction): Double =
 		case None => ()
 
 	hypo.lastMove match
-		case Some(ClueInterp.Play) if playables.isEmpty && !state.inEndgame =>
+		case Some(ClueInterp.Play) if playables.isEmpty && !game.inEndgame =>
 			Log.warn(s"clue ${clue.fmt(state, target)} looks like ref play but gets no playables!")
 			-100
 		case Some(ClueInterp.Reveal) if playables.isEmpty && trash.nonEmpty && trash.forall(state.deck(_).clued) =>
@@ -70,9 +70,9 @@ def getResult(game: RefSieve, hypo: RefSieve, action: ClueAction): Double =
 			val value = goodTouch +
 				- 2.0 * dupedPlayables +
 				0.2 * untouchedPlays +
-				(if state.inEndgame then 0.01 else 0.1) * revealedTrash +
-				(if state.inEndgame then 0.2 else 0.1) * fill.length +
-				(if state.inEndgame then 0.1 else 0.05) * elim.length +
+				(if game.inEndgame then 0.01 else 0.1) * revealedTrash +
+				(if game.inEndgame then 0.2 else 0.1) * fill.length +
+				(if game.inEndgame then 0.1 else 0.05) * elim.length +
 				-0.1 * badTouch.length +
 				lockedTouch
 
@@ -211,7 +211,7 @@ def _evalAction(game: RefSieve, action: Action): Double =
 				(ClueInterp.Mistake, -100.0)
 			else
 				val mult = if !game.me.thinksPlayables(game, state.ourPlayerIndex).isEmpty then
-					if state.inEndgame then 0.1 else 0.25
+					if game.inEndgame then 0.1 else 0.25
 				else
 					0.5
 

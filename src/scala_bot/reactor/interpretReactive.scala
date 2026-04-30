@@ -51,7 +51,7 @@ def interpretReactiveColour(prev: Reactor, game: Reactor, action: ClueAction, fo
 			if uncluedDupe then 99 else i
 
 	// Try targeting all play targets
-	playTargets.view.flatMap { case (_, index) =>
+	playTargets.view.flatMap { (_, index) =>
 		val targetSlot = index + 1
 		val reactSlot = calcSlot(focusSlot, targetSlot)
 
@@ -85,7 +85,7 @@ def interpretReactiveColour(prev: Reactor, game: Reactor, action: ClueAction, fo
 				.filter: (o, _) =>
 					!prevKt.contains(o) &&
 					(state.isBasicTrash(state.deck(o).id().get) ||
-						state.hands(receiver).exists(o2 => o2 < o && state.deck(o).matches(state.deck(o2)))) // newer dupe in the same hand is trash
+						state.hands(receiver).exists(o2 => o2 < o && state.deck(o).matches(state.deck(o2)))) // newer dupe in the same hand
 				.sortBy: (o, _) =>
 					if prev.state.deck(o).clued then
 						-1
@@ -107,15 +107,15 @@ def interpretReactiveColour(prev: Reactor, game: Reactor, action: ClueAction, fo
 					-game.common.playableAway(id) * 10 + (5 - id.rank)
 
 			unknownTrash
-				.when(_.isEmpty)(_ => unknownDupes)
 				.when(_.isEmpty)(_ => knownTrash)
+				.when(_.isEmpty)(_ => unknownDupes)
 				.when(_.isEmpty)(_ => sacrifices)
 
 		if dcTargets.isEmpty then
 			Log.warn(s"reactive clue but receiver had no playable, trash or sacrifice targets!")
 			(None, game)
 		else
-			dcTargets.view.flatMap { (target, index) =>
+			dcTargets.findSome: (target, index) =>
 				if state.nextPlayerIndex(giver) != reacter && game.meta(target).status == CardStatus.CalledToPlay then
 					Log.warn("can't target previously-playable trash with a reverse reactive clue!")
 					None
@@ -144,7 +144,6 @@ def interpretReactiveColour(prev: Reactor, game: Reactor, action: ClueAction, fo
 								case Some(_) =>
 									Log.info(s"reactive play+dc, reacter ${state.names(reacter)} (slot ${reactSlot}) receiver ${state.names(receiver)} (slot ${targetSlot}), focus slot ${focusSlot}")
 									Some(Some(ClueInterp.Reactive), newGame)
-			}.headOption
 			.getOrElse(None, game)
 	}
 

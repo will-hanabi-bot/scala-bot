@@ -197,7 +197,7 @@ def interpretTccm(ctx: ClueContext): Option[List[Int]] =
 	val ClueAction(_, target, list, clue) = action
 	val FocusResult(focus, _, positional) = ctx.focusResult
 
-	if state.inEndgame then
+	if game.inEndgame then
 		Log.info("in endgame, not tccm")
 		return None
 

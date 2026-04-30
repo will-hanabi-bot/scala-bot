@@ -212,7 +212,7 @@ case class EndgameSolver[G <: Game](
 		.when(_.isEmpty): _ =>
 			List(Arrangement(Vector.empty, Frac.one, remainingIds))
 
-		Log.info(s"arrangements ${arrs.map(_._1.map(state.logId).mkString(","))}")
+		Log.info(s"arrangements ${arrs.map(_._1.map(state.logId).mkString(","))} (size ${arrs.length})")
 
 		val hypos = arrs.map:
 			case Arrangement(ids, prob, remaining) =>
@@ -435,7 +435,7 @@ case class EndgameSolver[G <: Game](
 			val defaultClue = PerformAction.Rank(0, 0)
 			val tooManyClues = state.actionList.flatten.reverse
 				.takeWhile(!_.requiresDraw)
-				.count(_.isInstanceOf[ClueAction]) > game.state.numPlayers
+				.count(_.isInstanceOf[ClueAction]) > game.state.numPlayers + 1
 
 			val clueWinnable = state.canClue &&
 				!tooManyClues &&
