@@ -1,6 +1,6 @@
-LATEST_VER=0.10.7
+LATEST_VER=0.10.8
 JVM_OPTS=-Xms128m -Xmx192m -Xss256k -XX:MaxMetaspaceSize=96m -XX:ReservedCodeCacheSize=64m -XX:+UseSerialGC
-NATIVE_IMAGE=/home/will/Programs/graalvm-jdk-25.0.2+10.1/bin/native-image
+NATIVE_IMAGE=
 
 build:
 	scala-cli --power package . --main-class scala_bot.main -o scala-bot-$(LATEST_VER).jar --assembly --preamble=false --force

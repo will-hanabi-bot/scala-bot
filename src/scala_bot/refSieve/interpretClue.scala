@@ -110,7 +110,7 @@ def targetPlay(ctx: ClueContext, targetOrder: Int): (Option[ClueInterp], RefSiev
 	targetId match
 		case Some(id) if !focusPoss.exists(_.id == id) =>
 			if action.giver == state.ourPlayerIndex then
-				(None, game)
+				(if game.inEndgame && common.orderTrash(game, targetOrder) then Some(ClueInterp.Stall) else None, game)
 			else
 				Log.highlight(Console.YELLOW, s"finding own!")
 				val conns = connect(ctx, targetOrder, id, unknown, findOwn = true)
@@ -140,14 +140,15 @@ def resolvePlay(ctx: ClueContext, targetOrder: Int, focusPoss: Seq[FocusPossibil
 			else
 				t.inferred.intersect(conn.ids)
 			t.copy(inferred = newInferred)
-
-		.when(_ => conn.isInstanceOf[FinesseConn]):
-			_.withMeta(order):
-				_.copy(status = CardStatus.Finessed, by = Some(action.giver))
-				.reason(state.turnCount)
-				.signal(state.turnCount)
-			.withThought(order)(_.copy(oldInferred = game.common.thoughts(order).inferred.toOpt))
-
+		.pipe: g =>
+			conn match
+				case f: FinesseConn =>
+					g.withMeta(order):
+						_.copy(status = if f.fKind == FinesseKind.Bluff then CardStatus.Bluffed else CardStatus.Finessed, by = Some(action.giver))
+						.reason(state.turnCount)
+						.signal(state.turnCount)
+					.withThought(order)(_.copy(oldInferred = game.common.thoughts(order).inferred.toOpt))
+				case _ => g
 		(newGame, modified + order)
 	}._1
 
@@ -172,15 +173,16 @@ def resolvePlay(ctx: ClueContext, targetOrder: Int, focusPoss: Seq[FocusPossibil
 			infoLock = t.possible.intersect(poss).toOpt
 		)
 
-	.withMeta(targetOrder): m =>
-		m.copy(
-			focused = m.focused || list.contains(targetOrder),
-			status = CardStatus.CalledToPlay,
-			by = Some(action.giver))
-		.reason(game.state.turnCount)
-		.signal(game.state.turnCount)
+	.when(_ => !matchedFps.exists(_.isBluff)):
+		_.withMeta(targetOrder): m =>
+			m.copy(
+				focused = m.focused || list.contains(targetOrder),
+				status = CardStatus.CalledToPlay,
+				by = Some(action.giver))
+			.reason(game.state.turnCount)
+			.signal(game.state.turnCount)
 
-def interpretLockedClue(ctx: ClueContext) =
+def interpret2pLockedClue(ctx: ClueContext) =
 	val ClueContext(prev, game, action) = ctx
 	val state = game.state
 	val ClueAction(giver, target, list, clue) = action

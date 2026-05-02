@@ -433,9 +433,10 @@ case class EndgameSolver[G <: Game](
 			.flatten
 
 			val defaultClue = PerformAction.Rank(0, 0)
-			val tooManyClues = state.actionList.flatten.reverse
-				.takeWhile(!_.requiresDraw)
-				.count(_.isInstanceOf[ClueAction]) > game.state.numPlayers + 1
+			val tooManyClues = state.numPlayers > 2 &&
+				state.actionList.flatten.reverse
+					.takeWhile(!_.requiresDraw)
+					.count(_.isInstanceOf[ClueAction]) > game.state.numPlayers + 1
 
 			val clueWinnable = state.canClue &&
 				!tooManyClues &&

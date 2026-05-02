@@ -4,7 +4,7 @@ import cats.effect.unsafe.implicits.global
 
 import scala_bot.refSieve.RefSieve
 import scala_bot.basics._
-import scala_bot.test.{fullyKnown, hasInfs, hasStatus, Player, preClue, setup, takeTurn}, Player._
+import scala_bot.test.{Colour, fullyKnown, hasInfs, hasStatus, Player, preClue, setup, takeTurn}, Player._
 
 import scala_bot.utils.{pipe, tap}
 import scala_bot.logger.{Logger, LogLevel}
@@ -22,7 +22,7 @@ class Reclues extends munit.FunSuite:
 		)
 		.pipe(takeTurn("Alice clues 3 to Bob"))
 		.tap: g =>
-			hasStatus(g, Bob, 1, CardStatus.Finessed)
+			hasStatus(g, Bob, 1, CardStatus.Bluffed)
 		.pipe(takeTurn("Bob plays b1", "p1"))
 
 		hasStatus(game, Bob, 2, CardStatus.None)
@@ -38,7 +38,7 @@ class Reclues extends munit.FunSuite:
 		)
 		.pipe(takeTurn("Bob clues 3 to Alice (slot 5)"))
 		.tap: g =>
-			hasStatus(g, Alice, 1, CardStatus.Finessed)
+			hasStatus(g, Alice, 1, CardStatus.Bluffed)
 		.pipe(takeTurn("Alice plays b1 (slot 1)"))
 
 		hasStatus(game, Alice, 2, CardStatus.None)
@@ -53,7 +53,7 @@ class Reclues extends munit.FunSuite:
 		)
 		.pipe(takeTurn("Alice clues green to Bob"))
 		.tap: g =>
-			hasStatus(g, Bob, 1, CardStatus.Finessed)
+			hasStatus(g, Bob, 1, CardStatus.Bluffed)
 		.pipe(takeTurn("Bob plays b1", "p1"))
 
 		hasStatus(game, Bob, 2, CardStatus.None)
@@ -69,10 +69,27 @@ class Reclues extends munit.FunSuite:
 		)
 		.pipe(takeTurn("Bob clues green to Alice (slot 5)"))
 		.tap: g =>
-			hasStatus(g, Alice, 1, CardStatus.Finessed)
+			hasStatus(g, Alice, 1, CardStatus.Bluffed)
 		.pipe(takeTurn("Alice plays b1 (slot 1)"))
 
 		hasStatus(game, Alice, 2, CardStatus.None)
+
+	test("prefers to scb over direct"):
+		val game = setup(RefSieve.apply, Vector(
+			Vector("xx", "xx", "xx", "xx", "xx"),
+			Vector("r5", "y4", "g4", "b2", "b4")
+		),
+			starting = Bob,
+			clueTokens = 7,
+			playStacks = Some(Vector(4, 0, 0, 0, 0)),
+			init =
+				fullyKnown[RefSieve](Bob, 2, "y4") andThen
+				fullyKnown[RefSieve](Bob, 3, "g4") andThen
+				preClue[RefSieve](Bob, 4, Vector("2")) andThen
+				preClue[RefSieve](Bob, 5, Vector("4"))
+		)
+
+		assertEquals(game.takeAction.unsafeRunSync(), PerformAction.Colour(Bob.ordinal, Colour.Blue.ordinal))
 
 	test("interprets a finesse + prompt"):
 		val game = setup(RefSieve.apply, Vector(
@@ -122,7 +139,7 @@ class Reclues extends munit.FunSuite:
 		)
 		.pipe(takeTurn("Alice clues 3 to Bob"))
 		.tap: g =>
-			hasStatus(g, Bob, 1, CardStatus.Finessed)
+			hasStatus(g, Bob, 1, CardStatus.Bluffed)
 		.pipe(takeTurn("Bob plays b1", "p1"))
 
 		hasInfs(game, None, Bob, 4, Vector("g1", "g2", "g4", "g5"))
@@ -249,6 +266,9 @@ class Reclues extends munit.FunSuite:
 
 		hasStatus(game, Alice, 1, CardStatus.CalledToPlay)
 		hasStatus(game, Alice, 2, CardStatus.CalledToPlay)
+
+		// Only slot 1 is playable.
+		assertEquals(game.common.thinksPlayables(game, Alice.ordinal), Vector(game.state.hands(Alice.ordinal)(0)))
 
 	test("doesn't give a bad no-info bluff"):
 		val game = setup(RefSieve.apply, Vector(

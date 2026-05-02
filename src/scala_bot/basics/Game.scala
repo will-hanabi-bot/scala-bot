@@ -280,9 +280,10 @@ extension[G <: Game](game: G)
 		.contains(id)
 
 	/** Returns whether the order is known to be a particular special suit from empathy. */
-	def knownAs(order: Int, regex: Regex) =
+	def knownAs(order: Int, regex: Regex, specialRank: Option[Int] = None) =
 		game.common.thoughts(order).possible.forall: i =>
-			regex.matches(game.state.variant.suits(i.suitIndex).name)
+			regex.matches(game.state.variant.suits(i.suitIndex).name) ||
+			specialRank.contains(i.rank)
 
 	def handleClue(prev: G, clue: ClueAction)(using ops: GameOps[G]) =
 		ops.interpretClue(prev, game.onClue(clue), clue)
@@ -393,7 +394,7 @@ extension[G <: Game](game: G)
 							c.copy(suitIndex = id.suitIndex, rank = id.rank))),
 			rewindDepth = Some(game.rewindDepth))))
 
-	def replay(using ops: GameOps[G]): Either[String, G] =
+	def replay(turn: Int)(using ops: GameOps[G]): Either[String, G] =
 		val state = game.state
 
 		if game.rewindDepth > 4 then
@@ -401,8 +402,8 @@ extension[G <: Game](game: G)
 
 		Log.highlight(Console.GREEN, "------- STARTING REPLAY -------")
 
-		// val level = Logger.level
-		// Logger.setLevel(LogLevel.Off)
+		val level = Logger.level
+		Logger.setLevel(LogLevel.Off)
 
 		val newGame = ops.blank(game, keepDeck = true)
 			.pipe: g =>
@@ -416,6 +417,8 @@ extension[G <: Game](game: G)
 						case DrawAction(playerIndex, order, _, _)
 							if acc.state.hands(playerIndex).contains(order) => acc
 						case _ =>
+							if acc.state.turnCount >= turn - 1 then
+								Logger.setLevel(level)
 							acc.handleAction(action)
 
 		Log.highlight(Console.GREEN, s"------- REPLAY COMPLETE -------")

@@ -40,16 +40,24 @@ case class RefSieve(
 
 	override def filterPlayables(player: Player, playerIndex: Int, orders: Seq[Int], assume: Boolean): Seq[Int] =
 		orders.filter: o =>
-			!player.links.exists(l => l.getOrders.contains(o) && l.getOrders.max != o)
+			!player.links.exists(l => l.getOrders.contains(o) && l.getOrders.max != o) &&
+			player.thoughts(o).inferred.forall(state.isPlayable) &&
+			!orders.exists: o2 =>
+				o != o2 &&
+				player.thoughts(o).reset && !player.thoughts(o2).reset &&
+				player.thoughts(o).possible == player.thoughts(o2).possible		// Look the same, but this one is reset and the other isn't
 
 	override def validArr(id: Identity, order: Int): Boolean =
 		val playables = this.me.thinksPlayables(this, state.ourPlayerIndex)
+		val trash = this.me.thinksTrash(this, state.ourPlayerIndex)
 
 		if playables.contains(order) then
 			state.isPlayable(id)
 		else if this.isTouched(order) && !this.common.thoughts(order).reset then
 			val good = this.me.thoughts(order).possible.difference(state.trashSet)
 			good.isEmpty || good.contains(id)
+		else if trash.contains(order) then
+			this.me.isTrash(this, id, excludeOrder = order)
 		else
 			true
 
@@ -94,7 +102,7 @@ case class RefSieve(
 
 		Option.when(needsReplay) {
 			copy(future = future.updated(order, IdentitySet.single(Identity(suitIndex, rank))))
-			.replay
+			.replay(state.deck(order).turnDrawn)
 			.toOption
 		}.flatten
 
@@ -246,9 +254,10 @@ object RefSieve:
 					val removePtd =
 						state.deck(o).clued &&
 						prev.meta(o).status == CardStatus.PermissionToDiscard &&
-						!state.deck(o).id(partial = true).exists(id => id.rank == 1 || id.rank == 2)
+						!game.common.thoughts(o).id(partial = true).exists(id => id.rank == 1 || id.rank == 2)
 
 					if removePtd then
+						Log.highlight(Console.CYAN, s"revoking ptd from $o")
 						(prev.withMeta(o)(_.copy(status = CardStatus.None)), game.withMeta(o)(_.copy(status = CardStatus.None)))
 					else
 						acc
@@ -256,7 +265,7 @@ object RefSieve:
 			val ctx = ClueContext(prev, game, action)
 
 			if state.numPlayers == 2 && game.common.thinksLocked(game, giver) then
-				return interpretLockedClue(ctx).elim()
+				return interpret2pLockedClue(ctx).elim()
 
 			val fix = checkFix(prev, game, action).isInstanceOf[FixResult.Normal]
 			val trashPush = !fix && newlyTouched.forall(game.common.orderKt(game, _))
@@ -564,7 +573,8 @@ object RefSieve:
 			val state = game.state
 
 			val nextBlindPlay =
-				game.common.thinksPlayables(game, currentPlayerIndex).filter(game.meta(_).signalTurn.isDefined)
+				(game.common.thinksPlayables(game, currentPlayerIndex) ++ state.hands(currentPlayerIndex).filter(game.meta(_).status == CardStatus.CalledToPlay))
+					.filter(game.meta(_).signalTurn.isDefined)
 					.minByOption(game.meta(_).signalTurn.getOrElse(99))
 
 			nextBlindPlay.fold(game): order =>

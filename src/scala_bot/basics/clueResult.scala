@@ -47,10 +47,14 @@ def dupeResponsibility(game: Game, id: Identity, except: Int) =
 			state.deck(o).clued &&
 			game.common.thoughts(o).inferred.contains(id)
 
-	val dupes = (0 until state.numPlayers).filter(_ != except).map(potentialDupes)
-	val minDupe = dupes.min
+	val dupes =
+		for
+			i <- 0 until state.numPlayers if i != except
+		yield
+			(potentialDupes(i), i)
+	val minDupe = dupes.minimizing(99)(_._1)
 
-	dupes.zipWithIndex.collect:
+	dupes.collect:
 		case (ds, i) if ds == minDupe => i
 
 /** Computes bad-touch-related statistics of the clue.

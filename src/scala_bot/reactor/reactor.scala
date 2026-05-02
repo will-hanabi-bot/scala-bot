@@ -123,7 +123,7 @@ case class Reactor(
 			copy(
 				future = future.updated(order, IdentitySet.single(Identity(suitIndex, rank)))
 			)
-			.replay
+			.replay(state.deck(order).turnDrawn)
 			.toOption
 		}.flatten
 

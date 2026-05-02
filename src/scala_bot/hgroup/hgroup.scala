@@ -311,9 +311,9 @@ case class HGroup(
 			reclue
 
 		lazy val muddySuitIndex = state.variant.suits.indexWhere(suit => MUDDY.matches(suit.name))
-		lazy val muddyCards = list.filter(this.knownAs(_, MUDDY))
+		lazy val muddyCards = list.filter(this.knownAs(_, MUDDY, if state.variant.rainbowS then state.variant.specialRank else None))
 		lazy val mudClue = clue.kind == ClueKind.Colour &&
-			state.includesVariant(MUDDY) &&
+			(state.includesVariant(MUDDY) || state.variant.rainbowS) &&
 			muddyCards.nonEmpty &&
 			reclue &&
 			// Mud clues should only work if the leftmost card is muddy.
@@ -351,6 +351,7 @@ case class HGroup(
 		else if mudClue then
 			val coloursAvailable = state.variant.colourableSuits.length
 			val focusIndex = (clue.value - coloursAvailable + 6*muddyCards.length) % muddyCards.length
+			// Log.info(s"mud clue! focusing slot ${state.hands(target).indexOf(muddyCards(focusIndex)) + 1}")
 			FocusResult(muddyCards(focusIndex), positional = true)
 
 		else if pinkStall5.isDefined then
@@ -442,7 +443,7 @@ case class HGroup(
 			copy(
 				future = future.updated(order, IdentitySet.single(Identity(suitIndex, rank)))
 			)
-			.replay
+			.replay(state.deck(order).turnDrawn)
 			.toOption
 		}.flatten
 
