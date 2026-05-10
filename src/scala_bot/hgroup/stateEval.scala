@@ -242,7 +242,7 @@ def advance(orig: HGroup, game: HGroup, offset: Int): Double =
 				val action = DiscardAction(playerIndex, chop, id.suitIndex, id.rank)
 				val dcGame = game.simulate(action)
 
-				if state.canClue then
+				if state.canClue && state.numPlayers > 2 then
 					val clueProb = if offset == 1 then
 						if common.thinksLoaded(game, bob) then
 							0.2

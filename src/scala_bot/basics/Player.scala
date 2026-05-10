@@ -1,7 +1,7 @@
 package scala_bot.basics
 
 import scala_bot.utils._
-import scala_bot.logger.{Log, Logger, LogLevel}
+import scala_bot.logger.{Logger, LogLevel}
 
 import scala.collection.immutable.BitSet
 

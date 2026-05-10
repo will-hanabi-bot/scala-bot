@@ -95,6 +95,7 @@ def findKnownConn(ctx: ClueContext, id: Identity, ignore: Set[Int], findOwn: Boo
 		order <- state.hands(playerIndex).find: o =>
 			prev.state.deck(o).clued &&
 			prev.common.hypoPlays.contains(o) &&
+			(prev.common.thoughts(o).reset || !game.common.thoughts(o).reset) &&
 			state.deck(o).matches(id, assume = game.allowFindOwn && findOwn) &&
 			common.thoughts(o).inferred.contains(id)
 	yield

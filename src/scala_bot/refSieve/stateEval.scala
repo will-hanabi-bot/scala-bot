@@ -169,11 +169,13 @@ def advance(orig: RefSieve, game: RefSieve, offset: Int): Double =
 			val Identity(suitIndex, rank) = id
 			val action = DiscardAction(playerIndex, order, suitIndex, rank)
 
-			Log.info(s"${state.names(playerIndex)} discarding ${state.logId(id)} but might clue")
-
 			val dcValue = advance(orig, game.simulate(action), offset + 1)
 
-			if state.clueTokens < 2 then dcValue else
+			if state.clueTokens < 2 || state.numPlayers == 2 then
+				Log.info(s"${state.names(playerIndex)} discarding ${state.logId(id)}")
+				dcValue
+			else
+				Log.info(s"${state.names(playerIndex)} discarding ${state.logId(id)} but might clue")
 				val clueValue = _forceClue(orig, game, offset)
 
 				val clueProb = if offset == 1 then
@@ -378,7 +380,7 @@ def evalGame(orig: RefSieve, game: RefSieve): Double =
 				case 1 => -math.pow(state.discardStacks(id.suitIndex)(id.rank - 1).length, 2)
 				case 2 => -3
 				case 3 => -1.5
-				case _ => if state.numPlayers == 2 then -0.25 else -1
+				case _ => if state.numPlayers == 2 && orig.state.score + orig.state.hands.flatten.count(orig.state.deck(_).clued) < state.maxScore / 2 then -0.25 else -1
 
 	val touchVal = state.hands.flatten.summing: o =>
 		if !state.deck(o).clued && game.meta(o).status == CardStatus.None then
@@ -390,11 +392,13 @@ def evalGame(orig: RefSieve, game: RefSieve): Double =
 				case Some(id) if state.isBasicTrash(id) => -0.1
 				case _ => Array(0.0, 0.01, 0.007, 0.005, 0.004, 0.003)(game.common.thoughts(o).inferred.length.min(5))
 
-	val lockedPenalty = (0 until state.numPlayers).summing: playerIndex =>
-		if !game.players(playerIndex).thinksLocked(game, playerIndex) then 0 else
+	val lockedPenalty =
+		val numLocked = (0 until state.numPlayers).count(i => game.players(i).thinksLocked(game, i))
+
+		if numLocked == state.numPlayers then -3.0 else
 			state.clueTokens match
-				case c if c > 4 => -1
-				case _ => -2
+				case c if c > 4 => -0.5 * numLocked
+				case _ => -1.0 * numLocked
 
 	val endgamePenalty = orig.state.endgameTurns.fold(0): turns =>
 		val finalScore = (0 until turns).foldLeft(orig.state.playStacks) { (stacks, i) =>
@@ -415,4 +419,4 @@ def evalGame(orig: RefSieve, game: RefSieve): Double =
 		if badPtd.isDefined then -5 else 0
 
 	Log.info(s"state: $stateVal, future: $futureVal, bdr: $bdrVal touch: $touchVal locked: $lockedPenalty${if endgamePenalty != 0 then s" endgame penalty: ${endgamePenalty}" else ""}${if badPtdVal != 0 then s" badPtd!" else ""}")
-	stateVal + futureVal + bdrVal + touchVal + endgamePenalty + badPtdVal
+	stateVal + futureVal + bdrVal + touchVal + endgamePenalty + badPtdVal + lockedPenalty

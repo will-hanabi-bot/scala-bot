@@ -231,6 +231,7 @@ extension[G <: Game](game: G)
 				newGame.onDraw(draw)
 					.when(g => g.state.turnCount == 0 && g.state.hands.forall(_.length == HAND_SIZE(state.numPlayers)))
 						(_.withState(_.copy(turnCount = 1)))
+					.elim()
 
 			case _: GameOverAction =>
 				Log.highlight(Console.YELLOW, "Game over!")

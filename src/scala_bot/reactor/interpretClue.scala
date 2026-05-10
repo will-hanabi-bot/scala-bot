@@ -122,7 +122,7 @@ private def tryStable(prev: Reactor, game: Reactor, action: ClueAction, stall: B
 			val possibleConnections =
 				for
 					o  <- list if prev.state.deck(o).clued
-					id <- state.deck(o).id() if state.playableAway(id) == 1
+					id <- state.deck(o).id().orElse(game.common.thoughts(o).id()) if state.playableAway(id) == 1
 				yield id
 
 			prevPlays.findSome: o =>
@@ -135,8 +135,11 @@ private def tryStable(prev: Reactor, game: Reactor, action: ClueAction, stall: B
 			val safeActions = playables.concat(common.thinksTrash(g, target))
 			val oldSafeActions = prevPlayables.concat(prev.common.thinksTrash(prev, target))
 
+			lazy val connectable = connectableSimple(game.withMove(ClueInterp.Reveal), game.common, state.nextPlayerIndex(giver), target)
+				.filterNot(oldSafeActions.contains)
+
 			// Try connecting with an unknown playable
-			lazy val connectable =
+			lazy val unknownConn =
 				state.deck(list.max).id() match
 					case Some(focusId) if nextPlayerIndex != target && state.playableAway(focusId) == 1 =>
 						prev.common.obviousPlayables(prev, nextPlayerIndex).find:
@@ -151,9 +154,13 @@ private def tryStable(prev: Reactor, game: Reactor, action: ClueAction, stall: B
 				Log.info("stalling with fill-in/hard burn!")
 				(Some(ClueInterp.Stall), g)
 
-			else if connectable.isDefined then
-				Log.info(s"connecting through unknown playable (${connectable.get})!")
-				val connectedGame = g.withThought(connectable.get): t =>
+			else if connectable.nonEmpty then
+				Log.info(s"connecting to revealed playables! $connectable")
+				(Some(ClueInterp.Reveal), g)
+
+			else if unknownConn.isDefined then
+				Log.info(s"connecting through unknown playable (${unknownConn.get})!")
+				val connectedGame = g.withThought(unknownConn.get): t =>
 					 t.copy(inferred = IdentitySet.single(state.deck(list.max).id().get.prev.get))
 
 				(Some(ClueInterp.Reveal), connectedGame)

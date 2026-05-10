@@ -4,7 +4,7 @@ import cats.effect.unsafe.implicits.global
 
 import scala_bot.reactor.Reactor
 import scala_bot.basics._
-import scala_bot.test.{hasInfs, hasStatus, Player, preClue, setup, takeTurn, TestVariant}, Player._
+import scala_bot.test.{fullyKnown, hasInfs, hasStatus, Player, preClue, setup, takeTurn, TestVariant}, Player._
 
 import scala_bot.utils.pipe
 import scala_bot.logger.{Logger, LogLevel}
@@ -170,6 +170,25 @@ class Stable extends munit.FunSuite:
 		// We should play slot 4 as g1, instead of trying to play slot 3 to sacrifice b4.
 		hasStatus(game, Player.Alice, 3, CardStatus.None)
 		hasInfs(game, None, Alice, 4, Vector("g1"))
+
+	test("it interprets a 1-away reveal through a known card"):
+		val game = setup(Reactor.apply, Vector(
+			Vector("xx", "xx", "xx", "xx", "xx"),
+			Vector("g3", "y3", "g2", "b2", "r4"),
+			Vector("r4", "y4", "g4", "b4", "p4"),
+		),
+			starting = Cathy,
+			clueTokens = 7,
+			init =
+				fullyKnown[Reactor](Alice, 3, "b1") andThen
+				preClue[Reactor](Bob, 3, Vector("green")) andThen
+				preClue[Reactor](Bob, 4, Vector("blue"))
+		)
+		.pipe(takeTurn("Cathy clues 2 to Bob"))
+
+		// Stable, not 5 + 3 = 3
+		assertEquals(game.lastMove, Some(ClueInterp.Reveal))
+		hasStatus(game, Player.Alice, 5, CardStatus.None)
 
 	test("doesn't give a false 1-away reveal"):
 		val game = setup(Reactor.apply, Vector(

@@ -166,6 +166,9 @@ def interpClue(ctx: ClueContext): HGroup =
 		state.variant.suits.zipWithIndex.forall: (suit, suitIndex) =>
 			!suit.suitType.pinkish ||
 			common.isTrash(game, Identity(suitIndex, clue.value), focus)
+		&&
+		game.common.thoughts(focus).possible.exists: i =>
+			!state.isCritical(i) && common.isTrash(game, i, focus)
 
 	if pinkTrashFix then
 		Log.info(s"pink trash fix!")

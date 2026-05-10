@@ -102,7 +102,7 @@ def advance(orig: Reactor, game: Reactor, offset: Int): Double =
 				// Only consider playing the leftmost of similarly-possible cards
 				!allPlayables.exists(p => p > o && common.thoughts(p).possible == common.thoughts(o).possible)
 
-		var strikes = 0
+		var strike = false
 
 		val playActions = playables.map: order =>
 			val (id, action) = state.deck(order).id() match
@@ -119,12 +119,12 @@ def advance(orig: Reactor, game: Reactor, offset: Int): Double =
 
 			val advancedGame = game.simulate(action)
 			if advancedGame.state.strikes > game.state.strikes then
-				strikes += 1
+				strike = true
 
 			advance(orig, advancedGame, offset + 1)
 
-		// Some of the playables cause strikes, but not all, so penalize playing.
-		if strikes > 0 && strikes < playables.length then
+		// At least one playable causes a strike, assume they will bomb the worst one.
+		if strike then
 			playActions.min
 		else
 			Log.info(s"also seeing if they can clue instead!")
@@ -214,7 +214,11 @@ def _evalAction(game: Reactor, action: Action): Double =
 			result * (if result > 0 then mult else 1) - 0.5
 
 		case PlayAction(_, order, suitIndex, rank) =>
-			if !game.inEndgame && visibleFind(state, game.me, Identity(suitIndex, rank), excludeOrder = order).exists(game.isTouched) then
+			val unknownDupe = !game.inEndgame &&
+				visibleFind(state, game.me, Identity(suitIndex, rank), excludeOrder = order).exists: o =>
+					game.isTouched(o) && !hypoGame.common.orderTrash(hypoGame, o)
+
+			if unknownDupe then
 				-0.25
 			else if suitIndex == -1 || rank == -1 then
 				1.5
@@ -301,12 +305,12 @@ def evalGame(orig: Reactor, game: Reactor): Double =
 						if by != state.ourPlayerIndex then
 							0
 						else
-							0.5
+							0.3
 					case Some(id) =>
 						if state.isBasicTrash(id) then
-							1
+							0.3
 						else if game.me.isSieved(game, id, order) then
-							0.5
+							0.2
 						else if state.isCritical(id) then
 							-(5 - state.playableAway(id)) * 10.0
 						else if by != state.ourPlayerIndex then

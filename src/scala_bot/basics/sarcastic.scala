@@ -43,7 +43,7 @@ def interpretUsefulDc(game: Game, action: DiscardAction): DiscardResult =
 					case _ => None
 
 	def tryFinding(excluding: Set[Int] = Set.empty): DiscardResult =
-		state.hands.flatten.find(o => !excluding.contains(o) && state.deck(o).matches(id)) match
+		state.hands.flatten.find(o => !excluding.contains(o) && game.orderMatches(o, id)) match
 			case Some(dupe) =>
 				val holder = state.holderOf(dupe)
 

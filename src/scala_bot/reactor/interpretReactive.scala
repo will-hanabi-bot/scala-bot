@@ -159,7 +159,7 @@ def interpretReactiveRank(prev: Reactor, game: Reactor, action: ClueAction, focu
 			state.deck(o).id().exists(hypoState.isPlayable)
 		.sortBy: (o, i) =>
 			// Do not target an unclued copy when there is a clued copy
-			val uncluedDupe = !prev.state.deck(9).clued &&
+			val uncluedDupe = !prev.state.deck(o).clued &&
 				state.hands(receiver).exists: o2 =>
 					o2 != o && prev.state.deck(o2).clued && state.deck(o).matches(state.deck(o2))
 

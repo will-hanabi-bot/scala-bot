@@ -23,7 +23,7 @@ case class CardElimResult(
 		)
 
 extension (p: Player)
-	private def updateMap(state: State, id: Identity, exclude: BitSet): CardElimResult =
+	private def updateMap(state: State, id: Identity, exclude: BitSet, excludeOwn: BitSet): CardElimResult =
 		var changed = false
 		var recursiveIds = IdentitySet.empty
 		var crossElimRemovals = BitSet.empty
@@ -33,12 +33,13 @@ extension (p: Player)
 		var dirty = p.dirty
 		var resets = BitSet.empty
 
-		loopIf(0, _ < state.numPlayers, _ + 1, !exclude.contains(_)): playerIndex =>
+		loopIf(0, _ < state.numPlayers, _ + 1, i => i == p.playerIndex || !exclude.contains(i)): playerIndex =>
 			state.hands(playerIndex).fastForeach: order =>
 				val thought = thoughts(order)
 				val noElim =
 					!thought.possible.contains(id) ||
-					certainMap(id.toOrd).exists(e => e.order == order || e.unknownTo == playerIndex)
+					certainMap(id.toOrd).exists(e => e.order == order || e.unknownTo == playerIndex) ||
+					excludeOwn.contains(order)
 
 				if !noElim then
 					changed = true
@@ -109,7 +110,7 @@ extension (p: Player)
 			val knownCount = res.player.certainMap(id.toOrd).length
 
 			if knownCount == state.cardCount(id.toOrd) then
-				val innerResult = res.player.updateMap(state, id, BitSet.empty)
+				val innerResult = res.player.updateMap(state, id, BitSet.empty, BitSet.empty)
 
 				res = res.merge(innerResult)
 				eliminated = eliminated.union(id)
@@ -145,12 +146,12 @@ extension (p: Player)
 			val certains = res.player.certainMap(id.toOrd).filter(c => !group.contains(c.order)).length
 
 			if group.size == state.cardCount(id.toOrd) - certains then
-				val innerResult = res.player.updateMap(state, id, BitSet.fromSpecific(group.map(state.holderOf)))
+				val innerResult = res.player.updateMap(state, id, BitSet.fromSpecific(group.map(state.holderOf)), BitSet.empty)
 				res = res.merge(innerResult)
 
 		// Now elim all the cards outside of this entry
 		for id <- ids do
-			val innerResult = res.player.updateMap(state, id, holders)
+			val innerResult = res.player.updateMap(state, id, holders, if p.isCommon then BitSet.empty else entries.filter(state.hands(p.playerIndex).contains))
 			res = res.merge(innerResult)
 
 		val innerResult = res.player.basicElim(state, ids)
@@ -247,8 +248,8 @@ extension (p: Player)
 				val possible = thought.possible
 
 				val canCrossElim = possible.length > 1 &&
-					possible.difference(state.trashSet).nonEmpty &&
-					state.multiplicity(possible) <= 8
+					// possible.difference(state.trashSet).nonEmpty &&
+					state.multiplicity(possible) <= 9
 
 				if canCrossElim then
 					crossElimCandidates = order +: crossElimCandidates
@@ -260,7 +261,7 @@ extension (p: Player)
 				newPlayer.certainMap(id.toOrd).fastForeach: c =>
 					certains = certains.incl(c.order)
 
-			state.multiplicity(thought.possible) - certains.size <= crossElimCandidates.length
+			state.multiplicity(thought.possible) - certains.size <= Math.min(9, crossElimCandidates.length)
 
 		var changed = true
 

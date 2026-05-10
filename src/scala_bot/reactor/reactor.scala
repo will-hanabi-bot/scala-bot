@@ -442,7 +442,7 @@ object Reactor:
 							None
 
 			val solveEndgame =
-				if game.inEndgame && state.remScore <= state.variant.suits.length + 1 then
+				if state.remScore <= state.variant.suits.length + 1 then
 					IO.blocking:
 						Log.highlight(Console.MAGENTA, "trying to solve endgame...")
 

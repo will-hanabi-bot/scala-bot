@@ -638,7 +638,7 @@ object HGroup:
 			val (state, me) = (game.state, game.me)
 
 			val solveEndgame =
-				if game.inEndgame && state.remScore <= state.variant.suits.length + 1 then
+				if state.remScore <= state.variant.suits.length + 1 then
 					IO.blocking:
 						Log.highlight(Console.MAGENTA, "trying to solve endgame...")
 
@@ -824,7 +824,7 @@ object HGroup:
 				.getOrElse(game.players(playerIndex).lockedDiscard(game.state, playerIndex))
 
 			val targets =
-				if game.level >= Level.Endgame && game.inEndgame then
+				if game.level >= Level.Endgame && (game.inEndgame || game.state.remScore < game.state.variant.suits.length) then
 					// ALlow discarding any known trash
 					game.state.hands(playerIndex).filter(game.players(playerIndex).orderKt(game, _))
 						.when(_.isEmpty)(_ => Vector(expectedDc))
