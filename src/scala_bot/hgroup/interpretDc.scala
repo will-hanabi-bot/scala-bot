@@ -317,7 +317,7 @@ def interpretSdcm(ctx: DiscardContext): Option[HGroup] =
 	val DiscardContext(prev, game, action) = ctx
 	val state = game.state
 
-	if game.inEndgame then
+	if game.inEndgame || action.failed then
 		return None
 
 	val bob = state.nextPlayerIndex(action.playerIndex)
