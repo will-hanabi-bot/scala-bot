@@ -78,7 +78,7 @@ def occamsRazor(ctx: ClueContext, fps: Seq[FocusPossibility], playerIndex: Int, 
 			(min, acc, fp +: impossible)
 		else
 			val simplicity = fpSimplicity(fp, playerIndex, state.ourPlayerIndex)
-			// println(s"${state.logId(fp.id)} $playerIndex simplicity: $simplicity")
+			// Log.info(s"${state.logId(fp.id)} $playerIndex simplicity: $simplicity")
 
 			if simplicity < min && actualId.forall(_ == fp.id) then
 				(simplicity, List(fp), impossible)

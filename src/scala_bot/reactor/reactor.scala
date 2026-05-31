@@ -50,13 +50,24 @@ case class Reactor(
 		// 	Log.info(s"$orders ${orders.map(player.thoughts(_).id(infer = true))} ${orders.map(meta(_).signalTurn)}")
 
 		orders.filterNot: o =>
-			player.thoughts(o).id(infer = true).isEmpty &&
-			!player.links.exists(l => l.getOrders.contains(o) && l.getOrders.max != o) &&
-			// Another card was queued earlier and this could connect to it
+			val id = player.thoughts(o).id(infer = true)
+			val linked = meta(o).signalTurn.isEmpty &&
+				player.links.exists(l => l.getOrders.contains(o) && l.getOrders.max != o)
+
+			linked ||
 			orders.exists: o2 =>
-				o != o2 &&
-				player.thoughts(o2).id(infer = true).forall(!_.next.exists(player.thoughts(o).inferred.contains)) &&
-				meta(o2).signalTurn.exists(t2 => meta(o).signalTurn.exists(_ > t2))
+				o2 != o &&
+				// o2 was queued earlier
+				meta(o2).signalTurn.exists(t2 => meta(o).signalTurn.exists(_ > t2)) &&
+				{
+					id match
+						case Some(id) =>
+							player.thoughts(o2).matches(id, infer = true)
+						case None =>
+							// o2 could connect before o
+							player.thoughts(o2).inferred.exists: id =>
+								id.next.exists(player.thoughts(o).inferred.contains)
+				}
 
 	override def validArr(id: Identity, order: Int): Boolean =
 		val infoLock = this.me.thoughts(order).infoLock
@@ -205,7 +216,7 @@ object Reactor:
 			val state = game.state
 			val ClueAction(giver, target, list, _) = action
 
-			val interpretedGame = checkMissed(game, giver, 99)
+			val interpretedGame = checkMissed(game.elim(), giver, 99)
 				.when(_.waiting.exists(_.reacter == giver)):
 					_.copy(waiting = None)
 				.pipe: g =>
@@ -222,7 +233,7 @@ object Reactor:
 							else
 								interpretStable(prev, g, action, stall = false)
 
-						case None if prev.common.obviousLocked(prev, giver) || game.inEndgame || prev.state.clueTokens == 8 =>
+						case None if prev.common.obviousLocked(prev, giver) || game.inEndgame || (prev.state.clueTokens == 8 && prev.common.obviousPlayables(game, giver).isEmpty) =>
 							interpretStable(prev, g, action, stall = true)
 
 						case None =>
@@ -489,6 +500,7 @@ object Reactor:
 								// Don't play if there is a focused card that looks exactly like this one (no OCM in reactor)
 								knownP.filter: order =>
 									game.meta(order).status == CardStatus.CalledToPlay ||
+									game.meta(order).status == CardStatus.GentlemansDiscard ||
 									!state.hands(state.ourPlayerIndex).exists: o =>
 										o != order && me.thoughts(o).possible == me.thoughts(order).possible && game.meta(o).focused
 							else

@@ -340,10 +340,10 @@ extension[G <: Game](game: G)
 		Logger.setLevel(level)
 		hypoGame
 
-	def simulate(action: Action)(using ops: GameOps[G]): G =
+	def simulate(action: Action, log: Option[Boolean] = None)(using ops: GameOps[G]): G =
 		action match
-			case clue: ClueAction => game.simulateAction(clue, log = true)
-			case _ => game.simulateAction(action, log = true)
+			case clue: ClueAction => game.simulateAction(clue, log = log.getOrElse(true))
+			case _ => game.simulateAction(action, log = log.getOrElse(false))
 
 	def rewind(turn: Int, action: Action)(using ops: GameOps[G]): Either[String, G] =
 		val state = game.state

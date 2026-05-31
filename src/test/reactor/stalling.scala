@@ -53,3 +53,29 @@ class Stalling extends munit.FunSuite:
 
 		// Bob's slot 5 is not called to play, since colour can't given to Cathy.
 		hasStatus(game, Bob, 5, CardStatus.None)
+
+	test("it reacts when a direct play is available"):
+		val game = setup(Reactor.apply, Vector(
+			Vector("xx", "xx", "xx", "xx", "xx"),
+			Vector("r4", "g5", "y4", "y1", "g4"),
+			Vector("r3", "r3", "y3", "y3", "b3"),
+		),
+			starting = Cathy
+		)
+		.pipe(takeTurn("Cathy clues 5 to Bob"))
+
+		// Even though green to Bob is unavailable, 1 to Bob is, so Alice should react.
+		hasStatus(game, Alice, 3, CardStatus.CalledToPlay)
+
+	test("it reacts at 8 clues when giver is loaded"):
+		val game = setup(Reactor.apply, Vector(
+			Vector("xx", "xx", "xx", "xx", "xx"),
+			Vector("r4", "g5", "r3", "y4", "g4"),
+			Vector("r1", "r3", "y3", "y3", "b3"),
+		))
+		.pipe(takeTurn("Alice clues blue to Cathy"))
+		.pipe(takeTurn("Bob discards y4", "p1"))		// Cathy loaded on r1
+		.pipe(takeTurn("Cathy clues 5 to Bob"))
+
+		// Even though Cathy is at 8 clues, she is loaded, so Alice should react.
+		hasStatus(game, Alice, 2, CardStatus.CalledToPlay)

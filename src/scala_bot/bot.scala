@@ -2,17 +2,17 @@
 //> using jvm 25
 //> using options -opt -Wall -Wconf:msg=toString:s -feature
 //> using javaOpt -Xms128m -Xmx192m -Xss256k -XX:MaxMetaspaceSize=96m -XX:ReservedCodeCacheSize=64m -XX:+UseSerialGC
-//> using dep com.softwaremill.sttp.client4::core:4.0.23
-//> using dep com.softwaremill.sttp.client4::cats:4.0.23
+//> using dep com.softwaremill.sttp.client4::core:4.0.25
+//> using dep com.softwaremill.sttp.client4::cats:4.0.25
 //> using dep org.typelevel::cats-effect:3.7.0
 //> using dep com.lihaoyi::upickle:4.4.3
 //> using dep com.lihaoyi::requests:0.9.3
 //> using dep org.scala-lang.modules::scala-parallel-collections:1.2.0
-//> using test.dep org.scalameta::munit:1.3.0
+//> using test.dep org.scalameta::munit:1.3.1
 
 package scala_bot
 
-import cats.effect.{ExitCode, IO, IOApp, FiberIO}
+import cats.effect.{ExitCode, IO, IOApp}
 import cats.effect.kernel.Ref
 import cats.effect.std.Queue
 import sttp.client4.*
@@ -26,6 +26,7 @@ import scala.concurrent.duration._
 import scala_bot.basics.{Game,Variant}
 import scala_bot.console.{ConsoleCmd, spawnConsole}
 import scala.util.Try
+import java.io.IOException
 
 case class WebSocketClosedException(code: Int, reason: String) extends Exception(s"WebSocket closed ($code): $reason")
 
@@ -82,7 +83,7 @@ object main extends IOApp:
 
 					loop
 
-			def startSender(ws: WebSocket[IO], queue: Queue[IO, String]): IO[FiberIO[Unit]] =
+			def senderLoop(queue: Queue[IO, String]): IO[Unit] =
 				def loop: IO[Unit] =
 					for
 						msg <- queue.take
@@ -90,7 +91,7 @@ object main extends IOApp:
 						_   <- IO.sleep(500.millis)
 						_   <- loop
 					yield ()
-				loop.start
+				loop
 
 			for
 				_        <- IO.println("connected!")
@@ -99,9 +100,8 @@ object main extends IOApp:
 				gameRef  <- Ref.of[IO, Option[Game]](None)
 				client   = new BotClient(wsQueue, gameRef, BotConfig.fromEnv(env))(using runtime)
 				console  <- spawnConsole(consoleQ, client)
-				sender   <- startSender(ws, wsQueue)
 				_        <- IO { Variant.init() }
-				_        <- (console.join, receive(client)).parTupled.guaranteeCase(_ => sender.cancel)
+				_        <- (console.join, receive(client), senderLoop(wsQueue)).parTupled
 			yield ()
 
 		val index = parsedArgs.getOrElse("index", "0").toInt
@@ -132,7 +132,7 @@ object main extends IOApp:
 					yield ()
 
 					attempt.handleErrorWith:
-						case err @ (_: ReadException | _: WebSocketClosedException | _: ConnectException) if attemptNum < maxRetries =>
+						case err @ (_: IOException | _: ReadException | _: WebSocketClosedException | _: ConnectException) if attemptNum < maxRetries =>
 							connectedRef.getAndSet(false).flatMap: wasConnected =>
 								val nextAttemptNum = if wasConnected then 0 else attemptNum + 1
 								IO.println(s"Connection lost (attempt $attemptNum/$maxRetries): ${err.getMessage}") *>

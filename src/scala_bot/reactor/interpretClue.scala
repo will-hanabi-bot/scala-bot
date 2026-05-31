@@ -98,8 +98,8 @@ private def tryStable(prev: Reactor, game: Reactor, action: ClueAction, stall: B
 		)
 	.pipe: g =>
 		checkFix(prev, g, action) match
-			case FixResult.Normal(_, _) =>
-				Log.info("fix clue!")
+			case FixResult.Normal(cluedResets, duplicateReveals) =>
+				Log.info(s"fix clue! $cluedResets $duplicateReveals")
 				return (Some(ClueInterp.Fix), g)
 			case _ => ()
 
@@ -214,57 +214,46 @@ private def tryStable(prev: Reactor, game: Reactor, action: ClueAction, stall: B
 /**
 * Returns a non-bad touching ref play clue or a ref dc clue on trash to the clue target, if it exists.
 */
-private def alternativeClue(game: Reactor, clueTarget: Int, playOnly: Boolean = false) =
-	if game.noRecurse then None else
-		val (common, state) = (game.common, game.state)
+private def alternativeClue(prev: Reactor, giver: Int, target: Int, refPlayOnly: Boolean = false) =
+	if prev.noRecurse then None else
+		val state = prev.state
+		val clues = if refPlayOnly then state.allColourClues(target) else state.allValidClues(target)
 
-		state.allValidClues(clueTarget).find: clue =>
-			val list = state.clueTouched(state.hands(clueTarget), clue.base)
-			val hand = state.hands(clueTarget)
-			val newlyTouched = list.filter(!state.deck(_).clued)
+		clues.find: clue =>
+			val action = Action.fromClue(state, clue, giver)
+			val hypo = prev.copy(noRecurse = true).simulate(action, log = Some(false))
+			val (badTouch, _, _) = badTouchResult(prev, hypo, action)
 
-			newlyTouched.nonEmpty && {
-				clue.kind match
-					case ClueKind.Colour =>
-						val playTarget = newlyTouched.map(common.refer(game, hand, _, left = true)).max
-						val poss = IdentitySet.from(state.variant.touchPossibilities(clue.base))
+			badTouch.isEmpty && {
+				hypo.lastMove.get match
+					case ClueInterp.Play => true
+					case ClueInterp.Reveal if !refPlayOnly => true
+					case ClueInterp.Discard =>
+						val dcTarget = hypo.state.hands(target).find: o =>
+							hypo.meta(o).status == CardStatus.CalledToDiscard &&
+							prev.meta(o).status != CardStatus.CalledToDiscard
 
-						state.isPlayable(state.deck(playTarget).id().get) &&
-							(newlyTouched.forall(o => state.isUseful(state.deck(o).id().get)) ||
-								newlyTouched.forall(common.thoughts(_).possible.intersect(poss).forall(state.isBasicTrash)))
-					case ClueKind.Rank =>
-						!playOnly &&
-						!hand.filter(!state.deck(_).clued).minOption.exists(list.contains) && {
-							val focus = newlyTouched.max
-							val focusPos = hand.indexOf(focus)
-							val targetIndex = hand.zipWithIndex.indexWhere((o, i) => i > focusPos && !state.deck(o).clued)
-
-							state.isBasicTrash(state.deck(hand(targetIndex)).id().get) &&
-							newlyTouched.forall(o => state.isUseful(state.deck(o).id().get))
-						}
+						state.isBasicTrash(state.deck(dcTarget.get).id().get)
+					case _ => false
 			}
 
 def badStable(prev: Reactor, game: Reactor, action: ClueAction, interp: ClueInterp, stall: Boolean = false) =
 	val state = game.state
-	val target = action.target
+	val ClueAction(giver, target, _, clue) = action
 
-	lazy val altPlay = alternativeClue(prev, target, playOnly = true)
-	lazy val alt = alternativeClue(game, target, playOnly = false)
+	lazy val altPlay = alternativeClue(prev, giver, target, refPlayOnly = true)
+	lazy val alt = alternativeClue(prev, giver, target, refPlayOnly = false)
 	lazy val badPlayable = state.hands.flatten.find: o =>
 		game.meta(o).status == CardStatus.CalledToPlay && !state.hasConsistentInfs(game.common.thoughts(o)) &&
 		(prev.meta(o).status != CardStatus.CalledToPlay || prev.state.hasConsistentInfs(prev.common.thoughts(o)))
 
-	lazy val badDiscard = state.hands(target).find: o =>
+	lazy val dcTarget = state.hands(target).find: o =>
 		game.meta(o).status == CardStatus.CalledToDiscard &&
-		prev.meta(o).status != CardStatus.CalledToDiscard &&
-		(state.isCritical(state.deck(o).id().get) ||
-			(stall &&
-				state.isUseful(state.deck(o).id().get) &&
-				alt.isDefined))
+		prev.meta(o).status != CardStatus.CalledToDiscard
 
 	if interp == ClueInterp.Mistake then
 		true
-	else if prev.state.turnCount == 1 && action.clue.kind == ClueKind.Rank && altPlay.isDefined then
+	else if prev.state.turnCount == 1 && prev.state.clueTokens == 8 && clue.kind == ClueKind.Rank && altPlay.isDefined then
 		Log.warn(s"bad turn 1 rank clue! ${altPlay.get.fmt(state)} is possible")
 		true
 	else if target == state.ourPlayerIndex then
@@ -273,8 +262,11 @@ def badStable(prev: Reactor, game: Reactor, action: ClueAction, interp: ClueInte
 		val bad = badPlayable.get
 		Log.warn(s"bad playable on $bad ${state.logId(bad)}!")
 		true
-	else if badDiscard.isDefined then
-		Log.warn(s"bad discard on ${badDiscard.get}!")
+	else if dcTarget.exists(o => state.isCritical(state.deck(o).id().get)) then
+		Log.warn(s"critical discard on ${dcTarget.get}!")
+		true
+	else if stall && dcTarget.exists(o => state.isUseful(state.deck(o).id().get)) && alt.isDefined then
+		Log.warn(s"bad discard on ${dcTarget.get}! alt clue ${alt.get.fmt(state)} was available!")
 		true
 	// Check for bad lock
 	else if interp == ClueInterp.Lock && alt.isDefined then

@@ -99,7 +99,12 @@ case class EndgameSolver[G <: Game](
 	def solve(game: G, onlyAction: Option[PerformAction] = None)(using ops: GameOps[G]): Either[String, (PerformAction, Frac)] =
 		val state = game.state
 		if state.score + 1 == state.maxScore then
-			val winningPlay = state.ourHand.find:
+			val playables = if game.goodTouch || game.state.endgameTurns.isDefined then
+				game.me.thinksPlayables(game, state.ourPlayerIndex, excludeTrash = true)
+			else
+				game.me.obviousPlayables(game, state.ourPlayerIndex)
+
+			val winningPlay = playables.find:
 				game.me.thoughts(_).id(infer = true).exists(state.isPlayable)
 
 			if winningPlay.isDefined then

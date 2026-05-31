@@ -481,7 +481,11 @@ def evalGame(orig: HGroup, game: HGroup): Double =
 		game.isCM(o) &&
 		game.state.deck(o).id().exists: id =>
 			state.isBasicTrash(id) ||
-			state.hands(state.holderOf(o)).exists(p => p != o && game.me.thoughts(p).matches(id, infer = true) && game.isSaved(p))
+			state.hands.flatten.exists: p =>
+				p != o &&
+				game.me.thoughts(p).matches(id, infer = true) &&
+				game.isSaved(p) &&
+				(state.holderOf(p) == state.holderOf(o) || game.common.hypoPlays.contains(p))
 		&&
 		!game.common.orderKt(game, o)
 

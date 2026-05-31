@@ -283,10 +283,15 @@ class BotClient(queue: Queue[IO, String], gameRef: Ref[IO, Option[Game]], config
 							handleAction(GameActionMessage(msg.tableID, msg.list.last))
 
 			case "joined" =>
+				val id = ujson.read(args)("tableID").num.toInt
+
 				IO:
-					tableID = Some(ujson.read(args)("tableID").num.toInt)
+					tableID = Some(id)
 					gameStarted = false
 					lastJoinRequester = None
+				.flatMap: _ =>
+					tables.get(id).fold(IO.unit): table =>
+						checkSupportedSettings(table)
 
 			case "init" =>
 				handleInit(upickle.read[InitMessage](args))
@@ -422,6 +427,9 @@ class BotClient(queue: Queue[IO, String], gameRef: Ref[IO, Option[Game]], config
 						case Some(t) => sendCmd("tableReattend", ujson.write(ujson.Obj("tableID" -> t.id)))
 						case None => sendPM(who, "Could not rejoin, as the bot is not a player in any open room.")
 
+		else if msg.startsWith("/leave") then
+			leaveRoom()
+
 		else if msg.startsWith("/settings") then
 			assignSettings(data, true)
 
@@ -538,6 +546,7 @@ class BotClient(queue: Queue[IO, String], gameRef: Ref[IO, Option[Game]], config
 
 	def checkSupportedSettings(table: Table): IO[Unit] =
 		val unsupportedOptions = List(
+			Option.when(table.options.emptyClues)("emptyClues"),
 			Option.when(table.options.detrimentalCharacters)("detrimentalChars"),
 			Option.when(table.options.oneExtraCard)("oneExtraCard"),
 			Option.when(table.options.oneLessCard)("oneLessCard"),
@@ -547,7 +556,7 @@ class BotClient(queue: Queue[IO, String], gameRef: Ref[IO, Option[Game]], config
 		val unsupportedVariants = unsupportedVarPattern.matches(table.options.variantName)
 
 		IO.whenA(unsupportedOptions.nonEmpty):
-			sendChat(s"This bot doesn't support the table options ${unsupportedOptions.mkString(", ")} and may crash or behave nonsensically.")
+			sendChat(s"This bot doesn't support the table ${if unsupportedOptions.length == 1 then "option" else "options"} ${unsupportedOptions.mkString(", ")} and may crash or behave nonsensically.")
 		*>
 		IO.whenA(unsupportedVariants):
 			sendChat(s"This bot doesn't support the variant ${table.options.variantName} and may crash or behave nonsensically.")

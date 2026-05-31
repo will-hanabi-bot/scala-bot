@@ -25,22 +25,32 @@ def interpretUsefulDc(game: Game, action: DiscardAction): DiscardResult =
 	Log.info("interpreting useful dc!")
 
 	def findGD(holder: Int, hypoState: State, connected: Set[Int]): Option[List[Int]] =
-		state.hands(holder).findLast(o => !connected.contains(o) && common.thoughts(o).possible.contains(id)) match
-			case None => None
-			case Some(f) =>
-				val finesseId =
-					if game.future(f).length == 1 then
-						Some(game.future(f).head)
-					else
-						game.me.thoughts(f).id()
+		val blindPlays = state.hands(holder).filter: o =>
+			game.isBlindPlaying(o) &&
+			common.thoughts(o).possible.contains(id)
 
-				finesseId match
-					case None => Some(List(f))
-					case Some(i) if i.matches(id) => Some(List(f))
-					case Some(i) if hypoState.isPlayable(i) =>
-						findGD(holder, hypoState.withPlay(i), connected + f).map: rest =>
-							f +: rest
-					case _ => None
+		val calledToPlay = blindPlays.indexWhere:
+			game.me.thoughts(_).matches(id, infer = true, assume = true)
+
+		if calledToPlay != -1 then
+			Some(blindPlays.take(calledToPlay + 1).toList)
+		else
+			state.hands(holder).findLast(o => !connected.contains(o) && common.thoughts(o).possible.contains(id)) match
+				case None => None
+				case Some(f) =>
+					val finesseId =
+						if game.future(f).length == 1 then
+							Some(game.future(f).head)
+						else
+							game.me.thoughts(f).id()
+
+					finesseId match
+						case None => Some(List(f))
+						case Some(i) if i.matches(id) => Some(List(f))
+						case Some(i) if hypoState.isPlayable(i) =>
+							findGD(holder, hypoState.withPlay(i), connected + f).map: rest =>
+								f +: rest
+						case _ => None
 
 	def tryFinding(excluding: Set[Int] = Set.empty): DiscardResult =
 		state.hands.flatten.find(o => !excluding.contains(o) && game.orderMatches(o, id)) match

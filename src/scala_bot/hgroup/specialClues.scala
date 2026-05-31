@@ -62,9 +62,12 @@ def colourSave(prev: HGroup, action: ClueAction, id: Identity, focus: Int): Bool
 		val completed = prev.common.hypoStacks(suitIndex) == state.maxRanks(suitIndex)
 		val savedCrit = list.exists: o =>
 			val card = state.deck(o)
+
+			o != focus &&
 			!card.clued && card.id().exists: i =>
-				state.isCritical(i) && i.rank != 5 &&
-				"Dark Rainbow|Dark Prism".r.matches(state.variant.suits(i.suitIndex).name)
+				state.isCritical(i) &&
+				i.rank != 5 &&
+				!DARK.matches(state.variant.suits(i.suitIndex).name)
 
 		if !completed && !savedCrit then
 			return false
