@@ -233,13 +233,20 @@ private def alternativeClue(prev: Reactor, giver: Int, target: Int, refPlayOnly:
 							hypo.meta(o).status == CardStatus.CalledToDiscard &&
 							prev.meta(o).status != CardStatus.CalledToDiscard
 
-						state.isBasicTrash(state.deck(dcTarget.get).id().get)
+						// TODO?: The dc target doesn't always exist. Consider a ref dc onto a card that previously had ctd.
+						dcTarget.exists(dc => state.isBasicTrash(state.deck(dc).id().get))
 					case _ => false
 			}
 
-def badStable(prev: Reactor, game: Reactor, action: ClueAction, interp: ClueInterp, stall: Boolean = false) =
+def badStable(prev: Reactor, game: Reactor, action: ClueAction, interp: ClueInterp, stall: Boolean = false): Boolean =
 	val state = game.state
 	val ClueAction(giver, target, _, clue) = action
+
+	if game.noRecurse then
+		return false
+
+	if interp == ClueInterp.Mistake then
+		return true
 
 	lazy val altPlay = alternativeClue(prev, giver, target, refPlayOnly = true)
 	lazy val alt = alternativeClue(prev, giver, target, refPlayOnly = false)
@@ -251,9 +258,7 @@ def badStable(prev: Reactor, game: Reactor, action: ClueAction, interp: ClueInte
 		game.meta(o).status == CardStatus.CalledToDiscard &&
 		prev.meta(o).status != CardStatus.CalledToDiscard
 
-	if interp == ClueInterp.Mistake then
-		true
-	else if prev.state.turnCount == 1 && prev.state.clueTokens == 8 && clue.kind == ClueKind.Rank && altPlay.isDefined then
+	if prev.state.turnCount == 1 && prev.state.clueTokens == 8 && clue.kind == ClueKind.Rank && altPlay.isDefined then
 		Log.warn(s"bad turn 1 rank clue! ${altPlay.get.fmt(state)} is possible")
 		true
 	else if target == state.ourPlayerIndex then
