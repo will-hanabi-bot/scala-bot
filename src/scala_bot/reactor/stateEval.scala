@@ -38,10 +38,13 @@ def getResult(game: Reactor, hypo: Reactor, action: ClueAction): Double =
 					-100
 				case _ =>
 					// Previously-unclued playables whose copies are already touched
-					val dupedPlayables = hypo.me.hypoPlays.count: p =>
+					val dupedPlayables = hypo.me.hypoPlays.filter: p =>
 						!state.deck(p).clued &&
 						state.hands.flatten.exists: o =>
-							o != p && game.isTouched(o) && state.deck(o).matches(state.deck(p))
+							o != p && game.isTouched(o) &&
+							hypo.me.thoughts(o).matches(state.deck(p))	// use our thoughts, since we may overwrte cards in endgame solving
+
+					val dupeCount = dupedPlayables.size
 
 					val goodTouch: Double =
 						if badTouch.length > newTouched.length then
@@ -52,10 +55,10 @@ def getResult(game: Reactor, hypo: Reactor, action: ClueAction): Double =
 					val untouchedPlays = playables.count(!hypo.state.deck(_).clued)
 
 					val playablesS = playables.map(state.logId(_)).mkString(", ")
-					Log.info(s"good touch: $goodTouch, playables: $playablesS, duped: $dupedPlayables, trash: ${trash.length}, fill: ${fill.length}, elim: ${elim.length}, bad touch: $badTouch, ${hypo.lastMove}")
+					Log.info(s"good touch: $goodTouch, playables: $playablesS, duped: $dupeCount, trash: ${trash.length}, fill: ${fill.length}, elim: ${elim.length}, bad touch: $badTouch, ${hypo.lastMove}")
 
 					val value = goodTouch +
-						(playables.length - 2.0 * dupedPlayables) +
+						(playables.length - 2.0 * dupeCount) +
 						0.2 * untouchedPlays +
 						(if game.inEndgame then 0.01 else 0.05) * revealedTrash +
 						(if game.inEndgame then 0.1 else 0.05) * fill.length +

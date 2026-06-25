@@ -29,7 +29,7 @@ def interpretTransfer(ctx: DiscardContext, holder: Int, dupe: Option[Int]): (Dis
 		val result =
 			if dupe.exists(game.players(holder).thoughts(_).matches(id, infer = true)) then
 				Log.info("discarded dupe of own hand")
-				(DiscardResult.None, false)
+				(result = DiscardResult.None, dda = false)
 
 			else if state.cardCount(id.toOrd) - state.baseCount(id.toOrd) > 1 then
 				findThird match
@@ -38,10 +38,10 @@ def interpretTransfer(ctx: DiscardContext, holder: Int, dupe: Option[Int]): (Dis
 					case None if holder != state.ourPlayerIndex =>
 						interpretTransfer(ctx, state.ourPlayerIndex, None)
 					case _ =>
-						(DiscardResult.Mistake, true)
+						(result = DiscardResult.Mistake, dda = true)
 			else
 				Log.warn(s"discarded useful ${state.logId(id)} but dupe was in their own hand!")
-				(DiscardResult.None, false)
+				(result = DiscardResult.None, dda = false)
 		return result
 
 	val cluedTargets = state.hands(holder).filter(o => game.isTouched(o) && validTransfer(game, id)(o))
@@ -49,7 +49,7 @@ def interpretTransfer(ctx: DiscardContext, holder: Int, dupe: Option[Int]): (Dis
 	if cluedTargets.isEmpty then
 		if game.level < Level.SpecialDiscards then
 			Log.info("looked like out-of-level gd/baton! ignoring")
-			(DiscardResult.Mistake, true)
+			(result = DiscardResult.Mistake, dda = true)
 
 		else if state.isPlayable(id) || prev.common.hypoPlays.contains(order) then
 			def findGD(hypoState: State, connected: Set[Int]): Option[List[Int]] =
@@ -78,18 +78,18 @@ def interpretTransfer(ctx: DiscardContext, holder: Int, dupe: Option[Int]): (Dis
 
 						case None if state.baseCount(id.toOrd) + 1 == state.cardCount(id.toOrd) =>
 							Log.warn(s"couldn't gd to ${state.names(holder)}")
-							(DiscardResult.Mistake, true)
+							(result = DiscardResult.Mistake, dda = true)
 
 						case None if holder != state.ourPlayerIndex =>
 							interpretTransfer(ctx, state.ourPlayerIndex, None)
 
 						case _ =>
 							Log.warn(s"couldn't gd to ${state.names(holder)}")
-							(DiscardResult.Mistake, true)
+							(result = DiscardResult.Mistake, dda = true)
 
 				case Some(orders) =>
 					Log.info(s"gd to ${state.names(holder)}'s $orders")
-					(DiscardResult.GentlemansDiscard(orders), false)
+					(result = DiscardResult.GentlemansDiscard(orders), dda = false)
 
 		else
 			val baton = game.findFinesse(holder, Set.empty) match
@@ -103,18 +103,18 @@ def interpretTransfer(ctx: DiscardContext, holder: Int, dupe: Option[Int]): (Dis
 			baton match
 				case None =>
 					Log.warn(s"couldn't baton to ${state.names(holder)}")
-					(DiscardResult.Mistake, true)
+					(result = DiscardResult.Mistake, dda = true)
 				case Some(order) =>
 					Log.info(s"baton to ${state.names(holder)}'s $order")
-					(DiscardResult.Baton(order), false)
+					(result = DiscardResult.Baton(order), dda = false)
 
 	else if dupe.exists(!cluedTargets.contains(_)) then
 		Log.warn(s"looks like sarcastic discard to $cluedTargets, but should be $dupe!")
-		(DiscardResult.Mistake, false)
+		(result = DiscardResult.Mistake, dda = false)
 
 	else
 		Log.info(s"sarcastic to ${state.names(holder)}'s $cluedTargets")
-		(DiscardResult.Sarcastic(cluedTargets), false)
+		(result = DiscardResult.Sarcastic(cluedTargets), dda = false)
 
 def checkUsefulDcH(ctx: DiscardContext): (DiscardResult, Boolean) =
 	val DiscardContext(prev, game, action) = ctx
@@ -126,7 +126,7 @@ def checkUsefulDcH(ctx: DiscardContext): (DiscardResult, Boolean) =
 
 	if prev.common.thinksLocked(prev, playerIndex) && !prev.state.canClue then
 		Log.highlight(Console.CYAN, s"locked sacrifice!")
-		return (DiscardResult.None, false)		// no dda after sacrifice?
+		return (result = DiscardResult.None, dda = false)		// no dda after sacrifice?
 
 	val dupe = (0 until state.numPlayers).findSome: i =>
 		state.hands(i).find(state.deck(_).matches(id)).map(i -> _)
@@ -137,7 +137,7 @@ def checkUsefulDcH(ctx: DiscardContext): (DiscardResult, Boolean) =
 
 		case None if playerIndex == state.ourPlayerIndex =>
 			// We discarded a card that we don't see nor have the other copy of
-			(DiscardResult.Mistake, true)
+			(result = DiscardResult.Mistake, dda = true)
 
 		case None =>
 			// Since we can't find it, we must be the target
@@ -221,9 +221,9 @@ def interpretUsefulDcH(ctx: DiscardContext): Option[HGroup] =
 					waiting = game.waiting.filterNot: wc =>
 						wc.connections.exists(_.order == order) ||
 						wc.focus == order
-					,
-					dda = Option.when(dda)(id)
 				)
+				.when(_ => dda):
+					_.checkDDA(playerIndex, id)
 				.withMove(DiscardInterp.Mistake)
 
 			case (DiscardResult.GentlemansDiscard(targets), _) =>
@@ -339,11 +339,10 @@ def interpretSdcm(ctx: DiscardContext): Option[HGroup] =
 
 		else if (status == DcStatus.Scream || status == DcStatus.Shout) && bobChop.isEmpty then
 			Log.warn(s"interpreted scream/shout but ${state.names(bob)} has no chop! interpreting mistake")
-			Some(game.copy(
-				dcStatus = DcStatus.None,
-				dda = Some(Identity(action.suitIndex, action.rank))
-			)
-			.withMove(DiscardInterp.Mistake))
+			Some:
+				game.copy(dcStatus = DcStatus.None)
+					.checkDDA(action.playerIndex, Identity(action.suitIndex, action.rank))
+					.withMove(DiscardInterp.Mistake)
 
 		else
 			val bobChopId = bobChop.flatMap(state.deck(_).id())
@@ -358,13 +357,12 @@ def interpretSdcm(ctx: DiscardContext): Option[HGroup] =
 			else
 				Log.info(s"interpreting ${status.toString().toLowerCase()}!")
 
-			Some(game.copy(
-				dcStatus = status,
-				dda = Some(Identity(action.suitIndex, action.rank))
-			)
-			.withMove(if mistake then DiscardInterp.Mistake else DiscardInterp.Emergency)
-			.when(_ => status != DcStatus.Generation): h =>
-				h.withMeta(bobChop.get)(_.copy(status = CardStatus.ChopMoved)))
+			Some:
+				game.copy(dcStatus = status)
+					.checkDDA(action.playerIndex, Identity(action.suitIndex, action.rank))
+					.withMove(if mistake then DiscardInterp.Mistake else DiscardInterp.Emergency)
+					.when(_ => status != DcStatus.Generation): h =>
+						h.withMeta(bobChop.get)(_.copy(status = CardStatus.ChopMoved))
 
 private def playablePoss(game: HGroup, playerIndex: Int, discarder: Int) =
 	val state = game.state

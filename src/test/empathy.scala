@@ -1,5 +1,6 @@
 package tests.empathy
 
+import scala_bot.hgroup.HGroup
 import scala_bot.reactor.Reactor
 import scala_bot.basics._
 import scala_bot.test.{hasPoss, Player, preClue, setup, takeTurn, TestVariant}, Player._
@@ -57,7 +58,6 @@ class Empathy extends munit.FunSuite:
 			Vector("g2", "b1", "r4", "r5", "y3"),
 			Vector("y5", "p1", "b3", "b5", "g3")
 		),
-			starting = Alice,
 			playStacks = Some(Vector(3, 0, 0, 0, 0)),
 			discarded = Vector("r1", "r1", "r2", "r3"),
 			init =
@@ -72,3 +72,45 @@ class Empathy extends munit.FunSuite:
 		// Bob's cards could be r4 or r5.
 		hasPoss(game, None, Bob, 3, Vector("r4", "r5"))
 		hasPoss(game, None, Bob, 4, Vector("r4", "r5"))
+
+	test("it elims dark cards properly 1"):
+		val game = setup(HGroup.atLevel(10), Vector(
+			Vector("xx", "xx", "xx", "xx", "xx"),
+			Vector("r1", "b1", "y1", "g1", "k5")
+		),
+			starting = Bob,
+			clueTokens = 4,
+			playStacks = Some(Vector(5, 5, 5, 5, 2)),
+			variant = TestVariant.Black5,
+			init = preClue(Bob, 5, Seq("black"))
+		)
+		.pipe(takeTurn("Bob discards g1", "k3"))
+		.pipe(takeTurn("Alice clues black to Bob"))
+		.pipe(takeTurn("Bob clues black to Alice (slot 2)"))
+
+		// Bob's slot 1 is [k3, k5].
+		hasPoss(game, None, Bob, 1, Vector("k3", "k5"))
+		hasPoss(game, Some(Bob), Bob, 1, Vector("k3", "k5"))
+
+		// Alice's slot 2 is exactly k4.
+		hasPoss(game, None, Alice, 2, Vector("k4"))
+		hasPoss(game, Some(Alice), Alice, 2, Vector("k4"))
+
+	test("it elims dark cards properly 2"):
+		val game = setup(HGroup.atLevel(10), Vector(
+			Vector("xx", "xx", "xx", "xx", "xx"),
+			Vector("r1", "b1", "y1", "g1", "r4")
+		),
+			starting = Bob,
+			clueTokens = 4,
+			playStacks = Some(Vector(0, 0, 0, 0, 2)),
+			variant = TestVariant.Black5,
+			init =
+				preClue[HGroup](Alice, 4, Seq("black")) andThen
+				preClue[HGroup](Alice, 5, Seq("black")) andThen
+				preClue[HGroup](Alice, 2, Seq("4"))
+		)
+		.pipe(takeTurn("Bob discards r4", "k3"))
+
+		// Alice's slot 2 cannot be a black 4.
+		hasPoss(game, Some(Alice), Alice, 2, Vector("r4", "y4", "g4", "b4"))

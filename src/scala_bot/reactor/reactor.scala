@@ -580,52 +580,33 @@ object Reactor:
 			val level = Logger.level
 			Logger.setLevel(LogLevel.Off)
 
-			var addedUselessClue = false
-
 			def clueValue(clue: Clue): Double =
 				val list = state.clueTouched(state.hands(clue.target), clue)
 				val action = ClueAction(giver, clue.target, list, clue.base)
 
 				// Only touches previously-clued trash
 				if list.forall(o => state.deck(o).clued && state.isBasicTrash(state.deck(o).id().get)) then
-					if addedUselessClue then
-						return -1
-					else
-						addedUselessClue = true
-						return 0
+					return -99
 
 				Log.highlight(Console.GREEN, s"===== Predicting value for ${clue.fmt(state)} =====")
 				val hypoGame = game.simulateClue(action, log = true)
 
 				if hypoGame.lastMove == Some(ClueInterp.Mistake) then
-					return -1
+					return -100
 
-				val clueResult = getResult(game, hypoGame, action)
-				val useful =
-					clueResult > -1 && {
-						hypoGame.lastMove == Some(ClueInterp.Reactive) ||
-						hypoGame.common.hypoScore > game.common.hypoScore ||
-						state.hands(clue.target).exists: o =>
-							game.deckIds(o).forall(state.isUseful) &&
-							hypoGame.state.deck(o).clued &&
-							hypoGame.common.thoughts(o).possible.length < game.common.thoughts(o).possible.length
-					}
-
-				if useful then
-					clueResult
-				else if addedUselessClue then
-					return -1
-				else
-					addedUselessClue = true
-					return 0
+				getResult(game, hypoGame, action)
 
 			val allClues =
 				(for
 					target <- (0 until state.numPlayers) if target != giver
 					clue   <- state.allValidClues(target)
-					value = clueValue(clue) if value >= 0
+					value = clueValue(clue)
 				yield
 					(clue, value))
+				.span((_, value) => value > -1)
+				.pipe: (useful, notUseful) =>
+					notUseful.maxByOption((_, value) => value).fold(useful): bestUseless =>
+						useful :+ bestUseless
 				.sortBy((_, value) => -value)
 				.map((clue, _) => PerformAction.fromClue(clue))
 

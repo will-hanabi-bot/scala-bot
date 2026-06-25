@@ -24,18 +24,13 @@ val STALL_TO_SEVERITY = Map(
 	StallInterp.Burn -> 5
 )
 
-def stallSeverity(game: HGroup, player: Player, giver: Int, infoPlayer: Option[Player] = None) =
+def stallSeverity(game: HGroup, player: Player, giver: Int) =
 	val state = game.state
 
 	lazy val severity2 =
 		game.dcStatus == DcStatus.Scream ||
 		game.dcStatus == DcStatus.Shout ||
-		game.level >= Level.Stalling && game.state.numPlayers > 2 && game.dda.exists: id =>
-			state.isCritical(id) &&
-			game.chop(giver).exists: chop =>
-				val usePlayer = infoPlayer.getOrElse(player)
-				usePlayer.thoughts(chop).possible.contains(id) &&
-				!visibleFind(state, usePlayer, id, infer = true).exists(game.isTouched)
+		game.dda.nonEmpty
 
 	if state.clueTokens == 8 && state.turnCount != 1 then
 		4
@@ -194,9 +189,9 @@ def alternativeClue(ctx: ClueContext, maxStall: Int) =
 
 def stallingSituation(ctx: ClueContext): Option[(StallInterp, Set[Int])] =
 	val ClueContext(prev, game, action) = ctx
-	val ClueAction(giver, target, list, clue) = ctx.action
+	val ClueAction(giver, target, list, clue) = action
 
-	val severity = stallSeverity(ctx.prev, ctx.prev.common, giver, infoPlayer = Some(ctx.game.common))
+	val severity = stallSeverity(prev, prev.common, giver)
 	Log.info(s"severity $severity")
 
 	lazy val giverLoaded = prev.common.thinksPlayables(prev, giver, assume = false).nonEmpty ||

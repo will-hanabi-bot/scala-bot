@@ -185,11 +185,9 @@ def interpretBombOcm(ctx: DiscardContext): Option[HGroup] =
 			if mistake then
 				Log.warn("ocm on trash!")
 
-			performCM(game, orders).copy(
-				dcStatus = DcStatus.None,
-				dda = Some(Identity(action.suitIndex, action.rank))
-			)
-			.withMove(if mistake then PlayInterp.Mistake else PlayInterp.OrderCM)
+			performCM(game, orders).copy(dcStatus = DcStatus.None)
+				.checkDDA(action.playerIndex, Identity(action.suitIndex, action.rank))
+				.withMove(if mistake then PlayInterp.Mistake else PlayInterp.OrderCM)
 
 def interpretTccm(ctx: ClueContext): Option[List[Int]] =
 	val ClueContext(prev, game, action) = ctx

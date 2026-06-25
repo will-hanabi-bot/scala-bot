@@ -151,14 +151,22 @@ def interpClue(ctx: ClueContext): HGroup =
 			.withMeta(focus)(_.copy(focused = true))
 			.withMove(ClueInterp.Distribution)
 
-	if game.level >= Level.BasicCM && !game.inEndgame then
+	if game.level >= Level.BasicCM then
 		interpretTcm(ctx) match
 			case None => ()
-			case Some(tcm) => return handleTcm(ctx, tcm, stall.isEmpty || thinksStall.isEmpty)
+			case Some(tcm) =>
+				if game.inEndgame then
+					return game.withMove(ClueInterp.Useless)
+				else
+					return handleTcm(ctx, tcm, stall.isEmpty || thinksStall.isEmpty)
 
 		interpret5cm(ctx) match
 			case None => ()
-			case Some(cm5) => return performCM(game, cm5).withMove(evaluateCM(ctx, cm5))
+			case Some(cm5) =>
+				if game.inEndgame then
+					return game.withMove(ClueInterp.Useless)
+				else
+					return performCM(game, cm5).withMove(evaluateCM(ctx, cm5))
 
 	val pinkTrashFix = state.includesVariant(PINKISH) &&
 		!positional && clue.kind == ClueKind.Rank &&
@@ -262,7 +270,11 @@ def interpClue(ctx: ClueContext): HGroup =
 		if noSelf then
 			if simplest.isEmpty then
 				Log.warn("no inferences!")
-				game.withMove(ClueInterp.Mistake)
+
+				if game.inEndgame && clue.kind == ClueKind.Colour && list.length == 1 && game.common.thoughts(focus).id().nonEmpty && state.numPlayers == 2 then
+					game.withMove(ClueInterp.Stall)
+				else
+					game.withMove(ClueInterp.Mistake)
 			else
 				Log.info(s"simplest focus possibilities [${simplest.map(fp => state.logId(fp.id)).mkString(",")}]")
 				resolveClue(ctx, simplest)

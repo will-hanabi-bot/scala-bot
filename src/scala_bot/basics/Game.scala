@@ -546,8 +546,6 @@ extension[G <: Game](game: G)
 
 		val note = if thought.inferred.isEmpty then
 			"??"
-		else if thought.inferred == thought.possible then
-			""
 		else if thought.inferred.length <= 6 then
 			game.common.strInfs(game.state, order)
 		else

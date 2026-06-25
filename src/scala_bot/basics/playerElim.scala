@@ -23,7 +23,15 @@ case class CardElimResult(
 		)
 
 extension (p: Player)
-	private def updateMap(state: State, id: Identity, exclude: BitSet, excludeOwn: BitSet): CardElimResult =
+	/**
+	 * Eliminates the given identity from the player's inferences and possibilities.
+	 *
+	 * @param state				The state
+	 * @param id				The identity to eliminate.
+	 * @param excludeHolders 	Player indices to exclude from elimination.
+	 * @param excludeOwn		Orders to exclude from elimination
+	 */
+	private def updateMap(state: State, id: Identity, excludeHolders: BitSet, excludeOrders: BitSet): CardElimResult =
 		var changed = false
 		var recursiveIds = IdentitySet.empty
 		var crossElimRemovals = BitSet.empty
@@ -33,13 +41,13 @@ extension (p: Player)
 		var dirty = p.dirty
 		var resets = BitSet.empty
 
-		loopIf(0, _ < state.numPlayers, _ + 1, i => i == p.playerIndex || !exclude.contains(i)): playerIndex =>
+		loopIf(0, _ < state.numPlayers, _ + 1, i => !excludeHolders.contains(i)): playerIndex =>
 			state.hands(playerIndex).fastForeach: order =>
 				val thought = thoughts(order)
 				val noElim =
 					!thought.possible.contains(id) ||
 					certainMap(id.toOrd).exists(e => e.order == order || e.unknownTo == playerIndex) ||
-					excludeOwn.contains(order)
+					excludeOrders.contains(order)
 
 				if !noElim then
 					changed = true
@@ -98,10 +106,7 @@ extension (p: Player)
 		)
 		CardElimResult(newPlayer, changed, crossElimRemovals, resets, recursiveIds)
 
-	/**
-	 * The "typical" empathy operation. If there are enough known instances of an identity, it is removed from every card (including future cards).
-	 * Returns true if at least one card was modified.
-	 */
+	/** The "typical" empathy operation. If there are enough known instances of an identity, it is removed from every card (including future cards). */
 	private def basicElim(state: State, ids: IdentitySet): CardElimResult =
 		var res = CardElimResult(p)
 		var eliminated = IdentitySet.empty
@@ -126,9 +131,8 @@ extension (p: Player)
 	 * The "sudoku" emathy operation, involving 2 parts:
 	 * Symmetric info - if Alice has [r5,g5] and Bob has [r5,g5], then everyone knows how r5 and g5 are distributed.
 	 * Naked pairs - If Alice has 3 cards with [r4,g5], then everyone knows that both r4 and g5 cannot be elsewhere (will be eliminated in basic_elim).
-	 * Returns true if at least one card was modified.
 	 */
-	private def performCrossElim(state: State, entries: BitSet, holders: BitSet, ids: IdentitySet): CardElimResult =
+	private def performCrossElim(state: State, entries: BitSet, ids: IdentitySet): CardElimResult =
 		val groups = Array.fill[List[Int]](state.variant.suits.length * 5)(Nil)
 		var groupIds = IdentitySet.empty
 
@@ -146,12 +150,12 @@ extension (p: Player)
 			val certains = res.player.certainMap(id.toOrd).filter(c => !group.contains(c.order)).length
 
 			if group.size == state.cardCount(id.toOrd) - certains then
-				val innerResult = res.player.updateMap(state, id, BitSet.fromSpecific(group.map(state.holderOf)), BitSet.empty)
+				val innerResult = res.player.updateMap(state, id, BitSet.fromSpecific(group.map(state.holderOf)), BitSet.fromSpecific(group))
 				res = res.merge(innerResult)
 
 		// Now elim all the cards outside of this entry
 		for id <- ids do
-			val innerResult = res.player.updateMap(state, id, holders, if p.isCommon then BitSet.empty else entries.filter(state.hands(p.playerIndex).contains))
+			val innerResult = res.player.updateMap(state, id, BitSet.empty, entries)
 			res = res.merge(innerResult)
 
 		val innerResult = res.player.basicElim(state, ids)
@@ -174,7 +178,7 @@ extension (p: Player)
 			return res
 
 		if contained.size > 1 && multiplicity - certains.size == contained.size then
-			val innerResult = performCrossElim(state, contained, holders, accIds)
+			val innerResult = performCrossElim(state, contained, accIds)
 			if innerResult.changed then
 				return innerResult
 			else

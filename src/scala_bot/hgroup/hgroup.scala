@@ -108,7 +108,8 @@ case class HGroup(
 				xmeta(o2).turnFinessed.exists(t2 => xmeta(o).turnFinessed.exists(_ > t2)) &&
 				xmeta(o2).finesseIds.exists(ids => player.thoughts(o).id(infer = true).exists(ids.contains))
 
-			val unrevealedHidden = waiting.exists: wc =>
+			val unrevealedHidden = waiting.find: wc =>
+				!state.deck(o).clued &&
 				!wc.symmetric && !wc.ambiguousSelf &&
 				// This is part of a hidden (?) connection that is not currently revealed
 				wc.connections.nonEmpty && {
@@ -121,7 +122,7 @@ case class HGroup(
 			((assume && !xmeta(o).fStatus.contains(FStatus.PossiblyOn(state.ourPlayerIndex))) || isDefinite(o)) &&
 			!possibleFocusDupe &&
 			!olderFinesseExists &&
-			!unrevealedHidden &&
+			unrevealedHidden.isEmpty &&
 			!unordered1 &&
 			!waiting.find(_.connections.exists(_.order == o)).exists(this.potentialClandestineWc(playerIndex, o, _).isDefined)
 
@@ -138,6 +139,22 @@ case class HGroup(
 
 	def withXMeta(order: Int)(f: XConvData => XConvData) =
 		copy(xmeta = xmeta.updated(order, f(xmeta(order))))
+
+	/** Marks DDA if the the next player could be double discarding. */
+	def checkDDA(discarder: Int, id: Identity): HGroup =
+		if level < Level.Stalling || state.numPlayers == 2 || id.suitIndex == -1 || id.rank == -1 || state.isBasicTrash(id) then
+			return this
+
+		val nextPlayerIndex = state.nextPlayerIndex(discarder)
+		val nextPlayer = players(nextPlayerIndex)
+
+		val dda =
+			state.isCritical(id) &&
+			chop(nextPlayerIndex).exists: chop =>
+				nextPlayer.thoughts(chop).possible.contains(id) &&
+				!visibleFind(state, nextPlayer, id, infer = true).exists(this.isTouched)
+
+		if dda then copy(dda = Some(id)) else this
 
 	def isCM(order: Int) =
 		meta(order).cm && !state.deck(order).clued
@@ -184,7 +201,10 @@ case class HGroup(
 
 		state.isBasicTrash(id) ||
 		(state.includesVariant(PINKISH) && !positional && clue.kind == ClueKind.Rank && clue.value != id.rank) ||
-		visibleFind(state, common, id, infer = true, excludeOrder = focus).nonEmpty ||
+		visibleFind(state, common, id, infer = true, excludeOrder = focus).exists: o =>
+			this.me.thoughts(o).matches(id) ||
+			(this.me.thoughts(o).matches(id, assume = true) && this.me.thoughts(o).possible.contains(id))
+		||
 		common.links.existsM:
 			case Link.Promised(_, i, target) => target != focus && id.matches(i)
 		||
@@ -588,11 +608,9 @@ object HGroup:
 			.orElse(interpretSdcm(ctx))
 			.orElse(interpretPosDc(ctx))
 			.getOrElse:
-				refreshedGame.copy(
-					dcStatus = DcStatus.None,
-					dda = Some(Identity(suitIndex, rank))
-				)
-				.withMove(DiscardInterp.None)
+				refreshedGame.copy(dcStatus = DcStatus.None)
+					.checkDDA(playerIndex, Identity(suitIndex, rank))
+					.withMove(DiscardInterp.None)
 			.when(_.inEarlyGame): g =>
 				val endEarlyGame = !failed &&
 					!game.state.deck(order).clued &&
@@ -600,8 +618,6 @@ object HGroup:
 
 				g.copy(inEarlyGame = !endEarlyGame)
 			.elim()
-			.when(g => g.level < Level.Stalling || g.dda.exists(id => id.suitIndex == -1 || id.rank == -1 || g.state.isBasicTrash(id))):
-				_.copy(dda = None)
 
 		def interpretPlay(prev: HGroup, game: HGroup, action: PlayAction): HGroup =
 			val PlayAction(playerIndex, order, suitIndex, rank) = action
@@ -711,16 +727,12 @@ object HGroup:
 
 						val chop = game.chop(state.ourPlayerIndex)
 
-						val inDDA = game.level >= Level.Stalling &&
-							game.state.numPlayers > 2 &&
-							game.dda.exists(id => state.isCritical(id) && game.chop(state.ourPlayerIndex).exists(me.thoughts(_).possible.contains(id)))
-
 						val canDiscardChop =
 							chop.isDefined &&
 							!cantDiscard &&
 							!me.thinksLocked(game, state.ourPlayerIndex) &&
 							!hasEarlyGameClue &&
-							!inDDA &&
+							game.dda.isEmpty &&
 							{
 								((!state.canClue || allPlays.isEmpty) && allDiscards.forall(_._3 == -100)) ||
 								state.clueTokens == 0 ||
@@ -768,49 +780,33 @@ object HGroup:
 			val level = Logger.level
 			Logger.setLevel(LogLevel.Off)
 
-			var addedUselessClue = false
-
 			def clueValue(clue: Clue): Double =
 				val list = state.clueTouched(state.hands(clue.target), clue)
 				val action = ClueAction(giver, clue.target, list, clue.base)
 
 				// Only touches previously-clued trash
 				if list.forall(o => state.deck(o).clued && state.isBasicTrash(state.deck(o).id().get)) then
-					if addedUselessClue then
-						return -99
-					else
-						addedUselessClue = true
-						return 0
+					return -99
 
 				Log.highlight(Console.GREEN, s"===== Predicting value for ${clue.fmt(state)} =====")
 				val hypoGame = game.simulate(action)
 
 				if hypoGame.lastMove == Some(ClueInterp.Mistake) then
-					return -99
+					return -100
 
-				val clueResult = getResult(game, hypoGame, action)
-				val useful =
-					clueResult > -10 &&		// A "useless" clue is already given a -10 mod from clueResult
-					state.hands(clue.target).exists: o =>
-						game.deckIds(o).forall(state.isUseful) &&
-						hypoGame.state.deck(o).clued &&
-						hypoGame.common.thoughts(o).possible.length < game.common.thoughts(o).possible.length
-
-				if useful then
-					clueResult
-				else if addedUselessClue then
-					return -99
-				else
-					addedUselessClue = true
-					return 0
+				getResult(game, hypoGame, action)
 
 			val allClues =
 				(for
 					target <- (0 until state.numPlayers) if target != giver
 					clue   <- state.allValidClues(target)
-					value = clueValue(clue) if value > -10
+					value = clueValue(clue)
 				yield
 					(clue, value))
+				.span((_, value) => value > -1)
+				.pipe: (useful, notUseful) =>
+					notUseful.maxByOption((_, value) => value).fold(useful): bestUseless =>
+						useful :+ bestUseless
 				.sortBy((_, value) => -value)
 				.map((clue, _) => PerformAction.fromClue(clue))
 
@@ -818,16 +814,15 @@ object HGroup:
 			allClues
 
 		def findAllDiscards(game: HGroup, playerIndex: Int) =
-			val trash = game.common.thinksTrash(game, playerIndex)
-			val expectedDc = trash.headOption
+			val state = game.state
+			val expectedDc = game.findDiscardable(playerIndex).headOption
 				.orElse(game.chop(playerIndex))
-				.getOrElse(game.players(playerIndex).lockedDiscard(game.state, playerIndex))
+				.getOrElse(game.players(playerIndex).lockedDiscard(state, playerIndex))
 
 			val targets =
-				if game.level >= Level.Endgame && (game.inEndgame || game.state.remScore < game.state.variant.suits.length) then
+				if game.level >= Level.Endgame && (game.inEndgame || state.remScore < state.variant.suits.length) then
 					// ALlow discarding any known trash
-					game.state.hands(playerIndex).filter(game.players(playerIndex).orderKt(game, _))
-						.when(_.isEmpty)(_ => Vector(expectedDc))
+					(expectedDc +: state.hands(playerIndex).filter(game.players(playerIndex).orderKt(game, _))).distinct
 				else
 					Seq(expectedDc)
 
