@@ -345,9 +345,10 @@ case class EndgameSolver[G <: Game](
 
 		if viableClueless then
 			val cluelessState = state.hands.flatten.foldLeft(state): (acc, order) =>
-				game.common.thoughts(order).id().fold(acc): id =>
-					val newCard = acc.deck(order).copy(suitIndex = id.suitIndex, rank = id.rank)
-					acc.copy(deck = acc.deck.updated(order, newCard))
+				val newCard = game.common.thoughts(order).id() match
+					case None => acc.deck(order).copy(suitIndex = -1, rank = -1)
+					case Some(id) => acc.deck(order).copy(suitIndex = id.suitIndex, rank = id.rank)
+				acc.copy(deck = acc.deck.updated(order, newCard))
 
 			val cluelessWin = this.cluelessWinnable(cluelessState, playerTurn, deadline, depth)
 			if cluelessWin.isDefined then

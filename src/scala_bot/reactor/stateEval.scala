@@ -66,8 +66,8 @@ def getResult(game: Reactor, hypo: Reactor, action: ClueAction): Double =
 						-0.1 * badTouch.length
 
 					hypo.lastMove match
-						case Some(ClueInterp.Mistake)  => value - 10
-						case Some(ClueInterp.Fix)      => value + 1
+						case Some(ClueInterp.Mistake) => value - 10
+						case Some(ClueInterp.Fix) if !game.inEndgame => value + 1
 						// case Some(ClueInterp.Reactive) => value + 1
 						case _ => value
 

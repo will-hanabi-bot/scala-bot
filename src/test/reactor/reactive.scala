@@ -333,6 +333,29 @@ class Reactive extends munit.FunSuite:
 		// Alice's slot 4 is called to discard (4 + 3 = 2)
 		hasStatus(game, Alice, 4, CardStatus.CalledToDiscard)
 
+	test("it stacks on top of its own self connection"):
+		val game = setup(Reactor.apply, Vector(
+			Vector("xx", "xx", "xx", "xx", "xx"),
+			Vector("r1", "r1", "y1", "y1", "g1"),
+			Vector("r2", "g2", "b1", "b1", "g1"),
+		),
+			clueTokens = 4,
+			starting = Bob,
+			playStacks = Some(Vector(4, 4, 4, 2, 2)),
+			init = fullyKnown(Alice, 5, "r5")
+		)
+		.pipe(takeTurn("Bob clues purple to Alice (slots 1,2)"))
+		.pipe(takeTurn("Cathy discards r2", "b2"))		// Alice's slot 1 is known p3
+		.pipe(takeTurn("Alice plays r5 (slot 5)"))		// slot 1 moves to slot 2
+
+		.pipe(takeTurn("Bob clues green to Alice (slot 4)"))
+		.pipe(takeTurn("Cathy discards b2", "p2"))		// Alice's slot 3 is known p4
+
+		hasInfs(game, None, Alice, 2, Vector("p3"))
+		hasInfs(game, None, Alice, 3, Vector("p4"))
+
+		assert(game.common.thinksPlayables(game, Alice.ordinal).contains(game.state.hands(Alice.ordinal)(1)))
+
 	test("it considers discarding kt to be a reaction"):
 		val game = setup(Reactor.apply, Vector(
 			Vector("xx", "xx", "xx", "xx", "xx"),

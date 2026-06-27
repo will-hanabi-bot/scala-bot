@@ -44,9 +44,15 @@ private def tryStable(prev: Reactor, game: Reactor, action: ClueAction, stall: B
 
 	game.when(_ => clue.kind == ClueKind.Rank && newlyTouched.nonEmpty): g =>
 		val trashPush = (0 until state.variant.suits.length).forall(suitIndex => state.isBasicTrash(Identity(suitIndex, clue.value)))
+		lazy val playableRankFocus =
+			if state.includesVariant(PINKISH) then
+				g.state.hands(target).filter(!prev.state.deck(_).clued).minOption.filter(list.contains).getOrElse(newlyTouched.max)
+			else
+				newlyTouched.max
+
 		lazy val playableRank = (0 until state.variant.suits.length).forall: suitIndex =>
 			val id = Identity(suitIndex, clue.value)
-			state.isBasicTrash(id) || state.isPlayable(id)
+			!game.common.thoughts(playableRankFocus).possible.contains(id) || state.isBasicTrash(id) || state.isPlayable(id)
 
 		if trashPush then
 			val focus = newlyTouched.max
@@ -56,25 +62,19 @@ private def tryStable(prev: Reactor, game: Reactor, action: ClueAction, stall: B
 				_.copy(trash = true)
 
 		else if playableRank then
-			val focus =
-				if state.includesVariant(PINKISH) then
-					g.state.hands(target).filter(!prev.state.deck(_).clued).minOption.filter(list.contains).getOrElse(newlyTouched.max)
-				else
-					newlyTouched.max
-
-			val unneccessaryFocus = g.common.thoughts(focus).possible.forall: i =>
+			val unneccessaryFocus = g.common.thoughts(playableRankFocus).possible.forall: i =>
 				state.isBasicTrash(i) || state.hands.flatten.exists(g.common.thoughts(_).matches(i))
 
 			if unneccessaryFocus then
 				Log.info("unnecessary focus!")
 				g
 			else
-				val newInferred = g.common.thoughts(focus).inferred.filter(i => state.isPlayable(i) && i.rank == clue.value)
-				g.withThought(focus)(t => t.copy(
+				val newInferred = g.common.thoughts(playableRankFocus).inferred.filter(i => state.isPlayable(i) && i.rank == clue.value)
+				g.withThought(playableRankFocus)(t => t.copy(
 					inferred = newInferred,
 					infoLock = newInferred.toOpt
 				))
-				.withMeta(focus):
+				.withMeta(playableRankFocus):
 					_.copy(focused = true, status = CardStatus.CalledToPlay)
 		else
 			g

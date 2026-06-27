@@ -151,9 +151,13 @@ def targetIPlay(@annotation.unused _prev: Reactor, game: Reactor, wc: ReactorWC,
 	val state = game.state
 	val order = wc.receiverHand(targetSlot - 1)
 
-	val selfPlayables = game.common.obviousPlayables(game, state.holderOf(order))
-		.foldLeft(state.playableSet): (acc, o) =>
+	val obviousPlays = game.common.obviousPlayables(game, state.holderOf(order))
+
+	val selfPlayables = obviousPlays.foldLeft(state.playableSet): (acc, o) =>
 			acc.union(game.common.thoughts(o).inferred.flatMap(_.next))
+		.difference:
+			IdentitySet.from:
+				obviousPlays.flatMap(game.common.thoughts(_).id(infer = true))
 
 	val newCommon = game.common.withThought(order)(t => t.copy(
 		oldInferred = t.inferred.toOpt,

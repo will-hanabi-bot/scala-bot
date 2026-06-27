@@ -414,7 +414,26 @@ object Reactor:
 			val (state, me) = (game.state, game.me)
 			val nextPlayerIndex = state.nextPlayerIndex(state.ourPlayerIndex)
 
-			val urgentAction = state.ourHand.find(game.meta(_).urgent).flatMap: urgent =>
+			val solveEndgame =
+				if state.remScore <= state.variant.suits.length + 1 then
+					IO.blocking:
+						Log.highlight(Console.MAGENTA, "trying to solve endgame...")
+
+						EndgameSolver(monteCarlo = true).solve(game) match
+							case Left(err) =>
+								Log.info(s"couldn't solve endgame: $err")
+								None
+							case Right((perform, winrate)) =>
+								if winrate < Frac(1, 100) then
+									Log.info(s"winrate below 1% (${winrate.toString}), skipping")
+									None
+								else
+									Log.info(s"endgame solved!")
+									Some(perform)
+				else
+					IO.pure(None)
+
+			lazy val urgentAction = state.ourHand.find(game.meta(_).urgent).flatMap: urgent =>
 				Log.info(s"urgent $urgent")
 				val urgentBobSave =
 					state.canClue &&
@@ -452,127 +471,104 @@ object Reactor:
 							Log.warn(s"unexpected urgent card status: ${game.meta(urgent).status}")
 							None
 
-			val solveEndgame =
-				if state.remScore <= state.variant.suits.length + 1 then
-					IO.blocking:
-						Log.highlight(Console.MAGENTA, "trying to solve endgame...")
+			lazy val normalAction =
+				val playableOrders =
+					val commonP = game.common.obviousPlayables(game, state.ourPlayerIndex)
+					val knownP = me.obviousPlayables(game, state.ourPlayerIndex)
 
-						EndgameSolver(monteCarlo = true).solve(game) match
-							case Left(err) =>
-								Log.info(s"couldn't solve endgame: $err")
-								None
-							case Right((perform, winrate)) =>
-								if winrate < Frac(1, 100) then
-									Log.info(s"winrate below 1% (${winrate.toString}), skipping")
-									None
-								else
-									Log.info(s"endgame solved!")
-									Some(perform)
-				else
-					IO.pure(None)
+					// If there is are commonly known playables that might connect to the reacter,
+					// we must play the oldest one.
+					val possibleConnectors =
+						if commonP.nonEmpty && game.waiting.exists(_.receiver == state.ourPlayerIndex) then
+							val reacter = game.waiting.get.reacter
+							commonP.filter: p =>
+								me.thoughts(p).inferred.exists:
+									_.next.exists: id =>
+										state.hands(reacter).exists: o =>
+											me.thoughts(o).matches(id)
+						else Nil
 
-			if urgentAction.isDefined then
-				IO.pure(urgentAction.get)
-			else
-				solveEndgame.map: solved =>
-					solved.getOrElse:
-						val playableOrders =
-							val commonP = game.common.obviousPlayables(game, state.ourPlayerIndex)
-							val knownP = me.obviousPlayables(game, state.ourPlayerIndex)
+					if possibleConnectors.nonEmpty then
+						Log.highlight(Console.CYAN, s"restricting playables to $possibleConnectors, since reverse reacter might need to connect")
+						Vector(possibleConnectors.minBy(game.meta(_).signalTurn.getOrElse(99)))
 
-							// If there is are commonly known playables that might connect to the reacter,
-							// we must play the oldest one.
-							val possibleConnectors =
-								if commonP.nonEmpty && game.waiting.exists(_.receiver == state.ourPlayerIndex) then
-									val reacter = game.waiting.get.reacter
-									commonP.filter: p =>
-										me.thoughts(p).inferred.exists:
-											_.next.exists: id =>
-												state.hands(reacter).exists: o =>
-													me.thoughts(o).matches(id)
-								else Nil
+					else if knownP.nonEmpty then
+						// Don't play if there is a focused card that looks exactly like this one (no OCM in reactor)
+						knownP.filter: order =>
+							game.meta(order).status == CardStatus.CalledToPlay ||
+							game.meta(order).status == CardStatus.GentlemansDiscard ||
+							!state.hands(state.ourPlayerIndex).exists: o =>
+								o != order && me.thoughts(o).possible == me.thoughts(order).possible && game.meta(o).focused
+					else
+						me.thinksPlayables(game, state.ourPlayerIndex)
 
-							if possibleConnectors.nonEmpty then
-								Log.highlight(Console.CYAN, s"restricting playables to $possibleConnectors, since reverse reacter might need to connect")
-								Vector(possibleConnectors.minBy(game.meta(_).signalTurn.getOrElse(99)))
+				Log.info(s"playables $playableOrders")
 
-							else if knownP.nonEmpty then
-								// Don't play if there is a focused card that looks exactly like this one (no OCM in reactor)
-								knownP.filter: order =>
-									game.meta(order).status == CardStatus.CalledToPlay ||
-									game.meta(order).status == CardStatus.GentlemansDiscard ||
-									!state.hands(state.ourPlayerIndex).exists: o =>
-										o != order && me.thoughts(o).possible == me.thoughts(order).possible && game.meta(o).focused
-							else
-								me.thinksPlayables(game, state.ourPlayerIndex)
+				val canClue = state.canClue && !game.waiting.exists(_.receiver == state.ourPlayerIndex)
 
-						Log.info(s"playables $playableOrders")
+				val allClues = if !canClue then Nil else
+					for
+						target <- (0 until state.numPlayers) if target != state.ourPlayerIndex
+						clue   <- state.allValidClues(target)
+					yield
+						val perform = PerformAction.fromClue(clue)
+						val action = perform.toAction(state, state.ourPlayerIndex)
+						(perform, action)
 
-						val canClue = state.canClue && !game.waiting.exists(_.receiver == state.ourPlayerIndex)
+				val allPlays = playableOrders.map: o =>
+					val action = PlayAction(state.ourPlayerIndex, o, me.thoughts(o).id(infer = true))
+					(PerformAction.Play(o), action)
 
-						val allClues = if !canClue then Nil else
-							for
-								target <- (0 until state.numPlayers) if target != state.ourPlayerIndex
-								clue   <- state.allValidClues(target)
-							yield
-								val perform = PerformAction.fromClue(clue)
-								val action = perform.toAction(state, state.ourPlayerIndex)
-								(perform, action)
+				// We have a play and the reacter might play on top of us
+				lazy val potentialForcedPlay = allPlays.nonEmpty &&
+					game.waiting.exists(_.reacter == nextPlayerIndex) &&
+					playableOrders.exists:
+						game.me.thoughts(_).inferred.exists: id =>
+							state.hands(nextPlayerIndex).exists: o =>
+								id.next.contains(state.deck(o).id().get)
 
-						val allPlays = playableOrders.map: o =>
-							val action = PlayAction(state.ourPlayerIndex, o, me.thoughts(o).id(infer = true))
-							(PerformAction.Play(o), action)
+				val cantDiscard = state.clueTokens == 8 ||
+					(state.pace == 0 && (allClues.nonEmpty || allPlays.nonEmpty)) ||
+					potentialForcedPlay
+				Log.info(s"can discard: ${!cantDiscard} ${state.clueTokens}")
 
-						// We have a play and the reacter might play on top of us
-						lazy val potentialForcedPlay = allPlays.nonEmpty &&
-							game.waiting.exists(_.reacter == nextPlayerIndex) &&
-							playableOrders.exists:
-								game.me.thoughts(_).inferred.exists: id =>
-									state.hands(nextPlayerIndex).exists: o =>
-										id.next.contains(state.deck(o).id().get)
+				val allDiscards: Seq[(PerformAction, Action)] = if cantDiscard then Nil else
+					val trash = me.thinksTrash(game, state.ourPlayerIndex)
 
-						val cantDiscard = state.clueTokens == 8 ||
-							(state.pace == 0 && (allClues.nonEmpty || allPlays.nonEmpty)) ||
-							potentialForcedPlay
-						Log.info(s"can discard: ${!cantDiscard} ${state.clueTokens}")
-
-						val allDiscards: Seq[(PerformAction, Action)] = if cantDiscard then Nil else
-							val trash = me.thinksTrash(game, state.ourPlayerIndex)
-
-							val zcsDiscardable = false
-								// !state.canClue &&
-								// !(allPlays.nonEmpty && game.waiting.exists(_.receiver == state.ourPlayerIndex))
-
-							val expectedDiscards =
-								if trash.nonEmpty then
-									trash
-								else if !me.obviousLocked(game, state.ourPlayerIndex) && (zcsDiscardable || allPlays.isEmpty) && game.hasPtd then
-									game.chop(state.ourPlayerIndex).toVector
-								else
-									Vector.empty
-
-							val discardOrders =
-								// Someone needs to react to our hand: don't do anything weird
-								if game.waiting.exists(_.receiver == state.ourPlayerIndex) then
-									expectedDiscards
-								else
-									(expectedDiscards ++ me.discardable(game, state.ourPlayerIndex)).distinct
-
-							Log.info(s"discardable $discardOrders")
-							discardOrders.map: o =>
-								val action = DiscardAction(state.ourPlayerIndex, o, me.thoughts(o).id(infer = true))
-								(PerformAction.Discard(o), action)
-
-						val allActions = allClues.concat(allPlays).concat(allDiscards)
-
-						if allActions.isEmpty then
-							if state.clueTokens == 8 then
-								Log.error("No actions available at 8 clues! Playing slot 1")
-								PerformAction.Play(state.ourHand.head)
-							else
-								PerformAction.Discard(me.lockedDiscard(state, state.ourPlayerIndex))
+					val expectedDiscards =
+						if trash.nonEmpty then
+							trash
+						else if !me.obviousLocked(game, state.ourPlayerIndex) && allPlays.isEmpty && game.hasPtd then
+							game.chop(state.ourPlayerIndex).toVector
 						else
-							allActions.maxBy((_, action) => evalAction(game, action))._1
+							Vector.empty
+
+					val discardOrders =
+						// Someone needs to react to our hand: don't do anything weird
+						if game.waiting.exists(_.receiver == state.ourPlayerIndex) then
+							expectedDiscards
+						else
+							(expectedDiscards ++ me.discardable(game, state.ourPlayerIndex)).distinct
+
+					Log.info(s"discardable $discardOrders")
+					discardOrders.map: o =>
+						val action = DiscardAction(state.ourPlayerIndex, o, me.thoughts(o).id(infer = true))
+						(PerformAction.Discard(o), action)
+
+				val allActions = allClues.concat(allPlays).concat(allDiscards)
+
+				if allActions.isEmpty then
+					if state.clueTokens == 8 then
+						Log.error("no actions available at 8 clues! Playing slot 1")
+						PerformAction.Play(state.ourHand.head)
+					else
+						PerformAction.Discard(me.lockedDiscard(state, state.ourPlayerIndex))
+				else
+					allActions.maxBy((_, action) => evalAction(game, action))._1
+
+			solveEndgame.flatMap: solved =>
+				solved.map(IO.pure).getOrElse:
+					IO(urgentAction.getOrElse(normalAction))
 
 		def findAllClues(game: Reactor, giver: Int) =
 			val state = game.state
@@ -608,6 +604,10 @@ object Reactor:
 					notUseful.maxByOption((_, value) => value).fold(useful): bestUseless =>
 						useful :+ bestUseless
 				.sortBy((_, value) => -value)
+				// .pipe: clues =>
+				// 	for (clue, value) <- clues do
+				// 		Log.info(s"clue ${clue.fmt(state)} $value")
+				// 	clues
 				.map((clue, _) => PerformAction.fromClue(clue))
 
 			Logger.setLevel(level)

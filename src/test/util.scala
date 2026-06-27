@@ -11,7 +11,7 @@ enum Player:
 	case Alice, Bob, Cathy, Donald, Emily
 
 enum TestVariant:
-	case NoVariant, NoVar6, Rainbow5, Black5, White5, Pink5, Brown5, Prism5, Muddy5, Cocoa5, Omni5, PinkLPink6
+	case NoVariant, NoVar6, Rainbow5, Black5, White5, Pink5, Brown5, Prism5, Muddy5, Cocoa5, Omni5, Null5, PinkLPink6
 
 val VARIANTS = Map(
 	TestVariant.NoVariant	-> Variant(0, "No Variant",           Vector("Red", "Yellow", "Green", "Blue", "Purple"),  shorts = Some(Vector('r', 'y', 'g', 'b', 'p'))),
@@ -25,6 +25,7 @@ val VARIANTS = Map(
 	TestVariant.Muddy5		-> Variant(161, "Muddy Rainbow (5 Suits)", Vector("Red", "Yellow", "Green", "Blue", "Muddy Rainbow"), shorts = Some(Vector('r', 'y', 'g', 'b', 'm'))),
 	TestVariant.Cocoa5		-> Variant(291, "Cocoa Rainbow (5 Suits)", Vector("Red", "Yellow", "Green", "Blue", "Cocoa Rainbow"), shorts = Some(Vector('r', 'y', 'g', 'b', 'm'))),
 	TestVariant.Omni5		-> Variant(177, "Omni (5 Suits)",     Vector("Red", "Yellow", "Green", "Blue", "Omni"),    shorts = Some(Vector('r', 'y', 'g', 'b', 'o'))),
+	TestVariant.Null5		-> Variant(181, "Null (5 Suits)",     Vector("Red", "Yellow", "Green", "Blue", "Null"),    shorts = Some(Vector('r', 'y', 'g', 'b', 'u'))),
 	TestVariant.PinkLPink6	-> Variant(1296, "Pink & Light Pink (6 Suits)", Vector("Red", "Yellow", "Green", "Blue", "Pink", "Light Pink"), shorts = Some(Vector('r', 'y', 'g', 'b', 'i', 'l')))
 )
 
@@ -259,7 +260,7 @@ def parseAction(state: State, action: String) =
 
 				matching match
 					case Vector() =>
-						throw new IllegalArgumentException(s"Unable to find $short to discard in $playerIndex's hand")
+						throw new IllegalArgumentException(s"Unable to find $short to discard in ${state.names(playerIndex)}'s hand")
 					case Vector(order) =>
 						// If slot provided, it must be correct
 						if slotS != null then

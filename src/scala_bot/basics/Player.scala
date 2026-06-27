@@ -100,6 +100,7 @@ case class Player(
 
 	/** Returns true if the given identity has been "sieved" (visible and will never go on chop). */
 	def isSieved(game: Game, id: Identity, excludeOrder: Int) =
+		!game.state.isCritical(id) &&
 		(0 until game.state.numPlayers).exists: playerIndex =>
 			val loaded = thinksLoaded(game, playerIndex)
 			val chop = chopNewest(game, playerIndex)

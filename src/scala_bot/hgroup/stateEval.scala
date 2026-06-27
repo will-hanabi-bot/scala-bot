@@ -134,7 +134,8 @@ def advance(orig: HGroup, game: HGroup, offset: Int): Double =
 
 	lazy val earlyGameClue = game.earlyGameClue(playerIndex)
 
-	if playerIndex == state.ourPlayerIndex || state.endgameTurns.contains(0) then
+	// Reduce lookahead in early game
+	if (orig.inEarlyGame && offset == 2) || playerIndex == state.ourPlayerIndex || state.endgameTurns.contains(0) then
 		evalGame(orig, game)
 
 	else if allPlayables.nonEmpty then

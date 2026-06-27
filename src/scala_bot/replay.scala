@@ -121,12 +121,15 @@ def processGame[G <: Game](game: G, data: GameData, index: Int)(using ops: GameO
 
 object replay extends IOApp:
 	def run(args: List[String]) =
-		for
-			wsQueue  <- Queue.unbounded[IO, String]
-			consoleQ <- Queue.unbounded[IO, ConsoleCmd]
-			game = fetchGame(args)
-			gameRef  <- Ref.of[IO, Option[Game]](Some(game))
-			client = new BotClient(wsQueue, gameRef)(using runtime)
-			console  <- spawnConsole(consoleQ, client)
-			_ <- console.join
-		yield (ExitCode.Success)
+		val io =
+			for
+				wsQueue  <- Queue.unbounded[IO, String]
+				consoleQ <- Queue.unbounded[IO, ConsoleCmd]
+				game = fetchGame(args)
+				gameRef  <- Ref.of[IO, Option[Game]](Some(game))
+				client = new BotClient(wsQueue, gameRef)(using runtime)
+				console  <- spawnConsole(consoleQ, client)
+				_ <- console.join
+			yield (ExitCode.Success)
+
+		io.onCancel(IO.print("\n"))

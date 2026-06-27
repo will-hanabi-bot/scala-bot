@@ -64,6 +64,21 @@ class Stable extends munit.FunSuite:
 		// Alice should clue 4 to Bob.
 		assertEquals(game.takeAction.unsafeRunSync(), PerformAction.Rank(Bob.ordinal, 4))
 
+	test("it interprets a direct rank"):
+		val game = setup(Reactor.apply, Vector(
+			Vector("xx", "xx", "xx", "xx", "xx"),
+			Vector("r1", "r1", "b1", "b1", "u4"),
+			Vector("y1", "y1", "g1", "g1", "u3")
+		),
+			starting = Cathy,
+			playStacks = Some(Vector(2, 4, 5, 2, 0)),
+			variant = TestVariant.Null5
+		)
+		.pipe(takeTurn("Cathy clues 3 to Alice (slot 2)"))
+
+		hasStatus(game, Alice, 3, CardStatus.None)
+		assert(game.common.thinksPlayables(game, Alice.ordinal).contains(game.state.hands(Alice.ordinal)(1)))
+
 	test("eliminates direct ranks from focus"):
 		val game = setup(Reactor.apply, Vector(
 			Vector("xx", "xx", "xx", "xx", "xx"),

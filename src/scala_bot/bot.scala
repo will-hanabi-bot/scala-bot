@@ -141,4 +141,5 @@ object main extends IOApp:
 						case err =>
 							IO(err.printStackTrace()) *> IO.raiseError(err)
 				connect()
+		.onCancel(IO.print("\n"))
 		.as(ExitCode.Success)
