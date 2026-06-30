@@ -1,6 +1,5 @@
 package scala_bot.basics
 
-import scala.collection.immutable.BitSet
 import scala_bot.utils._
 import scala_bot.logger.Log
 
@@ -51,6 +50,7 @@ extension[G <: Game](game: G)
 		game.withState: s =>
 			s.copy(
 				hands = s.hands.updated(playerIndex, s.hands(playerIndex).filter(_ != order)),
+				heldOrders = s.heldOrders.excl(order),
 				endgameTurns = s.endgameTurns.map(_ - 1)
 			)
 			.cond(_ => failed)
@@ -109,7 +109,8 @@ extension[G <: Game](game: G)
 			s.copy(
 				hands = s.hands.updated(playerIndex, order +: s.hands(playerIndex)),
 				deck = s.deck :+ Card(suitIndex, rank, order, s.turnCount),
-				holders = s.holders :+ playerIndex,
+				holderOf = s.holderOf :+ playerIndex,
+				heldOrders = s.heldOrders.incl(order),
 				nextCardOrder = order + 1,
 				cardsLeft = s.cardsLeft - 1
 			)
@@ -129,7 +130,7 @@ extension[G <: Game](game: G)
 				))),
 				common = Some(g.common.copy(
 					thoughts = g.common.thoughts :+ Thought(-1, -1, order, g.common.allPossible),
-					dirty = g.common.dirty + order
+					dirty = g.common.dirty.incl(order)
 				)),
 				meta = Some(g.meta :+ ConvData(order))
 			))
@@ -142,13 +143,14 @@ extension[G <: Game](game: G)
 		game.withState: s =>
 			s.copy(
 				hands = s.hands.updated(playerIndex, s.hands(playerIndex).filter(_ != order)),
+				heldOrders = s.heldOrders.excl(order),
 				endgameTurns = s.endgameTurns.map(_ - 1)
 			)
 		.when(_ => game.state.options.deckPlays && order == game.state.cardCount.sum - 1 && game.state.deck.length == order): g =>
 			g.withState: s =>
 				s.copy(
 					deck = s.deck :+ Card(suitIndex, rank, order, s.turnCount),
-					holders = s.holders :+ playerIndex,
+					holderOf = s.holderOf :+ playerIndex,
 					nextCardOrder = s.nextCardOrder + 1,
 					cardsLeft = s.cardsLeft - 1,
 					endgameTurns = Some(s.numPlayers)
@@ -165,7 +167,7 @@ extension[G <: Game](game: G)
 				))),
 				common = Some(g.common.copy(
 					thoughts = g.common.thoughts :+ Thought(-1, -1, order, g.common.allPossible),
-					dirty = g.common.dirty + order
+					dirty = g.common.dirty.incl(order)
 				)),
 				meta = Some(g.meta :+ ConvData(order))
 			)))
@@ -190,7 +192,7 @@ extension[G <: Game](game: G)
 		val state = game.state
 
 		game.pipe:
-			state.hands.flatten.foldLeft(_): (g, order) =>
+			state.heldOrders.foldLeft(_): (g, order) =>
 				val thought = g.common.thoughts(order)
 
 				g.when(_ => thought.inferred.isEmpty && !thought.reset):
@@ -241,7 +243,7 @@ extension[G <: Game](game: G)
 									else
 										ids.toOpt
 							t.copy(
-								possible = thought.possible,
+								possible = thought.possible.intersect(t.possible),
 								inferred = newInferred,
 								infoLock = newInfoLock,
 								reset = thought.reset
@@ -256,9 +258,9 @@ extension[G <: Game](game: G)
 				.refreshLinks(g)._2
 				.refreshPlayLinks(g)
 				.updateHypoStacks(g)
-				.copy(dirty = BitSet.empty)
+				.copy(dirty = FastBitSet.empty)
 
 			ops.copyWith(g, GameUpdates(
-				common = Some(g.common.copy(dirty = BitSet.empty)),
+				common = Some(g.common.copy(dirty = FastBitSet.empty)),
 				players = Some(newPlayers)
 			))

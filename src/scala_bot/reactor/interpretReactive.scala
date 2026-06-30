@@ -62,7 +62,7 @@ def interpretReactiveColour(prev: Reactor, game: Reactor, action: ClueAction, fo
 			case Some(reactOrder) if prev.common.thinksTrash(prev, reacter).contains(reactOrder) && looksStable && prev.common.obviousPlayables(prev, reacter).isEmpty =>
 				Log.warn(s"attempted dc+play would result in reacter naturally discarding ${state.logId(reactOrder)} $reactOrder!")
 				None
-			case Some(reactOrder) if game.common.thoughts(reactOrder).possible.forall(state.isCritical) =>
+			case Some(reactOrder) if game.common.thoughts(reactOrder).possible.difference(state.criticalSet).isEmpty =>
 				Log.warn(s"attempted dc+play would result in reacter discarding known critical ${state.logId(reactOrder)} $reactOrder!")
 				None
 			case Some(reactOrder) =>
@@ -94,7 +94,7 @@ def interpretReactiveColour(prev: Reactor, game: Reactor, action: ClueAction, fo
 
 			val unknownDupes = state.hands(receiver).zipWithIndex.filter: (o, _) =>
 				!prevKt.contains(o) &&
-				state.hands.flatten.exists(o2 => o2 != o && game.common.thoughts(o2).matches(state.deck(o), infer = true))
+				state.heldOrders.excl(o).exists(game.common.thoughts(_).matches(state.deck(o), infer = true))
 
 			lazy val knownTrash = state.hands(receiver).zipWithIndex.filter: (o, _) =>
 				state.isBasicTrash(state.deck(o).id().get)

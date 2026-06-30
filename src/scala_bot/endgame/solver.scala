@@ -229,7 +229,7 @@ case class EndgameSolver[G <: Game](
 					.when(_.isEmpty): _ =>
 						possibleActions(hypo, state.ourPlayerIndex, remaining, deadline, infer = true)
 
-				val gameArrs = genArrs(hypo, remaining, actions.forall(_._1.isClue))
+				val gameArrs = genArrs(hypo, remaining, state.ourPlayerIndex, actions.forall(_._1.isClue))
 
 				(hypo, actions, gameArrs, prob)
 
@@ -255,6 +255,8 @@ case class EndgameSolver[G <: Game](
 
 		Log.info(s"all actions: ${allActions.map(_.fmt(game))}")
 		Log.info(s"initial arrangement: ${firstHypo.state.ourHand.map(firstHypo.state.logId).mkString(",")} $firstProb")
+
+		// Logger.setLevel(LogLevel.Off)
 
 		val initialActions =
 			val init = optimizeFull(firstHypo, firstArrs, firstActions, state.ourPlayerIndex, deadline)
@@ -340,11 +342,11 @@ case class EndgameSolver[G <: Game](
 			yield
 				Identity(suitIndex, rank)
 		.forall: id =>
-			val order = state.hands.flatten.find(game.common.thoughts(_).matches(id, infer = true))
+			val order = state.heldOrders.find(game.common.thoughts(_).matches(id, infer = true))
 			order.exists(state.deck(_).id().forall(_.matches(id)))
 
 		if viableClueless then
-			val cluelessState = state.hands.flatten.foldLeft(state): (acc, order) =>
+			val cluelessState = state.heldOrders.foldLeft(state): (acc, order) =>
 				val newCard = game.common.thoughts(order).id() match
 					case None => acc.deck(order).copy(suitIndex = -1, rank = -1)
 					case Some(id) => acc.deck(order).copy(suitIndex = id.suitIndex, rank = id.rank)
@@ -360,7 +362,7 @@ case class EndgameSolver[G <: Game](
 				else
 					return Right((List(cluelessWin.get), Frac.one))
 
-		val bottomDecked = remaining.nonEmpty && remaining.keys.forall(id => state.isCritical(id) && id.rank != 5)
+		val bottomDecked = remaining.nonEmpty && remaining.keys.forall(id => state.isCritical(id) && id.rank < state.maxRanks(id.suitIndex))
 
 		if bottomDecked || unwinnableState(state, playerTurn, depth) then
 			return UNWINNABLE
@@ -399,7 +401,7 @@ case class EndgameSolver[G <: Game](
 
 		Log.highlight(Console.GREEN, s"${indent(depth)}actions: ${performs.map((p, _) => p.fmtObj(game, playerTurn)).mkString(", ")}")
 
-		val arrs = genArrs(game, remaining, false)
+		val arrs = genArrs(game, remaining, playerTurn, clueOnly = false)
 		val result = optimize(game, arrs, performs, playerTurn, deadline, depth)
 		result
 
@@ -454,7 +456,7 @@ case class EndgameSolver[G <: Game](
 			val clueActions = if !clueWinnable then Nil else
 				// If everyone knows exactly where all the remaining useful cards are, clues are only useful for stalling, so we only need to consider 1 clue
 				val fullyKnown = (remaining.isEmpty || (remaining.size == 1 && state.isBasicTrash(remaining.head._1))) &&
-					state.hands.flatten.forall: o =>
+					state.heldOrders.forall: o =>
 						state.deck(o).id().forall: id =>
 							state.isBasicTrash(id) || game.common.thoughts(o).matches(id, infer = true)
 
@@ -471,7 +473,7 @@ case class EndgameSolver[G <: Game](
 					game.players(playerTurn).thoughts(p).id(infer = true).exists: id =>
 						// Always play a 5 over dc
 						id.rank == 5 ||
-						(state.hands(playerTurn).exists(o => o != p && state.deck(o).clued && game.common.thoughts(o).possible.forall(state.isCritical)) && {
+						(state.hands(playerTurn).exists(o => o != p && state.deck(o).clued && game.common.thoughts(o).possible.difference(state.criticalSet).isEmpty) && {
 							state.isCritical(id) ||
 							// Always play a duped card in hand over dc
 							state.hands(playerTurn).exists(o => o != p && game.players(playerTurn).thoughts(o).matches(id, infer = true))
@@ -490,11 +492,13 @@ case class EndgameSolver[G <: Game](
 			// 			hand.count(game.players(index).thoughts(_).possible.forall(state.isCritical))
 			// 	ownCrits < minCrits
 
+			// If no playables are visible, try discarding before cluing
 			val preferDc = state.hands.zipWithIndex.forall: (hand, i) =>
 				i == playerTurn || hand.forall(o => !state.isPlayable(state.deck(o).id().get))
 
-			// If no playables are visible, try discarding before cluing
-			if preferDc then
+			if depth == 0 && ops.preferEndgameClue(game) then
+				clueActions.concat(playActions).concat(dcActions)
+			else if preferDc then
 				playActions.concat(dcActions).concat(clueActions)
 			else
 				playActions.concat(clueActions).concat(dcActions)
@@ -533,15 +537,14 @@ case class EndgameSolver[G <: Game](
 							prob * wr
 
 	def optimizeFull(game: G, arrs: (Seq[GameArr], Seq[GameArr]), actions: Seq[(PerformAction, Seq[Identity])], playerTurn: Int, deadline: Instant)(using ops: GameOps[G]): Seq[(PerformAction, Frac)] =
-		boundary:
-			val (undrawn, drawn) = arrs
+		val (undrawn, drawn) = arrs
 
-			actions.map: (perform, winnableDraws) =>
-				val winrate = actionWinrate(game, if perform.isClue then undrawn else drawn, (perform, winnableDraws), playerTurn, deadline)
-				(perform, winrate)
+		actions.map: (perform, winnableDraws) =>
+			val winrate = actionWinrate(game, if perform.isClue then undrawn else drawn, (perform, winnableDraws), playerTurn, deadline)
+			(perform, winrate)
 
-			.toList
-			.sortBy(-_._2)
+		.toList
+		.sortBy(-_._2)
 
 	def optimize(game: G, arrs: (Seq[GameArr], Seq[GameArr]), actions: Seq[(PerformAction, Seq[Identity])], playerTurn: Int, deadline: Instant, depth: Int = 0)(using ops: GameOps[G]): WinnableResult =
 		boundary:
@@ -568,7 +571,13 @@ case class EndgameSolver[G <: Game](
 					val newProb = remProb - prob
 					lazy val newGame = game.simulateAction(perform.toAction(game.state, playerTurn), drew)
 
-					val unwinnable = drew.exists(!winnableDraws.contains(_)) || newGame.state.maxScore < game.state.maxScore
+					val unwinnable =
+						drew.exists(!winnableDraws.contains(_)) ||
+						newGame.state.maxScore < game.state.maxScore ||
+						newGame.state.pace < 0 ||
+						(remaining.nonEmpty && remaining.keys.forall: id =>
+							newGame.state.isCritical(id) && id.rank < newGame.state.maxRanks(id.suitIndex))
+
 					if unwinnable then
 						calcWinrate(arrs.tail, winrate, newProb)
 					else

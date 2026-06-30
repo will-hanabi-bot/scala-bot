@@ -27,6 +27,7 @@ import scala_bot.basics.{Game,Variant}
 import scala_bot.console.{ConsoleCmd, spawnConsole}
 import scala.util.Try
 import java.io.IOException
+import java.util.concurrent.TimeoutException
 
 case class WebSocketClosedException(code: Int, reason: String) extends Exception(s"WebSocket closed ($code): $reason")
 
@@ -61,10 +62,13 @@ object main extends IOApp:
 		val parsedArgs = parseArgs(args)
 		val env = sys.env ++ readEnv(parsedArgs)
 		def useWebSocket(ws: WebSocket[IO]): IO[Unit] =
+			def heartbeat: IO[Unit] =
+				(ws.send(WebSocketFrame.Ping(Array.emptyByteArray)) *> IO.sleep(30.seconds)).foreverM
+
 			def receive(client: BotClient): IO[Unit] =
 				Ref.of[IO, String]("").flatMap: buffer =>
 					def loop: IO[Unit] =
-						ws.receive().flatMap:
+						ws.receive().timeout(2.minutes).flatMap:
 							case WebSocketFrame.Text(text, finalFrame, _) =>
 								if !finalFrame then
 									buffer.update(_ + text) *> loop
@@ -78,6 +82,8 @@ object main extends IOApp:
 
 							case WebSocketFrame.Close(code, reason) =>
 								IO.raiseError(WebSocketClosedException(code, reason))
+
+							case WebSocketFrame.Pong(_) => loop
 
 							case _ => loop
 
@@ -101,7 +107,7 @@ object main extends IOApp:
 				client   = new BotClient(wsQueue, gameRef, BotConfig.fromEnv(env))(using runtime)
 				console  <- spawnConsole(consoleQ, client)
 				_        <- IO { Variant.init() }
-				_        <- (console.join, receive(client), senderLoop(wsQueue)).parTupled
+				_        <- (console.join, receive(client), senderLoop(wsQueue), heartbeat).parTupled
 			yield ()
 
 		val index = parsedArgs.getOrElse("index", "0").toInt
@@ -132,7 +138,7 @@ object main extends IOApp:
 					yield ()
 
 					attempt.handleErrorWith:
-						case err @ (_: IOException | _: ReadException | _: WebSocketClosedException | _: ConnectException) if attemptNum < maxRetries =>
+						case err @ (_: IOException | _: ReadException | _: WebSocketClosedException | _: ConnectException | _: TimeoutException) if attemptNum < maxRetries =>
 							connectedRef.getAndSet(false).flatMap: wasConnected =>
 								val nextAttemptNum = if wasConnected then 0 else attemptNum + 1
 								IO.println(s"Connection lost (attempt $attemptNum/$maxRetries): ${err.getMessage}") *>

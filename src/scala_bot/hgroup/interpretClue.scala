@@ -25,7 +25,7 @@ def evaluateCM(ctx: ClueContext, chopMoved: Seq[Int]): ClueInterp =
 		ClueInterp.Discard
 
 def unacceptableClue(prev: HGroup, game: HGroup, @annotation.unused action: ClueAction): Boolean =
-	val fSymmetric = game.state.hands.flatten.find: o =>
+	val fSymmetric = game.state.heldOrders.find: o =>
 		game.isBlindPlaying(o) &&
 		!prev.isBlindPlaying(o) &&
 		prev.waiting.exists: wc =>
@@ -175,8 +175,8 @@ def interpClue(ctx: ClueContext): HGroup =
 			!suit.suitType.pinkish ||
 			common.isTrash(game, Identity(suitIndex, clue.value), focus)
 		&&
-		game.common.thoughts(focus).possible.exists: i =>
-			!state.isCritical(i) && common.isTrash(game, i, focus)
+		game.common.thoughts(focus).possible.difference(state.criticalSet).exists:
+			common.isTrash(game, _, focus)
 
 	if pinkTrashFix then
 		Log.info(s"pink trash fix!")
@@ -249,8 +249,13 @@ def interpClue(ctx: ClueContext): HGroup =
 
 		common.thoughts(focus).inferred.filter: inf =>
 			!prev.invalidFocus(giver, clue, inf, ctx.focusResult) &&
-			!visibleFind(state, game.players(target), inf, infer = true, excludeOrder = focus).exists: o =>
-				prev.state.deck(o).clued && !state.hands(giver).contains(o)
+			!state.heldOrders.exists: o =>
+				o != focus &&
+				prev.state.deck(o).clued &&
+				game.players(giver).thoughts(o).matches(inf, infer = true) && {			// giver knows about it, and
+					game.players(target).thoughts(o).matches(inf, infer = true) ||		// either target knows about it too, or
+					(state.ourHand.contains(o) && game.me.thoughts(o).matches(inf, infer = true))	// we know we have it in our hand
+				}
 			&&
 			!savePoss.exists(_.id == inf)
 		.flatMap:
@@ -258,7 +263,9 @@ def interpClue(ctx: ClueContext): HGroup =
 
 	val simplest =
 		val possible = (savePoss ++ focusPoss)
-			.filter(fp => game.players(target).thoughts(focus).possible.contains(fp.id))
+			.filter: fp =>
+				game.players(target).thoughts(focus).possible.contains(fp.id) ||
+				game.players(giver).thoughts(focus).possible.contains(fp.id)
 
 		occamsRazor(ctx, possible, target)
 

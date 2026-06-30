@@ -63,7 +63,7 @@ private def tryStable(prev: Reactor, game: Reactor, action: ClueAction, stall: B
 
 		else if playableRank then
 			val unneccessaryFocus = g.common.thoughts(playableRankFocus).possible.forall: i =>
-				state.isBasicTrash(i) || state.hands.flatten.exists(g.common.thoughts(_).matches(i))
+				state.isBasicTrash(i) || state.heldOrders.exists(g.common.thoughts(_).matches(i))
 
 			if unneccessaryFocus then
 				Log.info("unnecessary focus!")
@@ -212,31 +212,44 @@ private def tryStable(prev: Reactor, game: Reactor, action: ClueAction, stall: B
 			refDiscard(prev, g, action, stall)
 
 /**
-* Returns a non-bad touching ref play clue or a ref dc clue on trash to the clue target, if it exists.
+* Returns the best alternative clue, if it exists, and whether it is a ref play.
 */
-private def alternativeClue(prev: Reactor, giver: Int, target: Int, refPlayOnly: Boolean = false) =
-	if prev.noRecurse then None else
+private def alternativeClue(prev: Reactor, giver: Int, target: Int) =
+	if prev.noRecurse then (None, false) else
 		val state = prev.state
-		val clues = if refPlayOnly then state.allColourClues(target) else state.allValidClues(target)
 
-		clues.find: clue =>
-			val action = Action.fromClue(state, clue, giver)
-			val hypo = prev.copy(noRecurse = true).simulate(action, log = Some(false))
-			val (badTouch, _, _) = badTouchResult(prev, hypo, action)
+		@annotation.tailrec
+		def recur(clues: collection.View[Clue], foundClue: Option[Clue] = None, refPlay: Boolean = false): (Option[Clue], Boolean) =
+			if clues.isEmpty then (foundClue, refPlay) else
+				val clue = clues.head
 
-			badTouch.isEmpty && {
-				hypo.lastMove.get match
-					case ClueInterp.Play => true
-					case ClueInterp.Reveal if !refPlayOnly => true
-					case ClueInterp.Discard =>
-						val dcTarget = hypo.state.hands(target).find: o =>
-							hypo.meta(o).status == CardStatus.CalledToDiscard &&
-							prev.meta(o).status != CardStatus.CalledToDiscard
+				if foundClue.isDefined && clue.kind != ClueKind.Colour then
+					recur(clues.tail, foundClue, refPlay)
+				else
+					val action = Action.fromClue(state, clue, giver)
+					val hypo = prev.copy(noRecurse = true).simulate(action, log = Some(false))
+					val (badTouch, _, _) = badTouchResult(prev, hypo, action)
 
-						// TODO?: The dc target doesn't always exist. Consider a ref dc onto a card that previously had ctd.
-						dcTarget.exists(dc => state.isBasicTrash(state.deck(dc).id().get))
-					case _ => false
-			}
+					if badTouch.nonEmpty then
+						recur(clues.tail, foundClue, refPlay)
+					else
+						hypo.lastMove.get match
+							case ClueInterp.Play => (Some(clue), true)
+							case ClueInterp.Reveal => recur(clues.tail, Some(clue), false)
+							case ClueInterp.Discard =>
+								val dcTarget = hypo.state.hands(target).find: o =>
+									hypo.meta(o).status == CardStatus.CalledToDiscard &&
+									prev.meta(o).status != CardStatus.CalledToDiscard
+
+								// TODO?: The dc target doesn't always exist. Consider a ref dc onto a card that previously had ctd.
+								if dcTarget.exists(dc => state.isBasicTrash(state.deck(dc).id().get)) then
+									recur(clues.tail, Some(clue), false)
+								else
+									recur(clues.tail, foundClue, false)
+							case _ =>
+								recur(clues.tail, foundClue, false)
+
+		recur(state.allValidClues(target))
 
 def badStable(prev: Reactor, game: Reactor, action: ClueAction, interp: ClueInterp, stall: Boolean = false): Boolean =
 	val state = game.state
@@ -248,9 +261,8 @@ def badStable(prev: Reactor, game: Reactor, action: ClueAction, interp: ClueInte
 	if interp == ClueInterp.Mistake then
 		return true
 
-	lazy val altPlay = alternativeClue(prev, giver, target, refPlayOnly = true)
-	lazy val alt = alternativeClue(prev, giver, target, refPlayOnly = false)
-	lazy val badPlayable = state.hands.flatten.find: o =>
+	lazy val (altClue, refPlay) = alternativeClue(prev, giver, target)
+	lazy val badPlayable = state.heldOrders.find: o =>
 		game.meta(o).status == CardStatus.CalledToPlay && !state.hasConsistentInfs(game.common.thoughts(o)) &&
 		(prev.meta(o).status != CardStatus.CalledToPlay || prev.state.hasConsistentInfs(prev.common.thoughts(o)))
 
@@ -258,10 +270,7 @@ def badStable(prev: Reactor, game: Reactor, action: ClueAction, interp: ClueInte
 		game.meta(o).status == CardStatus.CalledToDiscard &&
 		prev.meta(o).status != CardStatus.CalledToDiscard
 
-	if prev.state.turnCount == 1 && prev.state.clueTokens == 8 && clue.kind == ClueKind.Rank && altPlay.isDefined then
-		Log.warn(s"bad turn 1 rank clue! ${altPlay.get.fmt(state)} is possible")
-		true
-	else if target == state.ourPlayerIndex then
+	if target == state.ourPlayerIndex then
 		false
 	else if badPlayable.isDefined then
 		val bad = badPlayable.get
@@ -270,17 +279,20 @@ def badStable(prev: Reactor, game: Reactor, action: ClueAction, interp: ClueInte
 	else if dcTarget.exists(o => state.isCritical(state.deck(o).id().get)) then
 		Log.warn(s"critical discard on ${dcTarget.get}!")
 		true
-	else if stall && dcTarget.exists(o => state.isUseful(state.deck(o).id().get)) && alt.isDefined then
-		Log.warn(s"bad discard on ${dcTarget.get}! alt clue ${alt.get.fmt(state)} was available!")
+	else if stall && dcTarget.exists(o => state.isUseful(state.deck(o).id().get)) && altClue.isDefined then
+		Log.warn(s"bad discard on ${dcTarget.get}! alt clue ${altClue.get.fmt(state)} was available!")
+		true
+	else if prev.state.turnCount == 1 && prev.state.clueTokens == 8 && clue.kind == ClueKind.Rank && refPlay then
+		Log.warn(s"bad turn 1 rank clue! ${altClue.get.fmt(state)} is possible")
 		true
 	// Check for bad lock
-	else if interp == ClueInterp.Lock && alt.isDefined then
-		Log.warn(s"alternative clue ${alt.get.fmt(state)} was available!")
+	else if interp == ClueInterp.Lock && altClue.isDefined then
+		Log.warn(s"alternative clue ${altClue.get.fmt(state)} was available!")
 		true
 	else if !stall then
 		false
-	else if interp == ClueInterp.Stall && alt.isDefined then
-		Log.warn(s"alternative clue ${alt.get.fmt(state)} was available!")
+	else if interp == ClueInterp.Stall && altClue.isDefined then
+		Log.warn(s"alternative clue ${altClue.get.fmt(state)} was available!")
 		true
 	else
 		false

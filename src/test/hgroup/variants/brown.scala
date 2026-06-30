@@ -25,6 +25,18 @@ class Brown extends munit.FunSuite:
 
 		hasInfs(game, None, Alice, 5, Vector("n1", "n2", "n5"))
 
+	test("understands brown save with dark brown"):
+		val game = setup(HGroup.atLevel(1), Vector(
+			Vector("xx", "xx", "xx", "xx", "xx"),
+			Vector("r4", "r4", "y4", "y4", "g4")
+		),
+			starting = Bob,
+			variant = TestVariant.DBrown5
+		)
+		.pipe(takeTurn("Bob clues brown to Alice (slot 5)"))
+
+		hasInfs(game, None, Alice, 5, Vector("n1", "n2", "n3", "n4", "n5"))
+
 	test("will save n5 with brown"):
 		val game = setup(HGroup.atLevel(1), Vector(
 			Vector("xx", "xx", "xx", "xx", "xx"),

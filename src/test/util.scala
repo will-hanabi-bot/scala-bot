@@ -11,7 +11,7 @@ enum Player:
 	case Alice, Bob, Cathy, Donald, Emily
 
 enum TestVariant:
-	case NoVariant, NoVar6, Rainbow5, Black5, White5, Pink5, Brown5, Prism5, Muddy5, Cocoa5, Omni5, Null5, PinkLPink6
+	case NoVariant, NoVar6, Rainbow5, Black5, White5, Pink5, Brown5, Prism5, Muddy5, Cocoa5, Omni5, Null5, DBrown5, PinkLPink6
 
 val VARIANTS = Map(
 	TestVariant.NoVariant	-> Variant(0, "No Variant",           Vector("Red", "Yellow", "Green", "Blue", "Purple"),  shorts = Some(Vector('r', 'y', 'g', 'b', 'p'))),
@@ -26,6 +26,7 @@ val VARIANTS = Map(
 	TestVariant.Cocoa5		-> Variant(291, "Cocoa Rainbow (5 Suits)", Vector("Red", "Yellow", "Green", "Blue", "Cocoa Rainbow"), shorts = Some(Vector('r', 'y', 'g', 'b', 'm'))),
 	TestVariant.Omni5		-> Variant(177, "Omni (5 Suits)",     Vector("Red", "Yellow", "Green", "Blue", "Omni"),    shorts = Some(Vector('r', 'y', 'g', 'b', 'o'))),
 	TestVariant.Null5		-> Variant(181, "Null (5 Suits)",     Vector("Red", "Yellow", "Green", "Blue", "Null"),    shorts = Some(Vector('r', 'y', 'g', 'b', 'u'))),
+	TestVariant.DBrown5		-> Variant(90, "Dark Brown (5 Suits)",     Vector("Red", "Yellow", "Green", "Blue", "Dark Brown"),   shorts = Some(Vector('r', 'y', 'g', 'b', 'n'))),
 	TestVariant.PinkLPink6	-> Variant(1296, "Pink & Light Pink (6 Suits)", Vector("Red", "Yellow", "Green", "Blue", "Pink", "Light Pink"), shorts = Some(Vector('r', 'y', 'g', 'b', 'i', 'l')))
 )
 
@@ -166,13 +167,13 @@ def takeTurn[G <: Game](rawAction: String, drawS: String = "")(game: G)(using op
 				case _ => g
 		.handleAction(TurnAction(state.turnCount, state.nextPlayerIndex(action.playerIndex)))
 
-def strToClue(state: State, s: String) =
-	if "12345".contains(s) then
-		BaseClue(ClueKind.Rank, s.toInt)
+def strToClue(state: State, str: String) =
+	if "12345".contains(str) then
+		BaseClue(ClueKind.Rank, str.toInt)
 	else
-		val colour = state.variant.suits.indexWhere(_.name.toLowerCase() == s.toLowerCase())
+		val colour = state.variant.suits.indexWhere(s => Variant.stripName(s.name).toLowerCase() == str.toLowerCase())
 		if colour == -1 then
-			throw new IllegalArgumentException(s"Colour $s not found in [${state.variant.suits.mkString(",")}]")
+			throw new IllegalArgumentException(s"Colour $str not found in [${state.variant.suits.mkString(",")}]")
 
 		BaseClue(ClueKind.Colour, colour)
 
@@ -315,8 +316,11 @@ def _preClue[G <: Game](playerIndex: Player, slot: Int, clues: Seq[TestClue])(ga
 			clues.forall(c => state.variant.idTouched(i, c.toBase))
 
 	ops.copyWith(game, GameUpdates(
-		common = Some(game.common.withThought(order):
-			_.copy(inferred = possibilities, possible = possibilities)
+		common = Some(game.common.withThought(order): t =>
+			t.copy(
+				inferred = possibilities.intersect(t.possible),
+				possible = possibilities.intersect(t.possible)
+			)
 		),
 		state = Some(state.copy(
 			deck = state.deck.updated(order, state.deck(order).copy(

@@ -1,26 +1,23 @@
 package scala_bot.basics
 
-import scala.collection.immutable.BitSet
 import scala_bot.utils._
 import scala_bot.logger.Log
 
 case class MatchEntry(order: Int, unknownTo: Int)
 
-case class CardElimResult(
-	player: Player,
-	changed: Boolean = false,
-	removals: BitSet = BitSet.empty,
-	resets: BitSet = BitSet.empty,
-	recursiveIds: IdentitySet = IdentitySet.empty
+class CardElimResult(
+	var player: Player,
+	var changed: Boolean = false,
+	var removals: FastBitSet = FastBitSet.empty,
+	var resets: FastBitSet = FastBitSet.empty,
+	var recursiveIds: IdentitySet = IdentitySet.empty
 ):
-	def merge(other: CardElimResult): CardElimResult =
-		CardElimResult(
-			player = other.player,
-			changed = changed || other.changed,
-			removals = removals.union(other.removals),
-			resets = resets.union(other.resets),
-			recursiveIds = recursiveIds.union(other.recursiveIds)
-		)
+	def merge(other: CardElimResult) =
+		player = other.player
+		changed = changed || other.changed
+		removals = removals.union(other.removals)
+		resets = resets.union(other.resets)
+		recursiveIds = recursiveIds.union(other.recursiveIds)
 
 extension (p: Player)
 	/**
@@ -31,15 +28,15 @@ extension (p: Player)
 	 * @param excludeHolders 	Player indices to exclude from elimination.
 	 * @param excludeOwn		Orders to exclude from elimination
 	 */
-	private def updateMap(state: State, id: Identity, excludeHolders: BitSet, excludeOrders: BitSet): CardElimResult =
+	private def updateMap(state: State, id: Identity, excludeHolders: FastBitSet, excludeOrders: FastBitSet): CardElimResult =
 		var changed = false
 		var recursiveIds = IdentitySet.empty
-		var crossElimRemovals = BitSet.empty
+		var crossElimRemovals = FastBitSet.empty
 
 		var certainMap = p.certainMap
 		var thoughts = p.thoughts
 		var dirty = p.dirty
-		var resets = BitSet.empty
+		var resets = FastBitSet.empty
 
 		loopIf(0, _ < state.numPlayers, _ + 1, i => !excludeHolders.contains(i)): playerIndex =>
 			state.hands(playerIndex).fastForeach: order =>
@@ -108,37 +105,37 @@ extension (p: Player)
 
 	/** The "typical" empathy operation. If there are enough known instances of an identity, it is removed from every card (including future cards). */
 	private def basicElim(state: State, ids: IdentitySet): CardElimResult =
-		var res = CardElimResult(p)
+		val res = CardElimResult(p)
 		var eliminated = IdentitySet.empty
 
 		ids.foreach: id =>
 			val knownCount = res.player.certainMap(id.toOrd).length
 
 			if knownCount == state.cardCount(id.toOrd) then
-				val innerResult = res.player.updateMap(state, id, BitSet.empty, BitSet.empty)
+				val innerResult = res.player.updateMap(state, id, FastBitSet.empty, FastBitSet.empty)
 
-				res = res.merge(innerResult)
+				res.merge(innerResult)
 				eliminated = eliminated.union(id)
 
 		if res.recursiveIds.nonEmpty then
 			val innerResult = res.player.basicElim(state, res.recursiveIds)
-			res = res.merge(innerResult)
+			res.merge(innerResult)
 
-		res.copy(player = res.player.copy(
-			allPossible = res.player.allPossible.difference(eliminated)))
+		res.player = res.player.copy(allPossible = res.player.allPossible.difference(eliminated))
+		res
 
 	/**
 	 * The "sudoku" emathy operation, involving 2 parts:
 	 * Symmetric info - if Alice has [r5,g5] and Bob has [r5,g5], then everyone knows how r5 and g5 are distributed.
 	 * Naked pairs - If Alice has 3 cards with [r4,g5], then everyone knows that both r4 and g5 cannot be elsewhere (will be eliminated in basic_elim).
 	 */
-	private def performCrossElim(state: State, entries: BitSet, ids: IdentitySet): CardElimResult =
+	private def performCrossElim(state: State, entries: FastBitSet, ids: IdentitySet): CardElimResult =
 		val groups = Array.fill[List[Int]](state.variant.suits.length * 5)(Nil)
 		var groupIds = IdentitySet.empty
 
-		var res = CardElimResult(p)
+		val res = CardElimResult(p)
 
-		entries.fastForeach: o =>
+		entries.foreach: o =>
 			val id = state.deck(o).id()
 			if id.isDefined then
 				val ord = id.get.toOrd
@@ -150,29 +147,30 @@ extension (p: Player)
 			val certains = res.player.certainMap(id.toOrd).filter(c => !group.contains(c.order)).length
 
 			if group.size == state.cardCount(id.toOrd) - certains then
-				val innerResult = res.player.updateMap(state, id, BitSet.fromSpecific(group.map(state.holderOf)), BitSet.fromSpecific(group))
-				res = res.merge(innerResult)
+				val innerResult = res.player.updateMap(state, id, FastBitSet.from(group.map(state.holderOf)), FastBitSet.from(group))
+				res.merge(innerResult)
 
 		// Now elim all the cards outside of this entry
 		for id <- ids do
-			val innerResult = res.player.updateMap(state, id, BitSet.empty, entries)
-			res = res.merge(innerResult)
+			val innerResult = res.player.updateMap(state, id, FastBitSet.empty, entries)
+			res.merge(innerResult)
 
 		val innerResult = res.player.basicElim(state, ids)
 		res.merge(innerResult)
+		res
 
 	private def crossElim(
 		state: State,
-		remaining: List[Int],
-		contained: BitSet = BitSet.empty,
-		holders: BitSet = BitSet.empty,
+		remaining: FastBitSet,
+		contained: FastBitSet = FastBitSet.empty,
+		holders: FastBitSet = FastBitSet.empty,
 		accIds: IdentitySet = IdentitySet.empty,
-		certains: BitSet = BitSet.empty
+		certains: FastBitSet = FastBitSet.empty
 	): CardElimResult =
 		val multiplicity = state.multiplicity(accIds)
-		val impossibleMultiplicity = multiplicity - certains.size > contained.size + remaining.length
+		val impossibleMultiplicity = multiplicity - certains.size > contained.size + remaining.size
 
-		var res = CardElimResult(p)
+		val res = CardElimResult(p)
 
 		if impossibleMultiplicity then
 			return res
@@ -182,7 +180,7 @@ extension (p: Player)
 			if innerResult.changed then
 				return innerResult
 			else
-				res = res.merge(innerResult)
+				res.merge(innerResult)
 
 		if remaining.isEmpty then
 			res
@@ -204,23 +202,24 @@ extension (p: Player)
 							mCertains = mCertains.incl(c.order)
 					mCertains
 
-				allCertains.diff(nextContained)
+				allCertains.difference(nextContained)
 
 			val nextHolders = holders.incl(state.holderOf(order))
-			val innerResult = res.player.crossElim(state, remaining.tail, nextContained, nextHolders, newAccIds, nextCertains)
+			val innerResult = res.player.crossElim(state, remaining.excl(order), nextContained, nextHolders, newAccIds, nextCertains)
 
-			if innerResult.changed then
-				res.merge(innerResult)
-			else
-				res.merge(innerResult).merge(res.player.crossElim(state, remaining.tail, contained, holders, accIds, certains))
+			res.merge(innerResult)
 
-	def cardElim(state: State): (BitSet, Player) =
+			if !innerResult.changed then
+				res.merge(res.player.crossElim(state, remaining.excl(order), contained, holders, accIds, certains))
+			res
+
+	def cardElim(state: State): (FastBitSet, Player) =
 		var certainMap = p.certainMap
 
 		if p.dirty.isEmpty then
-			return (BitSet.empty, p)
+			return (FastBitSet.empty, p)
 
-		p.dirty.toArray.fastForeach: order =>
+		p.dirty.foreach: order =>
 			val thought = p.thoughts(order)
 			val id = thought.id(symmetric = p.isCommon)
 
@@ -239,12 +238,12 @@ extension (p: Player)
 						certainMap.updated(id.get.toOrd, MatchEntry(order, unknownTo) +: certains)
 
 		var newPlayer = p.copy(certainMap = certainMap)
-		var crossElimCandidates = List.empty[Int]
-		var resets = BitSet.empty
+		var crossElimCandidates = FastBitSet.empty
+		var resets = FastBitSet.empty
 
-		val CardElimResult(player, _, _, basicResets, _) = newPlayer.basicElim(state, state.allIds)
-		newPlayer = player
-		resets = resets.union(basicResets)
+		val res = newPlayer.basicElim(state, newPlayer.allPossible)
+		newPlayer = res.player
+		resets = resets.union(res.resets)
 
 		loop(0, _ < state.numPlayers, _ + 1): playerIndex =>
 			state.hands(playerIndex).fastForeach: order =>
@@ -256,26 +255,26 @@ extension (p: Player)
 					state.multiplicity(possible) <= 9
 
 				if canCrossElim then
-					crossElimCandidates = order +: crossElimCandidates
+					crossElimCandidates = crossElimCandidates.incl(order)
 
 		var candidates = crossElimCandidates.filter: order =>
 			val thought = newPlayer.thoughts(order)
-			var certains = BitSet.empty
+			var certains = FastBitSet.empty
 			thought.possible.foreach: id =>
 				newPlayer.certainMap(id.toOrd).fastForeach: c =>
 					certains = certains.incl(c.order)
 
-			state.multiplicity(thought.possible) - certains.size <= Math.min(9, crossElimCandidates.length)
+			state.multiplicity(thought.possible) - certains.size <= Math.min(9, crossElimCandidates.size)
 
 		var changed = true
 
-		while candidates.length > 1 && changed do
-			val CardElimResult(innerPlayer, innerChanged, removals, innerResets, _) = newPlayer.crossElim(state, candidates)
+		while candidates.size > 1 && changed do
+			val res = newPlayer.crossElim(state, candidates)
 
-			changed = innerChanged
-			candidates = candidates.filterNot(removals.contains)
-			resets = resets.union(innerResets)
-			newPlayer = innerPlayer
+			changed = res.changed
+			candidates = candidates.difference(res.removals)
+			resets = resets.union(res.resets)
+			newPlayer = res.player
 
 		(resets, newPlayer)
 
@@ -294,7 +293,7 @@ extension (p: Player)
 			game.isTouched(order)
 
 		var dirty = p.dirty
-		var resets = BitSet.empty
+		var resets = FastBitSet.empty
 		var newThoughts = p.thoughts
 
 		loop(0, _ < state.numPlayers, _ + 1): i =>
@@ -340,7 +339,7 @@ extension (p: Player)
 
 			thoughts.updated(order, newThought)
 
-		p.copy(thoughts = newThoughts, dirty = p.dirty ++ matches)
+		p.copy(thoughts = newThoughts, dirty = p.dirty.union(matches))
 
 	def findLinks(game: Game) =
 		val state = game.state
@@ -367,7 +366,7 @@ extension (p: Player)
 				val inferred = keys.next()
 				val orders = infMap(inferred)
 				if orders.length > 1 then
-					val focused = orders.filter(game.meta(_).focused)
+					val focused = orders.filter(o => game.meta(o).focused || game.meta(o).status == CardStatus.GentlemansDiscard)
 					if focused.length == 1 && inferred.length == 1 then
 						newPlayer = newPlayer.elimLink(game, orders, focused.head, inferred.head)
 
@@ -427,7 +426,7 @@ extension (p: Player)
 
 						thought.id(symmetric = true).nonEmpty ||
 						ids.exists(!thought.possible.contains(_)) ||
-						!state.hands.flatten.contains(o)		// An unknown card was played/discarded hypothetically; in hypo, we would know what it is
+						!state.heldOrders.contains(o)		// An unknown card was played/discarded hypothetically; in hypo, we would know what it is
 
 					lazy val focused = orders.filter(game.meta(_).focused)
 

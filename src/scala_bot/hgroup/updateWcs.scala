@@ -406,7 +406,7 @@ def resolveRetained(prev: HGroup, game: HGroup, action: Action, wc: WaitingConne
 		Log.info(s"$name didn't play into ${wc.currConn.kind} but they need to play multiple non-hidden cards, passing back")
 		return UpdateResult.AmbiguousPassback
 
-	val allowableHesitation = if reacting != wc.target then None else
+	val allowableHesitation = if reacting != wc.target || wc.currConn.isBluff then None else
 		// Find all waiting connections using this order OR self-identities, and merge their possible identities
 		val linkedIds = (for
 			w     <- game.waiting if w != wc && w.focus == wc.focus

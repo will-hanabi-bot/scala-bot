@@ -29,7 +29,8 @@ case class State(
 	names: Vector[String],
 	hands: Vector[Vector[Int]],
 	deck: Vector[Card],
-	holders: Vector[Int],
+	holderOf: Vector[Int],
+	heldOrders: FastBitSet,
 
 	ourPlayerIndex: Int,
 	actionList: Vector[List[Action]] = Vector(),
@@ -68,7 +69,7 @@ case class State(
 	def withPlay(id: Identity) =
 		val newPlayable = id.next match
 			case Some(next) => playableSet.difference(id).union(next)
-			case None => playableSet.difference(id)
+			case None       => playableSet.difference(id)
 
 		copy(
 			playStacks = playStacks.updated(id.suitIndex, id.rank),
@@ -164,11 +165,6 @@ case class State(
 
 		count
 
-	def holderOf(order: Int): Int =
-		holders.lift(order) match
-			case Some(playerIndex) => playerIndex
-			case None => throw new IllegalArgumentException(s"Tried to get holder of $order but it hasn't been drawn yet!")
-
 	def inStartingHand(order: Int)=
 		order < numPlayers * HAND_SIZE(numPlayers)
 
@@ -260,7 +256,8 @@ object State:
 			names = names,
 			hands = Vector.fill(names.length)(Vector()),
 			deck = Vector.empty,
-			holders = Vector.empty,
+			holderOf = Vector.empty,
+			heldOrders = FastBitSet.empty,
 
 			ourPlayerIndex = ourPlayerIndex,
 			options = options)

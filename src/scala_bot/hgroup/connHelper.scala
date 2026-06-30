@@ -499,4 +499,13 @@ def resolveClue(ctx: ClueContext, fps: Seq[FocusPossibility], ambiguousOwn: Seq[
 		Log.highlight(Console.YELLOW, s"important action for ${g.state.names(giver)}!")
 		g.copy(importantAction = g.importantAction.updated(giver, true))
 
+	// Perform 1 round of elim
+	.when(_.common.thoughts(focus).id(infer = true).exists(state.isCritical)): g =>
+		val focusId = g.common.thoughts(focus).id(infer = true).get
+
+		state.heldOrders.foldLeft(g): (acc, o) =>
+			if o == focus then acc else
+				acc.withThought(o): t =>
+					t.copy(inferred = t.inferred.difference(focusId))
+
 	.withMeta(focus)(_.copy(focused = true))

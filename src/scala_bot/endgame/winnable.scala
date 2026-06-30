@@ -39,7 +39,10 @@ extension[G <: Game] (solver: EndgameSolver[G])
 		if state.score == state.maxScore then
 			return true
 
-		if unwinnableState(state, playerTurn, depth) then
+		val bottomDecked = remaining.nonEmpty && remaining.keys.forall(id =>
+		    state.isCritical(id) && id.rank < state.maxRanks(id.suitIndex))
+
+		if bottomDecked || unwinnableState(state, playerTurn, depth) then
 			return false
 
 		val initial = (false, if !state.canClue then Nil else List(PerformAction.Rank(0, 0)))

@@ -29,6 +29,7 @@ case class RefSieve(
 	queuedCmds: List[(String, String)] = Nil,
 	nextInterp: Option[Interp] = None,
 	noRecurse: Boolean = false,
+	hypothetical: Boolean = false,
 	rewindDepth: Int = 0,
 	inProgress: Boolean = false,
 
@@ -219,7 +220,8 @@ object RefSieve:
 				nextInterp = updates.nextInterp.getOrElse(game.nextInterp),
 				rewindDepth = updates.rewindDepth.getOrElse(game.rewindDepth),
 				inProgress = updates.inProgress.getOrElse(game.inProgress),
-				noRecurse = updates.noRecurse.getOrElse(game.noRecurse)
+				noRecurse = updates.noRecurse.getOrElse(game.noRecurse),
+				hypothetical = updates.hypothetical.getOrElse(game.hypothetical)
 			)
 
 		def blank(game: RefSieve, keepDeck: Boolean) =
@@ -531,7 +533,7 @@ object RefSieve:
 						allPlays.nonEmpty || {
 							allClues.nonEmpty &&
 							game.state.remScore < game.state.variant.suits.length &&
-							game.state.hands.flatten.exists(o => state.deck(o).id().exists(state.isPlayable))
+							game.state.heldOrders.exists(state.deck(_).id().exists(state.isPlayable))
 						}
 					}
 
@@ -657,3 +659,11 @@ object RefSieve:
 
 		def evalAction(game: RefSieve, action: Action): Double =
 			_evalAction(game, action)
+
+		override def preferEndgameClue(game: RefSieve): Boolean =
+			val state = game.state
+			val nextPlayerIndex = state.nextPlayerIndex(state.ourPlayerIndex)
+
+			!game.players(nextPlayerIndex).thinksLoaded(game, nextPlayerIndex) &&
+			game.chop(nextPlayerIndex).exists: o =>
+				state.deck(o).id().exists(state.isCritical)

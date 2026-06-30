@@ -41,7 +41,7 @@ def elimDcDc(state: State, common: Player, meta: Vector[ConvData], reacter: Int,
 		else
 			state.hands(reacter).lift(reactSlot - 1) match
 				case None => (c, m)
-				case Some(reactOrder) if newCommon.thoughts(reactOrder).possible.forall(state.isCritical) =>
+				case Some(reactOrder) if newCommon.thoughts(reactOrder).possible.difference(state.criticalSet).isEmpty =>
 					(c, m)
 				case _ =>
 					val newCommon = c.withThought(receiveOrder)(t => t.copy(
@@ -67,7 +67,7 @@ def elimPlayDc(state: State, common: Player, meta: Vector[ConvData], reacter: In
 			(c, m)
 		else
 			state.hands(reacter).lift(reactSlot - 1) match
-				case Some(reactOrder) if m(reactOrder).status != CardStatus.CalledToPlay && newCommon.thoughts(reactOrder).possible.exists(state.isPlayable) =>
+				case Some(reactOrder) if m(reactOrder).status != CardStatus.CalledToPlay && newCommon.thoughts(reactOrder).possible.intersect(state.playableSet).nonEmpty =>
 					val newCommon = c.withThought(receiveOrder)(t => t.copy(
 						inferred = t.inferred.difference(state.trashSet)
 					))
@@ -91,7 +91,7 @@ def elimDcPlay(state: State, common: Player, meta: Vector[ConvData], reacter: In
 			(c, m)
 		else
 			state.hands(reacter).lift(reactSlot - 1) match
-				case Some(reactOrder) if !common.thoughts(reactOrder).possible.forall(state.isCritical)=>
+				case Some(reactOrder) if !common.thoughts(reactOrder).possible.difference(state.criticalSet).isEmpty =>
 					val newCommon = c.withThought(receiveOrder)(t => t.copy(
 						inferred = t.inferred.difference(state.playableSet)
 					))

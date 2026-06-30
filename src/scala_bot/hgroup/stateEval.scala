@@ -13,7 +13,7 @@ def getResult(game: HGroup, hypo: HGroup, action: ClueAction): Double =
 	if hypo.lastMove == Some(ClueInterp.Mistake) then
 		return -100
 
-	val newPlayables = state.hands.flatten.filter: o =>
+	val newPlayables = state.heldOrders.filter: o =>
 		meta(o).status != CardStatus.Finessed && hypo.meta(o).status == CardStatus.Finessed
 
 	val badPlay = newPlayables.find: o =>
@@ -23,7 +23,7 @@ def getResult(game: HGroup, hypo: HGroup, action: ClueAction): Double =
 		Log.warn(s"clue ${clue.fmt(state, target)} results in ${state.logId(badPlay.get)} ${badPlay.get} looking playable! ${hypo.me.hypoPlays}")
 		return -100
 
-	val badTrash = state.hands.flatten.find: o =>
+	val badTrash = state.heldOrders.find: o =>
 		!meta(o).trash && hypo.meta(o).trash &&
 		state.deck(o).id().exists: id =>
 			state.isUseful(id) && visibleFind(game.state, game.players(giver), id, excludeOrder = o).isEmpty
@@ -65,10 +65,13 @@ def getResult(game: HGroup, hypo: HGroup, action: ClueAction): Double =
 	// Previously-unclued playables whose copies are already touched
 	val dupedPlayables = hypo.me.hypoPlays.count: p =>
 		!state.deck(p).clued &&
-		state.hands.flatten.exists: o =>
+		state.heldOrders.exists: o =>
 			o != p && game.isTouched(o) && state.deck(o).matches(state.deck(p))
 
 	val goodTouch: Double =
+		// if playables.nonEmpty then
+		// 	playables.length
+		// else
 		if badTouch.length > 0 then
 			-badTouch.length * 4
 		else
@@ -135,7 +138,7 @@ def advance(orig: HGroup, game: HGroup, offset: Int): Double =
 	lazy val earlyGameClue = game.earlyGameClue(playerIndex)
 
 	// Reduce lookahead in early game
-	if (orig.inEarlyGame && offset == 2) || playerIndex == state.ourPlayerIndex || state.endgameTurns.contains(0) then
+	if (orig.inEarlyGame && state.includesVariant(RAINBOWISH) && state.includesVariant(PINKISH) && offset == 2) || playerIndex == state.ourPlayerIndex || state.endgameTurns.contains(0) then
 		evalGame(orig, game)
 
 	else if allPlayables.nonEmpty then
@@ -433,7 +436,7 @@ def evalGame(orig: HGroup, game: HGroup): Double =
 		val prevDiscarded = orig.state.discardStacks(id.suitIndex)(id.rank - 1)
 		val discarded = state.discardStacks(id.suitIndex)(id.rank - 1).filterNot(prevDiscarded.contains)
 
-		lazy val duplicated = state.hands.flatten.exists: o =>
+		lazy val duplicated = state.heldOrders.exists: o =>
 			state.deck(o).matches(id) ||
 			game.me.thoughts(o).matches(id, infer = true) && game.meta(o).focused
 
@@ -452,7 +455,7 @@ def evalGame(orig: HGroup, game: HGroup): Double =
 				case 3 => -1.5
 				case _ => -0.5
 
-	val touchVal = state.hands.flatten.summing: o =>
+	val touchVal = state.heldOrders.summing: o =>
 		if !state.deck(o).clued && game.meta(o).status == CardStatus.None then
 			0
 		else if game.common.orderTrash(game, o) then
@@ -478,11 +481,11 @@ def evalGame(orig: HGroup, game: HGroup): Double =
 
 		(finalScore - state.maxScore) * 5
 
-	val badCM = -1 * game.state.hands.flatten.count: o =>
+	val badCM = -1 * game.state.heldOrders.count: o =>
 		game.isCM(o) &&
 		game.state.deck(o).id().exists: id =>
 			state.isBasicTrash(id) ||
-			state.hands.flatten.exists: p =>
+			state.heldOrders.exists: p =>
 				p != o &&
 				game.me.thoughts(p).matches(id, infer = true) &&
 				game.isSaved(p) &&

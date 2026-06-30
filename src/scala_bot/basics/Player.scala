@@ -3,8 +3,6 @@ package scala_bot.basics
 import scala_bot.utils._
 import scala_bot.logger.{Logger, LogLevel}
 
-import scala.collection.immutable.BitSet
-
 enum Link:
 	/** A link where one of the cards are conventionally promised to be the identity.
 	  * @example With multiple clued 1s and a play clue on r2, a Promised link would exist for r1.
@@ -58,14 +56,14 @@ case class Player(
 	links: List[Link] = Nil,
 	playLinks: List[PlayLink] = Nil,
 	/** The set of orders that are known playable, without knowing their identities. */
-	unknownPlays: BitSet = BitSet.empty,
+	unknownPlays: FastBitSet = FastBitSet.empty,
 	/** The set of orders that are known delayed playable. */
-	hypoPlays: BitSet = BitSet.empty,
+	hypoPlays: FastBitSet = FastBitSet.empty,
 	/** The total number of hypo plays that are from links (and thus aren't assigned to particular orders). */
 	linkedPlays: Int = 0,
 
 	/** The set of orders whose inferences have been modified since the last call to elim(). */
-	dirty: BitSet = BitSet.empty,
+	dirty: FastBitSet = FastBitSet.empty,
 	/** Maps each identity (by ordinal) to the orders known to be that identity. */
 	certainMap: Vector[List[MatchEntry]]
 ):
@@ -124,7 +122,7 @@ case class Player(
 	  */
 	def isDuped(game: Game, id: Identity, excludeOrder: Int) =
 		val candidates = if game.goodTouch then
-			game.state.hands.flatten.filter(game.isTouched)
+			game.state.hands.view.flatten.filter(game.isTouched)
 		else
 			game.state.hands(game.state.holderOf(excludeOrder))
 
@@ -132,6 +130,7 @@ case class Player(
 			o != excludeOrder &&
 			thoughts(o).matches(id, infer = true) &&
 			game.state.deck(o).matches(id, assume = true) &&		// card must actually match
+			game.me.thoughts(o).possible.contains(id) &&
 			// Not sharing a link
 			!links.exists:
 				case Link.Unpromised(orders, ids) =>
@@ -157,7 +156,7 @@ case class Player(
 
 		if orderKt(game, order) then
 			true
-		else if thought.possible.forall(game.state.isCritical) then
+		else if thought.possible.difference(game.state.criticalSet).isEmpty then
 			false
 		else
 			conventionalTrash || thought.possibilities.forall(isTrash(game, _, order))
@@ -172,7 +171,7 @@ case class Player(
 				game.state.hands(game.state.holderOf(order)).exists: o =>
 					o != order && thoughts(o).matches(id)
 
-		(game.meta(order).trash && thought.possible.forall(id => !game.state.isCritical(id))) ||
+		(game.meta(order).trash && thought.possible.intersect(game.state.criticalSet).isEmpty) ||
 		sameHandDupe
 		// (thought.inferred.isEmpty && thought.reset)
 
@@ -183,7 +182,7 @@ case class Player(
 		val state = game.state
 		val thought = thoughts(order)
 
-		if thought.possible.forall(!state.isPlayable(_)) then
+		if thought.possible.intersect(state.playableSet).isEmpty then
 			false
 		else
 			inline def possPlayable(poss: IdentitySet) =
@@ -229,7 +228,7 @@ case class Player(
 
 	/** Returns the obvious and inferred playable orders in the given player's hand. (See [[orderPlayable]].) */
 	def thinksPlayables(game: Game, playerIndex: Int, excludeTrash: Boolean = false, assume: Boolean = true) =
-		game.state.hands(playerIndex).filter(o => orderPlayable(game, o, excludeTrash = excludeTrash && game.isTouched(o)))
+		game.state.hands(playerIndex).filter(o => orderPlayable(game, o, excludeTrash = !thoughts(o).reset && excludeTrash && game.isTouched(o)))
 			.pipe: playables =>
 				// Exclude unknown cards if there is a duplicate that is fully known.
 				playables.filterNot: p1 =>
@@ -353,7 +352,7 @@ case class Player(
 		val leastCrits = critPercents.filter(_._2 == critPercents(0)._2)
 
 		leastCrits.maxBy { (order, percent) =>
-			thoughts(order).possibilities.summing2: p =>
+			thoughts(order).possibilities.summing: p =>
 				if state.isBasicTrash(p) then 5 else
 					(if percent == 1 then p.rank * 5 else 0) + p.rank - hypoStacks(p.suitIndex)
 		}._1
@@ -375,7 +374,7 @@ case class Player(
 
 	/** Returns how many copies of the given id are unseen by this player. */
 	def unknownIds(state: State, id: Identity) =
-		val visibleCount = state.hands.flatten.filter(thoughts(_).matches(id)).length
+		val visibleCount = state.heldOrders.filter(thoughts(_).matches(id)).size
 		state.cardCount(id.toOrd) - state.baseCount(id.toOrd) - visibleCount
 
 	def linkedOrders(state: State) =
@@ -401,9 +400,9 @@ case class Player(
 				ops.copyWith(game, GameUpdates(noRecurse = Some(true), players = Some(game.players.updated(playerIndex, this))))
 		.pipe(ops.cleanHypo)
 
-		var unknownPlays = BitSet.empty
-		var played = BitSet.empty
-		var attempted = BitSet.empty
+		var unknownPlays = FastBitSet.empty
+		var played = FastBitSet.empty
+		var attempted = FastBitSet.empty
 		var linkedPlays = 0
 
 		def player = if isCommon then hypo.common else hypo.players(playerIndex)

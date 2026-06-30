@@ -38,6 +38,7 @@ case class Reactor(
 	queuedCmds: List[(String, String)] = Nil,
 	nextInterp: Option[Interp] = None,
 	noRecurse: Boolean = false,
+	hypothetical: Boolean = false,
 	rewindDepth: Int = 0,
 	inProgress: Boolean = false,
 
@@ -50,7 +51,6 @@ case class Reactor(
 		// 	Log.info(s"$orders ${orders.map(player.thoughts(_).id(infer = true))} ${orders.map(meta(_).signalTurn)}")
 
 		orders.filterNot: o =>
-			val id = player.thoughts(o).id(infer = true)
 			val linked = meta(o).signalTurn.isEmpty &&
 				player.links.exists(l => l.getOrders.contains(o) && l.getOrders.max != o)
 
@@ -60,7 +60,7 @@ case class Reactor(
 				// o2 was queued earlier
 				meta(o2).signalTurn.exists(t2 => meta(o).signalTurn.exists(_ > t2)) &&
 				{
-					id match
+					player.thoughts(o).id(infer = true) match
 						case Some(id) =>
 							player.thoughts(o2).matches(id, infer = true)
 						case None =>
@@ -195,7 +195,8 @@ object Reactor:
 				nextInterp = updates.nextInterp.getOrElse(game.nextInterp),
 				rewindDepth = updates.rewindDepth.getOrElse(game.rewindDepth),
 				inProgress = updates.inProgress.getOrElse(game.inProgress),
-				noRecurse = updates.noRecurse.getOrElse(game.noRecurse)
+				noRecurse = updates.noRecurse.getOrElse(game.noRecurse),
+				hypothetical = updates.hypothetical.getOrElse(game.hypothetical)
 			)
 
 		def blank(game: Reactor, keepDeck: Boolean) =
@@ -278,15 +279,15 @@ object Reactor:
 
 					interpGame.withMove(interp.getOrElse(ClueInterp.Mistake))
 
-			val signalledPlays = interpretedGame.state.hands.flatten.filter: o =>
+			val signalledPlays = interpretedGame.state.heldOrders.filter: o =>
 				prev.meta(o).status != CardStatus.CalledToPlay && interpretedGame.meta(o).status == CardStatus.CalledToPlay
 
 			val eliminatedGame = interpretedGame.elim()
-			val playsAfterElim = eliminatedGame.state.hands.flatten.filter(eliminatedGame.meta(_).status == CardStatus.CalledToPlay)
+			val playsAfterElim = eliminatedGame.state.heldOrders.filter(eliminatedGame.meta(_).status == CardStatus.CalledToPlay)
 
 			eliminatedGame
-				.when(_ => playsAfterElim.length < signalledPlays.length): g =>
-					Log.warn(s"lost play signal on ${signalledPlays.filterNot(playsAfterElim.contains)} after elim!")
+				.when(_ => playsAfterElim.size < signalledPlays.size): g =>
+					Log.warn(s"lost play signal on ${signalledPlays.filter(!playsAfterElim.contains(_))} after elim!")
 					g.withMove(ClueInterp.Mistake, overwrite = true)
 				.when(_ => prev.state.canClue):
 					resetZcs
@@ -304,7 +305,7 @@ object Reactor:
 					Log.warn("bombed! clearing all information")
 
 					val initial = (g.common, g.meta)
-					val (clearedC, clearedM) = state.hands.flatten.foldLeft(initial) { case ((c, m), order) =>
+					val (clearedC, clearedM) = state.heldOrders.foldLeft(initial) { case ((c, m), order) =>
 						val newC = c.withThought(order)(t => t.copy(
 							inferred = t.possible,
 							oldInferred = IdentitySetOpt.empty,
@@ -463,9 +464,9 @@ object Reactor:
 					Some(bestClue)
 				else
 					game.meta(urgent).status match
-						case CardStatus.CalledToPlay if !me.thoughts(urgent).possible.forall(state.isBasicTrash) =>
+						case CardStatus.CalledToPlay if me.thoughts(urgent).possible.difference(state.trashSet).nonEmpty =>
 							Some(PerformAction.Play(urgent))
-						case CardStatus.CalledToDiscard if !me.thoughts(urgent).possible.forall(state.isCritical) =>
+						case CardStatus.CalledToDiscard if me.thoughts(urgent).possible.difference(state.criticalSet).nonEmpty =>
 							Some(PerformAction.Discard(urgent))
 						case _ =>
 							Log.warn(s"unexpected urgent card status: ${game.meta(urgent).status}")
@@ -624,3 +625,11 @@ object Reactor:
 
 		def evalAction(game: Reactor, action: Action): Double =
 			_evalAction(game, action)
+
+		override def preferEndgameClue(game: Reactor): Boolean =
+			val state = game.state
+			val nextPlayerIndex = state.nextPlayerIndex(state.ourPlayerIndex)
+
+			!game.players(nextPlayerIndex).thinksLoaded(game, nextPlayerIndex) &&
+			game.chop(nextPlayerIndex).exists: o =>
+				state.deck(o).id().exists(state.isCritical)

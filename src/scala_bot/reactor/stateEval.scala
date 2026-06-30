@@ -15,7 +15,7 @@ def getResult(game: Reactor, hypo: Reactor, action: ClueAction): Double =
 	val revealedTrash = hypo.common.thinksTrash(hypo, target).count: o =>
 		hypo.state.deck(o).clued && !common.thinksTrash(game, target).contains(o)
 
-	val newPlayables = state.hands.flatten.filter: o =>
+	val newPlayables = state.heldOrders.filter: o =>
 		meta(o).status != CardStatus.CalledToPlay && hypo.meta(o).status == CardStatus.CalledToPlay
 
 	val badPlayable = newPlayables.find(o =>
@@ -40,8 +40,8 @@ def getResult(game: Reactor, hypo: Reactor, action: ClueAction): Double =
 					// Previously-unclued playables whose copies are already touched
 					val dupedPlayables = hypo.me.hypoPlays.filter: p =>
 						!state.deck(p).clued &&
-						state.hands.flatten.exists: o =>
-							o != p && game.isTouched(o) &&
+						state.heldOrders.excl(p).exists: o =>
+							game.isTouched(o) &&
 							hypo.me.thoughts(o).matches(state.deck(p))	// use our thoughts, since we may overwrte cards in endgame solving
 
 					val dupeCount = dupedPlayables.size
@@ -287,7 +287,7 @@ def evalGame(orig: Reactor, game: Reactor): Double =
 
 	val stateVal = evalState(state, inEndgame = orig.inEndgame || orig.state.remScore < state.variant.suits.length)
 
-	val futureVal = state.hands.flatten.summing: order =>
+	val futureVal = state.heldOrders.summing: order =>
 		game.meta(order).status match
 			case CardStatus.CalledToPlay =>
 				game.me.thoughts(order).id(infer = true) match
@@ -325,7 +325,7 @@ def evalGame(orig: Reactor, game: Reactor): Double =
 	val bdrVal = 2.5 * state.variant.allIds.summing: id =>
 		val discarded = state.discardStacks(id.suitIndex)(id.rank - 1)
 
-		lazy val duplicate = state.hands.flatten.find: o =>
+		lazy val duplicate = state.heldOrders.find: o =>
 			state.deck(o).matches(id) ||
 			game.me.thoughts(o).matches(id, infer = true) && game.meta(o).focused
 

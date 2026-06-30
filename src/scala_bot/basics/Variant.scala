@@ -128,6 +128,14 @@ object Variant:
 	private var variants: Map[String, Variant] = Map()
 	private var colours: Seq[Suit] = Seq()
 
+	def stripName(name: String) =
+		if name.startsWith("Dark") then
+			name.drop(5)
+		else if name.startsWith("Light") then
+			name.drop(6)
+		else
+			name
+
 	def init(): Unit =
 		val variantsJSON = read[ujson.Value](requests.get(VARIANTS_URL).text()).arr
 		val coloursJSON = read[ujson.Value](requests.get(COLOURS_URL).text()).arr

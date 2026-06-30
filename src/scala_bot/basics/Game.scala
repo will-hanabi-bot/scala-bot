@@ -59,7 +59,8 @@ case class GameUpdates(
 	rewindDepth: Option[Int] = None,
 	inProgress: Option[Boolean] = None,
 
-	noRecurse: Option[Boolean] = None
+	noRecurse: Option[Boolean] = None,
+	hypothetical: Option[Boolean] = None
 )
 
 /** A helper function to generate the players and common perspective, given a state. */
@@ -99,6 +100,9 @@ trait Game:
 	def nextInterp: Option[Interp]
 	/** Whether to disallow recursing into hypothetical states, like seeing if a stall was available. */
 	def noRecurse: Boolean
+	/** Whether the game is a simulated version or the actual game state. */
+	def hypothetical: Boolean
+
 	def rewindDepth: Int
 	/** Whether the game is live or a replay. */
 	def inProgress: Boolean
@@ -158,6 +162,9 @@ trait GameOps[G <: Game]:
 	def findAllDiscards(game: G, playerIndex: Int): Seq[PerformAction]
 
 	def evalAction(game: G, action: Action): Double
+
+	def preferEndgameClue(game: G): Boolean =
+		false
 
 extension[G <: Game](game: G)
 	def withThought(order: Int)(f: Thought => Thought)(using ops: GameOps[G]) =
@@ -231,7 +238,8 @@ extension[G <: Game](game: G)
 				newGame.onDraw(draw)
 					.when(g => g.state.turnCount == 0 && g.state.hands.forall(_.length == HAND_SIZE(state.numPlayers)))
 						(_.withState(_.copy(turnCount = 1)))
-					.elim()
+					.when(_ => suitIndex != -1 && rank != -1):
+						_.elim()
 
 			case _: GameOverAction =>
 				Log.highlight(Console.YELLOW, "Game over!")
@@ -242,7 +250,7 @@ extension[G <: Game](game: G)
 					currentPlayerIndex = currentPlayerIndex,
 					turnCount = num + 1
 				))
-				.when(_ => currentPlayerIndex != -1):		// game hasn't ended yet
+				.when(g => currentPlayerIndex != -1 && !g.hypothetical):		// game hasn't ended yet
 					ops.updateTurn(_, turn).updateNotes()
 
 			case InterpAction(interp) =>
@@ -323,7 +331,7 @@ extension[G <: Game](game: G)
 		val playerIndex = action.playerIndex
 
 		val hypoGame = withCatchup:
-			_.when(g => g.state.actionList.length > 1 && !g.state.actionList.last.exists(_.isInstanceOf[TurnAction])): g =>
+			ops.copyWith(_, GameUpdates(hypothetical = Some(true))).when(g => g.state.actionList.length > 1 && !g.state.actionList.last.exists(_.isInstanceOf[TurnAction])): g =>
 				g.handleAction(TurnAction(g.state.turnCount, playerIndex))
 			.handleAction(action)
 			.when(action.requiresDraw && _.state.cardsLeft > 0): g =>
@@ -561,7 +569,7 @@ extension[G <: Game](game: G)
 
 	def updateNotes()(using ops: GameOps[G]): G =
 		val (state, notes) = (game.state, game.notes)
-		val (cmds, newNotes) = game.state.hands.flatten.foldLeft((List.empty[(String, String)], notes)): (acc, order) =>
+		val (cmds, newNotes) = game.state.heldOrders.foldLeft((List.empty[(String, String)], notes)): (acc, order) =>
 			val (cmds, newNotes) = acc
 			val card = state.deck(order)
 			lazy val note = getNote(order)

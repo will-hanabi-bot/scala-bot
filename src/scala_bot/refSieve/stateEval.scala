@@ -15,7 +15,7 @@ def getResult(game: RefSieve, hypo: RefSieve, action: ClueAction): Double =
 	val revealedTrash = hypo.common.thinksTrash(hypo, target).count: o =>
 		hypo.state.deck(o).clued && !common.thinksTrash(game, target).contains(o)
 
-	val newPlayables = state.hands.flatten.filter: o =>
+	val newPlayables = state.heldOrders.filter: o =>
 		meta(o).status != CardStatus.CalledToPlay && hypo.meta(o).status == CardStatus.CalledToPlay
 
 	val badPlayable = newPlayables.find: o =>
@@ -41,8 +41,8 @@ def getResult(game: RefSieve, hypo: RefSieve, action: ClueAction): Double =
 			// Previously-unclued playables whose copies are already touched
 			val dupedPlayables = hypo.me.hypoPlays.count: p =>
 				!state.deck(p).clued &&
-				state.hands.flatten.exists(o =>
-					o != p && game.isTouched(o) && state.deck(o).matches(state.deck(p)))
+				state.heldOrders.excl(p).exists: o =>
+					game.isTouched(o) && state.deck(o).matches(state.deck(p))
 
 			val goodTouch: Double =
 				if badTouch.length > newTouched.length then
@@ -278,7 +278,7 @@ def _evalAction(game: RefSieve, action: Action): Double =
 						2.5 * Array(0, 0, -3, -1.5, -1, -20)(rank)
 					else
 						val poss = hypoGame.me.thoughts(order).possibilities
-						poss.summing2: id =>
+						poss.summing: id =>
 							2.5 * Array(0, 0, -3, -1.5, -1, -20)(id.rank)
 						/ poss.length
 
@@ -323,7 +323,7 @@ def evalGame(orig: RefSieve, game: RefSieve): Double =
 
 	val stateVal = evalState(state)
 
-	val futureVal = state.hands.flatten.summing: order =>
+	val futureVal = state.heldOrders.summing: order =>
 		if game.me.hypoPlays.contains(order) then
 			game.me.thoughts(order).id(infer = true) match
 				case None => 0.4
@@ -367,7 +367,7 @@ def evalGame(orig: RefSieve, game: RefSieve): Double =
 		val prevDiscarded = orig.state.discardStacks(id.suitIndex)(id.rank - 1)
 		val discarded = state.discardStacks(id.suitIndex)(id.rank - 1).filterNot(prevDiscarded.contains)
 
-		lazy val duplicated = state.hands.flatten.exists: o =>
+		lazy val duplicated = state.heldOrders.exists: o =>
 			state.deck(o).matches(id) ||
 			(game.me.thoughts(o).matches(id, infer = true) && game.meta(o).focused)
 
@@ -380,9 +380,9 @@ def evalGame(orig: RefSieve, game: RefSieve): Double =
 				case 1 => -math.pow(state.discardStacks(id.suitIndex)(id.rank - 1).length, 2)
 				case 2 => -3
 				case 3 => -1.5
-				case _ => if state.numPlayers == 2 && orig.state.score + orig.state.hands.flatten.count(orig.state.deck(_).clued) < state.maxScore / 2 then -0.25 else -1
+				case _ => if state.numPlayers == 2 && orig.state.score + orig.state.heldOrders.count(orig.state.deck(_).clued) < state.maxScore / 2 then -0.25 else -1
 
-	val touchVal = state.hands.flatten.summing: o =>
+	val touchVal = state.heldOrders.summing: o =>
 		if !state.deck(o).clued && game.meta(o).status == CardStatus.None then
 			0
 		else if game.common.orderTrash(game, o) then
@@ -411,7 +411,7 @@ def evalGame(orig: RefSieve, game: RefSieve): Double =
 		(finalScore - state.maxScore) * 5
 
 	val badPtdVal =
-		val badPtd = orig.state.hands.flatten.find: o =>
+		val badPtd = orig.state.heldOrders.find: o =>
 			orig.meta(o).status != CardStatus.PermissionToDiscard &&
 			game.meta(o).status == CardStatus.PermissionToDiscard &&
 			orig.state.deck(o).id().exists(orig.state.isCritical)

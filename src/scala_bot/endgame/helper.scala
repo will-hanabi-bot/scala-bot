@@ -116,7 +116,7 @@ def triviallyWinnable(game: Game, playerTurn: Int): WinnableResult =
 		case _ => UNWINNABLE
 
 /** Generates a map of game arrangements for the possible actions.*/
-def genArrs(game: Game, remaining: RemainingMap, clueOnly: Boolean): (List[GameArr], List[GameArr]) =
+def genArrs(game: Game, remaining: RemainingMap, playerTurn: Int, clueOnly: Boolean): (List[GameArr], List[GameArr]) =
 	val state = game.state
 	val undrawn = GameArr(Frac.one, remaining, None)
 
@@ -134,7 +134,7 @@ def genArrs(game: Game, remaining: RemainingMap, clueOnly: Boolean): (List[GameA
 		else
 			val drawnArrs =
 				val (usefulArrs, trashArr) = remaining.foldLeft((List.empty[GameArr], GameArr(Frac.zero, remaining, None))):
-					case ((acc, trashArr), (id, missing)) if state.isBasicTrash(id) =>
+					case ((acc, trashArr), (id, missing)) if state.isBasicTrash(id) || state.hands(playerTurn).exists(game.common.thoughts(_).matches(id, infer = true)) =>
 						val newProb = Frac(missing, state.cardsLeft)
 						val newRemaining = remaining.rem(id)
 						(acc, trashArr.copy(prob = trashArr.prob + newProb, remaining = newRemaining, drew = Some(id)))

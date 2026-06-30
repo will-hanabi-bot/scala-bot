@@ -165,11 +165,10 @@ def findUnknownConnecting(ctx: ClueContext, reacting: Int, id: Identity, connect
 	val tryPinkPrompt = state.includesVariant(PINKISH) &&
 		potentialFinesse.forall: f =>
 			if level < Level.Bluffs then
-				!game.common.thoughts(f).possible.exists: i =>
-					state.variant.suits(i.suitIndex).suitType.pinkish &&
-					state.isPlayable(i)
+				!game.common.thoughts(f).possible.intersect(state.playableSet).exists: i =>
+					state.variant.suits(i.suitIndex).suitType.pinkish
 			else
-				!game.common.thoughts(f).possible.exists(state.isPlayable)
+				game.common.thoughts(f).possible.intersect(state.playableSet).isEmpty
 
 	if tryPinkPrompt then
 		val pinkPrompt = prev.common.findPrompt(prev, reacting, id, connected, ignore, forcePink = true)

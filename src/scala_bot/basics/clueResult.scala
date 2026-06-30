@@ -120,7 +120,7 @@ def badTouchResult(prev: Game, game: Game, action: ClueAction) =
   * @return A tuple of the orders that are newly blind playing and newly playable.
   */
 def playablesResult(prev: Game, game: Game) =
-	game.me.hypoPlays.foldRight((List[Int](), List[Int]())) { case (order, (blindPlays, playables)) =>
+	game.me.hypoPlays.foldLeft((List[Int](), List[Int]())) { case ((blindPlays, playables), order) =>
 		val badPlayable = prev.me.hypoPlays.contains(order) ||
 			game.me.thoughts(order).id(infer = true).exists: id =>
 				prev.me.hypoStacks(id.suitIndex) >= id.rank ||

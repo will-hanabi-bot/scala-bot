@@ -68,7 +68,7 @@ def connectableSimple[G <: Game](game: G, player: Player, start: Int, target: In
 		val connectables = playables.view.map { order =>
 			player.thoughts(order).id(infer = true).map: playId =>
 				val newGame =
-					game.when(_.state.currentPlayerIndex != start):
+					ops.copyWith(game, GameUpdates(noRecurse = Some(true))).when(_.state.currentPlayerIndex != start):
 						_.simulateAction(TurnAction(state.turnCount, start))	// Go to starting player's turn
 					.simulateAction(PlayAction(start, order, playId.suitIndex, playId.rank))
 

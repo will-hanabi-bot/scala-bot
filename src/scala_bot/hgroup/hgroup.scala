@@ -68,6 +68,7 @@ case class HGroup(
 	queuedCmds: List[(String, String)] = Nil,
 	nextInterp: Option[Interp] = None,
 	noRecurse: Boolean = false,
+	hypothetical: Boolean = false,
 	rewindDepth: Int = 0,
 	inProgress: Boolean = false,
 
@@ -131,7 +132,7 @@ case class HGroup(
 
 		if playables.contains(order) then
 			state.isPlayable(id)
-		else if this.isTouched(order) && !this.common.thoughts(order).reset then
+		else if this.isTouched(order) && !(if state.ourHand.contains(order) then this.me else this.common).thoughts(order).reset then
 			val good = this.me.thoughts(order).possible.difference(state.trashSet)
 			good.isEmpty || good.contains(id)
 		else
@@ -265,7 +266,7 @@ case class HGroup(
 			val inFinesse = this.isBlindPlaying(o)	// TODO: play link?
 			lazy val unknownCM = isCM(o) &&
 				!state.deck(o).clued &&
-				thought.possible.exists(!state.isPlayable(_))
+				thought.possible.difference(state.playableSet).nonEmpty
 
 			def connecting(playerIndex: Int, id: Identity) =
 				state.hands(playerIndex).exists: o =>
@@ -530,6 +531,7 @@ object HGroup:
 				rewindDepth = updates.rewindDepth.getOrElse(game.rewindDepth),
 				inProgress = updates.inProgress.getOrElse(game.inProgress),
 				noRecurse = updates.noRecurse.getOrElse(game.noRecurse),
+				hypothetical = updates.hypothetical.getOrElse(game.hypothetical),
 
 				xmeta = game.xmeta.padTo(meta.length, XConvData())
 			)
@@ -768,8 +770,9 @@ object HGroup:
 				if !wc.symmetric then acc else
 					revert(acc, wc.focus, List(wc.inference))
 						.pipe: g =>
-							g.copy(players = g.players.map: player =>
-								player.withThought(wc.focus)(t => t.copy(inferred = t.inferred.difference(wc.inference)))
+							g.copy(
+								players = g.players.map:
+									_.withThought(wc.focus)(t => t.copy(inferred = t.inferred.difference(wc.inference)))
 							)
 
 		override def refreshAfterPlay(prev: HGroup, game: HGroup, action: PlayAction) =
@@ -809,6 +812,9 @@ object HGroup:
 					notUseful.maxByOption((_, value) => value).fold(useful): bestUseless =>
 						useful :+ bestUseless
 				.sortBy((_, value) => -value)
+				// .tap: clues =>
+				// 	for (clue, value) <- clues do
+				// 		Log.info(s"clue ${clue.fmt(state)} $value")
 				.map((clue, _) => PerformAction.fromClue(clue))
 
 			Logger.setLevel(level)
@@ -831,6 +837,14 @@ object HGroup:
 
 		def evalAction(game: HGroup, action: Action): Double =
 			_evalAction(game, action)
+
+		override def preferEndgameClue(game: HGroup): Boolean =
+			val state = game.state
+			val nextPlayerIndex = state.nextPlayerIndex(state.ourPlayerIndex)
+
+			!game.players(nextPlayerIndex).thinksLoaded(game, nextPlayerIndex) &&
+			game.chop(nextPlayerIndex).exists: o =>
+				state.deck(o).id().exists(state.isCritical)
 
 	def atLevel(level: Int) =
 		(tableID: Int, state: State, inProgress: Boolean) =>
