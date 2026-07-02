@@ -57,7 +57,8 @@ case class HGroup(
 	common: Player,
 	base: (State, Vector[ConvData], Vector[Player], Player),
 	lastActions: Vector[Option[Action]],
-	importantAction: Vector[Boolean],
+	importantFinesse: Vector[Boolean],
+	savedCtx: Vector[Option[ClueContext]],
 
 	meta: Vector[ConvData] = Vector(),
 	deckIds: Vector[Option[Identity]],
@@ -75,7 +76,7 @@ case class HGroup(
 	level: Int = 1,
 	waiting: List[WaitingConnection] = Nil,
 	stalled5: Boolean = false,
-	cluedOnChop: Set[Int] = Set(),
+	cluedOnChop: FastBitSet = FastBitSet.empty,
 	dcStatus: DcStatus = DcStatus.None,
 	dda: Option[Identity] = None,
 	inEarlyGame: Boolean = true,
@@ -118,7 +119,7 @@ case class HGroup(
 					wc.connections.tail.exists(c => c.order == o && c.hidden)
 				}
 
-			val unordered1 = (state.includesVariant(PINKISH) || this.level < Level.BasicCM) && ordered1s.nonEmpty && ordered1s.tail.contains(o)
+			val unordered1 = (state.variant.pinkish || this.level < Level.BasicCM) && ordered1s.nonEmpty && ordered1s.tail.contains(o)
 
 			((assume && !xmeta(o).fStatus.contains(FStatus.PossiblyOn(state.ourPlayerIndex))) || isDefinite(o)) &&
 			!possibleFocusDupe &&
@@ -201,7 +202,7 @@ case class HGroup(
 		val FocusResult(focus, _, positional) = focusResult
 
 		state.isBasicTrash(id) ||
-		(state.includesVariant(PINKISH) && !positional && clue.kind == ClueKind.Rank && clue.value != id.rank) ||
+		(state.variant.pinkish && !positional && clue.kind == ClueKind.Rank && clue.value != id.rank) ||
 		visibleFind(state, common, id, infer = true, excludeOrder = focus).exists: o =>
 			this.me.thoughts(o).matches(id) ||
 			(this.me.thoughts(o).matches(id, assume = true) && this.me.thoughts(o).possible.contains(id))
@@ -215,7 +216,7 @@ case class HGroup(
 			wc.connections.exists: conn =>
 				xmeta(conn.order).fStatus.contains(FStatus.PossiblyOn(giver))
 
-	def findFinesse(playerIndex: Int, connected: Set[Int] = Set(), ignore: Set[Int] = Set()): Option[Int] =
+	def findFinesse(playerIndex: Int, connected: FastBitSet = FastBitSet.empty, ignore: FastBitSet = FastBitSet.empty): Option[Int] =
 		val order = state.hands(playerIndex).find: o =>
 			val card = state.deck(o)
 			val status = this.meta(o).status
@@ -227,7 +228,7 @@ case class HGroup(
 
 		order.filter(!ignore.contains(_))
 
-	def findFinesseId(playerIndex: Int, id: Identity, connected: Set[Int] = Set(), ignore: Set[Int] = Set(), overrideLayer: Boolean = false): Option[Int] =
+	def findFinesseId(playerIndex: Int, id: Identity, connected: FastBitSet = FastBitSet.empty, ignore: FastBitSet = FastBitSet.empty, overrideLayer: Boolean = false): Option[Int] =
 		val order = state.hands(playerIndex).find: o =>
 			val card = state.deck(o)
 			val status = this.meta(o).status
@@ -321,7 +322,7 @@ case class HGroup(
 		val reclue = list.forall(prev.state.deck(_).clued)
 
 		lazy val pinkChoiceTempo = clue.kind == ClueKind.Rank &&
-			state.includesVariant(PINKISH) &&
+			state.variant.pinkish &&
 			reclue &&
 			clue.value <= hand.length &&
 			list.contains(hand(clue.value - 1)) &&
@@ -334,7 +335,7 @@ case class HGroup(
 		lazy val muddySuitIndex = state.variant.suits.indexWhere(suit => MUDDY.matches(suit.name))
 		lazy val muddyCards = list.filter(this.knownAs(_, MUDDY, if state.variant.rainbowS then state.variant.specialRank else None))
 		lazy val mudClue = clue.kind == ClueKind.Colour &&
-			(state.includesVariant(MUDDY) || state.variant.rainbowS) &&
+			(state.variant.muddy || state.variant.rainbowS) &&
 			muddyCards.nonEmpty &&
 			reclue &&
 			// Mud clues should only work if the leftmost card is muddy.
@@ -342,7 +343,7 @@ case class HGroup(
 
 		lazy val pinkStall5 =
 			val valid = clue.isEq(BaseClue(ClueKind.Rank, 5)) &&
-				state.includesVariant(PINKISH) &&
+				state.variant.pinkish &&
 				stallSeverity(prev, prev.common, giver) > 0
 
 			if !valid then None else
@@ -401,7 +402,7 @@ case class HGroup(
 
 		allClues.find: clue =>
 			val action = Action.fromClue(state, clue, giver)
-			val focus = determineFocus(this, action).focus
+			val FocusResult(focus, chop, _) = determineFocus(this, action)
 			val focusCard = state.deck(focus)
 			val focusId = focusCard.id().get
 
@@ -420,7 +421,8 @@ case class HGroup(
 
 					case Some(ClueInterp.Play) =>
 						val (badTouch, _, _) = badTouchResult(this, hypo, action)
-						badTouch.isEmpty
+						badTouch.isEmpty ||
+						(chop && visibleFind(state, this.players(giver), focusId, infer = true, excludeOrder = focus).isEmpty)	// save principle
 			}
 
 	def findDiscardable(playerIndex: Int) =
@@ -461,11 +463,9 @@ case class HGroup(
 			future(order).length > 1
 
 		Option.when(needsReplay) {
-			copy(
-				future = future.updated(order, IdentitySet.single(Identity(suitIndex, rank)))
-			)
-			.replay(state.deck(order).turnDrawn)
-			.toOption
+			copy(future = future.updated(order, IdentitySet.single(Identity(suitIndex, rank))))
+				.replay(state.deck(order).turnDrawn)
+				.toOption
 		}.flatten
 
 	/** Removes the 'idUncertain' flag if no longer applicable. */
@@ -483,7 +483,19 @@ case class HGroup(
 			acc.copy(xmeta = xmeta.updated(o, xmeta(o).copy(idUncertain = false)))
 
 	def resetImportant(playerIndex: Int) =
-		copy(importantAction = importantAction.updated(playerIndex, false))
+		copy(
+			importantFinesse = importantFinesse.updated(playerIndex, false),
+			savedCtx = savedCtx.updated(playerIndex, None)
+		)
+
+	/** Returns whether a real waiting connection was lost, which usually indicates that a mistake occurred. */
+	def wcLost(prev: HGroup) =
+		prev.waiting.exists: wc =>
+			!wc.symmetric && !wc.ambiguousSelf &&
+			!this.waiting.exists(w => w.inference == wc.inference && w.turn == wc.turn)
+
+	def importantAction(playerIndex: Int) =
+		importantFinesse(playerIndex) || savedCtx(playerIndex).fold(false)(urgentSave)
 
 object HGroup:
 	private def init(
@@ -503,7 +515,8 @@ object HGroup:
 		future = Vector.fill(state.variant.totalCards)(state.allIds),
 		inProgress = inProgress,
 		lastActions = Vector.fill(state.numPlayers)(None),
-		importantAction = Vector.fill(state.numPlayers)(false),
+		importantFinesse = Vector.fill(state.numPlayers)(false),
+		savedCtx = Vector.fill(state.numPlayers)(None),
 		level = level
 	)
 
@@ -550,7 +563,8 @@ object HGroup:
 				deckIds = if keepDeck then game.deckIds else Vector.fill(game.state.variant.totalCards)(None),
 				future = if keepDeck then game.future else Vector.fill(game.state.variant.totalCards)(game.state.allIds),
 				lastActions = Vector.fill(game.state.numPlayers)(None),
-				importantAction = Vector.fill(game.state.numPlayers)(false),
+				importantFinesse = Vector.fill(game.state.numPlayers)(false),
+				savedCtx = Vector.fill(game.state.numPlayers)(None),
 				xmeta = Vector.fill(game.base._2.length)(XConvData())
 			)
 
@@ -561,21 +575,16 @@ object HGroup:
 				val pre = refreshWCs(prev, updatedGame, action, beforeClueInterp = true)
 					.resetImportant(action.playerIndex)
 
-				def lostWcs(p: HGroup, g: HGroup) =
-					p.waiting.exists: wc =>
-						!wc.symmetric && !wc.ambiguousSelf &&
-						!g.waiting.exists(w => w.inference == wc.inference && w.turn == wc.turn)
-
-				if !game.allowFindOwn && lostWcs(prev, pre) then
+				if !game.allowFindOwn && pre.wcLost(prev) then
 					Log.warn("removed wc! mistake")
 					pre.withMove(ClueInterp.Mistake)
 				else
 					val interpreted = interpClue(ClueContext(prev, pre, action))
-					val updatedPre = pre.copy(importantAction = interpreted.importantAction)
+					val updatedPre = pre.copy(importantFinesse = interpreted.importantFinesse, savedCtx = interpreted.savedCtx)
 						.withMove(interpreted.lastMove.get)
 
 					refreshWCs(prev, updatedPre, action)
-						.cond(_.waiting.length < pre.waiting.length && !game.noRecurse) { g =>
+						.cond(_.waiting.count(wc => !wc.symmetric && !wc.ambiguousSelf) < pre.waiting.count(wc => !wc.symmetric && !wc.ambiguousSelf) && !game.noRecurse) { g =>
 							Log.highlight(Console.GREEN, "----- REINTERPRETING CLUE -----")
 							val res = interpClue(ClueContext(prev, g.copy(moveHistory = g.moveHistory.dropRight(1)), action))
 							Log.highlight(Console.GREEN, "----- DONE REINTERPRETING -----")
@@ -627,29 +636,34 @@ object HGroup:
 			val updatedGame = game.refreshUncertain
 
 			updatedGame.reinterpPlay(prev, action).getOrElse:
-				refreshWCs(prev, updatedGame, action)
-					.resetImportant(action.playerIndex)
-					.cond(_.level >= Level.BasicCM && rank == 1) { g =>
-						checkOcm(prev, action) match
-							case None =>
-								g.withMove(PlayInterp.None)
-							case Some(orders) =>
-								val chop = orders.min
-								val mistake = game.state.deck(chop).id().exists: id =>
-									game.state.isBasicTrash(id) || id.rank == 1
+				val pre = refreshWCs(prev, updatedGame, action)
 
-								if mistake then
-									Log.warn("bad ocm!")
+				if !game.allowFindOwn && pre.wcLost(prev) then
+					Log.warn("removed wc! mistake")
+					pre.withMove(PlayInterp.Mistake)
+				else
+					pre.resetImportant(action.playerIndex)
+						.cond(_.level >= Level.BasicCM && rank == 1) { g =>
+							checkOcm(prev, action) match
+								case None =>
+									g.withMove(PlayInterp.None)
+								case Some(orders) =>
+									val chop = orders.min
+									val mistake = game.state.deck(chop).id().exists: id =>
+										game.state.isBasicTrash(id) || id.rank == 1
 
-								performCM(g, orders).withMove:
-									if mistake then PlayInterp.Mistake else PlayInterp.OrderCM
-					} {
-						_.withMove(PlayInterp.None)
-					}
-					.copy(
-						dcStatus = DcStatus.None,
-						dda = None
-					)
+									if mistake then
+										Log.warn("bad ocm!")
+
+									performCM(g, orders).withMove:
+										if mistake then PlayInterp.Mistake else PlayInterp.OrderCM
+						} {
+							_.withMove(PlayInterp.None)
+						}
+						.copy(
+							dcStatus = DcStatus.None,
+							dda = None
+						)
 			.elim()
 
 		def takeAction(game: HGroup): IO[PerformAction] =
@@ -768,12 +782,11 @@ object HGroup:
 		override def cleanHypo(game: HGroup) =
 			game.waiting.foldLeft(game): (acc, wc) =>
 				if !wc.symmetric then acc else
-					revert(acc, wc.focus, List(wc.inference))
-						.pipe: g =>
-							g.copy(
-								players = g.players.map:
-									_.withThought(wc.focus)(t => t.copy(inferred = t.inferred.difference(wc.inference)))
-							)
+					revert(acc, wc.focus, List(wc.inference)).pipe: g =>
+						g.copy(
+							players = g.players.map:
+								_.withThought(wc.focus)(t => t.copy(inferred = t.inferred.difference(wc.inference)))
+						)
 
 		override def refreshAfterPlay(prev: HGroup, game: HGroup, action: PlayAction) =
 			refreshWCs(prev, game, action, elim = false, hypo = Some(-1))
@@ -826,14 +839,14 @@ object HGroup:
 				.orElse(game.chop(playerIndex))
 				.getOrElse(game.players(playerIndex).lockedDiscard(state, playerIndex))
 
-			val targets =
-				if game.level >= Level.Endgame && (game.inEndgame || state.remScore < state.variant.suits.length) then
-					// ALlow discarding any known trash
-					(expectedDc +: state.hands(playerIndex).filter(game.players(playerIndex).orderKt(game, _))).distinct
-				else
-					Seq(expectedDc)
+			if game.level >= Level.Endgame && (game.inEndgame || state.remScore < state.variant.suits.length) then
+				// ALlow discarding/bombing any trash
+				val knownTrash = expectedDc +: state.hands(playerIndex).filter(game.players(playerIndex).orderTrash(game, _))
 
-			targets.map(PerformAction.Discard(_))
+				knownTrash.distinct.flatMap: o =>
+					Seq(PerformAction.Discard(o), PerformAction.Play(o))
+			else
+				Seq(PerformAction.Discard(expectedDc))
 
 		def evalAction(game: HGroup, action: Action): Double =
 			_evalAction(game, action)

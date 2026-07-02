@@ -72,8 +72,9 @@ def occamsRazor(ctx: ClueContext, fps: Seq[FocusPossibility], playerIndex: Int, 
 	val state = game.state
 
 	val initial = (99, Seq.empty[FocusPossibility], Seq.empty[FocusPossibility])
+	val sorted = fps.sortBy(fp => if actualId.forall(_ == fp.id) then -1 else 0)
 
-	fps.foldRight(initial) { case (fp, (min, acc, impossible)) =>
+	sorted.foldLeft(initial) { case ((min, acc, impossible), fp) =>
 		if !game.players(playerIndex).thoughts(ctx.focusResult.focus).possible.contains(fp.id) then
 			(min, acc, fp +: impossible)
 		else
@@ -88,7 +89,7 @@ def occamsRazor(ctx: ClueContext, fps: Seq[FocusPossibility], playerIndex: Int, 
 				(min, acc, impossible)
 	}
 	.pipe: (min, acc, impossible) =>
-		acc ++ impossible.filter(fpSimplicity(_, playerIndex, state.ourPlayerIndex) <= min)
+		acc.reverse ++ impossible.filter(fpSimplicity(_, playerIndex, state.ourPlayerIndex) <= min)
 
 	.when(_ => playerIndex == state.ourPlayerIndex): simplest =>
 		// If a simplest possibility involves X finessing, followed by a self-finesse,

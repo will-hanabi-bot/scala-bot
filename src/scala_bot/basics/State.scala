@@ -155,6 +155,10 @@ case class State(
 
 	def canClue = clueTokens > 0
 
+	/**
+	 * Returns whether a suit exists with the given regex.
+	 * Regex is slow, so prefer using e.g. this.variant.pinkish over includesVariant(PINKISH).
+	 */
 	def includesVariant(regex: Regex) =
 		variant.suits.exists(suit => regex.matches(suit.name))
 

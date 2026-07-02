@@ -305,23 +305,19 @@ case class EndgameSolver[G <: Game](
 				else
 					loop2(actions.tail, best)
 
-		if hypos.length > 1 then
-			val (bestPerform, bestWinrate) = loop2(initialActions, initialActions.head)
-			Logger.setLevel(level)
-
-			if bestWinrate == Frac.zero then
-				Left("couldn't find any winning actions")
+		val (bestPerform, bestWinrate) =
+			if hypos.length > 1 then
+				loop2(initialActions, initialActions.head)
 			else
-				Log.info(s"endgame winnable! ${bestPerform.fmt(game)} (winrate $bestWinrate)")
-				Log.info(s"solved in ${start.until(Instant.now()).toMillis()}ms")
-				Right((bestPerform, bestWinrate))
+				initialActions.head
+		Logger.setLevel(level)
 
+		if bestWinrate == Frac.zero then
+			Left("couldn't find any winning actions")
 		else
-			Logger.setLevel(level)
-			val (bestAction, winrate) = initialActions.head
-			Log.info(s"endgame winnable! ${bestAction.fmt(game)} (winrate $winrate)")
+			Log.info(s"endgame winnable! ${bestPerform.fmt(game)} (winrate $bestWinrate)")
 			Log.info(s"solved in ${start.until(Instant.now()).toMillis()}ms")
-			Right(initialActions.head)
+			Right((bestPerform, bestWinrate))
 
 	def winnable(game: G, playerTurn: Int, remaining: RemainingMap, deadline: Instant, depth: Int = 0)(using ops: GameOps[G]): WinnableResult =
 		val state = game.state

@@ -284,7 +284,7 @@ case class Player(
 			(status != CardStatus.None && status != CardStatus.CalledToDiscard)
 
 	/** Returns whether the given order is a valid prompt for the given identity. */
-	def validPrompt(prev: Game, order: Int, id: Identity, connected: Set[Int] = Set(), forcePink: Boolean = false) =
+	def validPrompt(prev: Game, order: Int, id: Identity, connected: FastBitSet = FastBitSet.empty, forcePink: Boolean = false) =
 		val state = prev.state
 		val card = state.deck(order)
 		val thought = thoughts(order)
@@ -315,7 +315,7 @@ case class Player(
 	  * @param forcePink  Whether to force a prompt for a pink identity, even if the Pink Prompt Rank Exception applies.
 	  * @param rightmost  Whether to prompt from the right (defaults to false).
 	  */
-	def findPrompt(prev: Game, playerIndex: Int, id: Identity, connected: Set[Int] = Set(), ignore: Set[Int] = Set(), forcePink: Boolean = false, rightmost: Boolean = false) =
+	def findPrompt(prev: Game, playerIndex: Int, id: Identity, connected: FastBitSet = FastBitSet.empty, ignore: FastBitSet = FastBitSet.empty, forcePink: Boolean = false, rightmost: Boolean = false) =
 		val state = prev.state
 		val hand = state.hands(playerIndex).when(_ => rightmost)(_.reverse)
 		val validPrompts = hand.filter(validPrompt(prev, _, id, connected, forcePink))
@@ -324,7 +324,7 @@ case class Player(
 		validPrompts.maxByOption(state.deck(_).clues.map(_.base).distinct.length)
 			.filter(!ignore.contains(_))
 
-	def findClued(prev: Game, playerIndex: Int, id: Identity, ignore: Set[Int] = Set()) =
+	def findClued(prev: Game, playerIndex: Int, id: Identity, ignore: FastBitSet = FastBitSet.empty) =
 		val state = prev.state
 		state.hands(playerIndex).filter: order =>
 			val thought = thoughts(order)
@@ -393,96 +393,97 @@ case class Player(
 
 	/** Returns a new Player with the hypo stacks (and hypo plays, unknown plays, etc.) updated based on current information. */
 	def updateHypoStacks[G <: Game](game: G)(using ops: GameOps[G]): Player =
-		var hypo =
-			if isCommon then
-				ops.copyWith(game, GameUpdates(noRecurse = Some(true), common = Some(this)))
-			else
-				ops.copyWith(game, GameUpdates(noRecurse = Some(true), players = Some(game.players.updated(playerIndex, this))))
-		.pipe(ops.cleanHypo)
+		if this.dirty.isEmpty then this else
+			var hypo =
+				if isCommon then
+					ops.copyWith(game, GameUpdates(noRecurse = Some(true), common = Some(this)))
+				else
+					ops.copyWith(game, GameUpdates(noRecurse = Some(true), players = Some(game.players.updated(playerIndex, this))))
+			.pipe(ops.cleanHypo)
 
-		var unknownPlays = FastBitSet.empty
-		var played = FastBitSet.empty
-		var attempted = FastBitSet.empty
-		var linkedPlays = 0
+			var unknownPlays = FastBitSet.empty
+			var played = FastBitSet.empty
+			var attempted = FastBitSet.empty
+			var linkedPlays = 0
 
-		def player = if isCommon then hypo.common else hypo.players(playerIndex)
-		def state = hypo.state
+			def player = if isCommon then hypo.common else hypo.players(playerIndex)
+			def state = hypo.state
 
-		def play(order: Int) =
-			val holder = hypo.state.holderOf(order)
+			def play(order: Int) =
+				val holder = hypo.state.holderOf(order)
 
-			// NOTE: symmetric = true?
-			player.thoughts(order).id(infer = true) match
-				case None =>
-					links.fastForeach: link =>
-						val orders = link.getOrders
-						if orders.contains(order) && orders.forall(o => o == order || played.contains(o)) then
-							hypo = link.promise.fold(hypo): id =>
-								if !hypo.state.isPlayable(id) then
-									// Log.warn(s"tried to add linked ${state.logId(id)} ($order) onto hypo stacks, but they were at ${hypo.state.playStacks} $played ($name)")
-									hypo
-								else
-									linkedPlays += 1
-									hypo.withState(_.withPlay(id))
+				// NOTE: symmetric = true?
+				player.thoughts(order).id(infer = true) match
+					case None =>
+						links.fastForeach: link =>
+							val orders = link.getOrders
+							if orders.contains(order) && orders.forall(o => o == order || played.contains(o)) then
+								hypo = link.promise.fold(hypo): id =>
+									if !hypo.state.isPlayable(id) then
+										// Log.warn(s"tried to add linked ${state.logId(id)} ($order) onto hypo stacks, but they were at ${hypo.state.playStacks} $played ($name)")
+										hypo
+									else
+										linkedPlays += 1
+										hypo.withState(_.withPlay(id))
 
-					unknownPlays = unknownPlays.incl(order)
-					played = played.incl(order)
-
-				case Some(id) =>
-					if hypo.state.isPlayable(id) then
-						val playAction = PlayAction(holder, order, id.suitIndex, id.rank)
-
-						val level = Logger.level
-						Logger.setLevel(LogLevel.Error.min(level))
-
-						hypo = hypo.onPlay(playAction)
-							.pipe(ops.refreshAfterPlay(hypo, _, playAction))
-
-						Logger.setLevel(level)
+						unknownPlays = unknownPlays.incl(order)
 						played = played.incl(order)
-					else
-						// Log.warn(s"tried to add ${state.logId(id)} ($order) onto hypo stacks, but they were at ${hypo.state.playStacks} $played ($name)")
-						attempted = attempted.incl(order)
 
-			hypo = hypo.withState(s => s.copy(hands = s.hands.updated(holder, s.hands(holder).filter(_ != order))))
+					case Some(id) =>
+						if hypo.state.isPlayable(id) then
+							val playAction = PlayAction(holder, order, id.suitIndex, id.rank)
 
-		var changed = true
+							val level = Logger.level
+							Logger.setLevel(LogLevel.Error.min(level))
 
-		while changed do
-			changed = false
+							hypo = hypo.onPlay(playAction)
+								.pipe(ops.refreshAfterPlay(hypo, _, playAction))
 
-			loop(0, _ < state.numPlayers, _ + 1): i =>
-				val playables =
-					if game.goodTouch then
-						player.thinksPlayables(hypo, i, excludeTrash = true)
-					else
-						player.obviousPlayables(hypo, i)
+							Logger.setLevel(level)
+							played = played.incl(order)
+						else
+							// Log.warn(s"tried to add ${state.logId(id)} ($order) onto hypo stacks, but they were at ${hypo.state.playStacks} $played ($name)")
+							attempted = attempted.incl(order)
 
-				val it = playables.iterator
+				hypo = hypo.withState(s => s.copy(hands = s.hands.updated(holder, s.hands(holder).filter(_ != order))))
 
-				while (it.hasNext && !changed) {
-					val o = it.next()
-					if !played.contains(o) && !attempted.contains(o) && hypo.state.hasConsistentInfs(thoughts(o)) then
-						play(o)
-						changed = true
-				}
+			var changed = true
 
-			player.playLinks.fastForeach: link =>
-				val allPlayed = link.orders.fastForall(played.contains)
+			while changed do
+				changed = false
 
-				if allPlayed && !played.contains(link.target) && state.hands.exists(_.contains(link.target)) then
-					val order = link.target
-					val id = state.deck(order).id()
+				loop(0, _ < state.numPlayers, _ + 1): i =>
+					val playables =
+						if game.goodTouch then
+							player.thinksPlayables(hypo, i, excludeTrash = true)
+						else
+							player.obviousPlayables(hypo, i)
 
-					if id.isEmpty || state.isUseful(id.get) then
-						play(link.target)
+					val it = playables.iterator
 
-		this.copy(
-			hypoStacks = hypo.state.playStacks,
-			unknownPlays = unknownPlays,
-			hypoPlays = played,
-			linkedPlays = linkedPlays
-		)
+					while (it.hasNext && !changed) {
+						val o = it.next()
+						if !played.contains(o) && !attempted.contains(o) && hypo.state.hasConsistentInfs(thoughts(o)) then
+							play(o)
+							changed = true
+					}
+
+				player.playLinks.fastForeach: link =>
+					val allPlayed = link.orders.fastForall(played.contains)
+
+					if allPlayed && !played.contains(link.target) && state.hands.exists(_.contains(link.target)) then
+						val order = link.target
+						val id = state.deck(order).id()
+
+						if id.isEmpty || state.isUseful(id.get) then
+							play(link.target)
+
+			this.copy(
+				hypoStacks = hypo.state.playStacks,
+				unknownPlays = unknownPlays,
+				hypoPlays = played,
+				linkedPlays = linkedPlays
+			)
 
 object Player:
 	def apply(

@@ -13,9 +13,9 @@ private def reactiveFocus(state: State, receiver: Int, action: ClueAction) =
 
 	clue.kind match
 		case ClueKind.Colour =>
-			if state.includesVariant(RAINBOWISH) || state.variant.rainbowS then clue.value + 1 else focusIndex + 1
+			if state.variant.rainbowish || state.variant.rainbowS then clue.value + 1 else focusIndex + 1
 		case ClueKind.Rank =>
-			if state.includesVariant(PINKISH) || state.variant.pinkS then clue.value else focusIndex + 1
+			if state.variant.pinkish || state.variant.pinkS then clue.value else focusIndex + 1
 
 def interpretStable(prev: Reactor, game: Reactor, action: ClueAction, stall: Boolean) =
 	val ClueAction(giver, target, _, _) = action
@@ -45,7 +45,7 @@ private def tryStable(prev: Reactor, game: Reactor, action: ClueAction, stall: B
 	game.when(_ => clue.kind == ClueKind.Rank && newlyTouched.nonEmpty): g =>
 		val trashPush = (0 until state.variant.suits.length).forall(suitIndex => state.isBasicTrash(Identity(suitIndex, clue.value)))
 		lazy val playableRankFocus =
-			if state.includesVariant(PINKISH) then
+			if state.variant.pinkish then
 				g.state.hands(target).filter(!prev.state.deck(_).clued).minOption.filter(list.contains).getOrElse(newlyTouched.max)
 			else
 				newlyTouched.max
@@ -189,7 +189,7 @@ private def tryStable(prev: Reactor, game: Reactor, action: ClueAction, stall: B
 		else if common.orderKt(game, newlyTouched.max) then
 			// at least 1 useful unplayable brown and clue didn't touch chop
 			val brownishTcm =
-				state.includesVariant(BROWNISH) &&
+				state.variant.brownish &&
 				clue.kind == ClueKind.Rank &&
 				!prev.common.obviousLoaded(game, target) &&
 				state.variant.suits.zipWithIndex.exists: (suit, suitIndex) =>
@@ -462,7 +462,7 @@ def refDiscard(prev: Reactor, game: Reactor, action: ClueAction, stall: Boolean)
 				else
 					Log.info("locked!")
 
-					game.when(_.state.includesVariant(PINKISH)):
+					game.when(_.state.variant.pinkish):
 						_.withThought(lockOrder): t =>
 							t.copy(inferred = t.inferred.filter(_.rank == clue.value))
 						.withMeta(lockOrder):
@@ -485,7 +485,7 @@ def refDiscard(prev: Reactor, game: Reactor, action: ClueAction, stall: Boolean)
 
 				Log.info(s"ref discard on ${state.names(receiver)}'s slot ${targetIndex + 1}")
 
-				game.cond(_.state.includesVariant(PINKISH)) {
+				game.cond(_.state.variant.pinkish) {
 					_.withThought(promisedOrder): t =>
 						t.copy(inferred = t.inferred.filter(_.rank == clue.value))
 					.withMeta(promisedOrder):

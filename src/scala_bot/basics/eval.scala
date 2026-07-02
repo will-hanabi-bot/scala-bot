@@ -16,7 +16,7 @@ def forceClue[G <: Game](game: G, giver: Int, advance: G => Double, only: Option
 	val state = game.state
 
 	if !state.canClue then
-		return -999.0
+		return -999
 
 	if state.numPlayers == 2 then
 		return advance(game.withState(s => s.copy(clueTokens = s.clueTokens - 1)))
@@ -36,14 +36,18 @@ def forceClue[G <: Game](game: G, giver: Int, advance: G => Double, only: Option
 
 		if hypoGame.lastMove == Some(ClueInterp.Mistake) then
 			Logger.setLevel(level)
-			-100.0
+			-100
+		else if hypoGame.lastMove == Some(ClueInterp.Useless) then
+			Logger.setLevel(level)
+			// Log.highlight(Console.YELLOW, s"${action.fmt(state)}: -50 (useless)")
+			-50
 		else
 			val value = advance(hypoGame)
 			Logger.setLevel(level)
-			Log.highlight(Console.YELLOW, s"${action.fmt(state)}: $value")
+			Log.highlight(Console.YELLOW, f"${action.fmt(state)}: $value%.2f")
 			value
 
-	if value == -100 then
+	if value <= -50 then
 		// Hope they can clue something in our hand
 		advance(game.withState(s => s.copy(clueTokens = s.clueTokens - 1)))
 	else

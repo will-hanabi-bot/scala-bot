@@ -79,7 +79,7 @@ case class RefSieve(
 		!common.thinksLoaded(this, bob) &&
 		chop(bob).flatMap(state.deck(_).id()).exists(id => state.isCritical(id) || state.isPlayable(id))
 
-	def findFinesse(playerIndex: Int, connected: Set[Int] = Set(), ignore: Set[Int] = Set()) =
+	def findFinesse(playerIndex: Int, connected: FastBitSet = FastBitSet.empty, ignore: FastBitSet = FastBitSet.empty) =
 		val order = state.hands(playerIndex).find: o =>
 			!this.isTouched(o) && !connected.contains(o)
 
@@ -315,7 +315,7 @@ object RefSieve:
 
 							valid.forall(x => x)
 
-						game.findFinesse(action.target, Set(f1)) match
+						game.findFinesse(action.target, FastBitSet.single(f1)) match
 							case Some(f2) =>
 								Log.info(s"no-info double bluff on $f1 and $f2!")
 

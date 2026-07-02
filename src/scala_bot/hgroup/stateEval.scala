@@ -138,7 +138,7 @@ def advance(orig: HGroup, game: HGroup, offset: Int): Double =
 	lazy val earlyGameClue = game.earlyGameClue(playerIndex)
 
 	// Reduce lookahead in early game
-	if (orig.inEarlyGame && state.includesVariant(RAINBOWISH) && state.includesVariant(PINKISH) && offset == 2) || playerIndex == state.ourPlayerIndex || state.endgameTurns.contains(0) then
+	if (orig.inEarlyGame && state.variant.rainbowish && state.variant.pinkish && offset == 2) || playerIndex == state.ourPlayerIndex || state.endgameTurns.contains(0) then
 		evalGame(orig, game)
 
 	else if allPlayables.nonEmpty then
@@ -153,7 +153,7 @@ def advance(orig: HGroup, game: HGroup, offset: Int): Double =
 					// Only consider playing the leftmost of similarly-possible cards
 					!allPlayables.exists(p => p > o && common.thoughts(p).possible == common.thoughts(o).possible)
 
-		val finessed = playables.find(meta(_).status == CardStatus.Finessed)
+		val finessed = playables.find(o => meta(o).status == CardStatus.Finessed || game.isBlindPlaying(o))
 
 		if finessed.isDefined then
 			val order = finessed.get
@@ -305,7 +305,7 @@ def _evalAction(game: HGroup, action: Action): Double =
 						-1 + 0.5 * clueValue
 					else
 						0.5 * clueValue
-				Log.info(s"initial clue value: $value")
+				Log.info(f"initial clue value: $value%.2f")
 				val best = value + advance(game, hypoGame, 1)
 
 				Log.info(f"${action.fmt(state)}%s: $best%.2f (${hypoGame.lastMove.get}%s) + $bonus")

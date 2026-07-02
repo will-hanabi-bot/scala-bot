@@ -46,7 +46,7 @@ def checkHFix(ctx: ClueContext): Option[HGroup] =
 
 	checkFix(prev, game, action) match
 		// Check for pink 1's fix, which won't be caught by checkFix().
-		case FixResult.None if state.includesVariant(PINKISH) && prev.common.hypoStacks.exists(_ == 0) =>
+		case FixResult.None if state.variant.pinkish && prev.common.hypoStacks.exists(_ == 0) =>
 			val fixed = list.filter: o =>
 				!prev.meta(o).focused &&
 				prev.common.thoughts(o).inferred.forall(_.rank == 1) &&
@@ -113,7 +113,7 @@ def interpClue(ctx: ClueContext): HGroup =
 		case _ => ()
 
 	val stall = stallingSituation(ctx)
-	val thinksStall = stall.map(_._2).getOrElse(Set.empty)
+	val thinksStall = stall.map(_._2).getOrElse(FastBitSet.empty)
 
 	if stall.isDefined then
 		val (interp, thinksStall) = stall.get
@@ -131,7 +131,7 @@ def interpClue(ctx: ClueContext): HGroup =
 				.when(_.inEarlyGame && interp == StallInterp.Stall5):
 					_.copy(stalled5 = true)
 				// Pink promise on stalls
-				.when(_.state.includesVariant(PINKISH) && clue.kind == ClueKind.Rank):
+				.when(_.state.variant.pinkish && clue.kind == ClueKind.Rank):
 					_.withThought(focus)(t => t.copy(inferred = t.inferred.filter(_.rank == clue.value)))
 				.copy(stallInterp = Some(interp))
 				.withMove(ClueInterp.Stall)
@@ -168,7 +168,7 @@ def interpClue(ctx: ClueContext): HGroup =
 				else
 					return performCM(game, cm5).withMove(evaluateCM(ctx, cm5))
 
-	val pinkTrashFix = state.includesVariant(PINKISH) &&
+	val pinkTrashFix = state.variant.pinkish &&
 		!positional && clue.kind == ClueKind.Rank &&
 		list.forall(o => prev.state.deck(o).clued && game.knownAs(o, PINKISH)) &&
 		state.variant.suits.zipWithIndex.forall: (suit, suitIndex) =>
@@ -326,7 +326,7 @@ def interpClue(ctx: ClueContext): HGroup =
 			case _ =>
 				g
 
-	.when(_.state.includesVariant(PINKISH) && clue.kind == ClueKind.Rank && clue.value == 1): g =>
+	.when(_.state.variant.pinkish && clue.kind == ClueKind.Rank && clue.value == 1): g =>
 		// Pink 1's Assumption
 		list.filter(g.unknown1).foldLeft(g): (acc, o) =>
 			acc.withThought(o)(t => t.copy(inferred = t.inferred.filter(_.rank == 1)))

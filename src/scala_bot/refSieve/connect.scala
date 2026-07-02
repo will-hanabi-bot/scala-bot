@@ -5,7 +5,7 @@ import scala_bot.logger.Log
 
 import scala.annotation.tailrec
 
-def findConnecting(ctx: ClueContext, id: Identity, playerIndex: Int, connected: Set[Int], looksDirect: Boolean, ignore: Set[Int] = Set(), findOwn: Boolean = false, alwaysConnect: Boolean = false, preferF: Boolean = false): Option[Connection] =
+def findConnecting(ctx: ClueContext, id: Identity, playerIndex: Int, connected: FastBitSet, looksDirect: Boolean, ignore: FastBitSet = FastBitSet.empty, findOwn: Boolean = false, alwaysConnect: Boolean = false, preferF: Boolean = false): Option[Connection] =
 	val ClueContext(prev, game, action) = ctx
 	val state = game.state
 	val player = if findOwn then game.players(playerIndex) else game.common
@@ -64,7 +64,7 @@ def connect(ctx: ClueContext, targetOrder: Int, id: Identity, unknown: Boolean, 
 			Some(connections.reverse)
 		else
 			val nextId = Identity(suitIndex, nextRank)
-			val connected = connections.map(_.order).toSet + targetOrder
+			val connected = FastBitSet.from(connections.map(_.order)).incl(targetOrder)
 			val looksDirect = unknown && playerIndex == action.target
 			val own = findOwn && playerIndex == state.ourPlayerIndex
 			val connecting = findConnecting(ctx, nextId, playerIndex, connected, looksDirect, findOwn = own, alwaysConnect = alwaysConnect, preferF = remF > 0)

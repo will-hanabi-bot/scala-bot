@@ -8,7 +8,7 @@ import scala_bot.utils.{pipe, tap}
 import scala_bot.logger.{Logger, LogLevel}
 
 class General extends munit.FunSuite:
-	override def beforeAll() = Logger.setLevel(LogLevel.Off)
+	// override def beforeAll() = Logger.setLevel(LogLevel.Off)
 
 	test("understands a fake finesse"):
 		val game = setup(HGroup.atLevel(5), Vector(
@@ -379,6 +379,20 @@ class General extends munit.FunSuite:
 		// Alice doesn't need to save Donald's 5, since Cathy won't be able to play on her turn.
 
 		assert(!game.importantAction(Alice.ordinal))
+
+	test("doesn't give nonsensical clues".only):
+		val game = setup(HGroup.atLevel(5), Vector(
+			Vector("xx", "xx", "xx", "xx", "xx"),
+			Vector("y3", "b4", "b4", "p4", "y4"),
+			Vector("r3", "r4", "g4", "g4", "y4")
+		),
+			starting = Bob
+		)
+		.pipe(takeTurn("Bob clues 5 to Alice (slots 1,5)"))
+		.pipe(takeTurn("Cathy clues 3 to Bob"))
+		.pipe(takeTurn("Alice clues red to Cathy"))		// a weird bug with occam's razor suggests this clue
+
+		assertEquals(game.lastMove, Some(ClueInterp.Mistake))
 
 class Rainbow extends munit.FunSuite:
 	override def beforeAll() = Logger.setLevel(LogLevel.Off)

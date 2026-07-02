@@ -95,6 +95,10 @@ def isStall(ctx: ClueContext, severity: Int): Option[StallInterp] =
 			Log.info("save that could look like lhs!")
 			return Some(StallInterp.SaveLHS)
 
+		if state.variant.pinkish && clue.kind == ClueKind.Rank && state.deck(focus).id().exists(_.rank != clue.value) then
+			Log.info(s"lhs that breaks pink promise!")
+			return None
+
 		Log.info(s"locked hand stall!")
 		return Some(StallInterp.Locked)
 
@@ -185,9 +189,9 @@ def alternativeClue(ctx: ClueContext, maxStall: Int) =
 					_.connections.exists: conn =>
 						conn.kind != "known" && p == state.holderOf(conn.order)
 
-	seenBy.foldLeft((0 until state.numPlayers).toSet)(_ -- _)
+	seenBy.foldLeft(FastBitSet.from(0 until state.numPlayers))(_.difference(_))
 
-def stallingSituation(ctx: ClueContext): Option[(StallInterp, Set[Int])] =
+def stallingSituation(ctx: ClueContext): Option[(StallInterp, FastBitSet)] =
 	val ClueContext(prev, game, action) = ctx
 	val ClueAction(giver, target, list, clue) = action
 
@@ -207,7 +211,7 @@ def stallingSituation(ctx: ClueContext): Option[(StallInterp, Set[Int])] =
 	else
 		isStall(ctx, severity).map: stall =>
 			if game.noRecurse || game.state.numPlayers == 2 then
-				(stall, (0 until game.state.numPlayers).toSet)
+				(stall, FastBitSet.from(0 until game.state.numPlayers))
 			else
 				val thinksStall = alternativeClue(ctx, STALL_TO_SEVERITY(stall))
 				(stall, thinksStall)

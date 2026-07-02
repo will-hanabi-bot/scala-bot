@@ -21,6 +21,13 @@ case class Variant(
 	suits: Vector[Suit],
 	shortForms: Vector[Char],
 	colourableSuits: Vector[Suit],
+	whitish: Boolean,
+	rainbowish: Boolean,
+	pinkish: Boolean,
+	brownish: Boolean,
+	dark: Boolean,
+	prism: Boolean,
+	muddy: Boolean,
 	criticalRank: Option[Int],
 	clueStarved: Boolean,
 	specialRank: Option[Int],
@@ -197,6 +204,13 @@ object Variant:
 							(suits :+ suit, shortForms :+ short, colourableSuits :+ suit)
 
 		Variant(id, name, suits, shortForms, colourableSuits,
+			suits.exists(_.suitType.whitish),
+			suits.exists(_.suitType.rainbowish),
+			suits.exists(_.suitType.pinkish),
+			suits.exists(_.suitType.brownish),
+			suits.exists(_.suitType.dark),
+			suits.exists(_.suitType.prism),
+			suits.exists(_.suitType.muddy),
 			criticalRank,
 			clueStarved, specialRank, rainbowS, whiteS, pinkS, brownS, deceptiveS, scarce1s)
 

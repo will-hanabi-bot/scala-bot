@@ -3,7 +3,7 @@ package scala_bot.hgroup
 import scala_bot.basics._
 // import scala_bot.logger.Log
 
-def validBluff(game: HGroup, action: ClueAction, blind: Identity, truth: Identity, reacting: Int, connected: Set[Int], symmetric: Boolean = false) =
+def validBluff(game: HGroup, action: ClueAction, blind: Identity, truth: Identity, reacting: Int, connected: FastBitSet, symmetric: Boolean = false) =
 	val state = game.state
 	val ClueAction(giver, target, _, clue) = action
 	val focus = connected.head
@@ -100,14 +100,14 @@ def rankSave(prev: HGroup, action: ClueAction, id: Identity, focus: Int): Boolea
 		return false
 
 	val loaded34 = prev.common.thinksLoaded(prev, target) &&
-		(state.includesVariant(WHITISH) || state.includesVariant("Dark Rainbow|Dark Prism".r)) &&
+		(state.variant.whitish || state.includesVariant("Dark Rainbow|Dark Prism".r)) &&
 		(rank == 3 || rank == 4)
 
 	if loaded34 then
 		return false
 
 	// Breaks pink promise
-	if state.includesVariant(PINKISH) && clue.kind == ClueKind.Rank && rank != clue.value then
+	if state.variant.pinkish && clue.kind == ClueKind.Rank && rank != clue.value then
 		return false
 
 	state.isCritical(id) || rank == 2

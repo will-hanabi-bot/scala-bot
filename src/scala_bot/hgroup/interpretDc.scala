@@ -52,7 +52,7 @@ def interpretTransfer(ctx: DiscardContext, holder: Int, dupe: Option[Int]): (Dis
 			(result = DiscardResult.Mistake, dda = true)
 
 		else if state.isPlayable(id) || prev.common.hypoPlays.contains(order) then
-			def findGD(hypoState: State, connected: Set[Int]): Option[List[Int]] =
+			def findGD(hypoState: State, connected: FastBitSet): Option[List[Int]] =
 				game.findFinesse(holder, connected) match
 					case None => None
 					case Some(f) =>
@@ -66,11 +66,11 @@ def interpretTransfer(ctx: DiscardContext, holder: Int, dupe: Option[Int]): (Dis
 							case None => Some(List(f))
 							case Some(i) if i.matches(id) => Some(List(f))
 							case Some(i) if hypoState.isPlayable(i) =>
-								findGD(hypoState.withPlay(i), connected + f).map: rest =>
+								findGD(hypoState.withPlay(i), connected.incl(f)).map: rest =>
 									f +: rest
 							case _ => None
 
-			findGD(state, Set.empty) match
+			findGD(state, FastBitSet.empty) match
 				case None =>
 					findThird match
 						case Some((otherHolder, otherDupe)) =>
@@ -92,7 +92,7 @@ def interpretTransfer(ctx: DiscardContext, holder: Int, dupe: Option[Int]): (Dis
 					(result = DiscardResult.GentlemansDiscard(orders), dda = false)
 
 		else
-			val baton = game.findFinesse(holder, Set.empty) match
+			val baton = game.findFinesse(holder, FastBitSet.empty) match
 				case None => None
 				case Some(f) =>
 					game.me.thoughts(f).id() match

@@ -7,13 +7,13 @@ import scala_bot.logger.{Log, Logger, LogLevel}
 
 case class ConnectContext(
 	looksDirect: Boolean,
-	thinksStall: Set[Int],
-	connected: Set[Int],
-	ignore: Set[Int] = Set()
+	thinksStall: FastBitSet,
+	connected: FastBitSet,
+	ignore: FastBitSet = FastBitSet.empty
 )
 
 case class ConnectOpts(
-	knownOnly: Set[Int] = Set(),
+	knownOnly: FastBitSet = FastBitSet.empty,
 	assumeTruth: Boolean = false,
 	bluff: Boolean = false,
 	findOwn: Option[Int] = None,
@@ -23,24 +23,42 @@ case class ConnectOpts(
 	insertingInto: Option[Seq[Int]] = None
 )
 
-def findKnownConn(ctx: ClueContext, id: Identity, ignore: Set[Int], findOwn: Boolean) =
+def findKnownConn(ctx: ClueContext, id: Identity, ignore: FastBitSet, findOwn: Boolean): Option[Connection] =
 	val ClueContext(prev, game, action) = ctx
 	val (common, state) = (game.common, game.state)
 	val giver = action.giver
 
-	def validKnown(order: Int) =
-		!ignore.contains(order) &&
-		game.state.deck(order).matches(id, assume = true) &&
-		common.thoughts(order).matches(id, infer = true) &&
-		!game.meta(order).hidden &&
-		!game.xmeta(order).fStatus.contains(FStatus.PossiblyOn(giver)) &&
-		(game.assumePlays || !game.xmeta(order).fStatus.contains(FStatus.PossiblyOn(state.ourPlayerIndex))) &&
-		!common.linkedOrders(state).contains(order)
+	val globallyKnown = state.heldOrders.findSome: o =>
+		val validKnown =
+			!ignore.contains(o) &&
+			game.state.deck(o).matches(id, assume = true) &&
+			common.thoughts(o).matches(id, infer = true) &&
+			!game.meta(o).hidden &&
+			!game.xmeta(o).fStatus.contains(FStatus.PossiblyOn(giver)) &&
+			(game.assumePlays || !game.xmeta(o).fStatus.contains(FStatus.PossiblyOn(state.ourPlayerIndex))) &&
+			!common.linkedOrders(state).contains(o)
 
-	def validLink(link: Link, order: Int) =
-		link.matchesP:
-			case Link.Promised(orders, i, _) => i == id && orders.contains(order)
-			case Link.Sarcastic(orders, i) => i == id && orders.contains(order)
+		Option.when(validKnown)(KnownConn(state.holderOf(o), o, id))
+
+	if globallyKnown.isDefined then
+		return globallyKnown
+
+	val promised = state.heldOrders.findSome: o =>
+		if common.thoughts(o).inferred.difference(state.playableSet).nonEmpty then
+			None
+		else
+			val link = common.links.find: link =>
+				link.matchesP:
+					case Link.Promised(orders, i, _) => i == id && orders.contains(o)
+					case Link.Sarcastic(orders, i)   => i == id && orders.contains(o)
+
+			link.map: l =>
+				PlayableConn(state.holderOf(o), o, id, linked = l.getOrders.toList)
+
+	if promised.isDefined then
+		return promised
+
+	// Log.info(s"finding known ${state.logId(id)} $ignore ${common.linkedOrders(state)} $findOwn")
 
 	def validPlayable(playerIndex: Int, order: Int) =
 		!ignore.contains(order) &&
@@ -54,60 +72,49 @@ def findKnownConn(ctx: ClueContext, id: Identity, ignore: Set[Int], findOwn: Boo
 			state.deck(ctx.focusResult.focus).id().contains(id)
 		)
 
-	def validLinkedPlay(order: Int) =
-		state.deck(order).clued &&
-		common.playLinks.find(_.target == order).isDefined &&
-		common.thoughts(order).inferred.contains(id)
-
-	// Globally known
-	val knownConns = for
-		playerIndex <- (0 until state.numPlayers).view
-		order <- state.hands(playerIndex) if validKnown(order)
-	yield
-		KnownConn(playerIndex, order, id)
-
-	// Promised
-	val linkedConns = for
-		playerIndex <- (0 until state.numPlayers).view
-		order <- state.hands(playerIndex)
-		link <- common.links if validLink(link, order) && common.thoughts(order).inferred.difference(state.playableSet).isEmpty
-	yield
-		PlayableConn(playerIndex, order, id, linked = link.getOrders.toList)
-
-	// Log.info(s"finding known ${state.logId(id)} $ignore ${common.linkedOrders(state)} $findOwn")
-
 	// Visible and going to be played (excludes giver)
-	val playableConns = for
-		playerIndex <- (0 until state.numPlayers).view if playerIndex != giver
-		playables = state.hands(playerIndex).filter(validPlayable(playerIndex, _))
-		order <- playables if state.deck(order).matches(id, assume = game.allowFindOwn && findOwn) && game.isTouched(order)
-	yield
-		PlayableConn(playerIndex, order, id, linked = playables.toList)
+	val playable = state.hands.zipWithIndex.findSome: (hand, playerIndex) =>
+		if playerIndex == giver then None else
+			val playables = hand.filter(validPlayable(playerIndex, _))
+			val playableOrder = playables.find: p =>
+				state.deck(p).matches(id, assume = game.allowFindOwn && findOwn) && game.isTouched(p)
 
-	val playLinkedConns = for
-		playerIndex <- (0 until state.numPlayers).view if playerIndex != giver
-		order <- state.hands(playerIndex).find(validLinkedPlay) if state.deck(order).matches(id, assume = game.allowFindOwn && findOwn)
-	yield
-		PlayableConn(playerIndex, order, id, linked = List(order))
+			playableOrder.map(PlayableConn(playerIndex, _, id, linked = playables.toList))
 
-	val previouslyPlayable = for
-		playerIndex <- (0 until state.numPlayers).view if playerIndex != giver
-		order <- state.hands(playerIndex).find: o =>
+	if playable.isDefined then
+		return playable
+
+	val playLinked = state.heldOrders.findSome: o =>
+		val playerIndex = state.holderOf(o)
+		val play =
+			playerIndex != giver &&
+			state.deck(o).clued &&
+			common.playLinks.find(_.target == o).isDefined &&
+			common.thoughts(o).inferred.contains(id) &&
+			state.deck(o).matches(id, assume = game.allowFindOwn && findOwn)
+
+		Option.when(play):
+			PlayableConn(playerIndex, o, id, linked = List(o))
+
+	if playLinked.isDefined then
+		return playLinked
+
+	val previouslyPlayable = state.heldOrders.findSome: o =>
+		val playerIndex = state.holderOf(o)
+		val play =
+			playerIndex != giver &&
 			prev.state.deck(o).clued &&
 			prev.common.hypoPlays.contains(o) &&
 			(prev.common.thoughts(o).reset || !game.common.thoughts(o).reset) &&
 			state.deck(o).matches(id, assume = game.allowFindOwn && findOwn) &&
 			common.thoughts(o).inferred.contains(id)
-	yield
-		PlayableConn(playerIndex, order, id, linked = List(order))
 
-	knownConns.headOption
-	.orElse(linkedConns.headOption)
-	.orElse(playableConns.headOption)
-	.orElse(playLinkedConns.headOption)
-	.orElse(previouslyPlayable.headOption)
+		Option.when(play):
+			PlayableConn(playerIndex, o, id, linked = List(o))
 
-def findUnknownConnecting(ctx: ClueContext, reacting: Int, id: Identity, connected: Set[Int], ignore: Set[Int], opts: ConnectOpts): Option[Connection] =
+	previouslyPlayable
+
+def findUnknownConnecting(ctx: ClueContext, reacting: Int, id: Identity, connected: FastBitSet, ignore: FastBitSet, opts: ConnectOpts): Option[Connection] =
 	val ClueContext(prev, game, action) = ctx
 	val (state, level) = (game.state, game.level)
 	val ClueAction(giver, target, _, _) = action
@@ -122,7 +129,7 @@ def findUnknownConnecting(ctx: ClueContext, reacting: Int, id: Identity, connect
 	// Log.info(s"finding unknown connecting for ${state.logId(id)} (${state.names(reacting)}), $connected, flags: [$flags]")
 
 	if opts.bluff then
-		val clued = prev.common.findClued(prev, reacting, id, ignore ++ connected)
+		val clued = prev.common.findClued(prev, reacting, id, ignore.union(connected))
 		val matched = clued.find(state.deck(_).matches(id, assume = opts.findOwn.isDefined))
 
 		return matched.map: order =>
@@ -162,7 +169,7 @@ def findUnknownConnecting(ctx: ClueContext, reacting: Int, id: Identity, connect
 		return tryPrompt(prompt.get)
 
 	// Try prompting a wrongly-ranked pink card
-	val tryPinkPrompt = state.includesVariant(PINKISH) &&
+	val tryPinkPrompt = state.variant.pinkish &&
 		potentialFinesse.forall: f =>
 			if level < Level.Bluffs then
 				!game.common.thoughts(f).possible.intersect(state.playableSet).exists: i =>
@@ -202,7 +209,7 @@ def findUnknownConnecting(ctx: ClueContext, reacting: Int, id: Identity, connect
 					// At least one id is possible on the next card on finesse position
 					val possible = nextFinesse.exists(hypo.common.thoughts(_).possible.intersect(finesseIds).nonEmpty)
 
-					Either.cond(possible, newConnected + nextFinesse.get, Set.empty)
+					Either.cond(possible, newConnected.incl(nextFinesse.get), FastBitSet.empty)
 				.nonEmpty
 
 			def canInsert(prevHand: Vector[Int], insertOrders: Seq[Int], firstInsert: Boolean): Boolean =
@@ -242,8 +249,8 @@ def findUnknownConnecting(ctx: ClueContext, reacting: Int, id: Identity, connect
 
 			val newConnected = (0 until insertOrders.length).foldLeftOpt(connected): (newConnected, _) =>
 				hypo.findFinesse(reacting, newConnected, ignore) match
-					case None => Left(Set.empty)
-					case Some(f) => Right(newConnected + f)
+					case None => Left(FastBitSet.empty)
+					case Some(f) => Right(newConnected.incl(f))
 
 			if newConnected.isEmpty then None else
 				game.findFinesseId(reacting, id, newConnected, ignore, overrideLayer = opts.insertingInto.exists(_.exists(prev.state.hands(reacting).contains)))
@@ -255,7 +262,7 @@ def findUnknownConnecting(ctx: ClueContext, reacting: Int, id: Identity, connect
 			val futureIds = game.future(finesse.get).intersect(state.playableSet)
 
 			if futureIds.isEmpty then
-				Log.warn(s"future knowledge of ${finesse.get} is [${game.future(finesse.get).fmt(state)}], but all unplayable!")
+				// Log.warn(s"future knowledge of ${finesse.get} is [${game.future(finesse.get).fmt(state)}], but all unplayable!")
 				None
 			else
 				val fKind = if futureIds.isExactly(id) then
@@ -381,9 +388,9 @@ def findSingleConn(ctx: ClueContext, reacting: Int, id: Identity, connCtx: Conne
 					None
 				else
 					val hypo = state.deck(conn.order).id().orElse(Option.when(conn.ids.length == 1)(conn.ids.head))
-						.fold(game)(id => game.withState(_.withPlay(id)).elim())
+						.fold(game)(id => game.withState(_.withPlay(id)).elim(skipHypoStacks = true))
 
-					val newConnCtx = connCtx.copy(connected = connCtx.connected + conn.order)
+					val newConnCtx = connCtx.copy(connected = connCtx.connected.incl(conn.order))
 					findSingleConn(ctx.copy(game = hypo), reacting, id, newConnCtx, opts, conn +: connections)
 
 			case Some(conn) =>
@@ -400,7 +407,7 @@ def findConnecting(ctx: ClueContext, id: Identity, connCtx: ConnectContext, opts
 		Log.info(s"all ${state.logId(id)} in trash!")
 		return None
 
-	val known = findKnownConn(ctx, id, connCtx.ignore ++ connCtx.connected, opts.findOwn.isDefined)
+	val known = findKnownConn(ctx, id, connCtx.ignore.union(connCtx.connected), opts.findOwn.isDefined)
 
 	if known.isDefined then
 		return Some(known.toList)
@@ -424,7 +431,7 @@ def findConnecting(ctx: ClueContext, id: Identity, connCtx: ConnectContext, opts
 	connPlayerOrder.zipWithIndex.findSome: (reacting, i) =>
 		findSingleConn(ctx, reacting, id, connCtx, opts.copy(noLayer = mustPassback && i == 0))
 
-def connect(ctx: ClueContext, id: Identity, looksDirect: Boolean, thinksStall: Set[Int], assumeTruth: Boolean = false, ignoreKnown: Set[Int] = Set.empty, findOwn: Option[Int] = None, preferOwn: Boolean = false): Option[FocusPossibility] =
+def connect(ctx: ClueContext, id: Identity, looksDirect: Boolean, thinksStall: FastBitSet, assumeTruth: Boolean = false, ignoreKnown: FastBitSet = FastBitSet.empty, findOwn: Option[Int] = None, preferOwn: Boolean = false): Option[FocusPossibility] =
 	val ClueContext(prev, game, action) = ctx
 	val ClueAction(giver, target, _, clue) = action
 	val state = game.state
@@ -441,7 +448,7 @@ def connect(ctx: ClueContext, id: Identity, looksDirect: Boolean, thinksStall: S
 		val newCtx = ctx.copy(game = hypo)
 
 		def seekOwn(playerIndex: Int) =
-			val known = findKnownConn(newCtx, nextId, connCtx.ignore ++ connCtx.connected, findOwn = true)
+			val known = findKnownConn(newCtx, nextId, connCtx.ignore.union(connCtx.connected), findOwn = true)
 
 			// See if we need to correct based on future information
 			val actualKnown = known match
@@ -451,7 +458,7 @@ def connect(ctx: ClueContext, id: Identity, looksDirect: Boolean, thinksStall: S
 
 						if playableIds.isEmpty then None else
 							Log.highlight(Console.CYAN, "playable conn is known to not match in the future, finding again")
-							val unknown = findSingleConn(newCtx, playerIndex, nextId, connCtx.copy(connected = connCtx.connected + order), opts.copy(findOwn = Some(playerIndex)))
+							val unknown = findSingleConn(newCtx, playerIndex, nextId, connCtx.copy(connected = connCtx.connected.incl(order)), opts.copy(findOwn = Some(playerIndex)))
 							unknown.map(c.copy(id = playableIds.head) +: _)
 					else
 						Some(List(c))
@@ -498,7 +505,7 @@ def connect(ctx: ClueContext, id: Identity, looksDirect: Boolean, thinksStall: S
 						positional ||
 						!conns.existsM { case f: FinesseConn => f.reacting != target && !f.hidden }
 					},
-					connected = connCtx.connected ++ conns.map(_.order)
+					connected = connCtx.connected.union(conns.map(_.order))
 				)
 
 				val newOpts = opts.copy(
@@ -509,12 +516,12 @@ def connect(ctx: ClueContext, id: Identity, looksDirect: Boolean, thinksStall: S
 
 				loop(newGame, nextRank + 1, connections ++ conns, newConnCtx, newOpts)
 
-	val initialConnCtx = ConnectContext(looksDirect = looksDirect, thinksStall = thinksStall, connected = Set(focus), ignore = ignoreKnown)
+	val initialConnCtx = ConnectContext(looksDirect = looksDirect, thinksStall = thinksStall, connected = FastBitSet.single(focus), ignore = ignoreKnown)
 	val initialOpts = ConnectOpts(assumeTruth = assumeTruth)
 
 	loop(game, state.playStacks(id.suitIndex) + 1, Nil, initialConnCtx, initialOpts) match
 		case (Left(conns), _) if conns.existsM { case _: KnownConn => true } =>
-			val newIgnore = ignoreKnown + conns.collectFirst { case c: KnownConn => c.order }.get
+			val newIgnore = ignoreKnown.incl(conns.collectFirst { case c: KnownConn => c.order }.get)
 			connect(ctx, id, looksDirect, thinksStall, ignoreKnown = newIgnore, findOwn = findOwn, assumeTruth = assumeTruth, preferOwn = preferOwn)
 
 		case (Left(_), bluffed) if game.level >= Level.Bluffs && !assumeTruth && bluffed =>

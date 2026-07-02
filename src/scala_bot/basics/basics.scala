@@ -188,7 +188,7 @@ extension[G <: Game](game: G)
 	  * Also clears the dirty bit on all players.
 	  * @param except The index of the player to ignore during good touch elim (e.g. if they are giving a clue).
 	  */
-	def elim(except: Option[Int] = None)(using ops: GameOps[G]): G =
+	def elim(except: Option[Int] = None, skipHypoStacks: Boolean = false)(using ops: GameOps[G]): G =
 		val state = game.state
 
 		game.pipe:
@@ -218,7 +218,10 @@ extension[G <: Game](game: G)
 		.pipe: g =>
 			val (sarcastics, newCommon) = g.common.refreshLinks(g)
 			val newGame = ops.copyWith(g, GameUpdates(
-				common = Some(newCommon.refreshPlayLinks(g).updateHypoStacks(g))
+				common = Some:
+					newCommon.refreshPlayLinks(g)
+					.when(_ => !skipHypoStacks):
+						_.updateHypoStacks(g)
 			))
 
 			sarcastics.foldLeft(newGame): (acc, order) =>
@@ -257,7 +260,8 @@ extension[G <: Game](game: G)
 					_.goodTouchElim(g, except)._2
 				.refreshLinks(g)._2
 				.refreshPlayLinks(g)
-				.updateHypoStacks(g)
+				.when(_ => !skipHypoStacks):
+					_.updateHypoStacks(g)
 				.copy(dirty = FastBitSet.empty)
 
 			ops.copyWith(g, GameUpdates(

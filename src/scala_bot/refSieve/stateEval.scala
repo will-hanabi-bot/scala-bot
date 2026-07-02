@@ -218,7 +218,7 @@ def _evalAction(game: RefSieve, action: Action): Double =
 					0.5
 
 				val initial = getResult(game, hypoGame, clue) * mult - 0.5
-				Log.info(s"initial clue value: $initial")
+				Log.info(s"initial clue value: $initial%.2f")
 
 				val value = initial + advance(game, hypoGame, 1)
 				(hypoGame.lastMove.get, value)

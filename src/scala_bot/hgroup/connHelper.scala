@@ -64,7 +64,7 @@ def assignConns(game: HGroup, action: ClueAction, fps: Seq[FocusPossibility], fo
 			.pipe: g =>
 				val idUncertain =
 					conn.reacting == state.ourPlayerIndex && {
-						val connected = fp.connections.take(connI).map(_.order).toSet
+						val connected = FastBitSet.from(fp.connections.take(connI).map(_.order))
 
 						def possiblyFinesse(id: Identity) =
 							g.findFinesseId(state.ourPlayerIndex, id, connected).exists(g.me.thoughts(_).possible.contains(id))
@@ -74,7 +74,7 @@ def assignConns(game: HGroup, action: ClueAction, fps: Seq[FocusPossibility], fo
 								linked.length > 1 || possiblyFinesse(id)
 
 							case PromptConn(reacting, order, id, _) =>
-								g.common.findPrompt(g, reacting, id, connected + order).exists(g.me.thoughts(_).possible.contains(id)) ||
+								g.common.findPrompt(g, reacting, id, connected.incl(order)).exists(g.me.thoughts(_).possible.contains(id)) ||
 								possiblyFinesse(id)
 
 							case FinesseConn(reacting, order, ids, _, _) =>
@@ -205,7 +205,7 @@ def assignConns(game: HGroup, action: ClueAction, fps: Seq[FocusPossibility], fo
 def importantFinesse(state: State, action: ClueAction, fps: Seq[FocusPossibility]) =
 	val ClueAction(giver, target, _, _) = action
 
-	fps.exists { fp =>
+	fps.exists: fp =>
 		val conns = fp.connections
 
 		@annotation.tailrec
@@ -226,10 +226,9 @@ def importantFinesse(state: State, action: ClueAction, fps: Seq[FocusPossibility
 				false	// This player could give the finesse
 
 		loop(state.nextPlayerIndex(giver))
-	}
 
 def urgentSave(ctx: ClueContext): Boolean =
-	val ClueContext(prev, game, action) = ctx
+	val ClueContext(_, game, action) = ctx
 	val state = game.state
 
 	// Log.info(s"checking if ${state.names(action.giver)} performed an urgent save")
@@ -290,7 +289,7 @@ def resolveClue(ctx: ClueContext, fps: Seq[FocusPossibility], ambiguousOwn: Seq[
 					!game.invalidFocus(giver, clue, inf, ctx.focusResult) &&
 					!fps.exists(_.id == inf)
 				.flatMap:
-					connect(ctx, _, looksDirect, thinksStall = Set(), findOwn = Some(target))
+					connect(ctx, _, looksDirect, thinksStall = FastBitSet.empty, findOwn = Some(target))
 
 			symmetricFps
 			// occamsRazor(ctx, symmetricFps, target)
@@ -310,7 +309,7 @@ def resolveClue(ctx: ClueContext, fps: Seq[FocusPossibility], ambiguousOwn: Seq[
 						fp.connections.forall(_.reacting == state.ourPlayerIndex)
 					}
 			.flatMap:
-				connect(ctx, _, looksDirect, thinksStall = Set(), preferOwn = true, assumeTruth = true)		// An ambiguous connection is always delayed (can't be a bluff)
+				connect(ctx, _, looksDirect, thinksStall = FastBitSet.empty, preferOwn = true, assumeTruth = true)		// An ambiguous connection is always delayed (can't be a bluff)
 			.filter: fp =>
 				!(fps ++ ambiguousOwn).exists(_.connections == fp.connections)
 
@@ -485,7 +484,7 @@ def resolveClue(ctx: ClueContext, fps: Seq[FocusPossibility], ambiguousOwn: Seq[
 
 		g.copy(
 			waiting = newWcs,
-			cluedOnChop = if chop then g.cluedOnChop + focus else g.cluedOnChop
+			cluedOnChop = if chop then g.cluedOnChop.incl(focus) else g.cluedOnChop
 		)
 		.withMove(interp)
 	.when(_ => undoScream): g =>
@@ -495,9 +494,18 @@ def resolveClue(ctx: ClueContext, fps: Seq[FocusPossibility], ambiguousOwn: Seq[
 		state.hands(giver).find(game.meta(_).cm).fold(g): oldChop =>
 			g.withMeta(oldChop)(_.copy(status = CardStatus.None))
 
-	.when(g => importantFinesse(g.state, action, fps) || urgentSave(ctx)): g =>
-		Log.highlight(Console.YELLOW, s"important action for ${g.state.names(giver)}!")
-		g.copy(importantAction = g.importantAction.updated(giver, true))
+	.when(_.level >= Level.IntermediateFinesses): g =>
+		val important = importantFinesse(g.state, action, fps)
+		if important then
+			Log.highlight(Console.YELLOW, s"important action for ${g.state.names(giver)}!")
+
+		g.copy(
+			importantFinesse = g.importantFinesse.updated(giver, important),
+			savedCtx = g.savedCtx.updated(giver, Some(ctx.copy(
+				prev = prev.copy(savedCtx = Vector.fill(state.numPlayers)(None)),
+				game = game.copy(savedCtx = Vector.fill(state.numPlayers)(None))
+			)))
+		)
 
 	// Perform 1 round of elim
 	.when(_.common.thoughts(focus).id(infer = true).exists(state.isCritical)): g =>

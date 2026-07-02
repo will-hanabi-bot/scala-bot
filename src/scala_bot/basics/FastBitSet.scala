@@ -84,6 +84,22 @@ object FastBitSet:
 
 			if found then Some(foundNum) else None
 
+		def findSome[A](cond: Int => Option[A]): Option[A] =
+			var bits = set
+			var found = false
+			var foundRes: Option[A] = None
+
+			while bits != 0 && !found do
+				val tz = java.lang.Long.numberOfTrailingZeros(bits)
+				bits &= bits - 1
+				val res = cond(tz)
+
+				if res.isDefined then
+					found = true
+					foundRes = res
+
+			foundRes
+
 		def toList =
 			var res = List.empty[Int]
 			set.foreach: i =>
