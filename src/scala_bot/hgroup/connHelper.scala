@@ -99,7 +99,10 @@ def assignConns(game: HGroup, action: ClueAction, fps: Seq[FocusPossibility], fo
 					conn.matchesP:
 						case _: FinesseConn =>
 							// Finesse that could be ambiguous
-							fps.length + ambiguousOwn.length > 1
+							fps.length + ambiguousOwn.length > 1 &&
+							!(fps ++ ambiguousOwn).forall: fp =>
+								fp.connections.existsM:
+									case f: FinesseConn => f.order == conn.order
 
 						case _: PromptConn => g.me.thoughts(focus).possible.exists: i =>
 							// Could be hidden? (TODO: Investigate why this is here.)
@@ -115,8 +118,7 @@ def assignConns(game: HGroup, action: ClueAction, fps: Seq[FocusPossibility], fo
 					if !maybeFinessed then
 						Nil
 					else if target == state.ourPlayerIndex then
-						if conn.reacting == state.ourPlayerIndex then Nil else
-							List(FStatus.PossiblyOn(state.ourPlayerIndex))
+						List(FStatus.PossiblyOn(state.ourPlayerIndex))
 					else
 						List(
 							Option.when(giver != state.ourPlayerIndex && conn.reacting != state.ourPlayerIndex)
@@ -305,7 +307,10 @@ def resolveClue(ctx: ClueContext, fps: Seq[FocusPossibility], ambiguousOwn: Seq[
 				!game.invalidFocus(giver, clue, inf, ctx.focusResult) &&
 				!(fps ++ ambiguousOwn).exists: fp =>
 					fp.id == inf && {
-						fp.connections.forall(_.matchesP { case _: KnownConn => true ; case _: PlayableConn => true }) ||
+						fp.connections.forall(_.matchesP:
+							case c: KnownConn => !game.xmeta(c.order).fStatus.contains(FStatus.PossiblyOn(state.ourPlayerIndex))
+							case _: PlayableConn => true
+						) ||
 						fp.connections.forall(_.reacting == state.ourPlayerIndex)
 					}
 			.flatMap:

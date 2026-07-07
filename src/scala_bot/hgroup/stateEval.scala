@@ -463,7 +463,10 @@ def evalGame(orig: HGroup, game: HGroup): Double =
 		else
 			state.deck(o).id() match
 				case Some(id) if state.isBasicTrash(id) => -0.1
-				case _ => Array(0.0, 0.1, 0.07, 0.05, 0.04, 0.03)(game.common.thoughts(o).inferred.length.min(5))
+				case id =>
+					val bonus3 = if id.exists(_.rank == 3) then 0.05 else 0
+
+					bonus3 + Array(0.0, 0.1, 0.07, 0.05, 0.04, 0.03)(game.common.thoughts(o).inferred.length.min(5))
 
 	val lockedPenalty = (0 until state.numPlayers).summing: playerIndex =>
 		if !game.players(playerIndex).thinksLocked(game, playerIndex) then 0 else

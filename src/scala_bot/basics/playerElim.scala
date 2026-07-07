@@ -241,7 +241,7 @@ extension (p: Player)
 		var crossElimCandidates = FastBitSet.empty
 		var resets = FastBitSet.empty
 
-		val res = newPlayer.basicElim(state, newPlayer.allPossible)
+		val res = newPlayer.basicElim(state, state.allIds)
 		newPlayer = res.player
 		resets = resets.union(res.resets)
 
@@ -366,7 +366,11 @@ extension (p: Player)
 				val inferred = keys.next()
 				val orders = infMap(inferred)
 				if orders.length > 1 then
-					val focused = orders.filter(o => game.meta(o).focused || game.meta(o).status == CardStatus.GentlemansDiscard)
+					val focused = orders.filter: o =>
+						game.meta(o).focused ||
+						game.meta(o).status == CardStatus.GentlemansDiscard ||
+						game.meta(o).status == CardStatus.Finessed
+
 					if focused.length == 1 && inferred.length == 1 then
 						newPlayer = newPlayer.elimLink(game, orders, focused.head, inferred.head)
 

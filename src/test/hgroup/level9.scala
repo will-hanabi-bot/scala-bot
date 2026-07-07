@@ -332,26 +332,27 @@ class Stalling extends munit.FunSuite:
 		val finesse = takeTurn("Bob clues red to Cathy")(game)
 		assertEquals(finesse.lastMove, Some(ClueInterp.Play))
 
-	test("respects potentially having a clue in their hand when interpreting a stall"):
-		val game = setup(HGroup.atLevel(9), Vector(
-			Vector("xx", "xx", "xx", "xx", "xx"),
-			Vector("r1", "y4", "y1", "g4", "p4"),
-			Vector("r3", "r4", "r4", "p1", "b4")
-		),
-			starting = Bob,
-			playStacks = Some(Vector(2, 3, 0, 0, 0)),
-			discarded = Vector("r3")
-		)
-		.pipe(takeTurn("Bob clues 5 to Alice (slots 2,3)"))	// r5 finesse (Cathy), y5 finesse (self)
+	// Removed -- No play clues with 5
+	// test("respects potentially having a clue in their hand when interpreting a stall"):
+	// 	val game = setup(HGroup.atLevel(9), Vector(
+	// 		Vector("xx", "xx", "xx", "xx", "xx"),
+	// 		Vector("r1", "y4", "y1", "g4", "p4"),
+	// 		Vector("r3", "r4", "r4", "p1", "b4")
+	// 	),
+	// 		starting = Bob,
+	// 		playStacks = Some(Vector(2, 3, 0, 0, 0)),
+	// 		discarded = Vector("r3")
+	// 	)
+	// 	.pipe(takeTurn("Bob clues 5 to Alice (slots 2,3)"))	// r5 finesse (Cathy), y5 finesse (self)
 
-		// We can see a clue to Cathy, so it can't be a 5 Stall.
+	// 	// We can see a clue to Cathy, so it can't be a 5 Stall.
 
-		val redFinesse = takeTurn("Cathy plays r3", "r1")(game)
-		hasInfs(redFinesse, None, Alice, 2, Vector("r5"))
+	// 	val redFinesse = takeTurn("Cathy plays r3", "r1")(game)
+	// 	hasInfs(redFinesse, None, Alice, 2, Vector("r5"))
 
-		val yellowFinesse = takeTurn("Cathy discards b4", "r1")(game)
-		hasInfs(yellowFinesse, None, Alice, 2, Vector("y5"))
-		hasStatus(yellowFinesse, Alice, 1, CardStatus.Finessed)
+	// 	val yellowFinesse = takeTurn("Cathy discards b4", "r1")(game)
+	// 	hasInfs(yellowFinesse, None, Alice, 2, Vector("y5"))
+	// 	hasStatus(yellowFinesse, Alice, 1, CardStatus.Finessed)
 
 class DoubleDiscardAvoidance extends munit.FunSuite:
 	override def beforeAll() = Logger.setLevel(LogLevel.Off)

@@ -212,8 +212,8 @@ object FastBitSet:
 			var remaining = set
 			while remaining != 0L do
 				val bit = java.lang.Long.numberOfTrailingZeros(remaining)
-				str ++= bit + ","
+				str ++= s"$bit,"
 
 				remaining &= (remaining - 1)
 
-			str.dropRight(1).toString()
+			s"FastBitSet(${str.dropRight(1).toString()})"

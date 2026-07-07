@@ -124,7 +124,7 @@ extension[G <: Game](game: G)
 						if i != playerIndex then suitIndex else -1,
 						if i != playerIndex then rank else -1,
 						order,
-						player.allPossible
+						g.common.allPossible
 					),
 					dirty = player.dirty.incl(order)
 				))),

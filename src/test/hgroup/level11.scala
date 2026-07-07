@@ -3,7 +3,7 @@ package tests.hgroup.level11
 import cats.effect.unsafe.implicits.global
 
 import scala_bot.basics._
-import scala_bot.test.{hasInfs, hasStatus, Player, setup, takeTurn, TestVariant}, Player._
+import scala_bot.test.{hasInfs, hasStatus, Player, preClue, setup, takeTurn, TestVariant}, Player._
 import scala_bot.hgroup.HGroup
 
 import scala_bot.utils.{pipe, tap}
@@ -234,6 +234,28 @@ class IndirectBluffs extends munit.FunSuite:
 
 		// p4 is a valid bluff target, without requiring the 3 to be red.
 		hasInfs(game, None, Bob, 1, Vector("r3", "y3"))
+
+	test("prefers a bluff connection when posssible"):
+		val game = setup(HGroup.atLevel(11), Vector(
+			Vector("xx", "xx", "xx", "xx", "xx"),
+			Vector("g4", "r1", "r1", "y1", "y1"),
+			Vector("r2", "b4", "b4", "p4", "p4")
+		),
+			starting = Bob,
+			playStacks = Some(Vector(1, 2, 0, 0, 0)),
+			init =
+				preClue[HGroup](Alice, 4, Seq("red")) andThen
+				preClue[HGroup](Alice, 5, Seq("red"))
+		)
+		.pipe(takeTurn("Bob clues 4 to Alice (slot 1)"))
+		.pipe(takeTurn("Cathy plays r2", "y5"))
+		.tap: g =>
+			// Alice's 4 can be red or yellow.
+			hasInfs(g, None, Alice, 1, Vector("r4", "y4"))
+		.pipe(takeTurn("Alice discards y2 (slot 3)"))
+
+		// Alice's 4 can still be red or yellow.
+		hasInfs(game, None, Alice, 2, Vector("r4", "y4"))
 
 	test("writes the correct inferences after receiving a bluff"):
 		val game = setup(HGroup.atLevel(11), Vector(

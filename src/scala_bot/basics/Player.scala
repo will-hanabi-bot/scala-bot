@@ -134,9 +134,9 @@ case class Player(
 			// Not sharing a link
 			!links.exists:
 				case Link.Unpromised(orders, ids) =>
-					orders.contains(excludeOrder) && orders.contains(o) && ids.contains(id)
+					(excludeOrder == -1 || orders.contains(excludeOrder)) && orders.contains(o) && ids.contains(id)
 				case link =>
-					link.getOrders.contains(excludeOrder) && link.getOrders.contains(o) && link.promise.contains(id)
+					(excludeOrder == -1 || link.getOrders.contains(excludeOrder)) && link.getOrders.contains(o) && link.promise.contains(id)
 
 	/** Returns true if the given identity is either basic trash or duplicated (see [[Player.isDuped]]).*/
 	def isTrash(game: Game, id: Identity, excludeOrder: Int) =
@@ -184,6 +184,8 @@ case class Player(
 
 		if thought.possible.intersect(state.playableSet).isEmpty then
 			false
+		else if thought.possible.difference(state.playableSet).isEmpty then
+			true
 		else
 			inline def possPlayable(poss: IdentitySet) =
 				val p = if excludeTrash then poss.difference(state.trashSet) else poss
@@ -197,9 +199,11 @@ case class Player(
 				case CardStatus.Sarcastic | CardStatus.GentlemansDiscard =>
 					possPlayable(thought.inferred)
 
+				case _ if linkedOrders(state, unpromisedOnly = true).contains(order) =>
+					false
+
 				case _ =>
-					possPlayable(thought.possible) ||
-					thought.infoLock.existsO(possPlayable)
+					possPlayable(thought.possible) || thought.infoLock.existsO(possPlayable)
 
 	/** Returns true if this order is obviously playable (see [[Player.orderKp]]) or inferred to be playable.
 	  * @param excludeTrash If true, trash identities are excluded from the inferences.
@@ -210,6 +214,8 @@ case class Player(
 		if orderKp(game, order, excludeTrash) then
 			true
 		else if game.meta(order).trash then
+			false
+		else if linkedOrders(state, unpromisedOnly = true).contains(order) then
 			false
 		else
 			val infer =
@@ -377,16 +383,19 @@ case class Player(
 		val visibleCount = state.heldOrders.filter(thoughts(_).matches(id)).size
 		state.cardCount(id.toOrd) - state.baseCount(id.toOrd) - visibleCount
 
-	def linkedOrders(state: State) =
-		links.flatMap:
-			case Link.Promised(orders, id, _) =>
-				if orders.length > unknownIds(state, id) then orders else Nil
+	def linkedOrders(state: State, unpromisedOnly: Boolean = false): FastBitSet =
+		links.foldLeft(FastBitSet.empty): (acc, link) =>
+			link match
+				case Link.Promised(orders, id, _) if !unpromisedOnly =>
+					if orders.length > unknownIds(state, id) then acc.union(orders) else acc
 
-			case Link.Sarcastic(orders, id) =>
-				if orders.length > unknownIds(state, id) then orders else Nil
+				case Link.Sarcastic(orders, id) if !unpromisedOnly =>
+					if orders.length > unknownIds(state, id) then acc.union(orders) else acc
 
-			case Link.Unpromised(orders, ids) =>
-				if orders.length > ids.iter.summing(unknownIds(state, _)) then orders else Nil
+				case Link.Unpromised(orders, ids) =>
+					if orders.length > ids.iter.summing(unknownIds(state, _)) then acc.union(orders) else acc
+
+				case _ => acc
 
 	/** Returns the predicted score if all delayed playable cards are played. */
 	def hypoScore = hypoStacks.sum + unknownPlays.size - linkedPlays

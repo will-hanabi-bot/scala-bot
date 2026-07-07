@@ -23,10 +23,37 @@ case class ConnectOpts(
 	insertingInto: Option[Seq[Int]] = None
 )
 
-def findKnownConn(ctx: ClueContext, id: Identity, ignore: FastBitSet, findOwn: Boolean): Option[Connection] =
+def findKnownConn(ctx: ClueContext, id: Identity, ignore: FastBitSet, findOwn: Boolean, preferOwn: Boolean = false): Option[Connection] =
 	val ClueContext(prev, game, action) = ctx
 	val (common, state) = (game.common, game.state)
 	val giver = action.giver
+
+	// Try looking for a [r1, r2] card that can be disproved if someone else doesn't play
+	val ownPlay = if !preferOwn then None else
+		var wcExists = false
+
+		state.ourHand.find: o =>
+			!ignore.contains(o) &&
+			common.thoughts(o).possible.contains(id) &&
+			common.thoughts(o).inferred.forall: i =>
+				state.isPlayable(i) ||
+				game.waiting.exists: wc =>
+					val conn = wc.currConn
+					val valid =
+						i.prev.exists(conn.ids.contains) &&
+						conn.reacting != state.ourPlayerIndex &&
+						game.xmeta(conn.order).fStatus.contains(FStatus.PossiblyOn(state.ourPlayerIndex))
+
+					if valid then
+						wcExists = true
+
+					valid
+			&& wcExists
+		.map: o =>
+			KnownConn(state.ourPlayerIndex, o, id)
+
+	if ownPlay.isDefined then
+		return ownPlay
 
 	val globallyKnown = state.heldOrders.findSome: o =>
 		val validKnown =
@@ -317,7 +344,10 @@ def findUnknownConnecting(ctx: ClueContext, reacting: Int, id: Identity, connect
 				Log.warn(s"found non-forward finesse ${state.logId(id)} in ${state.names(reacting)}'s hand at lv 1!")
 				None
 			else
-				Some(FinesseConn(reacting, finesse.get, List(id), FinesseKind.True))
+				val possiblyBluff = !opts.assumeTruth &&
+					validBluff(game, action, finesseId, id, reacting, connected)
+
+				Some(FinesseConn(reacting, finesse.get, List(id), fKind = if possiblyBluff then FinesseKind.Bluff else FinesseKind.True))
 
 		case Some(finesseId) =>
 			val possiblyBluff = !opts.assumeTruth &&
@@ -448,7 +478,7 @@ def connect(ctx: ClueContext, id: Identity, looksDirect: Boolean, thinksStall: F
 		val newCtx = ctx.copy(game = hypo)
 
 		def seekOwn(playerIndex: Int) =
-			val known = findKnownConn(newCtx, nextId, connCtx.ignore.union(connCtx.connected), findOwn = true)
+			val known = findKnownConn(newCtx, nextId, connCtx.ignore.union(connCtx.connected), findOwn = true, preferOwn = preferOwn)
 
 			// See if we need to correct based on future information
 			val actualKnown = known match

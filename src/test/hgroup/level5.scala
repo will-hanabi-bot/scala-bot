@@ -8,7 +8,7 @@ import scala_bot.utils.{pipe, tap}
 import scala_bot.logger.{Logger, LogLevel}
 
 class General extends munit.FunSuite:
-	// override def beforeAll() = Logger.setLevel(LogLevel.Off)
+	override def beforeAll() = Logger.setLevel(LogLevel.Off)
 
 	test("understands a fake finesse"):
 		val game = setup(HGroup.atLevel(5), Vector(
@@ -245,6 +245,22 @@ class General extends munit.FunSuite:
 		// Bob might be finessed for r1, but we aren't sure.
 		assert(game.xmeta(game.state.hands(Bob.ordinal)(0)).fStatus.contains(FStatus.PossiblyOn(game.state.ourPlayerIndex)))
 
+	test("identifies more maybe finessed cards"):
+		val game = setup(HGroup.atLevel(5), Vector(
+			Vector("xx", "xx", "xx", "xx"),
+			Vector("y1", "y4", "r4", "b4"),
+			Vector("r1", "r2", "g4", "b4"),
+			Vector("g1", "g4", "p4", "p4")
+		),
+			starting = Bob
+		)
+		.pipe(takeTurn("Bob clues red to Cathy"))
+		.pipe(takeTurn("Cathy clues green to Donald"))
+		.pipe(takeTurn("Donald clues 3 to Alice (slot 4)"))
+
+		// We might be finessed for y2, but we aren't sure.
+		assert(game.xmeta(game.state.hands(Alice.ordinal)(0)).fStatus.contains(FStatus.PossiblyOn(game.state.ourPlayerIndex)))
+
 	test("recognizes certainly finessed cards"):
 		val game = setup(HGroup.atLevel(5), Vector(
 			Vector("xx", "xx", "xx", "xx"),
@@ -380,7 +396,7 @@ class General extends munit.FunSuite:
 
 		assert(!game.importantAction(Alice.ordinal))
 
-	test("doesn't give nonsensical clues".only):
+	test("doesn't give nonsensical clues"):
 		val game = setup(HGroup.atLevel(5), Vector(
 			Vector("xx", "xx", "xx", "xx", "xx"),
 			Vector("y3", "b4", "b4", "p4", "y4"),

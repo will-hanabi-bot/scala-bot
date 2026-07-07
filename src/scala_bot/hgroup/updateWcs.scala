@@ -284,7 +284,8 @@ def otherPlay(game: HGroup, action: Action, wc: WaitingConnection) =
 	} &&
 	// currConn.ids.length == 1 &&
 	// thought.matches(currConn.ids.head, infer = true) &&
-	!wc.currConn.hidden	// Don't advance if the real connection is layered, because that player won't skip
+	!wc.currConn.hidden &&	// Don't advance if the real connection is layered, because that player won't skip
+	!wc.currConn.isBluff	// Someone else can't play into a bluff
 
 def resolveOtherPlay(game: HGroup, wc: WaitingConnection) =
 	val nextIndex = wc.getNextIndex(game.state)
@@ -396,6 +397,7 @@ def resolveRetained(prev: HGroup, game: HGroup, action: Action, wc: WaitingConne
 				!conn.hidden &&
 				conn.reacting == wc.currConn.reacting
 
+			!f.bluff &&
 			reacting != state.ourPlayerIndex &&		// can't pass back to ourselves
 			nonHiddenConns > 1 &&					// they need to play more than 1 card
 			nonHiddenConns == wc.inference.rank - state.playStacks(wc.inference.suitIndex) - 1 &&	// they have all required cards

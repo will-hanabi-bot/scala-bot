@@ -373,7 +373,7 @@ private def playablePoss(game: HGroup, playerIndex: Int, discarder: Int) =
 		val holder = state.holderOf(o)
 		holder == playerIndex || holder == discarder
 
-	Log.info(s"slow plays $slowPlays ${player.hypoPlays}")
+	Log.info(s"slow plays ${slowPlays.fmt} ${player.hypoPlays.fmt} ${player.hypoStacks}")
 
 	for
 		(stack, suitIndex) <- player.hypoStacks.zipWithIndex

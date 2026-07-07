@@ -333,7 +333,7 @@ case class HGroup(
 			reclue
 
 		lazy val muddySuitIndex = state.variant.suits.indexWhere(suit => MUDDY.matches(suit.name))
-		lazy val muddyCards = list.filter(this.knownAs(_, MUDDY, if state.variant.rainbowS then state.variant.specialRank else None))
+		lazy val muddyCards = list.filter(this.knownAs(_, MUDDY, if state.variant.rainbowS then state.variant.specialRank else None)).sortBy(o => -o)
 		lazy val mudClue = clue.kind == ClueKind.Colour &&
 			(state.variant.muddy || state.variant.rainbowS) &&
 			muddyCards.nonEmpty &&
@@ -373,7 +373,7 @@ case class HGroup(
 		else if mudClue then
 			val coloursAvailable = state.variant.colourableSuits.length
 			val focusIndex = (clue.value - coloursAvailable + 6*muddyCards.length) % muddyCards.length
-			// Log.info(s"mud clue! focusing slot ${state.hands(target).indexOf(muddyCards(focusIndex)) + 1}")
+			// Log.info(s"mud clue! value ${clue.value} focusing index ${focusIndex} slot ${state.hands(target).indexOf(muddyCards(focusIndex)) + 1}")
 			FocusResult(muddyCards(focusIndex), positional = true)
 
 		else if pinkStall5.isDefined then
@@ -489,9 +489,12 @@ case class HGroup(
 		)
 
 	/** Returns whether a real waiting connection was lost, which usually indicates that a mistake occurred. */
-	def wcLost(prev: HGroup) =
-		prev.waiting.exists: wc =>
+	def wcLost(prev: HGroup, action: Action): Option[WaitingConnection] =
+		prev.waiting.find: wc =>
 			!wc.symmetric && !wc.ambiguousSelf &&
+			!action.matchesP:
+				case p: PlayAction => p.order == wc.currConn.order
+			&&
 			!this.waiting.exists(w => w.inference == wc.inference && w.turn == wc.turn)
 
 	def importantAction(playerIndex: Int) =
@@ -575,8 +578,8 @@ object HGroup:
 				val pre = refreshWCs(prev, updatedGame, action, beforeClueInterp = true)
 					.resetImportant(action.playerIndex)
 
-				if !game.allowFindOwn && pre.wcLost(prev) then
-					Log.warn("removed wc! mistake")
+				if !game.allowFindOwn && pre.wcLost(prev, action).nonEmpty then
+					Log.warn(s"removed wc ${game.state.logConns(pre.wcLost(prev, action).get.connections)}! mistake")
 					pre.withMove(ClueInterp.Mistake)
 				else
 					val interpreted = interpClue(ClueContext(prev, pre, action))
@@ -638,8 +641,8 @@ object HGroup:
 			updatedGame.reinterpPlay(prev, action).getOrElse:
 				val pre = refreshWCs(prev, updatedGame, action)
 
-				if !game.allowFindOwn && pre.wcLost(prev) then
-					Log.warn("removed wc! mistake")
+				if !game.allowFindOwn && pre.wcLost(prev, action).nonEmpty then
+					Log.warn(s"removed wc ${game.state.logConns(pre.wcLost(prev, action).get.connections)}! mistake")
 					pre.withMove(PlayInterp.Mistake)
 				else
 					pre.resetImportant(action.playerIndex)

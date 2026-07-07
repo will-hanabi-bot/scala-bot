@@ -180,6 +180,11 @@ def interpClue(ctx: ClueContext): HGroup =
 
 	if pinkTrashFix then
 		Log.info(s"pink trash fix!")
+
+		if prev.meta(focus).trash then
+			Log.warn("nonsensical burn!")
+			return game.withMove(ClueInterp.Useless)
+
 		return game
 			.withThought(focus): t =>
 				val newInferred = t.possible.filter(common.isTrash(game, _, focus))
@@ -193,7 +198,11 @@ def interpClue(ctx: ClueContext): HGroup =
 						!suit.suitType.pinkish ||
 						game.state.isBasicTrash(Identity(suitIndex, clue.value))
 				)
-			.withMove(ClueInterp.Fix)
+			.withMove:
+				if giver == state.ourPlayerIndex && !game.me.isTrash(game, state.deck(focus).id().get, focus) then
+					ClueInterp.Mistake
+				else
+					ClueInterp.Fix
 
 	if prev.state.deck(focus).clued && !positional then
 		if game.level >= Level.Fix then

@@ -210,7 +210,12 @@ def stallingSituation(ctx: ClueContext): Option[(StallInterp, FastBitSet)] =
 
 	else
 		isStall(ctx, severity).map: stall =>
-			if game.noRecurse || game.state.numPlayers == 2 then
+			val assumeStall =
+				game.noRecurse ||
+				game.state.numPlayers == 2 ||
+				(stall == StallInterp.Stall5 && giver != game.state.ourPlayerIndex)
+
+			if assumeStall then
 				(stall, FastBitSet.from(0 until game.state.numPlayers))
 			else
 				val thinksStall = alternativeClue(ctx, STALL_TO_SEVERITY(stall))

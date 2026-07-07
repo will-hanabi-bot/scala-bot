@@ -23,12 +23,14 @@ def spawnConsoleInput(queue: Queue[IO, ConsoleCmd]) =
 			case Array("hand", name, from) => IO.pure(Some(ConsoleCmd.Hand(name, Some(from))))
 			case Array(nav, arg) if nav == "navigate" || nav == "nav" =>
 				val navArg = arg match
-					case "++" => NavArg.NextRound
-					case "+" => NavArg.Next
-					case "--" => NavArg.PrevRound
-					case "-" => NavArg.Prev
-					case x => NavArg.Turn(x.toInt)
-				IO.pure(Some(ConsoleCmd.Navigate(navArg)))
+					case "++" => Some(NavArg.NextRound)
+					case "+" => Some(NavArg.Next)
+					case "--" => Some(NavArg.PrevRound)
+					case "-" => Some(NavArg.Prev)
+					case x => x.toIntOption.map(NavArg.Turn(_))
+				navArg.map(n => IO.pure(Some(ConsoleCmd.Navigate(n)))).getOrElse:
+					IO.println("unknown command") *>
+					IO.pure(None)
 			case _ =>
 				IO.println("unknown command") *>
 				IO.pure(None)
