@@ -91,8 +91,21 @@ def findKnownConn(ctx: ClueContext, id: Identity, ignore: FastBitSet, findOwn: B
 		!ignore.contains(order) &&
 		common.thoughts(order).inferred.contains(id) &&
 		!game.xmeta(order).fStatus.contains(FStatus.PossiblyOn(giver)) &&
-		(game.assumePlays || !game.xmeta(order).fStatus.contains(FStatus.PossiblyOn(state.ourPlayerIndex))) &&
-		common.orderPlayable(game, order, excludeTrash = true) &&
+		(game.assumePlays || !game.xmeta(order).fStatus.contains(FStatus.PossiblyOn(state.ourPlayerIndex))) && {
+			common.orderKp(game, order, excludeTrash = true) || {
+				// Mimic common.orderPlayable, except we can also try playing previously-known unrelated plays
+				!game.meta(order).trash &&
+				!common.linkedOrders(state, unpromisedOnly = true).contains(order) && {
+					val poss = common.thoughts(order).possibilities.difference(state.trashSet)
+
+					poss.nonEmpty && poss.forall: i =>
+						state.isPlayable(i) ||
+						(state.playStacks(i.suitIndex) + 1 until i.rank).forall: rank =>
+							common.hypoPlays.exists: o =>
+								state.deck(o).matches(Identity(i.suitIndex, rank))
+				}
+			}
+		} &&
 		!(	// Don't connect on our unknown playables for an id matching the focus:
 			// giver would be bad touching
 			playerIndex == state.ourPlayerIndex &&
@@ -123,23 +136,7 @@ def findKnownConn(ctx: ClueContext, id: Identity, ignore: FastBitSet, findOwn: B
 		Option.when(play):
 			PlayableConn(playerIndex, o, id, linked = List(o))
 
-	if playLinked.isDefined then
-		return playLinked
-
-	val previouslyPlayable = state.heldOrders.findSome: o =>
-		val playerIndex = state.holderOf(o)
-		val play =
-			playerIndex != giver &&
-			prev.state.deck(o).clued &&
-			prev.common.hypoPlays.contains(o) &&
-			(prev.common.thoughts(o).reset || !game.common.thoughts(o).reset) &&
-			state.deck(o).matches(id, assume = game.allowFindOwn && findOwn) &&
-			common.thoughts(o).inferred.contains(id)
-
-		Option.when(play):
-			PlayableConn(playerIndex, o, id, linked = List(o))
-
-	previouslyPlayable
+	playLinked
 
 def findUnknownConnecting(ctx: ClueContext, reacting: Int, id: Identity, connected: FastBitSet, ignore: FastBitSet, opts: ConnectOpts): Option[Connection] =
 	val ClueContext(prev, game, action) = ctx
@@ -153,7 +150,7 @@ def findUnknownConnecting(ctx: ClueContext, reacting: Int, id: Identity, connect
 	// 	opts.insertingInto.map(i => s"inserting into $i"),
 	// 	Option.when(opts.bluff)("bluff")
 	// ).flatten.mkString(", ")
-	// Log.info(s"finding unknown connecting for ${state.logId(id)} (${state.names(reacting)}), $connected, flags: [$flags]")
+	// Log.info(s"finding unknown connecting for ${state.logId(id)} (${state.names(reacting)}), ${connected.fmt}, flags: [$flags]")
 
 	if opts.bluff then
 		val clued = prev.common.findClued(prev, reacting, id, ignore.union(connected))
@@ -400,7 +397,7 @@ def findSingleConn(ctx: ClueContext, reacting: Int, id: Identity, connCtx: Conne
 
 	// TODO: When resolving, disallow prompting/finessing a player that may need to prove sth to us
 	if skip then
-		// Log.info(s"skipping ${state.names(reacting)}, giver $giver target $target $connCtx ${opts.knownOnly}")
+		// Log.info(s"skipping ${state.names(reacting)}, giver $giver target $target $connCtx ${opts.knownOnly.fmt}")
 		None
 	else
 		findUnknownConnecting(ctx, reacting, id, connCtx.connected, connCtx.ignore, opts) match

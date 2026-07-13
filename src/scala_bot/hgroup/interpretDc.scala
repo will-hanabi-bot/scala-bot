@@ -273,7 +273,7 @@ def valid1ClueScream(game: HGroup, bob: Int) =
 		val hypo = game.withMeta(o)(_.copy(status = CardStatus.ChopMoved))
 		hypo.common.thinksLocked(hypo, bob)
 
-private def checkSdcm(prev: HGroup, action: DiscardAction): Option[DcStatus] =
+private def checkSdcm(prev: HGroup, game: Game, action: DiscardAction): Option[DcStatus] =
 	val (common, state) = (prev.common, prev.state)
 	val DiscardAction(playerIndex, order, _, _, _) = action
 	val bob = state.nextPlayerIndex(playerIndex)
@@ -292,8 +292,8 @@ private def checkSdcm(prev: HGroup, action: DiscardAction): Option[DcStatus] =
 		}
 
 	val shout = common.thinksPlayables(prev, playerIndex).exists(_ != order) &&
-		prev.me.thinksPlayables(prev, playerIndex).exists(_ != order)// &&
-		// prev.players(playerIndex).thinksTrash(prev, playerIndex).contains(order)
+		prev.me.thinksPlayables(prev, playerIndex).exists(_ != order) &&
+		game.me.thinksPlayables(game, playerIndex).nonEmpty 	// still needs to be playable
 
 	val result = if scream then DcStatus.Scream else DcStatus.Shout
 
@@ -323,7 +323,7 @@ def interpretSdcm(ctx: DiscardContext): Option[HGroup] =
 	val bob = state.nextPlayerIndex(action.playerIndex)
 	val bobChop = game.chop(bob)
 
-	checkSdcm(prev, action).flatMap: status =>
+	checkSdcm(prev, game, action).flatMap: status =>
 		if game.level < Level.LastResorts then
 			// Only allow generation and screaming for criticals when out-of-level
 			val mistake = status.matchesP:

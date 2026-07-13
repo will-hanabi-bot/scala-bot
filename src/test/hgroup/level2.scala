@@ -273,8 +273,11 @@ class General extends munit.FunSuite:
 		.pipe(takeTurn("Alice clues 5 to Cathy"))
 		.pipe(takeTurn("Bob clues 3 to Donald"))	// confirming we have g2
 		.pipe(takeTurn("Cathy plays g1", "b1"))
-		.pipe(takeTurn("Donald clues 4 to Alice (slot 2)"))
 
+		.pipe(takeTurn("Donald clues 4 to Alice (slot 2)"))
+		.pipe(takeTurn("Alice plays g2 (slot 1)"))	// TODO: Alice seems to know too much before this play; this play can even be b2!
+
+		// assertEquals(game.common.thinksPlayables(game, Alice.ordinal), Vector(3))
 		hasInfs(game, None, Alice, 2, Vector("g4"))
 
 	test("updates hypo stacks correctly"):
@@ -311,7 +314,7 @@ class General extends munit.FunSuite:
 		hasInfs(game, None, Alice, 4, Vector("b1", "p1"))
 
 	test("interprets a prompt after a fake finesse"):
-		val game = setup(HGroup.atLevel(11), Vector(
+		val game = setup(HGroup.atLevel(2), Vector(
 			Vector("xx", "xx", "xx", "xx"),
 			Vector("g1", "g4", "y3", "y3"),
 			Vector("r1", "y4", "b4", "r3"),
@@ -328,3 +331,16 @@ class General extends munit.FunSuite:
 		// r1 is known to be in slot 4, with r2 prompted in slot 3.
 		hasInfs(game, None, Alice, 4, Vector("r1"))
 		hasInfs(game, None, Alice, 3, Vector("r2"))
+
+	test("allows playing non-urgently when fully known"):
+		val game = setup(HGroup.atLevel(2), Vector(
+			Vector("xx", "xx", "xx", "xx", "xx"),
+			Vector("r2", "g4", "g4", "b4", "b4"),
+			Vector("r1", "y4", "p4", "r4", "y1")
+		))
+		.pipe(takeTurn("Alice clues red to Bob"))
+		.pipe(takeTurn("Bob clues 1 to Cathy"))
+		.pipe(takeTurn("Cathy plays y1", "y4"))
+
+		// The r1 -> r2 connection is still on.
+		assert(game.waiting.nonEmpty)

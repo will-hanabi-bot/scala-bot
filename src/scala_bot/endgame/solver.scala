@@ -259,7 +259,7 @@ case class EndgameSolver[G <: Game](
 		// Logger.setLevel(LogLevel.Off)
 
 		val initialActions =
-			val init = optimizeFull(firstHypo, firstArrs, firstActions, state.ourPlayerIndex, deadline)
+			val init = optimizeFull(firstHypo, firstArrs, firstActions, state.ourPlayerIndex, deadline, shortcut = hypos.length == 1)
 
 			// Apply probability of first arrangement
 			init.map(e => e._1 -> e._2 * firstProb) ++
@@ -532,15 +532,19 @@ case class EndgameSolver[G <: Game](
 							Log.highlight(Console.YELLOW, s"} ${performs.map(_.fmtObj(game, nextPlayerIndex)).mkString(", ")} prob $prob winrate $wr")
 							prob * wr
 
-	def optimizeFull(game: G, arrs: (Seq[GameArr], Seq[GameArr]), actions: Seq[(PerformAction, Seq[Identity])], playerTurn: Int, deadline: Instant)(using ops: GameOps[G]): Seq[(PerformAction, Frac)] =
-		val (undrawn, drawn) = arrs
+	def optimizeFull(game: G, arrs: (Seq[GameArr], Seq[GameArr]), actions: Seq[(PerformAction, Seq[Identity])], playerTurn: Int, deadline: Instant, shortcut: Boolean)(using ops: GameOps[G]): Seq[(PerformAction, Frac)] =
+		boundary:
+			val (undrawn, drawn) = arrs
 
-		actions.map: (perform, winnableDraws) =>
-			val winrate = actionWinrate(game, if perform.isClue then undrawn else drawn, (perform, winnableDraws), playerTurn, deadline)
-			(perform, winrate)
+			actions.map: (perform, winnableDraws) =>
+				val winrate = actionWinrate(game, if perform.isClue then undrawn else drawn, (perform, winnableDraws), playerTurn, deadline)
+				if shortcut && winrate == Frac.one then
+					break(List((perform, winrate)))
 
-		.toList
-		.sortBy(-_._2)
+				(perform, winrate)
+
+			.toList
+			.sortBy(-_._2)
 
 	def optimize(game: G, arrs: (Seq[GameArr], Seq[GameArr]), actions: Seq[(PerformAction, Seq[Identity])], playerTurn: Int, deadline: Instant, depth: Int = 0)(using ops: GameOps[G]): WinnableResult =
 		boundary:

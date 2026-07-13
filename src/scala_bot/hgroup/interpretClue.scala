@@ -229,6 +229,10 @@ def interpClue(ctx: ClueContext): HGroup =
 			Log.warn("nonsensical burn!")
 			return game.withMove(ClueInterp.Useless)
 
+	if prev.meta(focus).status == CardStatus.GentlemansDiscard then
+		Log.warn("nonsensical burn on gd!")
+		return game.withMove(ClueInterp.Useless)
+
 	val trashPush = chop && game.common.orderKt(game, focus)
 
 	if trashPush && game.level <= Level.TrashMoves then

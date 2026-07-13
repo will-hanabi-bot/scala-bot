@@ -37,7 +37,10 @@ def assignConns(game: HGroup, action: ClueAction, fps: Seq[FocusPossibility], fo
 
 			val currPlayableIds = state.playableSet.filter(!acc.common.isTrash(acc, _, conn.order))
 
-			val isUnknownPlayable = conn.matchesP { case c: PlayableConn => c.linked.length > 1 }
+			val isUnknownPlayable = conn.matchesP:
+				case c: KnownConn => game.common.thoughts(c.order).inferred.length > 1
+				case c: PlayableConn => c.linked.length > 1
+
 			val thought = acc.common.thoughts(conn.order)
 
 			val newInferred =
@@ -133,7 +136,7 @@ def assignConns(game: HGroup, action: ClueAction, fps: Seq[FocusPossibility], fo
 				g.copy(
 					xmeta = g.xmeta.updated(conn.order, g.xmeta(conn.order).copy(
 						idUncertain = idUncertain,
-						fStatus = fStatus,
+						fStatus = (g.xmeta(conn.order).fStatus ++ fStatus).distinct,
 						finesseIds = Some(finesseIds))))
 			.pipe: g =>
 				conn match
@@ -456,39 +459,41 @@ def resolveClue(ctx: ClueContext, fps: Seq[FocusPossibility], ambiguousOwn: Seq[
 							case _ => acc
 	.pipe: g =>
 		def requiresWc(fp: FocusPossibility) =
-			fp.connections.exists: c =>
-				c.isInstanceOf[PlayableConn] || c.isInstanceOf[PromptConn] || c.isInstanceOf[FinesseConn]
+			fp.connections.existsM:
+				case c: KnownConn => game.isBlindPlaying(c.order)
+				case _: PlayableConn => true
+				case _: PromptConn => true
+				case _: FinesseConn => true
 			&&
 			(simplestFps.contains(fp) || !fp.isBluff)		// A bluff can't be an ambiguous connection
 
 		val (ambiguousFps, unambiguousFps) = allFps.partition(_.ambiguous)
 
-		val newWcs = g.waiting ++
-			unambiguousFps.collect:
-				case fp if requiresWc(fp) => WaitingConnection(
-					fp.connections,
-					giver,
-					target,
-					state.turnCount,
-					focus,
-					fp.id,
-					symmetric = fp.symmetric,
-					ambiguousSelf = !simplestFps.contains(fp) || fp.complicated,	// If it's too complicated, it could be an ambiguous connection
-				)
-			++
-			(ambiguousOwn ++ ambiguousFps).collect:
-				case fp if fp.connections.nonEmpty && !fp.isBluff => WaitingConnection(
-					fp.connections,
-					giver,
-					target,
-					state.turnCount,
-					focus,
-					fp.id,
-					ambiguousSelf = true
-				)
+		val unambiguousWcs = unambiguousFps.collect:
+			case fp if requiresWc(fp) => WaitingConnection(
+				fp.connections,
+				giver,
+				target,
+				state.turnCount,
+				focus,
+				fp.id,
+				symmetric = fp.symmetric,
+				ambiguousSelf = !simplestFps.contains(fp) || fp.complicated,	// If it's too complicated, it could be an ambiguous connection
+			)
+
+		val ambiguousWcs = (ambiguousOwn ++ ambiguousFps).collect:
+			case fp if fp.connections.nonEmpty && !fp.isBluff => WaitingConnection(
+				fp.connections,
+				giver,
+				target,
+				state.turnCount,
+				focus,
+				fp.id,
+				ambiguousSelf = true
+			)
 
 		g.copy(
-			waiting = newWcs,
+			waiting = g.waiting ++ unambiguousWcs ++ ambiguousWcs,
 			cluedOnChop = if chop then g.cluedOnChop.incl(focus) else g.cluedOnChop
 		)
 		.withMove(interp)

@@ -166,6 +166,22 @@ class ShoutDiscards extends munit.FunSuite:
 		// Alice should 5 Stall on Bob.
 		assertEquals(game.takeAction.unsafeRunSync(), PerformAction.Rank(Bob.ordinal, 5))
 
+	test("doesn't interpret a shout discard when a finesse is disproved"):
+		val game = setup(HGroup.atLevel(7), Vector(
+			Vector("xx", "xx", "xx", "xx", "xx"),
+			Vector("r5", "r4", "g4", "b4", "b3"),
+			Vector("p1", "g1", "r4", "y3", "p3")
+		),
+			starting = Bob,
+			clueTokens = 6,
+			playStacks = Some(Vector(1, 0, 0, 0, 0))
+		)
+		.pipe(takeTurn("Bob clues 2 to Alice (slot 1)"))
+		.pipe(takeTurn("Cathy discards p3", "p4"))
+
+		// Alice is not chop moved.
+		hasStatus(game, Alice, 5, CardStatus.None)
+
 class GenDiscards extends munit.FunSuite:
 	override def beforeAll() = Logger.setLevel(LogLevel.Off)
 

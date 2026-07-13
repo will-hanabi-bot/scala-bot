@@ -493,7 +493,7 @@ object RefSieve:
 			val (state, me) = (game.state, game.me)
 
 			val solveEndgame =
-				if state.remScore <= state.variant.suits.length + 1 then
+				if state.remScore <= state.variant.suits.length + 1 && state.pace + state.cardsLeft <= 8 then
 					IO.blocking:
 						Log.highlight(Console.MAGENTA, "trying to solve endgame...")
 

@@ -121,7 +121,8 @@ case class HGroup(
 
 			val unordered1 = (state.variant.pinkish || this.level < Level.BasicCM) && ordered1s.nonEmpty && ordered1s.tail.contains(o)
 
-			((assume && !xmeta(o).fStatus.contains(FStatus.PossiblyOn(state.ourPlayerIndex))) || isDefinite(o)) &&
+			// ((assume && !xmeta(o).fStatus.contains(FStatus.PossiblyOn(state.ourPlayerIndex))) || isDefinite(o)) &&
+			(assume || isDefinite(o)) &&
 			!possibleFocusDupe &&
 			!olderFinesseExists &&
 			unrevealedHidden.isEmpty &&
@@ -246,7 +247,9 @@ case class HGroup(
 	def unknown1(order: Int) =
 		val clues = state.deck(order).clues
 
-		clues.nonEmpty && clues.forall(_.isEq(BaseClue(ClueKind.Rank, 1)))
+		meta(order).status != CardStatus.Finessed &&
+		clues.nonEmpty &&
+		clues.forall(_.isEq(BaseClue(ClueKind.Rank, 1)))
 
 	def order1s(orders: Seq[Int]) =
 		orders.sortBy: o =>
@@ -413,7 +416,11 @@ case class HGroup(
 
 				hypo.lastMove.matchesP:
 					case Some(ClueInterp.Save) =>
-						state.isCritical(focusId) || dupeResponsibility(this, focusId, action.target).contains(giver)
+						state.isCritical(focusId) || {
+							focusId.rank == 2 &&
+							visibleFind(state, this.players(giver), focusId, infer = true, excludeOrder = focus).isEmpty &&
+							dupeResponsibility(this, focusId, action.target).contains(giver)
+						}
 
 					case Some(ClueInterp.Stall) =>
 						hypo.stallInterp == Some(StallInterp.Stall5) &&
@@ -800,13 +807,19 @@ object HGroup:
 			val level = Logger.level
 			Logger.setLevel(LogLevel.Off)
 
+			val considerClues = (0 until state.numPlayers)
+				.filter(_ != giver)
+				.flatMap(state.allValidClues)
+				.partition: clue =>
+					val list = state.clueTouched(state.hands(clue.target), clue)
+					list.exists: o =>
+						state.deck(o).id().exists(state.isUseful)
+				.pipe: (useful, useless) =>
+					if useful.isEmpty then useless.take(1) else useful
+
 			def clueValue(clue: Clue): Double =
 				val list = state.clueTouched(state.hands(clue.target), clue)
 				val action = ClueAction(giver, clue.target, list, clue.base)
-
-				// Only touches previously-clued trash
-				if list.forall(o => state.deck(o).clued && state.isBasicTrash(state.deck(o).id().get)) then
-					return -99
 
 				Log.highlight(Console.GREEN, s"===== Predicting value for ${clue.fmt(state)} =====")
 				val hypoGame = game.simulate(action)
@@ -816,17 +829,7 @@ object HGroup:
 
 				getResult(game, hypoGame, action)
 
-			val allClues =
-				(for
-					target <- (0 until state.numPlayers) if target != giver
-					clue   <- state.allValidClues(target)
-					value = clueValue(clue)
-				yield
-					(clue, value))
-				.span((_, value) => value > -1)
-				.pipe: (useful, notUseful) =>
-					notUseful.maxByOption((_, value) => value).fold(useful): bestUseless =>
-						useful :+ bestUseless
+			val allClues = considerClues.map(c => (c, clueValue(c)))
 				.sortBy((_, value) => -value)
 				// .tap: clues =>
 				// 	for (clue, value) <- clues do

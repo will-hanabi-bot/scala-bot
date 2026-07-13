@@ -500,5 +500,5 @@ def evalGame(orig: HGroup, game: HGroup): Double =
 		game.state.discardStacks(id.suitIndex)(id.rank - 1).length > orig.state.discardStacks(id.suitIndex)(id.rank - 1).length &&
 		visibleFind(game.state, game.me, id, infer = true).forall(!game.isTouched(_))
 
-	Log.info(s"state: $stateVal, future: $futureVal, bdr: $bdrVal touch: $touchVal badCM: $badCM plays dc'd: $playablesDiscarded locked: $lockedPenalty${if endgamePenalty != 0 then s" endgame penalty: ${endgamePenalty}" else ""}")
+	Log.info(f"state: $stateVal, future: $futureVal, bdr: $bdrVal touch: $touchVal%.2f badCM: $badCM plays dc'd: $playablesDiscarded locked: $lockedPenalty${if endgamePenalty != 0 then s" endgame penalty: ${endgamePenalty}" else ""}")
 	stateVal + futureVal + bdrVal + touchVal + badCM + playablesDiscarded + lockedPenalty + endgamePenalty

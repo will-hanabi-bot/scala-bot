@@ -176,6 +176,22 @@ class Pink1sAssumption extends munit.FunSuite:
 		// Alice must play slot 5 (not allowed to OCM by playing slot 4).
 		assertEquals(game.takeAction.unsafeRunSync(), PerformAction.Play(game.state.hands(Alice.ordinal)(4)))
 
+	test("understands finessed 1s in pink"):
+		val game = setup(HGroup.atLevel(4), Vector(
+			Vector("xx", "xx", "xx", "xx", "xx"),
+			Vector("y4", "y4", "i4", "r4", "r4"),
+			Vector("r2", "g4", "g4", "b4", "b4")
+		),
+			starting = Bob,
+			variant = TestVariant.Pink5,
+			clueTokens = 7
+		)
+		.pipe(takeTurn("Bob clues red to Cathy"))
+		.pipe(takeTurn("Cathy clues 1 to Alice (slots 1,5)"))
+
+		// Both slots 1 and 5 are playable, since slot 1 is known r1..
+		assertEquals(game.common.thinksPlayables(game, Alice.ordinal), Vector(4, 0))
+
 	test("plays 1s in order even after a certain discard"):
 		val game = setup(HGroup.atLevel(10), Vector(
 			Vector("xx", "xx", "xx", "xx"),

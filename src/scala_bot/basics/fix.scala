@@ -72,7 +72,12 @@ def connectableSimple[G <: Game](game: G, player: Player, start: Int, target: In
 						_.simulateAction(TurnAction(state.turnCount, start))	// Go to starting player's turn
 					.simulateAction(PlayAction(start, order, playId.suitIndex, playId.rank))
 
-				connectableSimple(newGame, player, nextPlayerIndex, target, id)
+				val newPlayer = if player.isCommon then
+					newGame.common
+				else
+					newGame.players(player.playerIndex)
+
+				connectableSimple(newGame, newPlayer, nextPlayerIndex, target, id)
 		}.flatten.find(_.nonEmpty)
 
 		connectables.getOrElse(connectableSimple(game, player, nextPlayerIndex, target, id))

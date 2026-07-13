@@ -2,13 +2,13 @@
 //> using jvm 25
 //> using options -opt -Wall -Wconf:msg=toString:s -feature
 //> using javaOpt -Xms128m -Xmx192m -Xss256k -XX:MaxMetaspaceSize=96m -XX:ReservedCodeCacheSize=64m -XX:+UseSerialGC
-//> using dep com.softwaremill.sttp.client4::core:4.0.25
-//> using dep com.softwaremill.sttp.client4::cats:4.0.25
+//> using dep com.softwaremill.sttp.client4::core:4.0.26
+//> using dep com.softwaremill.sttp.client4::cats:4.0.26
 //> using dep org.typelevel::cats-effect:3.7.0
 //> using dep com.lihaoyi::upickle:4.4.3
 //> using dep com.lihaoyi::requests:0.9.3
 //> using dep org.scala-lang.modules::scala-parallel-collections:1.2.0
-//> using test.dep org.scalameta::munit:1.3.3
+//> using test.dep org.scalameta::munit:1.3.4
 
 package scala_bot
 
