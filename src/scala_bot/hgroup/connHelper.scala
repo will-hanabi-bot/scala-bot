@@ -66,7 +66,10 @@ def assignConns(game: HGroup, action: ClueAction, fps: Seq[FocusPossibility], fo
 				t.copy(inferred = newInferred, oldInferred = t.oldInferred.orElse(t.inferred.toOpt))
 			.pipe: g =>
 				val idUncertain =
-					conn.reacting == state.ourPlayerIndex && {
+					conn.reacting == state.ourPlayerIndex &&
+					!conn.matchesP:
+						case f: FinesseConn => f.fKind == FinesseKind.Certain
+					&& {
 						val connected = FastBitSet.from(fp.connections.take(connI).map(_.order))
 
 						def possiblyFinesse(id: Identity) =
@@ -427,14 +430,15 @@ def resolveClue(ctx: ClueContext, fps: Seq[FocusPossibility], ambiguousOwn: Seq[
 
 							conn.linked.length >= 1 &&
 							!allFps.exists: fp2 =>
-								fp2 != fp && {
-									val matchingIndex = fp2.connections.indexWhere:
-										case p: PlayableConn => p.order == conn.order
-										case _ => false
+								lazy val matchingIndex = fp2.connections.indexWhere:
+									case p: PlayableConn => p.order == conn.order
+									case _ => false
 
+								fp2 != fp && {
+									(fp2.save && !state.isPlayable(fp2.id)) ||
 									// If there exists a focus possibility sharing this playable whose next reacting player is different,
 									// don't write a play link (otherwise, playing this card may trigger writing playable ids on the target too early).
-									matchingIndex != -1 && nextReacting(fp2, matchingIndex) != nextReact
+									(matchingIndex != -1 && nextReacting(fp2, matchingIndex) != nextReact)
 								}
 
 						conn match
@@ -494,7 +498,7 @@ def resolveClue(ctx: ClueContext, fps: Seq[FocusPossibility], ambiguousOwn: Seq[
 
 		g.copy(
 			waiting = g.waiting ++ unambiguousWcs ++ ambiguousWcs,
-			cluedOnChop = if chop then g.cluedOnChop.incl(focus) else g.cluedOnChop
+			clued1sOnChop = if chop then g.clued1sOnChop.incl(focus) else g.clued1sOnChop
 		)
 		.withMove(interp)
 	.when(_ => undoScream): g =>

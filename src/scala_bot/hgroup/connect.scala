@@ -38,7 +38,7 @@ def findKnownConn(ctx: ClueContext, id: Identity, ignore: FastBitSet, findOwn: B
 			common.thoughts(o).inferred.forall: i =>
 				state.isPlayable(i) ||
 				game.waiting.exists: wc =>
-					val conn = wc.currConn
+					val conn = wc.connections.find(!_.hidden).get
 					val valid =
 						i.prev.exists(conn.ids.contains) &&
 						conn.reacting != state.ourPlayerIndex &&

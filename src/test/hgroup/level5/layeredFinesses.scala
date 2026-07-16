@@ -399,3 +399,23 @@ class LayeredFinesses extends munit.FunSuite:
 		.pipe(takeTurn("Alice plays b1 (slot 2)"))
 
 		// It is now impossible to fulfill both the green and yellow finesses.
+
+	// This mirrors a test at level 2.
+	test("interprets a prompt after a fake finesse"):
+		val game = setup(HGroup.atLevel(5), Vector(
+			Vector("xx", "xx", "xx", "xx"),
+			Vector("g1", "g4", "y3", "y3"),
+			Vector("y1", "r1", "b4", "r3"),
+			Vector("p4", "p4", "b4", "y4")
+		),
+			starting = Donald
+		)
+		.pipe(takeTurn("Donald clues red to Alice (slots 3,4)"))	// could be r1 direct or r2 reverse
+		.pipe(takeTurn("Alice clues green to Bob"))
+		.pipe(takeTurn("Bob clues 3 to Cathy"))						// getting r3
+
+		.pipe(takeTurn("Cathy discards b4", "y1"))		// proving not finesse
+
+		// r1 is known to be in slot 4, with r2 prompted in slot 3.
+		hasInfs(game, None, Alice, 4, Vector("r1"))
+		hasInfs(game, None, Alice, 3, Vector("r2"))

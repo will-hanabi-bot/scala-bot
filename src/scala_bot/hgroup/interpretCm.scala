@@ -211,7 +211,7 @@ def interpretTccm(ctx: ClueContext): Option[List[Int]] =
 		Log.info("touched at least 1 new card, not tccm")
 		return None
 
-	Log.info(s"checking tccm: old score ${prev.common.hypoStacks} ${prev.common.hypoPlays}, new score ${common.hypoStacks} ${common.hypoPlays}")
+	Log.info(s"checking tccm: old score ${prev.common.hypoStacks} ${prev.common.hypoPlays.fmt}, new score ${common.hypoStacks} ${common.hypoPlays.fmt}")
 
 	if prev.common.hypoStacks.zip(common.hypoStacks).exists(s => s._1 > s._2) || prev.common.hypoScore + 1 != common.hypoScore then
 		Log.info(s"new score is not 1 exactly more than old score, not tccm")

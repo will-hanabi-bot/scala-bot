@@ -88,7 +88,8 @@ def refreshWCs(prev: HGroup, game: HGroup, action: Action, beforeClueInterp: Boo
 		val conns = wc.connections
 		val res =
 			// Do not allow the hypo'ing player to resolve wcs on themselves
-			if hypo.contains(wc.target) then
+			// Do not refresh wcs that were just generated this turn
+			if hypo.contains(wc.target) || wc.turn == game.state.turnCount then
 				UpdateResult.Keep
 			else
 				updateWc(prev, game, action, wc, struct.toRemove, beforeClueInterp)
@@ -189,7 +190,7 @@ def refreshWCs(prev: HGroup, game: HGroup, action: Action, beforeClueInterp: Boo
 				val ambiguousWcs = sameFocusWcs.filter(_.ambiguousSelf)
 
 				Log.error(s"assigning previously-ambiguous connections on $focus to ${ambiguousWcs.map(w => g.state.logId(w.inference))}")
-				assignConns(acc, action, ambiguousWcs.map(wc => FocusPossibility(wc.inference, wc.connections, ClueInterp.Play)), focus)
+				assignConns(acc, action, ambiguousWcs.map(wc => FocusPossibility(wc.inference, wc.connections, ClueInterp.Play, symmetric = wc.symmetric)), focus)
 					.withThought(focus): t =>
 						t.copy(inferred = t.possible.intersect(ambiguousWcs.map(_.inference)))
 			else
@@ -235,7 +236,7 @@ def updateWc(prev: HGroup, game: HGroup, action: Action, wc: WaitingConnection, 
 		Log.warn(s"connection was clued directly, cancelling")
 		UpdateResult.Remove
 
-	else if wc.ambiguousSelf || beforeClueInterp then
+	else if (wc.ambiguousSelf && wc.currConn.reacting == state.ourPlayerIndex) || beforeClueInterp then
 		UpdateResult.Keep
 
 	else if otherPlay(game, action, wc) then
@@ -377,7 +378,8 @@ def resolveRetained(prev: HGroup, game: HGroup, action: Action, wc: WaitingConne
 
 			if game.level >= Level.IntermediateFinesses && game.importantAction(reacting) then
 				if wc.currConn.isPossiblyBluff then
-					Log.info(s"$name not allowed to defer a potential bluff")
+					Log.highlight(Console.CYAN, s"$name not allowed to defer a potential bluff")
+					return UpdateResult.Remove
 				else
 					Log.info(s"allowing $name to defer a finesse for an important clue")
 					return UpdateResult.Keep

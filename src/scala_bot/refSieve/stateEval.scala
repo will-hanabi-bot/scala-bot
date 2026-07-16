@@ -89,7 +89,7 @@ def advanceGame(game: RefSieve, action: Action) =
 def _forceClue(orig: RefSieve, game: RefSieve, offset: Int, only: Option[Int] = None): Double =
 	val state = game.state
 	val giver = (state.ourPlayerIndex + offset) % state.numPlayers
-	-0.5 + forceClue(game, giver, advance(orig, _, offset + 1), only)
+	-0.5 + forceClue(game, giver, advance(orig, _, offset + 1), offset, only)
 
 def advance(orig: RefSieve, game: RefSieve, offset: Int): Double =
 	val (state, common, meta) = (game.state, game.common, game.meta)
@@ -189,7 +189,7 @@ def advance(orig: RefSieve, game: RefSieve, offset: Int): Double =
 					0.8
 
 				if clueValue < dcValue then
-					Log.info(s"won't assume ${state.names(playerIndex)} will clue! too low value")
+					Log.highlight(Console.CYAN, s"won't assume ${state.names(playerIndex)} will clue! too low value")
 					dcValue
 				else
 					clueProb * clueValue + (1.0 - clueProb) * dcValue

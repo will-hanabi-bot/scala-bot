@@ -24,13 +24,14 @@ def findMustPlays(state: State, hand: Vector[Int]) =
 
 	ret
 
-def unwinnableState(state: State, playerTurn: Int, depth: Int = 0): Boolean =
+def unwinnableState(state: State, playerTurn: Int, remaining: RemainingMap, depth: Int = 0): Boolean =
 	if state.ended || state.pace < 0 then
 		return true
 
 	val isVoid = Array.fill(state.numPlayers)(false)
 	val mustPlays = Array.fill(state.numPlayers)(0)
-	var mustStartEndgame = List.empty[Int]
+	var mustStartEndgame: FastBitSet = FastBitSet.empty
+	val allPlays = Array.fill(state.numPlayers)(List.empty[Identity])
 
 	loop(state.numPlayers - 1, _ >= 0, _ - 1): i =>
 		val hand = state.hands(i)
@@ -41,9 +42,10 @@ def unwinnableState(state: State, playerTurn: Int, depth: Int = 0): Boolean =
 
 		val plays = findMustPlays(state, hand)
 		mustPlays(i) += plays.length
+		allPlays(i) = plays
 
 		if (plays.length > 1)
-			mustStartEndgame = i +: mustStartEndgame
+			mustStartEndgame = mustStartEndgame.incl(i)
 
 	// println(s"${indent(depth)}void players: $voidPlayers, endgame_turns: ${state.endgameTurns}, current turn: ${state.names(playerTurn)}")
 
@@ -75,15 +77,38 @@ def unwinnableState(state: State, playerTurn: Int, depth: Int = 0): Boolean =
 
 	if state.cardsLeft == 1 then
 		// At least 2 people need to play 2 cards
-		if mustStartEndgame.length > 1 then
+		if mustStartEndgame.size > 1 then
 			// println(s"${indent(depth)}${mustStartEndgame.map(state.names)} need to start endgame, only 1 card left")
 			return true
 
-		if mustStartEndgame.length == 1 then
+		if mustStartEndgame.size == 1 then
 			val target = mustStartEndgame.head
 			if playerTurn != target && playersUntil(state.numPlayers, playerTurn, target).length > state.clueTokens then
 				// println(s"${indent(depth)}${state.names(target)} needs to start endgame, not enough clues to reach their turn")
 				return true
+
+		// If there is a critical card on the bottom and only 1 person has a playable card, that person must start the endgame.
+		val remainingId = remaining.keys.head
+
+		if state.isCritical(remainingId) && state.remScore == 3 && state.playStacks.contains(3) then
+			var hold4 = -1
+			var hold5 = -1
+			var playableIndices = FastBitSet.empty
+
+			loop(0, _ < allPlays.length, _ + 1): i =>
+				val plays = allPlays(i)
+				if plays.exists(_.rank == 4) then
+					hold4 = i
+				if plays.exists(_.rank == 5) then
+					hold5 = i
+				if plays.exists(state.isPlayable) then
+					playableIndices = playableIndices.incl(i)
+
+			if hold4 != -1 && hold5 != -1 && hold4 != hold5 && playableIndices.size == 1 then
+				val firstOk = state.nextPlayerIndex(hold5)
+				if playersUntil(state.numPlayers, playerTurn, firstOk).length > state.clueTokens then
+					// println(s"${indent(depth)}cannot reach first ok ${state.names(firstOk)} with ${state.logId(remainingId)} on bottom!")
+					return true
 
 	else if state.endgameTurns.isEmpty && isVoid.count(_ == true) > state.pace then
 		// println(s"${indent(depth)}too many void players, pace ${state.pace}")

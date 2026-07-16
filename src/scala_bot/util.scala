@@ -26,6 +26,9 @@ inline def loopIf(
 			body(i)
 		i = advance(i)
 
+def indent(depth: Int) =
+	(0 until depth).map(_ => "| ").mkString
+
 extension [A](a: A)
 	/** Executes [[ifTrue]] if the condition is true, otherwise [[ifFalse]]. */
 	def cond(condition: A => Boolean)(ifTrue: A => A)(ifFalse: A => A): A =

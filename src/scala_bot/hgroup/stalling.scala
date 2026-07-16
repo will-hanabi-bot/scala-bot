@@ -126,6 +126,9 @@ def alternativeClue(ctx: ClueContext, maxStall: Int) =
 		val (badTouch, _, _) = badTouchResult(game, hypo, hypoAction)
 		val (_, playables) = playablesResult(game, hypo)
 
+		val focus = game.determineFocus(game, hypoAction).focus
+		val focusId = state.deck(focus).id().get
+
 		hypo.lastMove.get.matchesP:
 			case ClueInterp.Play =>
 				playables.exists(!state.deck(_).clued) &&
@@ -156,7 +159,11 @@ def alternativeClue(ctx: ClueContext, maxStall: Int) =
 								true
 
 			case ClueInterp.Save =>
-				true
+				state.isCritical(focusId) || {
+					focusId.rank == 2 &&
+					visibleFind(state, game.players(giver), focusId, infer = true, excludeOrder = focus).isEmpty &&
+					dupeResponsibility(game, focusId, action.target).contains(giver)
+				}
 
 			case ClueInterp.Stall =>
 				val interp = hypo.stallInterp.get

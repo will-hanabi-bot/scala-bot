@@ -12,7 +12,7 @@ import scala_bot.logger.{Log, Logger, LogLevel}
   * @param only       If provided, only allows the giver to clue this player.
   * @param clueFilter Filters what clues are allowed to be given.
   */
-def forceClue[G <: Game](game: G, giver: Int, advance: G => Double, only: Option[Int] = None, clueFilter: Clue => Boolean = _ => true)(using ops: GameOps[G]): Double =
+def forceClue[G <: Game](game: G, giver: Int, advance: G => Double, offset: Int, only: Option[Int] = None, clueFilter: Clue => Boolean = _ => true)(using ops: GameOps[G]): Double =
 	val state = game.state
 
 	if !state.canClue then
@@ -44,7 +44,7 @@ def forceClue[G <: Game](game: G, giver: Int, advance: G => Double, only: Option
 		else
 			val value = advance(hypoGame)
 			Logger.setLevel(level)
-			Log.highlight(Console.YELLOW, f"${action.fmt(state)}: $value%.2f")
+			Log.highlight(Console.YELLOW, f"${indent(offset)}${action.fmt(state)}: $value%.2f")
 			value
 
 	if value <= -50 then

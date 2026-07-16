@@ -35,9 +35,12 @@ def getResult(game: HGroup, hypo: HGroup, action: ClueAction): Double =
 	def distance5(g: HGroup, playerIndex: Int) =
 		g.chop(playerIndex).flatMap: chop =>
 			val oldest5 = state.hands(playerIndex).findLast: o =>
+				val card = g.state.deck(o)
+
 				o > chop &&
-				g.state.deck(o).rank == 5 &&
-				!g.state.deck(o).clued
+				card.rank == 5 &&
+				!g.state.variant.suits(card.suitIndex).suitType.brownish &&
+				!card.clued
 
 			oldest5.map(g.chopDistance(playerIndex, _))
 
@@ -122,7 +125,7 @@ def _forceClue(orig: HGroup, game: HGroup, offset: Int, only: Option[Int] = None
 	val adv = (game: HGroup) =>
 		advance(orig, game.copy(dcStatus = DcStatus.None), offset + 1)
 
-	forceClue(game.copy(allowFindOwn = false), giver, adv, only, clueFilter = clueFilter(game, giver))
+	forceClue(game.copy(allowFindOwn = false), giver, adv, offset + 1, only, clueFilter = clueFilter(game, giver))
 
 def advance(orig: HGroup, game: HGroup, offset: Int): Double =
 	val (state, common, meta) = (game.state, game.common, game.meta)
@@ -139,7 +142,7 @@ def advance(orig: HGroup, game: HGroup, offset: Int): Double =
 
 	// Reduce lookahead in early game
 	if (orig.inEarlyGame && state.variant.rainbowish && state.variant.pinkish && offset == 2) || playerIndex == state.ourPlayerIndex || state.endgameTurns.contains(0) then
-		evalGame(orig, game)
+		evalGame(orig, game, offset)
 
 	else if allPlayables.nonEmpty then
 		val unknown1s = allPlayables.filter(game.unknown1)
@@ -166,7 +169,7 @@ def advance(orig: HGroup, game: HGroup, offset: Int): Double =
 						DiscardAction(playerIndex, order, id.suitIndex, id.rank, failed = true)
 					(Some(id), action)
 
-			Log.info(s"${state.names(playerIndex)} ${if id.exists(state.isPlayable) then "playing" else "bombing"} ${state.logId(id)} (f)")
+			Log.info(s"${indent(offset)}${state.names(playerIndex)} ${if id.exists(state.isPlayable) then "playing" else "bombing"} ${state.logId(id)} (f)")
 			advance(orig, game.simulate(action), offset + 1)
 		else
 			var strikes = 0
@@ -181,7 +184,7 @@ def advance(orig: HGroup, game: HGroup, offset: Int): Double =
 							DiscardAction(playerIndex, order, id.suitIndex, id.rank, failed = true)
 						(Some(id), action)
 
-				Log.info(s"${state.names(playerIndex)} ${if id.exists(state.isPlayable) then "playing" else "bombing"} ${state.logId(id)}")
+				Log.info(s"${indent(offset)}${state.names(playerIndex)} ${if id.exists(state.isPlayable) then "playing" else "bombing"} ${state.logId(id)}")
 				val advancedGame = game.simulate(action)
 
 				if advancedGame.state.strikes > game.state.strikes then
@@ -198,7 +201,7 @@ def advance(orig: HGroup, game: HGroup, offset: Int): Double =
 				maxPlay.max(_forceClue(orig, game, offset))
 
 	else if player.thinksLocked(game, playerIndex) then
-		Log.info(s"${state.names(playerIndex)} locked!")
+		Log.info(s"${indent(offset)}${state.names(playerIndex)} locked!")
 		if !state.canClue then
 			val action =
 				val anxietyPlay = player.anxietyPlay(state, playerIndex)
@@ -206,7 +209,7 @@ def advance(orig: HGroup, game: HGroup, offset: Int): Double =
 				if game.level >= Level.Stalling && anxietyPlay.isDefined then
 					val id = state.deck(anxietyPlay.get).id().get
 
-					Log.info(s"${state.names(playerIndex)} playing ${state.logId(id)} (${anxietyPlay.get}) from anxiety!")
+					Log.info(s"${indent(offset)}${state.names(playerIndex)} playing ${state.logId(id)} (${anxietyPlay.get}) from anxiety!")
 					if state.isPlayable(id) then
 						PlayAction(playerIndex, anxietyPlay.get, id.suitIndex, id.rank)
 					else
@@ -214,7 +217,7 @@ def advance(orig: HGroup, game: HGroup, offset: Int): Double =
 				else
 					val lockedDc = player.lockedDiscard(state, playerIndex)
 					val id = state.deck(lockedDc).id().get
-					Log.info(s"${state.names(playerIndex)} discarding ${state.logId(id)} ($lockedDc) from a locked hand!")
+					Log.info(s"${indent(offset)}${state.names(playerIndex)} discarding ${state.logId(id)} ($lockedDc) from a locked hand!")
 					DiscardAction(playerIndex, lockedDc, id.suitIndex, id.rank)
 
 			advance(orig, game.simulate(action), offset + 1)
@@ -222,19 +225,19 @@ def advance(orig: HGroup, game: HGroup, offset: Int): Double =
 			_forceClue(orig, game, offset)
 
 	else if state.clueTokens == 8 then
-		Log.info(s"forced clue at 8 clues! (${state.names(playerIndex)})")
+		Log.info(s"${indent(offset)}forced clue at 8 clues! (${state.names(playerIndex)})")
 		_forceClue(orig, game, offset)
 
 	else if game.dcStatus != DcStatus.None then
-		Log.info(s"forced clue due to scream/shout! (${state.names(playerIndex)})")
+		Log.info(s"${indent(offset)}forced clue due to scream/shout! (${state.names(playerIndex)})")
 		_forceClue(orig, game, offset)
 
 	else if earlyGameClue.isDefined then
-		Log.info(s"forced clue in early game! (${state.names(playerIndex)}) ${earlyGameClue.get.fmt(state)}")
+		Log.info(s"${indent(offset)}forced clue in early game! (${state.names(playerIndex)}) ${earlyGameClue.get.fmt(state)}")
 		_forceClue(orig, game, offset)
 
 	else if game.mustClue(playerIndex) then
-		Log.info(s"forcing ${state.names(playerIndex)} to clue ${state.names(state.nextPlayerIndex(playerIndex))}!")
+		Log.info(s"${indent(offset)}forcing ${state.names(playerIndex)} to clue ${state.names(state.nextPlayerIndex(playerIndex))}!")
 		_forceClue(orig, game, offset, only = Some(bob))
 
 	else
@@ -257,26 +260,28 @@ def advance(orig: HGroup, game: HGroup, offset: Int): Double =
 					else
 						0.8
 
-					Log.info(s"${state.names(playerIndex)} discarding ${state.logId(id)} but might clue $clueProb")
+					Log.info(s"${indent(offset)}${state.names(playerIndex)} might clue: $clueProb")
 					val clueVal = _forceClue(orig, game, offset)
+					Log.info(s"${indent(offset)}${state.names(playerIndex)} discarding ${state.logId(id)}:")
 					val dcVal = advance(orig, dcGame, offset + 1)
 
-					if clueVal < evalGame(orig, game) then
+					if clueVal < evalGame(orig, game, offset) then
 						val drewNew = state.hands.zipWithIndex.indexWhere((hand, i) => i != state.ourPlayerIndex && hand.exists(state.deck(_).id().isEmpty))
 
 						if drewNew != -1 then
-							Log.info(s"no visible clue available for ${state.names(playerIndex)} but ${state.names(drewNew)} may have drawn something")
-							0.2 * clueVal + 0.8 * dcVal
+							val hypoVal = 0.2 * (clueVal + 1) + 0.8 * dcVal
+							Log.highlight(Console.CYAN, f"${indent(offset)}no visible clue available for ${state.names(playerIndex)} but ${state.names(drewNew)} may have drawn something ($hypoVal%.2f)")
+							hypoVal
 						else
-							Log.info(s"no visible clue available for ${state.names(playerIndex)}, lowering clue prob to 0")
+							Log.highlight(Console.CYAN, f"${indent(offset)}no visible clue available for ${state.names(playerIndex)}, lowering clue prob to 0 ($dcVal%.2f)")
 							dcVal
 					else if clueVal < dcVal then
-						Log.info(s"won't assume ${state.names(playerIndex)} will clue! too low value")
+						Log.highlight(Console.CYAN, f"${indent(offset)}won't assume ${state.names(playerIndex)} will clue! too low value ($clueVal%.2f < $dcVal%.2f)")
 						dcVal
 					else
 						clueProb * clueVal + (1.0 - clueProb) * dcVal
 				else
-					Log.info(s"${state.names(playerIndex)} discarding ${state.logId(id)}")
+					Log.info(s"${indent(offset)}${state.names(playerIndex)} discarding ${state.logId(id)}")
 					advance(orig, dcGame, offset + 1)
 
 			case Some(order) =>
@@ -284,7 +289,7 @@ def advance(orig: HGroup, game: HGroup, offset: Int): Double =
 				val Identity(suitIndex, rank) = id
 				val action = DiscardAction(playerIndex, order, suitIndex, rank)
 
-				Log.info(s"${state.names(playerIndex)} discarding trash ${state.logId(id)}")
+				Log.info(s"${indent(offset)}${state.names(playerIndex)} discarding trash ${state.logId(id)}")
 				advance(orig, game.simulate(action), offset + 1)
 
 def _evalAction(game: HGroup, action: Action): Double =
@@ -303,7 +308,11 @@ def _evalAction(game: HGroup, action: Action): Double =
 				val value =
 					if game.me.thinksPlayables(game, state.ourPlayerIndex).nonEmpty && game.inEndgame then
 						-1 + 0.5 * clueValue
+					else if game.me.thinksPlayables(game, state.ourPlayerIndex).exists(p => game.me.thoughts(p).id(infer = true).exists(id => game.me.hypoStacks(id.suitIndex) > id.rank)) then
+						Log.highlight(Console.CYAN, "holding up a play sequence to clue!")
+						-0.5 + 0.5 * clueValue
 					else
+						Log.info(s"playables ${game.me.thinksPlayables(game, state.ourPlayerIndex).map(o => (o, state.logId(game.me.thoughts(o).id(infer = true))))} ${game.me.hypoStacks}")
 						0.5 * clueValue
 				Log.info(f"initial clue value: $value%.2f")
 				val best = value + advance(game, hypoGame, 1)
@@ -337,8 +346,10 @@ def _evalAction(game: HGroup, action: Action): Double =
 					val best = advance(game, hypoGame, 1)
 					Log.info(f"${action.fmt(state)}%s: $best%.2f (${hypoGame.lastMove.get}%s) + $bonus")
 					Right(value + best + bonus)
-			.when(_ != -100):
-				_ / uniqueInfs.length
+			.when(_ != -100): total =>
+				val average = total / uniqueInfs.length
+				Log.highlight(Console.GREEN, f"average for ${action.fmt(state)}%s: $average%.2f")
+				average
 
 		case DiscardAction(_, order, suitIndex, rank, _) if (suitIndex != -1 && rank != -1) || game.me.orderTrash(game, order) =>
 			val hypoGame = game.copy(allowFindOwn = false).simulate(action)
@@ -382,7 +393,7 @@ def _evalAction(game: HGroup, action: Action): Double =
 	else
 		value
 
-def evalState(state: State, inEndgame: Boolean): Double =
+def evalState(state: State, inEndgame: Boolean, offset: Int): Double =
 	// The first 2 * (# suits) pts are worth 1.5.
 	val scoreVal: Double =
 		if inEndgame then
@@ -407,18 +418,18 @@ def evalState(state: State, inEndgame: Boolean): Double =
 		case 3 => -100
 		case _ => 0
 
-	Log.info(s"state eval: score: $scoreVal, clues: $clueVal, dc crit: $dcCritVal, strikes: $strikesVal")
+	Log.info(s"${indent(offset)}state eval: score: $scoreVal, clues: $clueVal, dc crit: $dcCritVal, strikes: $strikesVal")
 	scoreVal + clueVal + dcCritVal + strikesVal
 
-def evalGame(orig: HGroup, game: HGroup): Double =
+def evalGame(orig: HGroup, game: HGroup, offset: Int): Double =
 	val state = game.state
 
 	if state.score == state.maxScore && state.score == orig.state.maxScore then
 		return 100
 
-	val stateVal = evalState(state, inEndgame = orig.inEndgame || orig.state.remScore < 5)
+	val stateVal = evalState(state, inEndgame = orig.inEndgame || orig.state.remScore < 5, offset)
 
-	val futureVal = (if orig.inEarlyGame then 2 else 1) * game.common.hypoPlays.summing: order =>
+	val futureVal = (if orig.inEarlyGame then 1.75 else 1) * game.common.hypoPlays.summing: order =>
 		game.me.thoughts(order).id(infer = true) match
 			case None => 0.4
 			case Some(id) =>
@@ -455,7 +466,7 @@ def evalGame(orig: HGroup, game: HGroup): Double =
 				case 3 => -1.5
 				case _ => -0.5
 
-	val touchVal = state.heldOrders.summing: o =>
+	val touchVal = 0.5 * state.heldOrders.summing: o =>
 		if !state.deck(o).clued && game.meta(o).status == CardStatus.None then
 			0
 		else if game.common.orderTrash(game, o) then
@@ -472,7 +483,7 @@ def evalGame(orig: HGroup, game: HGroup): Double =
 		if !game.players(playerIndex).thinksLocked(game, playerIndex) then 0 else
 			state.clueTokens match
 				case c if c > 4 => -1
-				case _ => -2
+				case _ => -1.9
 
 	val endgamePenalty = if orig.state.endgameTurns.isEmpty then 0 else state.endgameTurns.fold(0): turns =>
 		val finalScore = (0 until turns).foldLeft(state.playStacks) { (stacks, i) =>
@@ -500,5 +511,12 @@ def evalGame(orig: HGroup, game: HGroup): Double =
 		game.state.discardStacks(id.suitIndex)(id.rank - 1).length > orig.state.discardStacks(id.suitIndex)(id.rank - 1).length &&
 		visibleFind(game.state, game.me, id, infer = true).forall(!game.isTouched(_))
 
-	Log.info(f"state: $stateVal, future: $futureVal, bdr: $bdrVal touch: $touchVal%.2f badCM: $badCM plays dc'd: $playablesDiscarded locked: $lockedPenalty${if endgamePenalty != 0 then s" endgame penalty: ${endgamePenalty}" else ""}")
+	val log = List(
+		Option.when(badCM != 0)(s"badCM: $badCM"),
+		Option.when(playablesDiscarded != 0)(s"plays dc'd: $playablesDiscarded"),
+		Option.when(lockedPenalty != 0)(s"locked: $lockedPenalty"),
+		Option.when(endgamePenalty != 0)(s"endgame penalty: $endgamePenalty")
+	)
+
+	Log.info(f"${indent(offset)}state: $stateVal, future: $futureVal%.2f, bdr: $bdrVal touch: $touchVal%.2f ${log.flatten.mkString(" ")}")
 	stateVal + futureVal + bdrVal + touchVal + badCM + playablesDiscarded + lockedPenalty + endgamePenalty

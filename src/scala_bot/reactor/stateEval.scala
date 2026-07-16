@@ -81,7 +81,7 @@ def _forceClue(orig: Reactor, game: Reactor, offset: Int): Double =
 		val nextGame = game.withState(s => s.copy(clueTokens = s.clueTokens - 1))
 		advance(orig, nextGame, offset + 1) + 1.0
 	else
-		forceClue(game, giver, advance(orig, _, offset + 1), only = Some(bob)) + 0.5
+		forceClue(game, giver, advance(orig, _, offset + 1), offset, only = Some(bob)) + 0.5
 
 def advance(orig: Reactor, game: Reactor, offset: Int): Double =
 	val (state, common, meta) = (game.state, game.common, game.meta)
@@ -178,7 +178,7 @@ def advance(orig: Reactor, game: Reactor, offset: Int): Double =
 					0.8
 
 				if clueValue < dcValue then
-					Log.info(s"won't assume ${state.names(playerIndex)} will clue! too low value")
+					Log.highlight(Console.CYAN, s"won't assume ${state.names(playerIndex)} will clue! too low value")
 					dcValue
 				else
 					clueProb * clueValue + (1.0 - clueProb) * dcValue

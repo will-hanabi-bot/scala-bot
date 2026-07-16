@@ -194,6 +194,22 @@ class OrderCM extends munit.FunSuite:
 
 		hasStatus(game, Cathy, 5, CardStatus.ChopMoved)
 
+	test("overrides chop focus with a new fresh 1"):
+		val game = setup(HGroup.atLevel(4), Vector(
+			Vector("xx", "xx", "xx", "xx", "xx"),
+			Vector("b4", "r5", "b1", "g1", "r1")
+		))
+		.pipe(takeTurn("Alice clues 1 to Bob"))
+		.pipe(takeTurn("Bob plays g1", "y1"))	// OCM once
+		.pipe(takeTurn("Alice clues 1 to Bob"))
+		.pipe(takeTurn("Bob plays y1", "p4"))
+
+		// Slot 4 is not chop moved.
+		hasStatus(game, Alice, 4, CardStatus.None)
+
+class GeneralCM extends munit.FunSuite:
+	override def beforeAll() = Logger.setLevel(LogLevel.Off)
+
 	test("interprets new focus correctly"):
 		val game = setup(HGroup.atLevel(4), Vector(
 			Vector("xx", "xx", "xx", "xx", "xx"),

@@ -311,7 +311,7 @@ object RefSieve:
 								id2 <- state.deck(o2).id()
 							yield
 								state.isPlayable(id1) &&
-								(state.isPlayable(id2) || id1.next.exists(_ == id2))
+								(state.isPlayable(id2) || id1.next.contains(id2))
 
 							valid.forall(x => x)
 

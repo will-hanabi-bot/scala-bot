@@ -19,9 +19,6 @@ enum SimpleResult:
 val UNWINNABLE = Left("")
 val TIMEOUT = Left("timeout")
 
-def indent(depth: Int) =
-	(0 until depth).map(_ => "  ").mkString
-
 type RemainingMap = Map[Identity, Int]
 
 extension (remaining: RemainingMap)
@@ -348,7 +345,7 @@ case class EndgameSolver[G <: Game](
 					case Some(id) => acc.deck(order).copy(suitIndex = id.suitIndex, rank = id.rank)
 				acc.copy(deck = acc.deck.updated(order, newCard))
 
-			val cluelessWin = this.cluelessWinnable(cluelessState, playerTurn, deadline, depth)
+			val cluelessWin = this.cluelessWinnable(cluelessState, playerTurn, remaining, deadline, depth)
 			if cluelessWin.isDefined then
 				Log.info(s"${indent(depth)}clueless winnable!")
 
@@ -360,7 +357,7 @@ case class EndgameSolver[G <: Game](
 
 		val bottomDecked = remaining.nonEmpty && remaining.keys.forall(id => state.isCritical(id) && id.rank < state.maxRanks(id.suitIndex))
 
-		if bottomDecked || unwinnableState(state, playerTurn, depth) then
+		if bottomDecked || unwinnableState(state, playerTurn, remaining, depth) then
 			return UNWINNABLE
 
 		val performs = possibleActions(game, playerTurn, remaining, deadline, depth)
@@ -474,6 +471,12 @@ case class EndgameSolver[G <: Game](
 							// Always play a duped card in hand over dc
 							state.hands(playerTurn).exists(o => o != p && game.players(playerTurn).thoughts(o).matches(id, infer = true))
 						})
+				|| {
+					val holdingCrit = state.hands(playerTurn).exists(o => state.isCritical(state.deck(o).id().get))
+
+					// Density of crits is too high, can't discard
+					holdingCrit && remaining.forall((id, _) => state.isCritical(id)) && state.clueTokens < state.numPlayers - 1
+				}
 
 			val dcActions = if ignoreDc then Nil else
 				ops.findAllDiscards(game, playerTurn).map(tryAction).flatten

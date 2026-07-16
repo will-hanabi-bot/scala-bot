@@ -172,3 +172,22 @@ class General extends munit.FunSuite:
 		// Alice cannot play slot 1, since it might be y3 or p3.
 		// She also can't play slot 3, since it might be b2.
 		assert(game.me.thinksPlayables(game, Alice.ordinal).isEmpty)
+
+	test("doesn't create a play link for an unplayable save connection"):
+		val game = setup(HGroup.atLevel(1), Vector(
+			Vector("xx", "xx", "xx", "xx"),
+			Vector("r5", "y3", "b4", "p3"),
+			Vector("r1", "y1", "b4", "p3"),
+			Vector("r2", "g3", "g3", "p4")
+		),
+			starting = Donald,
+			discarded = Vector("b3")
+		)
+		.pipe(takeTurn("Donald clues 1 to Cathy"))
+		.pipe(takeTurn("Alice clues 2 to Donald"))
+		.pipe(takeTurn("Bob clues 3 to Alice (slot 4)"))		// could be r3 or b3
+
+		.pipe(takeTurn("Cathy plays r1", "y4"))
+		.pipe(takeTurn("Donald plays r2", "y5"))
+
+		hasInfs(game, None, Alice, 4, Vector("r3", "b3"))

@@ -211,7 +211,7 @@ extension[G <: Game](game: G)
 
 			resets.foldLeft(ops.copyWith(g, GameUpdates(common = Some(newCommon)))): (acc, order) =>
 				val entry = acc.meta(order)
-				if entry.status != CardStatus.CalledToPlay then acc else
+				if entry.status != CardStatus.CalledToPlay && entry.status != CardStatus.Finessed then acc else
 					acc.withMeta(order):
 						_.copy(status = CardStatus.None, by = None)
 

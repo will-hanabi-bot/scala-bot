@@ -209,7 +209,7 @@ def interpretUsefulDcH(ctx: DiscardContext): Option[HGroup] =
 	val valid = !failed &&
 		action.suitIndex != -1 && action.rank != -1 &&
 		!game.state.isBasicTrash(id) &&
-		prev.isTouched(action.order) && prev.isDefinite(order)
+		prev.isTouched(action.order) // && prev.isDefinite(order)
 
 	Option.when(valid):
 		(checkUsefulDcH(ctx) match
@@ -285,8 +285,11 @@ private def checkSdcm(prev: HGroup, game: Game, action: DiscardAction): Option[D
 	val chop = prev.chop(playerIndex)
 
 	val scream =
-		chop.contains(order) &&
-		common.thinksLoaded(prev, playerIndex) && {
+		chop.contains(order) && {
+			common.thinksPlayables(prev, playerIndex).nonEmpty ||
+			common.thinksTrash(prev, playerIndex).exists(state.deck(_).clued)
+		} &&
+		{
 			state.clueTokens == 0 ||
 			(state.clueTokens == 1 && valid1ClueScream(prev, bob))
 		}

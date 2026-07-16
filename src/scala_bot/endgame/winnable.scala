@@ -6,20 +6,20 @@ import java.time.Instant
 // import scala_bot.logger.Log
 
 extension[G <: Game] (solver: EndgameSolver[G])
-	def cluelessWinnable(state: State, playerTurn: Int, deadline: Instant, depth: Int): Option[PerformAction] =
+	def cluelessWinnable(state: State, playerTurn: Int, remaining: RemainingMap, deadline: Instant, depth: Int): Option[PerformAction] =
 		if state.score == state.maxScore then
 			Some(PerformAction.Play(99))
 
 		else if Instant.now().isAfter(deadline) then
 			None
 
-		else if unwinnableState(state, playerTurn, depth) then
+		else if unwinnableState(state, playerTurn, remaining, depth) then
 			None
 
 		else
 			def actionWinnable(perform: PerformAction) =
 				val newState = advanceState(state, perform, playerTurn, draw = None)
-				solver.cluelessWinnable(newState, state.nextPlayerIndex(playerTurn), deadline, depth + 1).isDefined
+				solver.cluelessWinnable(newState, state.nextPlayerIndex(playerTurn), remaining, deadline, depth + 1).isDefined
 
 			state.hands(playerTurn).collectFirst:
 				case order if state.deck(order).id().exists(state.isPlayable) && actionWinnable(PerformAction.Play(order)) =>
@@ -42,7 +42,7 @@ extension[G <: Game] (solver: EndgameSolver[G])
 		val bottomDecked = remaining.nonEmpty && remaining.keys.forall(id =>
 		    state.isCritical(id) && id.rank < state.maxRanks(id.suitIndex))
 
-		if bottomDecked || unwinnableState(state, playerTurn, depth) then
+		if bottomDecked || unwinnableState(state, playerTurn, remaining, depth) then
 			return false
 
 		val initial = (false, if !state.canClue then Nil else List(PerformAction.Rank(0, 0)))

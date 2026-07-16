@@ -313,6 +313,7 @@ class General extends munit.FunSuite:
 
 		hasInfs(game, None, Alice, 4, Vector("b1", "p1"))
 
+	// This mirrors a test at level 5.
 	test("interprets a prompt after a fake finesse"):
 		val game = setup(HGroup.atLevel(2), Vector(
 			Vector("xx", "xx", "xx", "xx"),

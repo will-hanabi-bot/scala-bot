@@ -26,6 +26,24 @@ class TrueClues extends munit.FunSuite:
 		hasInfs(game, None, Alice, 1, Vector("b1"))
 		hasStatus(game, Cathy, 2, CardStatus.None)
 
+	test("removes a fake bluff waiting connection"):
+		val game = setup(HGroup.atLevel(11), Vector(
+			Vector("xx", "xx", "xx", "xx"),
+			Vector("p1", "r4", "r4", "y4"),
+			Vector("r2", "g4", "g4", "b4"),
+			Vector("r3", "p4", "p4", "r1")
+		),
+			init = preClue(Donald, 4, Seq("1"))
+		)
+		.pipe(takeTurn("Alice clues 2 to Cathy"))
+		.pipe(takeTurn("Bob clues red to Donald"))
+
+		// Bob is definitely not bluffed anymore.
+		assert:
+			!game.waiting.exists: wc =>
+				wc.connections.exists: conn =>
+					conn.reacting == Bob.ordinal && conn.order == game.state.hands(Bob.ordinal)(0)
+
 	test("understands a direct play if the bluff isn't played into"):
 		val game = setup(HGroup.atLevel(11), Vector(
 			Vector("xx", "xx", "xx", "xx", "xx"),
@@ -238,3 +256,19 @@ class TrueClues extends munit.FunSuite:
 
 		// Alice should wait for Bob to demonstrate.
 		hasStatus(game, Alice, 1, CardStatus.None)
+
+	test("assumes a direct play even when an ambiguous layer with self-component is possible"):
+		val game = setup(HGroup.atLevel(11), Vector(
+			Vector("xx", "xx", "xx", "xx", "xx"),
+			Vector("r4", "r4", "y4", "g4", "b4"),
+			Vector("r1", "g1", "y4", "g4", "b4")
+		),
+			starting = Bob,
+			playStacks = Some(Vector(0, 0, 0, 0, 2)),
+			init = preClue(Alice, 5, Seq("2"))
+		)
+		.pipe(takeTurn("Bob clues 3 to Alice (slot 1)"))
+		.pipe(takeTurn("Cathy discards b4", "b5"))
+
+		// Alice should no longer assume it can be red or green.
+		hasInfs(game, None, Alice, 1, Vector("p3"))

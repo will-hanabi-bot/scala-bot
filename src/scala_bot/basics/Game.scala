@@ -166,6 +166,13 @@ trait GameOps[G <: Game]:
 	def preferEndgameClue(game: G): Boolean =
 		false
 
+	/**
+	 * A processing function that runs just before replaying the most recent turn.
+	 * Typically used to set flags like 'allowFindOwn' or 'hypothetical' after a replay.
+	 */
+	def injectReplay(@annotation.unused orig: G, hypo: G): G =
+		hypo
+
 extension[G <: Game](game: G)
 	def withThought(order: Int)(f: Thought => Thought)(using ops: GameOps[G]) =
 		ops.copyWith(game, GameUpdates(
@@ -428,7 +435,11 @@ extension[G <: Game](game: G)
 						case _ =>
 							if acc.state.turnCount >= turn - 1 then
 								Logger.setLevel(level)
-							acc.handleAction(action)
+
+							if action == state.actionList.last.last then
+								ops.injectReplay(game, acc).handleAction(action)
+							else
+								acc.handleAction(action)
 
 		Log.highlight(Console.GREEN, s"------- REPLAY COMPLETE -------")
 

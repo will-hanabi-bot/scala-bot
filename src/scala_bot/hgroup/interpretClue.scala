@@ -46,9 +46,10 @@ def checkHFix(ctx: ClueContext): Option[HGroup] =
 
 	checkFix(prev, game, action) match
 		// Check for pink 1's fix, which won't be caught by checkFix().
-		case FixResult.None if state.variant.pinkish && prev.common.hypoStacks.exists(_ == 0) =>
+		case FixResult.None if state.variant.pinkish && prev.common.hypoStacks.contains(0) =>
 			val fixed = list.filter: o =>
 				!prev.meta(o).focused &&
+				state.deck(o).rank != 1 &&
 				prev.common.thoughts(o).inferred.forall(_.rank == 1) &&
 				!prev.common.thoughts(o).possible.forall(_.rank == 1) &&
 				!prev.waiting.exists(wc => wc.connections.exists(_.order == o) && !prev.xmeta(o).idUncertain) && (
