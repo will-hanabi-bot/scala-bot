@@ -45,15 +45,17 @@ def interpretTransfer(ctx: DiscardContext, holder: Int, dupe: Option[Int]): (Dis
 		return result
 
 	val cluedTargets = state.hands(holder).filter(o => game.isTouched(o) && validTransfer(game, id)(o))
+	val inverted = state.variant.suits(suitIndex).suitType.inverted
 
 	if cluedTargets.isEmpty then
 		if game.level < Level.SpecialDiscards then
 			Log.info("looked like out-of-level gd/baton! ignoring")
 			(result = DiscardResult.Mistake, dda = true)
 
-		else if state.isPlayable(id) || prev.common.hypoPlays.contains(order) then
-			def findGD(hypoState: State, connected: FastBitSet): Option[List[Int]] =
-				game.findFinesse(holder, connected) match
+		else if state.isPlayable(id) || prev.common.hypoPlays.contains(order) || prev.common.orderPlayable(prev, order) then
+			def findGD(hypoGame: HGroup, connected: FastBitSet): Option[List[Int]] =
+				val hypoState = hypoGame.state
+				(if inverted then hypoGame.chop(holder) else hypoGame.findFinesse(holder, connected)) match
 					case None => None
 					case Some(f) =>
 						val finesseId =
@@ -65,12 +67,18 @@ def interpretTransfer(ctx: DiscardContext, holder: Int, dupe: Option[Int]): (Dis
 						finesseId match
 							case None => Some(List(f))
 							case Some(i) if i.matches(id) => Some(List(f))
-							case Some(i) if hypoState.isPlayable(i) =>
-								findGD(hypoState.withPlay(i), connected.incl(f)).map: rest =>
+							case Some(i) if (if inverted then hypoState.isBasicTrash(i) else hypoState.isPlayable(i)) =>
+								val nextState =
+									if inverted then
+										hypoState.withDiscard(i, f).copy(hands = hypoState.hands.updated(holder, hypoState.hands(holder).filter(_ != f)))
+									else
+										hypoState.withPlay(i)
+
+								findGD(hypoGame.copy(state = nextState), connected.incl(f)).map: rest =>
 									f +: rest
 							case _ => None
 
-			findGD(state, FastBitSet.empty) match
+			findGD(game, FastBitSet.empty) match
 				case None =>
 					findThird match
 						case Some((otherHolder, otherDupe)) =>
@@ -89,10 +97,10 @@ def interpretTransfer(ctx: DiscardContext, holder: Int, dupe: Option[Int]): (Dis
 
 				case Some(orders) =>
 					Log.info(s"gd to ${state.names(holder)}'s $orders")
-					(result = DiscardResult.GentlemansDiscard(orders), dda = false)
+					(result = DiscardResult.GentlemansDiscard(orders, inverted), dda = false)
 
 		else
-			val baton = game.findFinesse(holder, FastBitSet.empty) match
+			val baton = (if inverted then game.chop(holder) else game.findFinesse(holder, FastBitSet.empty)) match
 				case None => None
 				case Some(f) =>
 					game.me.thoughts(f).id() match
@@ -106,7 +114,7 @@ def interpretTransfer(ctx: DiscardContext, holder: Int, dupe: Option[Int]): (Dis
 					(result = DiscardResult.Mistake, dda = true)
 				case Some(order) =>
 					Log.info(s"baton to ${state.names(holder)}'s $order")
-					(result = DiscardResult.Baton(order), dda = false)
+					(result = DiscardResult.Baton(order, inverted), dda = false)
 
 	else if dupe.exists(!cluedTargets.contains(_)) then
 		Log.warn(s"looks like sarcastic discard to $cluedTargets, but should be $dupe!")
@@ -184,7 +192,7 @@ def transferWCs(ctx: DiscardContext, result: DiscardResult): HGroup =
 							id = id
 						)))
 			)
-		case DiscardResult.GentlemansDiscard(orders) =>
+		case DiscardResult.GentlemansDiscard(orders, _) =>
 			game.copy(
 				waiting = game.waiting.map: wc =>
 					val connIndex = wc.connections.indexWhere(_.order == order)
@@ -226,7 +234,7 @@ def interpretUsefulDcH(ctx: DiscardContext): Option[HGroup] =
 					_.checkDDA(playerIndex, id)
 				.withMove(DiscardInterp.Mistake)
 
-			case (DiscardResult.GentlemansDiscard(targets), _) =>
+			case (DiscardResult.GentlemansDiscard(targets, inverted), _) =>
 				targets.foldLeft((game, game.state)):
 					case ((acc, hypoState), o) =>
 						val hidden = o != targets.last
@@ -237,20 +245,20 @@ def interpretUsefulDcH(ctx: DiscardContext): Option[HGroup] =
 						acc.copy(
 							common = acc.common.withThought(o)(_.copy(inferred = inferred)),
 							meta = acc.meta.updated(o, game.meta(o).copy(
-								status = CardStatus.GentlemansDiscard,
+								status = if inverted then CardStatus.GDInverted else CardStatus.GentlemansDiscard,
 								hidden = hidden
 							))
 						) -> newState
 				._1
 				.pipe: g =>
 					val newCtx = ctx.copy(game = g)
-					transferWCs(newCtx, DiscardResult.GentlemansDiscard(targets))
+					transferWCs(newCtx, DiscardResult.GentlemansDiscard(targets, inverted))
 				.withMove(DiscardInterp.GentlemansDiscard)
 				.copy(dda = None)
 
-			case (DiscardResult.Baton(order), _) =>
+			case (DiscardResult.Baton(order, inverted), _) =>
 				game.withThought(order)(_.copy(inferred = IdentitySet.single(id)))
-					.withMeta(order)(_.copy(status = CardStatus.Sarcastic))
+					.withMeta(order)(_.copy(status = if inverted then CardStatus.ChopMoved else CardStatus.Sarcastic))
 					.withMove(DiscardInterp.Sarcastic)
 					.copy(dda = None)
 
@@ -320,7 +328,7 @@ def interpretSdcm(ctx: DiscardContext): Option[HGroup] =
 	val DiscardContext(prev, game, action) = ctx
 	val state = game.state
 
-	if game.inEndgame || action.failed then
+	if game.inEndgame || action.failed || prev.meta(action.order).status == CardStatus.GDInverted then
 		return None
 
 	val bob = state.nextPlayerIndex(action.playerIndex)

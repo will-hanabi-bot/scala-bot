@@ -7,15 +7,16 @@ import scala_bot.BotClient
 enum ConsoleCmd:
 	case Hand(name: String, from: Option[String])
 	case Navigate(arg: NavArg)
+	case State
 
 enum NavArg:
 	case PrevRound, Prev, Next, NextRound
 	case Turn(turn: Int)
 
-def spawnConsole(queue: Queue[IO, ConsoleCmd], client: BotClient) =
-	(spawnConsoleInput(queue), spawnConsoleHandler(queue, client)).parTupled.start
+def spawnConsole(queue: Queue[IO, ConsoleCmd], client: BotClient, username: String) =
+	(spawnConsoleInput(queue, username), spawnConsoleHandler(queue, client)).parTupled.start
 
-def spawnConsoleInput(queue: Queue[IO, ConsoleCmd]) =
+def spawnConsoleInput(queue: Queue[IO, ConsoleCmd], username: String) =
 	def loop: IO[Unit] = for
 		input <- Console[IO].readLine
 		cmd <- input.split(" ") match
@@ -31,6 +32,10 @@ def spawnConsoleInput(queue: Queue[IO, ConsoleCmd]) =
 				navArg.map(n => IO.pure(Some(ConsoleCmd.Navigate(n)))).getOrElse:
 					IO.println("unknown command") *>
 					IO.pure(None)
+			case Array("state") => IO.pure(Some(ConsoleCmd.State))
+			case Array("username") =>
+				IO.println(username) *>
+				IO.pure(None)
 			case _ =>
 				IO.println("unknown command") *>
 				IO.pure(None)

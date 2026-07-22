@@ -249,8 +249,8 @@ object RefSieve:
 				Log.highlight(Console.YELLOW, "empty clue!")
 				return _game.withMove(ClueInterp.Useless)
 
-			val (prev, game) = if state.numPlayers > 2 then (_prev, _game) else
-				list.foldLeft((_prev, _game)): (acc, o) =>
+			val (prev, game) = if state.numPlayers > 2 then (_prev, _game.elim()) else
+				list.foldLeft((_prev, _game.elim())): (acc, o) =>
 					val (prev, game) = acc
 					// Remove PTD on clued cards that are not 1s/2s
 					val removePtd =
@@ -330,6 +330,14 @@ object RefSieve:
 						game.withMove(ClueInterp.Mistake)
 				).elim()
 
+			val orangeFix = clue.kind == ClueKind.Colour &&
+				state.variant.colourableSuits(clue.value).suitType.inverted &&
+				list.exists(o => prevPlayables.contains(o) && !prev.players(target).thinksInverted(prev.state, o))
+
+			if orangeFix then
+				Log.info(s"orange fix!")
+				return game.withMove(ClueInterp.Fix)
+
 			lazy val focus = determineFocus(ctx, push = trashPush || clue.kind == ClueKind.Colour)
 			lazy val cluedGame = game.withMeta(focus)(_.copy(focused = true)).elim()
 
@@ -344,6 +352,9 @@ object RefSieve:
 							(Some(ClueInterp.Stall), game)
 						else if state.numPlayers == 2 && clue.kind == ClueKind.Colour then
 							targetPlay(ctx, list.max)
+						else if !trashPush && clue.kind == ClueKind.Rank && clue.value == 1 then
+							Log.info(s"reordering 1s!")
+							(Some(ClueInterp.Reveal), game)
 						else
 							refPlay(ctx, right = clue.kind == ClueKind.Rank && !trashPush)
 
@@ -423,7 +434,7 @@ object RefSieve:
 						case DiscardResult.Mistake =>
 							game.withMove(DiscardInterp.Mistake)
 
-						case DiscardResult.GentlemansDiscard(targets) =>
+						case DiscardResult.GentlemansDiscard(targets, _) =>
 							targets.foldLeft((game, game.state)):
 								case ((acc, hypoState), o) =>
 									val hidden = o != targets.last
@@ -447,7 +458,7 @@ object RefSieve:
 							)
 							.withMove(DiscardInterp.Sarcastic)
 
-						case DiscardResult.Baton(_) =>
+						case DiscardResult.Baton(_, _) =>
 							throw new Error("baton unsupported!")
 				else
 					game.withMove(DiscardInterp.None)
@@ -527,7 +538,7 @@ object RefSieve:
 
 					val allPlays = playableOrders.map: o =>
 						val action = PlayAction(state.ourPlayerIndex, o, me.thoughts(o).id(infer = true))
-						(PerformAction.Play(o), action)
+						(PerformAction.tryPlay(game, o), action)
 
 					lazy val pace0Stall = state.pace == 0 && {
 						allPlays.nonEmpty || {
@@ -557,7 +568,7 @@ object RefSieve:
 						Log.info(s"discardable $discardOrders")
 						discardOrders.map: o =>
 							val action = DiscardAction(state.ourPlayerIndex, o, me.thoughts(o).id(infer = true))
-							(PerformAction.Discard(o), action)
+							(PerformAction.tryDiscard(game, o), action)
 
 					val allActions = allClues.concat(allPlays).concat(allDiscards)
 

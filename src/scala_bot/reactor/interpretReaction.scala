@@ -220,7 +220,7 @@ def reactPlay(prev: Reactor, game: Reactor, playerIndex: Int, order: Int, wc: Re
 	val ReactorWC(_, reacter, receiver, receiverHand, clue, focusSlot, inverted, turn) = wc
 
 	if playerIndex != reacter then
-		game
+		game.withMove(PlayInterp.None)
 	else if inverted then
 		val knownPlayables = prev.common.obviousPlayables(prev, reacter)
 		// This should only trigger in 8 clue/locked/endgame situations, since
@@ -232,9 +232,9 @@ def reactPlay(prev: Reactor, game: Reactor, playerIndex: Int, order: Int, wc: Re
 				case Right(newGame) => newGame
 				case Left(err) =>
 					Log.warn(s"Failed to rewind a response inversion! $err")
-					game
+					game.withMove(PlayInterp.None)
 		else
-			game
+			game.withMove(PlayInterp.None)
 	else
 		calcTargetSlot(prev, game, order, wc).fold(game): (reactSlot, targetSlot) =>
 			val (newCommon, newMeta) = clue.kind match
@@ -247,3 +247,4 @@ def reactPlay(prev: Reactor, game: Reactor, playerIndex: Int, order: Int, wc: Re
 			val action = if clue.kind == ClueKind.Colour then "dc" else "play"
 			Log.info(s"reactive play+$action, reacter ${state.names(reacter)} (slot $reactSlot) receiver ${state.names(receiver)} (slot $targetSlot), focus slot $focusSlot (order ${state.hands(receiver)(targetSlot - 1)})")
 			game.copy(common = newCommon, meta = newMeta)
+		.withMove(PlayInterp.None)

@@ -283,7 +283,9 @@ def findUnknownConnecting(ctx: ClueContext, reacting: Int, id: Identity, connect
 
 	finesse.flatMap(state.deck(_).id()) match
 		case _ if finesse.exists(o => game.future(o).length < game.common.thoughts(o).possible.length) =>
-			val futureIds = game.future(finesse.get).intersect(state.playableSet)
+			val inverted = state.variant.suits(id.suitIndex).suitType.inverted
+			val possibleIds = if inverted then state.trashSet else state.playableSet
+			val futureIds = game.future(finesse.get).intersect(possibleIds)
 
 			if futureIds.isEmpty then
 				// Log.warn(s"future knowledge of ${finesse.get} is [${game.future(finesse.get).fmt(state)}], but all unplayable!")
@@ -296,7 +298,7 @@ def findUnknownConnecting(ctx: ClueContext, reacting: Int, id: Identity, connect
 				else
 					FinesseKind.Bluff
 
-				Some(FinesseConn(reacting, finesse.get, futureIds.toList, fKind))
+				Some(FinesseConn(reacting, finesse.get, futureIds.toList, fKind, inverted = inverted))
 
 		case None if finesse.isDefined && knownLayeredIds.isDefined =>
 			Some(FinesseConn(reacting, finesse.get, knownLayeredIds.get.toList, FinesseKind.Hidden))
@@ -330,7 +332,14 @@ def findUnknownConnecting(ctx: ClueContext, reacting: Int, id: Identity, connect
 					else
 						FinesseKind.True
 
-				val ids = if trueFinesse then List(thought.id(infer = true).getOrElse(id)) else bluffableIds.toList
+				val ids = if trueFinesse then
+					List(thought.id(infer = true).getOrElse(id))
+				else
+					game.common.thoughts(finesse.get).inferred.filter: i =>
+						state.isPlayable(i) &&
+						validBluff(game, action, i, id, reacting, connected)
+					.union(id)
+					.toList
 
 				FinesseConn(reacting, finesse.get, ids, fKind)
 

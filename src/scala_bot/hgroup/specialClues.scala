@@ -83,7 +83,9 @@ def colourSave(prev: HGroup, action: ClueAction, id: Identity, focus: Int): Bool
 	if suit.name.contains("Cocoa") && clue.value != muddySaveColour then
 		return false
 
-	state.isCritical(id) || (suit.suitType.brownish && rank == 2)
+	state.isCritical(id) ||
+	(suit.suitType.brownish && rank == 2) ||
+	(suit.suitType.inverted && (rank == 3 || rank == 4))
 
 def rankSave(prev: HGroup, action: ClueAction, id: Identity, focus: Int): Boolean =
 	val state = prev.state

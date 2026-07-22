@@ -100,7 +100,7 @@ def processGame[G <: Game](game: G, data: GameData, index: Int)(using ops: GameO
 		.pipe:
 			actions.foldLeft(_): (acc, perform) =>
 				val playerIndex = acc.state.currentPlayerIndex
-				acc.handleAction(perform.toAction(acc.state, playerIndex, Some(deck)))
+				acc.handleAction(perform.toAction(acc.state, playerIndex, Some(deck), retain = true))
 					.when(_.state.nextCardOrder < deck.length): a =>
 						perform match
 							case PerformAction.Play(_) | PerformAction.Discard(_) =>
@@ -128,7 +128,7 @@ object replay extends IOApp:
 				game = fetchGame(args)
 				gameRef  <- Ref.of[IO, Option[Game]](Some(game))
 				client = new BotClient(wsQueue, gameRef)(using runtime)
-				console  <- spawnConsole(consoleQ, client)
+				console  <- spawnConsole(consoleQ, client, username = "bot-replay")
 				_ <- console.join
 			yield (ExitCode.Success)
 

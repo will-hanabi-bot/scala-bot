@@ -10,20 +10,9 @@ https://github.com/user-attachments/assets/665e7d78-7c8b-4f07-b4c3-9116ec2ec8ab
 
 ## Bot features
 
-- Supports all the basic variants: Black, Rainbow, White, Prism, Pink, Brown, and blends.
+- Supports all the basic variants: Black, Rainbow, White, Prism, Pink, Brown, Orange, and blends.
 - Takes notes during the game on what it thinks each player knows about their own hand.
 - Can analyze completed games on hanab.live and offer suggested actions.
-
-## Running locally
-- Ensure you have [JVM 25](https://www.oracle.com/ca-en/java/technologies/downloads/#java25) or later.
-- Download the latest JAR file from the [Releases page](https://github.com/will-hanabi-bot/scala-bot/releases).
-- Fill out the login details for the bot in an .env file. See the example .env.template file and the [reference](#environment-variables-reference).
-  - You'll need to create its account on hanab.live first.
-- Run `java [JVM_OPTS] -jar scala-bot-<version>.jar index=<index>` to start the bot.
-  - Suggested JVM options for reduced memory usage: `-Xms128m -Xmx192m -Xss256k -XX:MaxMetaspaceSize=96m -XX:ReservedCodeCacheSize=64m -XX:+UseSerialGC`.
-
-## Contributing
-Noticed a bug, have an idea for a feature, or want to help with development? See the [contribution guide](./CONTRIBUTING.md).
 
 ## Supported commands
 
@@ -43,7 +32,36 @@ Some commands can be sent inside the room's chat to affect all bots that have jo
 - `/leaveall` to kick all bots from the table.
 - `/setall` to set the same settings for all bots at the table.
 
+## Contributing
+
+Noticed a bug, have an idea for a feature, or want to help with development? See the [contribution guide](./CONTRIBUTING.md).
+
+## Command Reference
+
+Below, commands are quoted in `code blocks`. These should be executed in a terminal, like Windows Terminal.
+
+- Sections in `<angle brackets>` must be replaced with the appropriate text, without the angle brackets.
+- Sections in `[square brackets]` are optional. They can be either replaced with the appropriate text or excluded from the command.
+
+## Running locally
+
+- Ensure you have [JVM 25](https://www.oracle.com/ca-en/java/technologies/downloads/#java25) or later.
+	- After, running `java --version` in a terminal should produce something like `Java(TM) SE Runtime Environment ...`.
+- Download the latest bot JAR file from the [Releases page](https://github.com/will-hanabi-bot/scala-bot/releases).
+- Fill out the login details for the bot in a file named `.env`. See the example .env.template file and the [reference](#environment-variables-reference).
+	- You'll need to create its account on hanab.live first.
+	- The .env file must be in the same folder as the JAR file.
+- In the terminal, navigate to the folder containing the JAR file.
+- Run `java [JVM_OPTS] -jar scala-bot-<version>.jar index=<index>` to start the bot.
+	- The index corresponds to which set of credentials the bot will use from the .env file.
+	- For example, running `java -jar scala-bot-0.11.3.jar index=1` causes the bot to log in with `HANABI_USERNAME1` and `HANABI_PASSWORD1`.
+	- Suggested JVM options for reduced memory usage: `-Xms128m -Xmx192m -Xss256k -XX:MaxMetaspaceSize=96m -XX:ReservedCodeCacheSize=64m -XX:+UseSerialGC`.
+
+You might see a warning about `sun.misc.Unsafe`: this is normal for Scala 3 programs and is nothing to worry about.
+
 ## Watching replays
+
+> This requires having [Scala installed and a local copy of the repository](./CONTRIBUTING.md#local-development).
 
 A replay from hanab.live or from a file (in JSON) can be loaded using `scala-cli . --main-class scala_bot.replay -- <options>`.
 - `id=<id>` indicates the ID of the hanab.live replay to load.
@@ -57,6 +75,9 @@ In a replay, the following commands are also supported (in addition to `hand`):
     - Instead of a turn number, `+` (next turn), `++` (next turn of the same player), `-`, and `--` can also be used.
 
 ## Self-play
+
+> This requires having [Scala installed and a local copy of the repository](./CONTRIBUTING.md#local-development).
+
 The bot can play games with copies of itself using `scala-cli . --main-class scala_bot.selfPlay [-- <options>]`. Possible options:
 - `games=<numGames>` sets the number of games to play (defaults to 1).
 - `seed=<seed>` sets the seed of the first game to be played (defaults to 0).

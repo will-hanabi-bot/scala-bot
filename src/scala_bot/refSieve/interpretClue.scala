@@ -110,7 +110,10 @@ def targetPlay(ctx: ClueContext, targetOrder: Int): (Option[ClueInterp], RefSiev
 	targetId match
 		case Some(id) if !focusPoss.exists(_.id == id) =>
 			if action.giver == state.ourPlayerIndex then
-				(if game.inEndgame && common.orderTrash(game, targetOrder) then Some(ClueInterp.Stall) else None, game)
+				if !state.deck(targetOrder).clued && game.state.variant.suits(id.suitIndex).suitType.inverted then
+					(Some(ClueInterp.Discard), resolvePlay(ctx, targetOrder, focusPoss, targetId))
+				else
+					(if game.inEndgame && common.orderTrash(game, targetOrder) then Some(ClueInterp.Stall) else None, game)
 			else
 				Log.highlight(Console.YELLOW, s"finding own!")
 				val conns = connect(ctx, targetOrder, id, unknown, findOwn = true)

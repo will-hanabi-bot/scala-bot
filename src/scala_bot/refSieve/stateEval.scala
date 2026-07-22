@@ -19,6 +19,7 @@ def getResult(game: RefSieve, hypo: RefSieve, action: ClueAction): Double =
 		meta(o).status != CardStatus.CalledToPlay && hypo.meta(o).status == CardStatus.CalledToPlay
 
 	val badPlayable = newPlayables.find: o =>
+		!state.deck(o).id().exists(id => state.variant.suits(id.suitIndex).suitType.inverted) &&
 		!(hypo.me.hypoPlays.contains(o) || (game.inEndgame && state.deck(o).id().exists(state.isPlayable)))
 
 	badPlayable match
@@ -115,15 +116,10 @@ def advance(orig: RefSieve, game: RefSieve, offset: Int): Double =
 
 		val (knownPlays, unknownPlays) = playables.partitionMap: order =>
 			val (id, action) = state.deck(order).id() match
-				case None => (None, PlayAction(playerIndex, order, -1, -1))
-				case Some(id) =>
-					val action = if state.isPlayable(id) then
-						PlayAction(playerIndex, order, id.suitIndex, id.rank)
-					else
-						DiscardAction(playerIndex, order, id.suitIndex, id.rank, failed = true)
-					(Some(id), action)
+				case None =>     (None,     PlayAction(playerIndex, order, -1, -1))
+				case Some(id) => (Some(id), game.players(playerIndex).tryPlay(state, order))
 
-			Log.info(s"${state.names(playerIndex)} ${if id.exists(state.isPlayable) then "playing" else "bombing"} ${state.logId(id)}")
+			Log.info(s"${state.names(playerIndex)} ${Action.gerund(action)} ${state.logId(id)}")
 			val value = advance(orig, game.simulate(action), offset + 1)
 
 			if player.thoughts(order).id(infer = true).isDefined then Left(value) else Right(value)
@@ -136,9 +132,11 @@ def advance(orig: RefSieve, game: RefSieve, offset: Int): Double =
 				game.chop(playerIndex).getOrElse:
 					game.players(playerIndex).lockedDiscard(state, playerIndex)
 
-			val id = state.deck(dc).id().get
-			val Identity(suitIndex, rank) = id
-			val action = DiscardAction(playerIndex, dc, suitIndex, rank)
+			val action =
+				if game.chop(playerIndex).contains(dc) then
+					Action.dragDiscard(state, playerIndex, dc)
+				else
+					game.players(playerIndex).tryDiscard(state, dc)
 
 			val dcValue = advance(orig, game.simulate(action), offset + 1)
 			0.5 * dcValue + 0.5 * playValue
@@ -148,8 +146,7 @@ def advance(orig: RefSieve, game: RefSieve, offset: Int): Double =
 	else if player.thinksLocked(game, playerIndex) then
 		if !state.canClue then
 			val lockedDc = player.lockedDiscard(state, playerIndex)
-			val Identity(suitIndex, rank) = state.deck(lockedDc).id().get
-			val action = DiscardAction(playerIndex, lockedDc, suitIndex, rank)
+			val action = game.players(playerIndex).tryDiscard(state, lockedDc)
 			Log.info(s"locked discard! $lockedDc")
 			advance(orig, game.simulate(action), offset + 1)
 		else
@@ -164,18 +161,22 @@ def advance(orig: RefSieve, game: RefSieve, offset: Int): Double =
 		_forceClue(orig, game, offset, only = Some(bob))
 
 	else
-		def tryDiscard(order: Int) =
+		def tryDiscard(order: Int, alwaysDiscard: Boolean) =
 			val id = state.deck(order).id().get
 			val Identity(suitIndex, rank) = id
-			val action = DiscardAction(playerIndex, order, suitIndex, rank)
+			val action =
+				if alwaysDiscard then
+					Action.dragDiscard(state, playerIndex, order)
+				else
+					game.players(playerIndex).tryDiscard(state, order)
 
 			val dcValue = advance(orig, game.simulate(action), offset + 1)
 
 			if state.clueTokens < 2 || state.numPlayers == 2 then
-				Log.info(s"${state.names(playerIndex)} discarding ${state.logId(id)}")
+				Log.info(s"${state.names(playerIndex)} ${Action.gerund(action)} ${state.logId(id)}")
 				dcValue
 			else
-				Log.info(s"${state.names(playerIndex)} discarding ${state.logId(id)} but might clue")
+				Log.info(s"${state.names(playerIndex)} ${Action.gerund(action)} ${state.logId(id)} but might clue")
 				val clueValue = _forceClue(orig, game, offset)
 
 				val clueProb = if offset == 1 then
@@ -197,9 +198,10 @@ def advance(orig: RefSieve, game: RefSieve, offset: Int): Double =
 		urgentDc.orElse(trash.headOption) match
 			case None =>
 				val chop = game.chop(playerIndex).getOrElse(throw new Exception(s"Player ${state.names(playerIndex)} not locked but no chop! ${state.hands(playerIndex).map(state.deck(_))}"))
-				tryDiscard(chop)
+				tryDiscard(chop, alwaysDiscard = true)
 
-			case Some(order) => tryDiscard(order)
+			case Some(order) =>
+				tryDiscard(order, alwaysDiscard = game.meta(order).status == CardStatus.PermissionToDiscard)
 
 def _evalAction(game: RefSieve, action: Action): Double =
 	Log.highlight(Console.GREEN, s"===== Predicting value for ${action.fmt(game.state)} =====")
@@ -218,7 +220,7 @@ def _evalAction(game: RefSieve, action: Action): Double =
 					0.5
 
 				val initial = getResult(game, hypoGame, clue) * mult - 0.5
-				Log.info(s"initial clue value: $initial%.2f")
+				Log.info(f"initial clue value: $initial%.2f")
 
 				val value = initial + advance(game, hypoGame, 1)
 				(hypoGame.lastMove.get, value)

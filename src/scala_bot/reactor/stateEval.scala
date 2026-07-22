@@ -109,16 +109,10 @@ def advance(orig: Reactor, game: Reactor, offset: Int): Double =
 
 		val playActions = playables.map: order =>
 			val (id, action) = state.deck(order).id() match
-				case None => (None, PlayAction(playerIndex, order, -1, -1))
-				case Some(id) =>
-					val action = if state.isPlayable(id) then
-						PlayAction(playerIndex, order, id.suitIndex, id.rank)
-					else
-						Log.warn(s"not playable! ${state.logId(id)}")
-						DiscardAction(playerIndex, order, id.suitIndex, id.rank, failed = true)
-					(Some(id), action)
+				case None =>     (None,     PlayAction(playerIndex, order, -1, -1))
+				case Some(id) => (Some(id), game.players(playerIndex).tryPlay(state, order))
 
-			Log.info(s"${state.names(playerIndex)} playing ${state.logId(id)}")
+			Log.info(s"${state.names(playerIndex)} ${Action.gerund(action)} ${state.logId(id)}")
 
 			val advancedGame = game.simulate(action)
 			if advancedGame.state.strikes > game.state.strikes then
@@ -136,8 +130,7 @@ def advance(orig: Reactor, game: Reactor, offset: Int): Double =
 	else if player.obviousLocked(game, playerIndex) then
 		if !state.canClue then
 			val lockedDc = player.lockedDiscard(state, playerIndex)
-			val Identity(suitIndex, rank) = state.deck(lockedDc).id().get
-			val action = DiscardAction(playerIndex, lockedDc, suitIndex, rank)
+			val action = game.players(playerIndex).tryDiscard(state, lockedDc)
 			Log.info(s"locked discard! $lockedDc")
 			advance(orig, game.simulate(action), offset + 1)
 		else
@@ -148,19 +141,23 @@ def advance(orig: Reactor, game: Reactor, offset: Int): Double =
 		_forceClue(orig, game, offset)
 
 	else if urgentDc.isDefined then
-		val id = state.deck(urgentDc.get).id().get
-		val Identity(suitIndex, rank) = id
-		val action = DiscardAction(playerIndex, urgentDc.get, suitIndex, rank)
+		val order = urgentDc.get
+		val id = state.deck(order).id().get
+		val action = Action.dragDiscard(state, playerIndex, order)
 
-		Log.info(s"${state.names(playerIndex)} urgently discarding ${state.logId(id)}")
+		Log.info(s"${state.names(playerIndex)} urgently ${Action.gerund(action)} ${state.logId(id)}")
 		advance(orig, game.simulate(action), offset + 1)
 
 	else
-		def tryDiscard(order: Int) =
+		def tryDiscard(order: Int, alwaysDiscard: Boolean) =
 			val id = state.deck(order).id().get
-			val action = DiscardAction(playerIndex, order, id.suitIndex, id.rank)
+			val action =
+				if alwaysDiscard then
+					Action.dragDiscard(state, playerIndex, order)
+				else
+					game.players(playerIndex).tryDiscard(state, order)
 
-			Log.info(s"${state.names(playerIndex)} discarding ${state.logId(id)} but might clue")
+			Log.info(s"${state.names(playerIndex)} ${Action.gerund(action)} ${state.logId(id)} but might clue")
 
 			val dcValue = advance(orig, game.simulate(action), offset + 1)
 
@@ -192,9 +189,9 @@ def advance(orig: Reactor, game: Reactor, offset: Int): Double =
 				val chop = game.chop(playerIndex)
 					.orElse(game.zcsTurn.map(_ => game.players(playerIndex).lockedDiscard(game.state, playerIndex))) 	// In ZCS, a player may have no valid discard while not being "locked".
 					.getOrElse(throw new Exception(s"Player ${state.names(playerIndex)} not locked but no chop! ${state.hands(playerIndex).map(meta(_).status)}"))
-				tryDiscard(chop)
+				tryDiscard(chop, alwaysDiscard = game.chop(playerIndex).isDefined)
 
-			case Some(order) => tryDiscard(order)
+			case Some(order) => tryDiscard(order, alwaysDiscard = !game.players(playerIndex).thoughts(order).id().exists(id => state.variant.suits(id.suitIndex).suitType.inverted))
 
 def _evalAction(game: Reactor, action: Action): Double =
 	Log.highlight(Console.GREEN, s"===== Predicting value for ${action.fmt(game.state)} =====")
@@ -287,39 +284,46 @@ def evalGame(orig: Reactor, game: Reactor): Double =
 
 	val stateVal = evalState(state, inEndgame = orig.inEndgame || orig.state.remScore < state.variant.suits.length)
 
-	val futureVal = state.heldOrders.summing: order =>
-		game.meta(order).status match
-			case CardStatus.CalledToPlay =>
-				game.me.thoughts(order).id(infer = true) match
-					case None => 0.4
-					case Some(id) =>
-						if state.isBasicTrash(id) then
-							-1.5
-						else if id.rank == 5 then
-							0.8
-						else
-							0.4
-			case CardStatus.CalledToDiscard =>
-				val by = game.meta(order).by.getOrElse(throw new Exception(s"order $order doesn't have a by!"))
+	def inverted(order: Int) = state.deck(order).id().exists(id => state.variant.suits(id.suitIndex).suitType.inverted)
 
-				state.deck(order).id() match
-					case None =>
-						// Trust others to discard trash
-						if by != state.ourPlayerIndex then
-							0
-						else
-							0.3
-					case Some(id) =>
-						if state.isBasicTrash(id) then
-							0.3
-						else if game.me.isSieved(game, id, order) then
-							0.2
-						else if state.isCritical(id) then
-							-(5 - state.playableAway(id)) * 10.0
-						else if by != state.ourPlayerIndex then
-							0
-						else
-							-(5 - state.playableAway(id)) * 0.5
+	def evalPlay(order: Int) =
+		game.me.thoughts(order).id(infer = true) match
+			case None => 0.4
+			case Some(id) =>
+				if state.isBasicTrash(id) then
+					-1.5
+				else if id.rank == 5 then
+					0.8
+				else
+					0.4
+
+	def evalDiscard(order: Int) =
+		val by = game.meta(order).by.getOrElse(throw new Exception(s"order $order doesn't have a by!"))
+
+		state.deck(order).id() match
+			case None =>
+				// Trust others to discard trash
+				if by != state.ourPlayerIndex then
+					0
+				else
+					0.3
+			case Some(id) =>
+				if state.isBasicTrash(id) then
+					0.3
+				else if game.me.isSieved(game, id, order) then
+					0.2
+				else if state.isCritical(id) then
+					-(5 - state.playableAway(id)) * 10.0
+				else if by != state.ourPlayerIndex then
+					0
+				else
+					-(5 - state.playableAway(id)) * 0.5
+
+	val futureVal = state.heldOrders.summing: order =>
+		val inv = inverted(order)
+		game.meta(order).status match
+			case CardStatus.CalledToPlay => if inv then evalDiscard(order) else evalPlay(order)
+			case CardStatus.CalledToDiscard => if inv then evalPlay(order) else evalDiscard(order)
 			case _ => 0
 
 	val bdrVal = 2.5 * state.variant.allIds.summing: id =>

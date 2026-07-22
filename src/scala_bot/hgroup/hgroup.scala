@@ -202,10 +202,11 @@ case class HGroup(
 		chop(bob).flatMap(state.deck(_).id()).exists(state.isCritical)
 
 	def invalidFocus(giver: Int, clue: ClueLike, id: Identity, focusResult: FocusResult) =
-		val FocusResult(focus, _, positional) = focusResult
+		val FocusResult(focus, chop, positional) = focusResult
 
 		state.isBasicTrash(id) ||
 		(state.variant.pinkish && !positional && clue.kind == ClueKind.Rank && clue.value != id.rank) ||
+		(state.variant.inverted && chop && state.variant.suits(id.suitIndex).suitType.inverted && state.isPlayable(id)) ||
 		visibleFind(state, common, id, infer = true, excludeOrder = focus).exists: o =>
 			this.me.thoughts(o).matches(id) ||
 			(this.me.thoughts(o).matches(id, assume = true) && this.me.thoughts(o).possible.contains(id))
@@ -439,6 +440,9 @@ case class HGroup(
 
 	def findDiscardable(playerIndex: Int) =
 		state.hands(playerIndex).filter: o =>
+			this.meta(o).status != CardStatus.Bluffed &&
+			this.meta(o).status != CardStatus.MaybeBluffed &&
+			this.meta(o).status != CardStatus.FMaybeBluffed &&
 			!(this.meta(o).status == CardStatus.Finessed && (this.xmeta(o).idUncertain || this.xmeta(o).fStatus.contains(FStatus.PossiblyOn(playerIndex)))) && {
 				this.me.orderTrash(this, o) || {
 					this.isTouched(o) &&
@@ -622,7 +626,9 @@ object HGroup:
 			val DiscardAction(playerIndex, order, suitIndex, rank, failed) = action
 
 			val updatedGame = game.refreshUncertain.elim()
-			val reinterpGame = if !failed then None else updatedGame.reinterpPlay(prev, action)
+
+			val reinterp = failed || prev.common.thoughts(order).possibilities.forall(id => prev.state.variant.suits(id.suitIndex).suitType.inverted)
+			val reinterpGame = if reinterp then updatedGame.reinterpPlay(prev, action) else None
 
 			if reinterpGame.isDefined then
 				return reinterpGame.get
@@ -688,7 +694,7 @@ object HGroup:
 			val (state, me) = (game.state, game.me)
 
 			val solveEndgame =
-				if state.remScore <= state.variant.suits.length + 1 then
+				if state.remScore <= state.variant.suits.length + 1 && state.pace + state.cardsLeft <= 7 then
 					IO.blocking:
 						Log.highlight(Console.MAGENTA, "trying to solve endgame...")
 
@@ -719,7 +725,7 @@ object HGroup:
 
 						if urgent.isDefined then
 							Log.info(s"urgent bluffed play! ${urgent.get}")
-							PerformAction.Play(urgent.get)
+							PerformAction.tryPlay(game, urgent.get)
 						else
 							val allClues =
 								for
@@ -734,12 +740,12 @@ object HGroup:
 							val allPlays = playableOrders.map: o =>
 								val action = PlayAction(state.ourPlayerIndex, o, me.thoughts(o).id(infer = true, partial = true))
 								val value = evalAction(game, action)
-								(PerformAction.Play(o), action, value)
+								(PerformAction.tryPlay(game, o), action, value)
 
 							val allDiscards = discardOrders.view.map: o =>
 								val action = DiscardAction(state.ourPlayerIndex, o, me.thoughts(o).id(infer = true))
 								val value = evalAction(game, action)
-								(PerformAction.Discard(o), action, value)
+								(PerformAction.tryDiscard(game, o), action, value)
 
 							val earlyGameClue = game.earlyGameClue(state.ourPlayerIndex)
 
@@ -778,17 +784,17 @@ object HGroup:
 								allClues.concat(allPlays).concat(allDiscards).when(_ => canDiscardChop): as =>
 									val action = DiscardAction(state.ourPlayerIndex, chop.get, -1, -1, false)
 									val value = evalAction(game, action)
-									as :+ (PerformAction.Discard(chop.get), action, value)
+									as :+ (PerformAction.tryDiscard(game, chop.get), action, value)
 
 							if allActions.isEmpty then
 								val anxietyPlay = me.anxietyPlay(state, state.ourPlayerIndex)
 
 								if game.level >= Level.Stalling && anxietyPlay.isDefined then
 									Log.info("anxiety play!")
-									PerformAction.Play(anxietyPlay.get)
+									PerformAction.tryPlay(game, anxietyPlay.get)
 								else if state.clueTokens == 8 then
 									Log.error("No actions available at 8 clues! Playing slot 1")
-									PerformAction.Play(state.ourHand.head)
+									PerformAction.tryPlay(game, state.ourHand.head)
 								else
 									PerformAction.Discard(me.lockedDiscard(state, state.ourPlayerIndex))
 							else
@@ -862,7 +868,7 @@ object HGroup:
 				.getOrElse(game.players(playerIndex).lockedDiscard(state, playerIndex))
 
 			if game.level >= Level.Endgame && (game.inEndgame || state.remScore < state.variant.suits.length) then
-				val expected = PerformAction.Discard(expectedDc)
+				val expected = PerformAction.tryDiscard(game, expectedDc)
 				val positionals = state.hands(playerIndex).filter: o =>
 					val index = state.hands(playerIndex).indexOf(o)
 
@@ -872,11 +878,11 @@ object HGroup:
 						hand.lift(index).exists: o =>
 							state.deck(o).id().exists(state.isUseful) &&
 							!game.common.hypoPlays.contains(o)
-				.flatMap(o => Seq(PerformAction.Discard(o), PerformAction.Play(o)))
+				.flatMap(o => Seq(PerformAction.tryDiscard(game, o), PerformAction.tryPlay(game, o)))
 
 				if positionals.contains(expected) then positionals else expected +: positionals
 			else
-				Seq(PerformAction.Discard(expectedDc))
+				Seq(PerformAction.tryDiscard(game, expectedDc))
 
 		def evalAction(game: HGroup, action: Action): Double =
 			_evalAction(game, action)

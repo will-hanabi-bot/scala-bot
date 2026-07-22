@@ -13,6 +13,7 @@ val BROWNISH = "Brown|Muddy|Cocoa|Null".r.unanchored
 val DARK = "Black|Dark|Gray|Cocoa".r.unanchored
 val PRISM = "Prism".r.unanchored
 val MUDDY = "Muddy|Cocoa".r.unanchored
+val INVERTED = "Orange".r.unanchored
 val NO_COLOUR = "White|Gray|Light|Null|Rainbow|Omni|Prism".r.unanchored
 
 case class Variant(
@@ -28,6 +29,7 @@ case class Variant(
 	dark: Boolean,
 	prism: Boolean,
 	muddy: Boolean,
+	inverted: Boolean,
 	criticalRank: Option[Int],
 	clueStarved: Boolean,
 	specialRank: Option[Int],
@@ -110,7 +112,8 @@ case class SuitType(
 	brownish: Boolean,
 	dark: Boolean,
 	prism: Boolean,
-	muddy: Boolean
+	muddy: Boolean,
+	inverted: Boolean
 )
 
 object SuitType:
@@ -122,7 +125,8 @@ object SuitType:
 			BROWNISH.matches(name),
 			DARK.matches(name),
 			PRISM.matches(name),
-			MUDDY.matches(name)
+			MUDDY.matches(name),
+			INVERTED.matches(name)
 		)
 
 case class Suit(
@@ -211,6 +215,7 @@ object Variant:
 			suits.exists(_.suitType.dark),
 			suits.exists(_.suitType.prism),
 			suits.exists(_.suitType.muddy),
+			suits.exists(_.suitType.inverted),
 			criticalRank,
 			clueStarved, specialRank, rainbowS, whiteS, pinkS, brownS, deceptiveS, scarce1s)
 

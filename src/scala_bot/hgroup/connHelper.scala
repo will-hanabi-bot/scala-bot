@@ -50,8 +50,8 @@ def assignConns(game: HGroup, action: ClueAction, fps: Seq[FocusPossibility], fo
 				else if conn.hidden then
 					IdentitySet.from(conn.ids)
 
-				else if isBluff then
-					thought.inferred.intersect(currPlayableIds)
+				// else if isBluff then
+				// 	thought.inferred.intersect(currPlayableIds)
 
 				else if modified.contains(conn.order) then
 					thought.inferred.union(conn.ids)
@@ -83,7 +83,7 @@ def assignConns(game: HGroup, action: ClueAction, fps: Seq[FocusPossibility], fo
 								g.common.findPrompt(g, reacting, id, connected.incl(order)).exists(g.me.thoughts(_).possible.contains(id)) ||
 								possiblyFinesse(id)
 
-							case FinesseConn(reacting, order, ids, _, _) =>
+							case FinesseConn(reacting, order, ids, _, _, _) =>
 								ids.exists: i =>
 									state.ourHand.exists(o => o < order && g.me.thoughts(o).possible.contains(i))
 

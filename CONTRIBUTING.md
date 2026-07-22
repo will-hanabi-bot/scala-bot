@@ -9,8 +9,8 @@ Before opening a bug report:
 	- On hanab.live, it writes a note containing its settings on the oldest card of the first player.
 - Check whether a similar issue has already been reported. If so, leave a like or comment rather than opening a duplicate.
 - Double-check convention docs.
-- If a mistake is made earlier on in the game, the bot may behave erratically later on.
-	- Leave a note if a mistake happened, even if potentially irrelevant.
+- If a human mistake is made earlier on in the game, the bot may behave erratically later on.
+	- Indicate in the bug report if a mistake happened, even if potentially irrelevant.
 
 To open a bug report:
 1. In the [Issues section](https://github.com/will-hanabi-bot/scala-bot/issues), click `New issue` -> `Bug report`.

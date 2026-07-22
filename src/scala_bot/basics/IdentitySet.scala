@@ -101,7 +101,7 @@ object IdentitySet:
 			var res = List.empty[Identity]
 			ids.foreach: i =>
 				res = i +: res
-			res
+			res.reverse
 
 		def iter: Iterator[Identity] =
 			new Iterator[Identity]:

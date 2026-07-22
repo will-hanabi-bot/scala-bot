@@ -51,7 +51,7 @@ def interpretReactiveColour(prev: Reactor, game: Reactor, action: ClueAction, fo
 			if uncluedDupe then 99 else i
 
 	// Try targeting all play targets
-	playTargets.view.flatMap { (_, index) =>
+	playTargets.view.flatMap: (order, index) =>
 		val targetSlot = index + 1
 		val reactSlot = calcSlot(focusSlot, targetSlot)
 
@@ -69,13 +69,16 @@ def interpretReactiveColour(prev: Reactor, game: Reactor, action: ClueAction, fo
 				val newCommon = game.common.withThought(reactOrder): t =>
 					t.copy(oldInferred = t.inferred.toOpt)
 
-				val (interp, newGame) = targetDiscard(game.copy(common = newCommon), action, reactOrder, urgent = true)
+				val (interp, newGame) =
+					if state.variant.suits(state.deck(order).suitIndex).suitType.inverted then
+						targetPlay(game.copy(common = newCommon), action, reactOrder, urgent = true, stable = false)
+					else
+						targetDiscard(game.copy(common = newCommon), action, reactOrder, urgent = true)
 				interp match
 					case None => Some(None, newGame)
 					case Some(_) =>
 						Log.info(s"reactive dc+play, reacter ${state.names(reacter)} (slot $reactSlot) receiver ${state.names(receiver)} (slot $targetSlot), focus slot $focusSlot")
 						Some((Some(ClueInterp.Reactive), newGame))
-	}
 	.headOption
 	.getOrElse {
 		// Didn't work, so target trash (NOTE: this was temporarily giver's trash. why?)
@@ -138,7 +141,11 @@ def interpretReactiveColour(prev: Reactor, game: Reactor, action: ClueAction, fo
 							val newCommon = game.common.withThought(reactOrder) { t =>
 								t.copy(oldInferred = t.inferred.toOpt)
 							}
-							val (interp, newGame) = targetPlay(game.copy(common = newCommon), action, reactOrder, urgent = true, stable = false)
+							val (interp, newGame) =
+								if state.variant.suits(state.deck(target).suitIndex).suitType.inverted then
+									targetDiscard(game.copy(common = newCommon), action, reactOrder, urgent = true)
+								else
+									targetPlay(game.copy(common = newCommon), action, reactOrder, urgent = true, stable = false)
 							interp match
 								case None => Some(None, newGame)
 								case Some(_) =>
@@ -182,7 +189,11 @@ def interpretReactiveRank(prev: Reactor, game: Reactor, action: ClueAction, focu
 				Log.warn(s"reaction would involve playing unplayable ${state.logId(reactOrder)} $reactOrder!")
 				None
 			case Some(reactOrder) =>
-				val (interp, newGame) = targetPlay(game, action, reactOrder, urgent = true, stable = false)
+				val (interp, newGame) =
+					if state.variant.suits(state.deck(target).suitIndex).suitType.inverted then
+						targetDiscard(game, action, reactOrder, urgent = true)
+					else
+						targetPlay(game, action, reactOrder, urgent = true, stable = false)
 				val nextGame = newGame.withThought(reactOrder): t =>
 					t.copy(inferred = t.inferred.difference(state.deck(receiveOrder).id().get))
 
@@ -221,7 +232,11 @@ def interpretReactiveRank(prev: Reactor, game: Reactor, action: ClueAction, focu
 					val newCommon = game.common.withThought(reactOrder): t =>
 						t.copy(oldInferred = t.inferred.toOpt)
 
-					val (interp, newGame) = targetPlay(game.copy(common = newCommon), action, reactOrder, urgent = true, stable = false)
+					val (interp, newGame) =
+						if state.variant.suits(state.deck(receiveOrder).suitIndex).suitType.inverted then
+							targetDiscard(game.copy(common = newCommon), action, reactOrder, urgent = true)
+						else
+							targetPlay(game.copy(common = newCommon), action, reactOrder, urgent = true, stable = false)
 					interp match
 						case None => Some(None, newGame)
 						case Some(_) =>

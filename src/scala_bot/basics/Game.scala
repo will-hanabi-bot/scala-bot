@@ -483,7 +483,6 @@ extension[G <: Game](game: G)
 			.withState(_.copy(actionList = actions))
 
 	def analyze(using ops: GameOps[G], runtime: IORuntime) =
-		Log.highlight(Console.GREEN, s"------- ANALYZING -------")
 		val blank = ops.blank(game, keepDeck = false)
 
 		case class Comment(turn: Int, note: String)

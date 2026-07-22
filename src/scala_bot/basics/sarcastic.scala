@@ -6,8 +6,8 @@ enum DiscardResult:
 	case None
 	case Mistake
 	case Sarcastic(orders: Seq[Int])
-	case GentlemansDiscard(orders: Seq[Int])
-	case Baton(order: Int)
+	case GentlemansDiscard(orders: Seq[Int], inverted: Boolean)
+	case Baton(order: Int, inverted: Boolean)
 
 def validTransfer(game: Game, id: Identity)(order: Int) =
 	val thought = game.common.thoughts(order)
@@ -78,7 +78,7 @@ def interpretUsefulDc(game: Game, action: DiscardAction): DiscardResult =
 
 						case Some(orders) =>
 							Log.info(s"gd to ${state.names(holder)}'s $orders")
-							DiscardResult.GentlemansDiscard(orders)
+							DiscardResult.GentlemansDiscard(orders, inverted = false)
 				else
 					val orders = state.hands(holder).filter(validTransfer(game, id))
 					Log.info(s"sarcastic to ${state.names(holder)}'s $orders")
@@ -116,7 +116,7 @@ def interpretUsefulDc(game: Game, action: DiscardAction): DiscardResult =
 							DiscardResult.Sarcastic(matching)
 						else
 							Log.info(s"gd to our $orders")
-							DiscardResult.GentlemansDiscard(orders)
+							DiscardResult.GentlemansDiscard(orders, inverted = false)
 
 			case None =>
 				val orders = state.ourHand.filter(validTransfer(game, id))

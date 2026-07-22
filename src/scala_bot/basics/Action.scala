@@ -267,6 +267,46 @@ object Action:
 		val list = state.clueTouched(state.hands(clue.target), clue)
 		ClueAction(giver, clue.target, list, clue.base)
 
+	def gerund(action: Action) =
+		action match
+			case _: PlayAction => "playing"
+			case d: DiscardAction => if d.failed then "bombing" else "discarding"
+			case _:	ClueAction => "cluing"
+			case _ => throw new Error(s"trying to call gerund() on $action!")
+
+	/**
+	 * Returns the result of dragging this card to the discard pile.
+	 * For inverted suits, this will return a PlayAction.
+	 */
+	def dragDiscard(state: State, playerIndex: Int, order: Int) =
+		state.deck(order).id() match
+			case Some(id) =>
+				if state.variant.suits(id.suitIndex).suitType.inverted then
+					if state.isPlayable(id) then
+						PlayAction(playerIndex, order, id.suitIndex, id.rank)
+					else
+						DiscardAction(playerIndex, order, id.suitIndex, id.rank, failed = true)
+				else
+					DiscardAction(playerIndex, order, id.suitIndex, id.rank)
+			case _ =>
+				DiscardAction(playerIndex, order, -1, -1)
+
+	/**
+	 * Returns the result of dragging this card to the discard pile.
+	 * For inverted suits, this will return a PlayAction.
+	 */
+	def dragPlay(state: State, playerIndex: Int, order: Int) =
+		state.deck(order).id() match
+			case Some(id) =>
+				if state.variant.suits(id.suitIndex).suitType.inverted then
+					DiscardAction(playerIndex, order, id.suitIndex, id.rank)
+				else if state.isPlayable(id) then
+					PlayAction(playerIndex, order, id.suitIndex, id.rank)
+				else
+					DiscardAction(playerIndex, order, id.suitIndex, id.rank, failed = true)
+			case _ =>
+				PlayAction(playerIndex, order, -1, -1)
+
 /** Returns an updated action list after trying to insert the action on the specified turn.
   * Does nothing if that turn already contains the action.
   *
@@ -386,7 +426,7 @@ enum PerformAction:
 			case Terminate(target, value) =>
 				ujson.Obj("tableID" -> tableID, "type" -> 4, "target" -> target, "value" -> value)
 
-	def toAction(state: State, playerIndex: Int, deck: Option[IndexedSeq[Identity]] = None) =
+	def toAction(state: State, playerIndex: Int, deck: Option[IndexedSeq[Identity]] = None, retain: Boolean = false) =
 		val deckId = (order: Int) =>
 			state.deck.lift(order).map(_.id()).flatten.orElse(deck.flatMap(d => d(order).id()))
 
@@ -397,7 +437,9 @@ enum PerformAction:
 			case PerformAction.Play(target) =>
 				deckId(target) match
 					case Some(id) =>
-						if state.isPlayable(id) then
+						if !retain && state.variant.suits(id.suitIndex).suitType.inverted then
+							DiscardAction(playerIndex, target, id.suitIndex, id.rank)
+						else if state.isPlayable(id) then
 							PlayAction(playerIndex, target, id.suitIndex, id.rank)
 						else
 							DiscardAction(playerIndex, target, id.suitIndex, id.rank, true)
@@ -407,7 +449,13 @@ enum PerformAction:
 			case PerformAction.Discard(target) =>
 				deckId(target) match
 					case Some(id) =>
-						DiscardAction(playerIndex, target, id.suitIndex, id.rank, false)
+						if !retain && state.variant.suits(id.suitIndex).suitType.inverted then
+							if state.isPlayable(id) then
+								PlayAction(playerIndex, target, id.suitIndex, id.rank)
+							else
+								DiscardAction(playerIndex, target, id.suitIndex, id.rank, true)
+						else
+							DiscardAction(playerIndex, target, id.suitIndex, id.rank, false)
 					case None =>
 						DiscardAction(playerIndex, target, -1, -1, false)
 
@@ -462,3 +510,23 @@ object PerformAction:
 		kind match
 			case ClueKind.Colour => PerformAction.Colour(target, value)
 			case ClueKind.Rank   => PerformAction.Rank(target, value)
+
+	def tryPlay(game: Game, order: Int) =
+		if game.state.variant.inverted && game.me.thoughts(order).possibilities.forall(id => game.state.variant.suits(id.suitIndex).suitType.inverted) then
+			// Prefer to play a card that is called to play, unless absolutely known orange
+			if game.meta(order).status == CardStatus.CalledToPlay && game.me.thoughts(order).possible.exists(!game.state.isPlayable(_)) then
+				PerformAction.Play(order)
+			else
+				PerformAction.Discard(order)
+		else
+			PerformAction.Play(order)
+
+	def tryDiscard(game: Game, order: Int) =
+		if game.state.variant.inverted && game.me.thoughts(order).possibilities.forall(id => game.state.variant.suits(id.suitIndex).suitType.inverted) then
+			// Prefer to discard a card that is called to discard, unless absolutely known orange
+			if game.meta(order).status == CardStatus.CalledToDiscard && game.me.thoughts(order).possible.exists(game.state.isPlayable) then
+				PerformAction.Discard(order)
+			else
+				PerformAction.Play(order)
+		else
+			PerformAction.Discard(order)

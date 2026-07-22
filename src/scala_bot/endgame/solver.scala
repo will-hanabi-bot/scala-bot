@@ -105,7 +105,7 @@ case class EndgameSolver[G <: Game](
 				game.me.thoughts(_).id(infer = true).exists(state.isPlayable)
 
 			if winningPlay.isDefined then
-				return Right(PerformAction.Play(winningPlay.get), Frac.one)
+				return Right(PerformAction.tryPlay(game, winningPlay.get), Frac.one)
 
 		val start = Instant.now()
 		val deadline = Instant.now().plus(timeout)
@@ -410,8 +410,8 @@ case class EndgameSolver[G <: Game](
 
 			val urgentAction = state.hands(playerTurn).find(game.meta(_).urgent).flatMap: urgent =>
 				val perform = game.meta(urgent).status match
-					case CardStatus.CalledToPlay => PerformAction.Play(urgent)
-					case _                       => PerformAction.Discard(urgent)
+					case CardStatus.CalledToPlay => PerformAction.tryPlay(game, urgent)
+					case _                       => PerformAction.tryDiscard(game, urgent)
 				tryAction(perform)
 
 			if urgentAction.isDefined then
@@ -430,7 +430,7 @@ case class EndgameSolver[G <: Game](
 					case None =>
 						// Log.info(s"can't identify $order ${game.players(playerTurn).thoughts(order)}")
 						None
-					case _ => tryAction(PerformAction.Play(order))
+					case _ => tryAction(PerformAction.tryPlay(game, order))
 			.flatten
 
 			val defaultClue = PerformAction.Rank(0, 0)

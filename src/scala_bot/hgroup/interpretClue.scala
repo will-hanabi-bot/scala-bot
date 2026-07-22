@@ -205,6 +205,46 @@ def interpClue(ctx: ClueContext): HGroup =
 				else
 					ClueInterp.Fix
 
+	val specialOrangeSituation = state.variant.inverted &&
+		clue.kind == ClueKind.Colour &&
+		state.variant.colourableSuits(clue.value).suitType.inverted
+
+	if specialOrangeSituation then
+		val chopFix = chop && state.deck(focus).id().exists(id => state.isBasicTrash(id) || (id.rank == 3 || id.rank == 4))
+
+		if chopFix then
+			val poss = game.common.thoughts(focus).inferred.filter: id =>
+				!state.isPlayable(id) &&
+				(state.isBasicTrash(id) || (id.rank != 2 && id.rank != 5))
+
+			if poss.isEmpty then
+				Log.info(s"orange fix on $focus! (trash)")
+
+				if giver == state.ourPlayerIndex && state.deck(focus).id().exists(state.isUseful) then
+					Log.error("mistake!")
+					return game.withMove(ClueInterp.Mistake)
+
+				return game.withThought(focus)(t => t.copy(inferred = IdentitySet.empty))
+					.withMeta(focus)(_.copy(trash = true))
+					.withMove(ClueInterp.Reveal)
+			else
+				Log.info(s"orange fix on $focus! ${poss.fmt(state)}")
+
+				if giver == state.ourPlayerIndex && state.deck(focus).id().exists(!poss.contains(_)) then
+					Log.error("mistake!")
+					return game.withMove(ClueInterp.Mistake)
+
+				return game.withThought(focus)(t => t.copy(inferred = poss))
+					.withMove(ClueInterp.Reveal)
+
+		val playFix = list.find: o =>
+			prev.common.orderPlayable(prev, o) &&
+			!prev.common.thinksInverted(prev.state, o)
+
+		if playFix.isDefined then
+			Log.info(s"orange play fix! ${playFix.get}")
+			return game.withMove(ClueInterp.Fix)
+
 	if prev.state.deck(focus).clued && !positional then
 		if game.level >= Level.Fix then
 			val fixTarget = Option.when(clue == BaseClue(ClueKind.Rank, 1)):
@@ -325,7 +365,15 @@ def interpClue(ctx: ClueContext): HGroup =
 
 			if simplestOwn.isEmpty then
 				Log.warn("no inferences!")
-				game.withMove(ClueInterp.Mistake)
+
+				if giver != state.ourPlayerIndex && game.state.variant.inverted && chop && clue.kind == ClueKind.Colour && state.variant.colourableSuits(clue.value).suitType.inverted then
+					Log.info(s"orange fix on trash!")
+					game.withThought(focus)(t => t.copy(inferred = IdentitySet.empty))
+						.withMeta(focus)(_.copy(trash = true))
+						.withMove(ClueInterp.Fix)
+
+				else
+					game.withMove(ClueInterp.Mistake)
 			else
 				resolveClue(ctx, simplestOwn, if savePoss.nonEmpty then Nil else ownFps.filter(fp => !simplestOwn.contains(fp) && !fp.symmetric))
 	}

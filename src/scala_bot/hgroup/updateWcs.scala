@@ -212,6 +212,8 @@ def updateWc(prev: HGroup, game: HGroup, action: Action, wc: WaitingConnection, 
 	val impossibleConn = wc.connections.find:
 		case p: PlayableConn if p.linked.nonEmpty =>	// For playable conns, all linked cards must be impossible
 			p.linked.forall(game.common.thoughts(_).possible.intersect(p.ids).isEmpty)
+		case f: FinesseConn if f.inverted =>
+			game.common.thoughts(f.order).possible.intersect(state.trashSet.union(f.ids)).isEmpty
 		case conn =>
 			game.common.thoughts(conn.order).possible.intersect(conn.ids).isEmpty
 
@@ -261,7 +263,7 @@ def updateWc(prev: HGroup, game: HGroup, action: Action, wc: WaitingConnection, 
 				case PlayAction(_, order, _, _) =>
 					resolvePlayed(game, wc, order)
 
-				case d: DiscardAction if d.failed =>
+				case d: DiscardAction if d.failed || wc.currConn.matchesP { case f: FinesseConn => f.inverted } =>
 					resolvePlayed(game, wc, d.order)
 
 				case DiscardAction(playerIndex, order, _, _, failed) =>

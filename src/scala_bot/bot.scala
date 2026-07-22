@@ -61,6 +61,13 @@ object main extends IOApp:
 	def run(args: List[String]) =
 		val parsedArgs = parseArgs(args)
 		val env = sys.env ++ readEnv(parsedArgs)
+
+		val index = parsedArgs.getOrElse("index", "0").toInt
+		val username = env.lift(s"HANABI_USERNAME$index")
+			.getOrElse(throw new IllegalStateException(s"Missing HANABI_USERNAME$index env variable!"))
+		val password = env.lift(s"HANABI_PASSWORD$index")
+			.getOrElse(throw new IllegalStateException(s"Missing HANABI_USERNAME$index env variable!"))
+
 		def useWebSocket(ws: WebSocket[IO]): IO[Unit] =
 			def heartbeat: IO[Unit] =
 				(ws.send(WebSocketFrame.Ping(Array.emptyByteArray)) *> IO.sleep(30.seconds)).foreverM
@@ -105,16 +112,10 @@ object main extends IOApp:
 				consoleQ <- Queue.unbounded[IO, ConsoleCmd]
 				gameRef  <- Ref.of[IO, Option[Game]](None)
 				client   = new BotClient(wsQueue, gameRef, BotConfig.fromEnv(env))(using runtime)
-				console  <- spawnConsole(consoleQ, client)
+				console  <- spawnConsole(consoleQ, client, username)
 				_        <- IO { Variant.init() }
 				_        <- (console.join, receive(client), senderLoop(wsQueue), heartbeat).parTupled
 			yield ()
-
-		val index = parsedArgs.getOrElse("index", "0").toInt
-		val username = env.lift(s"HANABI_USERNAME$index")
-			.getOrElse(throw new IllegalStateException(s"Missing HANABI_USERNAME$index env variable!"))
-		val password = env.lift(s"HANABI_PASSWORD$index")
-			.getOrElse(throw new IllegalStateException(s"Missing HANABI_USERNAME$index env variable!"))
 
 		val maxRetries = 5
 

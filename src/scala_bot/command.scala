@@ -204,6 +204,8 @@ class BotClient(queue: Queue[IO, String], gameRef: Ref[IO, Option[Game]], config
 							case r: RefSieve => gameRef.set(Some(r.navigate(turn)))
 							case r: HGroup => gameRef.set(Some(r.navigate(turn)))
 							case _ => IO.unit
+				case ConsoleCmd.State =>
+					IO.println(s"clue tokens: ${state.clueTokens}")
 
 	def handleMsg(data: String): IO[Unit] =
 		val (command, args) = data.splitAt(data.indexOf(' '))
@@ -452,7 +454,8 @@ class BotClient(queue: Queue[IO, String], gameRef: Ref[IO, Option[Game]], config
 
 					val analyzeIO = IO.blocking(fetchAnalyzeGame(args))
 						.flatMap: comments =>
-							comments.toList.traverse_(sendPM(who, _))
+							comments.toList.traverse_(sendPM(who, _)) *>
+							sendPM(who, "Analysis completed.")
 						.handleErrorWith: reason =>
 							sendPM(who, s"Failed to analyze: $reason.")
 
@@ -552,7 +555,7 @@ class BotClient(queue: Queue[IO, String], gameRef: Ref[IO, Option[Game]], config
 			Option.when(table.options.oneLessCard)("oneLessCard"),
 		).flatten
 
-		val unsupportedVarPattern = """Blind|Mute|Ambiguous|Dual-Color|Synesthesia|Mix|Funnels|Chimneys|Matryoshka|Alternating|Odds|Cow|Duck|Orange|Reversed|Throw|Up or Down|Sudoku""".r.unanchored
+		val unsupportedVarPattern = """Blind|Mute|Ambiguous|Dual-Color|Synesthesia|Mix|Funnels|Chimneys|Matryoshka|Alternating|Odds|Cow|Duck|Reversed|Throw|Up or Down|Sudoku""".r.unanchored
 		val unsupportedVariants = unsupportedVarPattern.matches(table.options.variantName)
 
 		IO.whenA(unsupportedOptions.nonEmpty):

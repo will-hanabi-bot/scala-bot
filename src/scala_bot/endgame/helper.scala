@@ -122,7 +122,7 @@ def triviallyWinnable(game: Game, playerTurn: Int): WinnableResult =
 
 	state.endgameTurns match
 		case Some(endgameTurns) if state.remScore <= endgameTurns =>
-			val initial = (PerformAction.Discard(state.hands(playerTurn).head), state.playStacks)
+			val initial = (PerformAction.tryDiscard(game, state.hands(playerTurn).head), state.playStacks)
 
 			val (perform, finalPlayStacks) = (0 until endgameTurns).foldLeft(initial): (acc, i) =>
 				val (action, stacks) = acc
@@ -133,7 +133,7 @@ def triviallyWinnable(game: Game, playerTurn: Int): WinnableResult =
 					acc
 				else
 					state.deck(playables.head).id().fold(acc): id =>
-						val perform = if i == 0 then PerformAction.Play(playables.head) else action
+						val perform = if i == 0 then PerformAction.tryPlay(game, playables.head) else action
 						(perform, stacks.updated(id.suitIndex, id.rank))
 
 			Either.cond(finalPlayStacks.sum == state.maxScore, (List(perform), Frac.one), "")

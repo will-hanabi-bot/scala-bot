@@ -87,7 +87,8 @@ case class FinesseConn(
 	order: Int,
 	ids: List[Identity],
 	fKind: FinesseKind,
-	ambiguousPassback: Boolean = false
+	ambiguousPassback: Boolean = false,
+	inverted: Boolean = false
 ) extends Connection:
 	def kind =
 		if fKind == FinesseKind.PossiblyBluff then "bluff?"

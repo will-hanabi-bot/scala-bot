@@ -397,6 +397,21 @@ case class Player(
 
 				case _ => acc
 
+	def thinksInverted(state: State, order: Int) =
+		thoughts(order).possibilities.forall(id => state.variant.suits(id.suitIndex).suitType.inverted)
+
+	def tryPlay(state: State, order: Int) =
+		if thinksInverted(state, order) then
+			Action.dragDiscard(state, playerIndex, order)
+		else
+			Action.dragPlay(state, playerIndex, order)
+
+	def tryDiscard(state: State, order: Int) =
+		if thinksInverted(state, order) then
+			Action.dragPlay(state, playerIndex, order)
+		else
+			Action.dragDiscard(state, playerIndex, order)
+
 	/** Returns the predicted score if all delayed playable cards are played. */
 	def hypoScore = hypoStacks.sum + unknownPlays.size - linkedPlays
 
@@ -423,6 +438,8 @@ case class Player(
 
 				// NOTE: symmetric = true?
 				player.thoughts(order).id(infer = true) match
+					case None if state.deck(order).id().exists(id => state.variant.suits(id.suitIndex).suitType.inverted) =>
+						// println(s"not known orange! $order")
 					case None =>
 						links.fastForeach: link =>
 							val orders = link.getOrders

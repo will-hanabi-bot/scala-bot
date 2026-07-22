@@ -328,7 +328,10 @@ object Reactor:
 
 					g.waiting match
 						case Some(wc) =>
-							reactDiscard(prev, g, playerIndex, order, wc)
+							if suitIndex != -1 && game.state.variant.suits(suitIndex).suitType.inverted then
+								reactPlay(prev, g, playerIndex, order, wc)
+							else
+								reactDiscard(prev, g, playerIndex, order, wc)
 
 						case None if usefulDc  =>
 							interpretUsefulDc(g, action) match
@@ -338,7 +341,7 @@ object Reactor:
 								case DiscardResult.Mistake =>
 									g.withMove(DiscardInterp.Mistake)
 
-								case DiscardResult.GentlemansDiscard(targets) =>
+								case DiscardResult.GentlemansDiscard(targets, _) =>
 									targets.foldLeft((game, game.state)):
 										case ((acc, hypoState), o) =>
 											val hidden = o != targets.last
@@ -360,22 +363,25 @@ object Reactor:
 									g.copy(common = g.common.copy(links = Link.Sarcastic(orders, id) +: g.common.links))
 										.withMove(DiscardInterp.Sarcastic)
 
-								case DiscardResult.Baton(_) =>
+								case DiscardResult.Baton(_, _) =>
 									throw new Error("baton unsupported!")
 						case None => g.withMove(DiscardInterp.None)
 				.elim()
 				.when(_ => prev.state.canClue)(resetZcs)
 
 		def interpretPlay(prev: Reactor, game: Reactor, action: PlayAction): Reactor =
-			val PlayAction(playerIndex, order, _, _) = action
+			val PlayAction(playerIndex, order, suitIndex, _) = action
 
 			game.reinterpPlay(prev, action).getOrElse:
 				checkMissed(game, playerIndex, order)
 					.pipe: g =>
 						g.waiting match
-							case Some(wc) => reactPlay(prev, g, playerIndex, order, wc)
-							case None => g
-					.withMove(PlayInterp.None, overwrite = true)
+							case Some(wc) =>
+								if suitIndex != -1 && game.state.variant.suits(suitIndex).suitType.inverted then
+									reactDiscard(prev, g, playerIndex, order, wc)
+								else
+									reactPlay(prev, g, playerIndex, order, wc)
+							case None => g.withMove(PlayInterp.None)
 					.elim()
 					.when(_ => prev.state.canClue)(resetZcs)
 
@@ -518,7 +524,7 @@ object Reactor:
 
 				val allPlays = playableOrders.map: o =>
 					val action = PlayAction(state.ourPlayerIndex, o, me.thoughts(o).id(infer = true))
-					(PerformAction.Play(o), action)
+					(PerformAction.tryPlay(game, o), action)
 
 				// We have a play and the reacter might play on top of us
 				lazy val potentialForcedPlay = allPlays.nonEmpty &&
@@ -554,7 +560,7 @@ object Reactor:
 					Log.info(s"discardable $discardOrders")
 					discardOrders.map: o =>
 						val action = DiscardAction(state.ourPlayerIndex, o, me.thoughts(o).id(infer = true))
-						(PerformAction.Discard(o), action)
+						(PerformAction.tryDiscard(game, o), action)
 
 				val allActions = allClues.concat(allPlays).concat(allDiscards)
 
@@ -563,7 +569,7 @@ object Reactor:
 						Log.error("no actions available at 8 clues! Playing slot 1")
 						PerformAction.Play(state.ourHand.head)
 					else
-						PerformAction.Discard(me.lockedDiscard(state, state.ourPlayerIndex))
+						PerformAction.tryDiscard(game, me.lockedDiscard(state, state.ourPlayerIndex))
 				else
 					allActions.maxBy((_, action) => evalAction(game, action))._1
 

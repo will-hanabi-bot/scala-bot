@@ -72,6 +72,7 @@ enum CardStatus:
 	case Finessed
 	case Sarcastic
 	case GentlemansDiscard
+	case GDInverted
 	/** Bluffed or finessed, but definitely blind playing. */
 	case FMaybeBluffed
 	case MaybeBluffed
@@ -87,6 +88,7 @@ enum CardStatus:
 			case CardStatus.Finessed => "finessed"
 			case CardStatus.Sarcastic => "sarcastic"
 			case CardStatus.GentlemansDiscard => "gentleman's discard"
+			case CardStatus.GDInverted => "gentleman's discard (inverted)"
 			case CardStatus.FMaybeBluffed => "finessed, maybe bluffed"
 			case CardStatus.MaybeBluffed => "maybe bluffed"
 			case CardStatus.Bluffed => "bluffed"

@@ -75,7 +75,7 @@ private def tryStable(prev: Reactor, game: Reactor, action: ClueAction, stall: B
 					infoLock = newInferred.toOpt
 				))
 				.withMeta(playableRankFocus):
-					_.copy(focused = true, status = CardStatus.CalledToPlay)
+					_.copy(focused = true, status = CardStatus.CalledToPlay, by = Some(giver))
 		else
 			g
 	.copy(

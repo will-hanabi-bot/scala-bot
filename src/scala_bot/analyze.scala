@@ -6,7 +6,7 @@ import scala_bot.refSieve.RefSieve
 import scala_bot.hgroup.HGroup
 import scala_bot.utils._
 
-import scala_bot.logger.{Logger, LogLevel}
+import scala_bot.logger.{Log, Logger, LogLevel}
 
 import cats.effect.{ExitCode, IO, IOApp, unsafe}, unsafe.IORuntime
 
@@ -54,7 +54,7 @@ def analyzeGame[G <: Game](game: G, data: GameData)(using ops: GameOps[G], runti
 		.pipe:
 			actions.foldLeft(_): (acc, perform) =>
 				val playerIndex = acc.state.currentPlayerIndex
-				acc.handleAction(perform.toAction(acc.state, playerIndex, Some(deck)))
+				acc.handleAction(perform.toAction(acc.state, playerIndex, Some(deck), retain = true))
 					.when(_.state.nextCardOrder < deck.length): a =>
 						perform match
 							case PerformAction.Play(_) | PerformAction.Discard(_) =>
@@ -76,6 +76,7 @@ object analyze extends IOApp:
 	def run(args: List[String]) =
 		IO.blocking {
 			val comments = fetchAnalyzeGame(args)(using runtime)
+			Log.highlight(Console.GREEN, s"------- ANALYZING -------")
 			println(comments.mkString("\n"))
 			ExitCode.Success
 		}
