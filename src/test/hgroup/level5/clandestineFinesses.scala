@@ -1,7 +1,5 @@
 package tests.hgroup.level5
 
-import cats.effect.unsafe.implicits.global
-
 import scala_bot.basics._
 import scala_bot.test.{hasInfs, hasStatus, Player, setup, takeTurn}, Player._
 import scala_bot.hgroup.HGroup
@@ -147,10 +145,7 @@ class ClandestineFinesses extends munit.FunSuite:
 
 		.pipe(takeTurn("Donald discards r3", "y1"))
 		.tap: g =>
-			assert(g.takeAction.unsafeRunSync() match
-				case _: PerformAction.Play => false
-				case _ => true
-			)
+			assertEquals(g.me.thinksPlayables(g, g.state.ourPlayerIndex), Vector.empty)
 		.pipe(takeTurn("Alice clues yellow to Donald"))
 		.pipe(takeTurn("Bob discards y3", "b1"))
 

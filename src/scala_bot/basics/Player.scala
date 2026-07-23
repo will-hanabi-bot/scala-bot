@@ -94,7 +94,7 @@ case class Player(
 
 	def chopNewest(game: Game, playerIndex: Int) =
 		game.state.hands(playerIndex).find: o =>
-			!game.state.deck(o).clued && game.meta(o).status == CardStatus.None
+			!game.state.deck(o).clued && (game.meta(o).status == CardStatus.None || game.meta(o).status == CardStatus.PermissionToDiscard)
 
 	/** Returns true if the given identity has been "sieved" (visible and will never go on chop). */
 	def isSieved(game: Game, id: Identity, excludeOrder: Int) =
@@ -152,7 +152,7 @@ case class Player(
 			thought.infoLock.existsO(_.forall(isTrash(game, _, order))) ||
 			meta.trash ||
 			meta.status == CardStatus.CalledToDiscard ||
-			meta.status == CardStatus.PermissionToDiscard
+			(game.loadedOnPtd && meta.status == CardStatus.PermissionToDiscard)
 
 		if orderKt(game, order) then
 			true
@@ -211,7 +211,7 @@ case class Player(
 	def orderPlayable(game: Game, order: Int, excludeTrash: Boolean = false) =
 		val state = game.state
 
-		if orderKp(game, order, excludeTrash) then
+		if orderKp(game, order) then
 			true
 		else if game.meta(order).trash then
 			false
@@ -272,6 +272,7 @@ case class Player(
 
 			game.state.deck(order).clued || (
 				status != CardStatus.None &&
+				status != CardStatus.PermissionToDiscard &&
 				status != CardStatus.CalledToDiscard &&
 				!(status == CardStatus.Finessed && game.meta(order).hidden)
 			)
@@ -286,8 +287,11 @@ case class Player(
 		game.state.hands(playerIndex).forall: order =>
 			val status = game.meta(order).status
 
-			game.state.deck(order).clued ||
-			(status != CardStatus.None && status != CardStatus.CalledToDiscard)
+			game.state.deck(order).clued || {
+				status != CardStatus.None &&
+				status != CardStatus.PermissionToDiscard &&
+				status != CardStatus.CalledToDiscard
+			}
 
 	/** Returns whether the given order is a valid prompt for the given identity. */
 	def validPrompt(prev: Game, order: Int, id: Identity, connected: FastBitSet = FastBitSet.empty, forcePink: Boolean = false) =

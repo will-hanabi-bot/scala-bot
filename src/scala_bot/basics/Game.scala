@@ -126,6 +126,9 @@ trait Game:
 
 	def lastMove: Option[Interp] = moveHistory.lastOption
 
+	/** Whether the convention considers a player with a card that has PTD to be loaded. */
+	def loadedOnPtd: Boolean = false
+
 trait GameOps[G <: Game]:
 	/** Returns a copy of the game state, but restarted from the beginning.
 	  * @param game     The current game state.
@@ -166,10 +169,9 @@ trait GameOps[G <: Game]:
 	def preferEndgameClue(game: G): Boolean =
 		false
 
-	/**
-	 * A processing function that runs just before replaying the most recent turn.
-	 * Typically used to set flags like 'allowFindOwn' or 'hypothetical' after a replay.
-	 */
+	/** A processing function that runs just before replaying the most recent turn.
+	  * Typically used to set flags like 'allowFindOwn' or 'hypothetical' after a replay.
+	  */
 	def injectReplay(@annotation.unused orig: G, hypo: G): G =
 		hypo
 
@@ -478,7 +480,8 @@ extension[G <: Game](game: G)
 				}
 			.pipe(ops.copyWith(_, GameUpdates(catchup = Some(game.catchup))))
 			.when(g => !g.catchup && g.state.currentPlayerIndex == g.state.ourPlayerIndex): g =>
-				Log.highlight(Console.BLUE, s"Suggested action: ${g.takeAction.unsafeRunSync().fmt(g, accordingTo = Some(g.me))}")
+				val perform = g.takeAction.unsafeRunSync().fmt(g, accordingTo = Some(g.me))
+				Log.highlight(Console.BLUE, s"Suggested action: $perform")
 				g
 			.withState(_.copy(actionList = actions))
 

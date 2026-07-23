@@ -26,7 +26,7 @@ def checkFix(prev: Game, game: Game, action: ClueAction): FixResult =
 			game.state.deck(order).matches(game.state.deck(o)) &&
 			prev.common.thoughts(order).id().isEmpty
 
-		if prev.common.orderKt(game, order) then
+		if prev.common.orderTrash(game, order) then
 			(cluedResets, duplicateReveals)
 		else if prev.meta(order).status == CardStatus.CalledToPlay && prev.isBlindPlaying(order) && game.common.thoughts(order).infoLock.existsO(_.forall(game.state.isBasicTrash)) then
 			(order +: cluedResets, duplicateReveals)

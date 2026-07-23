@@ -178,7 +178,7 @@ class Orange extends munit.FunSuite:
 		hasInfs(game, None, Alice, 5, Vector("o1"))
 
 		// Bob is not shouted for.
-		hasStatus(game, Bob, 5, CardStatus.None)
+		hasStatus(game, Bob, 5, CardStatus.PermissionToDiscard)
 
 	test("understands an orange baton discard"):
 		val game = setup(HGroup.atLevel(10), Vector(

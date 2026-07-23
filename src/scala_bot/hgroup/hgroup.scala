@@ -89,45 +89,56 @@ case class HGroup(
 	val goodTouch = true
 
 	override def filterPlayables(player: Player, playerIndex: Int, orders: Seq[Int], assume: Boolean = true) =
-		val ordered1s = this.order1s(orders.filter(this.unknown1))
+		val unknown1s = orders.filter(this.unknown1)
+		val ordered1s = this.order1s(unknown1s)
 
 		orders.filter: o =>
-			// if player.orderKp(this, o) then
-			// 	true
-			val possibleFocusDupe =
-				!ordered1s.contains(o) &&
-				!this.knownAs(o, PINKISH) &&
-				!meta(o).focused &&
-				state.deck(o).clued &&
-				state.hands(playerIndex).exists: o2 =>
-					meta(o2).focused &&
-					player.thoughts(o).inferred == player.thoughts(o2).inferred &&
-					state.deck(o).clues.forall(clue => state.deck(o2).clues.exists(_.isEq(clue)))
+			if this.meta(o).bluffed then
+				true
+			else
+				val possibleFocusDupe =
+					!ordered1s.contains(o) &&
+					!this.knownAs(o, PINKISH) &&
+					!meta(o).focused &&
+					state.deck(o).clued &&
+					state.hands(playerIndex).exists: o2 =>
+						meta(o2).focused &&
+						player.thoughts(o).inferred == player.thoughts(o2).inferred &&
+						state.deck(o).clues.forall(clue => state.deck(o2).clues.exists(_.isEq(clue)))
 
-			val olderFinesseExists = state.hands(playerIndex).exists: o2 =>
-				// An older finesse exists which could be swapped with this identity
-				xmeta(o2).idUncertain &&
-				xmeta(o2).turnFinessed.exists(t2 => xmeta(o).turnFinessed.exists(_ > t2)) &&
-				xmeta(o2).finesseIds.exists(ids => player.thoughts(o).id(infer = true).exists(ids.contains))
+				val olderFinesseExists = state.hands(playerIndex).exists: o2 =>
+					// An older finesse exists which could be swapped with this identity
+					xmeta(o2).idUncertain &&
+					xmeta(o2).turnFinessed.exists(t2 => xmeta(o).turnFinessed.exists(_ > t2)) &&
+					xmeta(o2).finesseIds.exists(ids => player.thoughts(o).id(infer = true).exists(ids.contains))
 
-			val unrevealedHidden = waiting.find: wc =>
-				!state.deck(o).clued &&
-				!wc.symmetric && !wc.ambiguousSelf &&
-				// This is part of a hidden (?) connection that is not currently revealed
-				wc.connections.nonEmpty && {
-					wc.currConn.hidden && wc.connections.tail.exists(_.order == o) ||
-					wc.connections.tail.exists(c => c.order == o && c.hidden)
+				val unrevealedHidden = waiting.find: wc =>
+					!state.deck(o).clued &&
+					!wc.symmetric && !wc.ambiguousSelf &&
+					// This is part of a hidden (?) connection that is not currently revealed
+					wc.connections.nonEmpty && {
+						wc.currConn.hidden && wc.connections.tail.exists(_.order == o) ||
+						wc.connections.tail.exists(c => c.order == o && c.hidden)
+					}
+
+				val unordered1 = (state.variant.pinkish || this.level < Level.BasicCM) && ordered1s.nonEmpty && ordered1s.tail.contains(o)
+
+				val ambiguous1 = unknown1s.nonEmpty && {
+					val possibleGDtargets = unknown1s.dropWhile(this.meta(_).status != CardStatus.GentlemansDiscard)
+					possibleGDtargets.length > 1 &&
+					unknown1s.length > state.playStacks.count(_ == 0) &&
+					possibleGDtargets.length < unknown1s.length &&
+					o != possibleGDtargets.head
 				}
 
-			val unordered1 = (state.variant.pinkish || this.level < Level.BasicCM) && ordered1s.nonEmpty && ordered1s.tail.contains(o)
-
-			// ((assume && !xmeta(o).fStatus.contains(FStatus.PossiblyOn(state.ourPlayerIndex))) || isDefinite(o)) &&
-			(assume || isDefinite(o)) &&
-			!possibleFocusDupe &&
-			!olderFinesseExists &&
-			unrevealedHidden.isEmpty &&
-			!unordered1 &&
-			!waiting.find(_.connections.exists(_.order == o)).exists(this.potentialClandestineWc(playerIndex, o, _).isDefined)
+				// ((assume && !xmeta(o).fStatus.contains(FStatus.PossiblyOn(state.ourPlayerIndex))) || isDefinite(o)) &&
+				(assume || isDefinite(o)) &&
+				!possibleFocusDupe &&
+				!olderFinesseExists &&
+				unrevealedHidden.isEmpty &&
+				!unordered1 &&
+				!ambiguous1 &&
+				!waiting.find(_.connections.exists(_.order == o)).exists(this.potentialClandestineWc(playerIndex, o, _).isDefined)
 
 	override def validArr(id: Identity, order: Int): Boolean =
 		val playables = this.me.thinksPlayables(this, state.ourPlayerIndex)
@@ -172,7 +183,7 @@ case class HGroup(
 	def chop(playerIndex: Int) =
 		state.hands(playerIndex).findLast: o =>
 			!state.deck(o).clued &&
-			(meta(o).status == CardStatus.None || !isDefinite(o))
+			(meta(o).status == CardStatus.None || meta(o).status == CardStatus.PermissionToDiscard || !isDefinite(o))
 		// If no chop seems to exist on someone other than us and they have hidden finesses to play, return the last finessed card instead.
 		.when(_.isEmpty && playerIndex != state.ourPlayerIndex && state.hands(playerIndex).exists(o => meta(o).status == CardStatus.Finessed && meta(o).hidden)): _ =>
 			state.hands(playerIndex).findLast: o =>
@@ -190,8 +201,11 @@ case class HGroup(
 
 				state.hands(playerIndex).count: o =>
 					o < order && o >= c &&
-					!state.deck(o).clued &&
-					meta(o).status == CardStatus.None
+					!state.deck(o).clued && {
+						meta(o).status == CardStatus.None ||
+						meta(o).status == CardStatus.PermissionToDiscard
+					}
+
 
 	def mustClue(playerIndex: Int) =
 		val bob = state.nextPlayerIndex(playerIndex)
@@ -438,6 +452,46 @@ case class HGroup(
 						(chop && visibleFind(state, this.players(giver), focusId, infer = true, excludeOrder = focus).isEmpty)	// save principle
 			}
 
+	def availableClue(giver: Int): Option[Clue] =
+		if noRecurse || !state.canClue || state.numPlayers == 2 then
+			return None
+
+		val allClues = for
+			target <- (0 until state.numPlayers).view if target != giver && target != state.lastPlayerIndex(giver)
+			clue   <- state.allValidClues(target)
+		yield
+			clue
+
+		allClues.find: clue =>
+			val action = Action.fromClue(state, clue, giver)
+			val FocusResult(focus, chop, _) = determineFocus(this, action)
+			val focusCard = state.deck(focus)
+			val focusId = focusCard.id().get
+
+			meta(focus).status != CardStatus.Finessed &&
+			!focusCard.clued &&
+			state.isUseful(focusId) && {
+				val hypo = this.copy(noRecurse = true, allowFindOwn = false).simulateAction(action)
+
+				hypo.lastMove.matchesP:
+					case Some(ClueInterp.Save) =>
+						state.isCritical(focusId) || {
+							focusId.rank == 2 &&
+							visibleFind(state, this.players(giver), focusId, infer = true, excludeOrder = focus).isEmpty &&
+							dupeResponsibility(this, focusId, action.target).contains(giver)
+						}
+
+					case Some(ClueInterp.Stall) =>
+						inEarlyGame &&
+						hypo.stallInterp == Some(StallInterp.Stall5) &&
+						!stalled5
+
+					case Some(ClueInterp.Play) =>
+						val (badTouch, _, _) = badTouchResult(this, hypo, action)
+						badTouch.isEmpty ||
+						(chop && visibleFind(state, this.players(giver), focusId, infer = true, excludeOrder = focus).isEmpty)	// save principle
+			}
+
 	def findDiscardable(playerIndex: Int) =
 		state.hands(playerIndex).filter: o =>
 			this.meta(o).status != CardStatus.Bluffed &&
@@ -648,8 +702,10 @@ object HGroup:
 					.withMove(DiscardInterp.None)
 			.when(_.inEarlyGame): g =>
 				val endEarlyGame = !failed &&
-					!game.state.deck(order).clued &&
-					game.meta(order).status == CardStatus.None
+					!game.state.deck(order).clued && {
+						game.meta(order).status == CardStatus.None ||
+						game.meta(order).status == CardStatus.PermissionToDiscard
+					}
 
 				g.copy(inEarlyGame = !endEarlyGame)
 			.elim()
@@ -666,32 +722,30 @@ object HGroup:
 					Log.warn(s"removed wc ${game.state.logConns(pre.wcLost(prev, action).get.connections)}! mistake")
 					pre.withMove(PlayInterp.Mistake)
 				else
-					pre.resetImportant(action.playerIndex)
-						.cond(_.level >= Level.BasicCM && rank == 1) { g =>
-							checkOcm(prev, action) match
-								case None =>
-									g.withMove(PlayInterp.None)
-								case Some(orders) =>
-									val chop = orders.min
-									val mistake = game.state.deck(chop).id().exists: id =>
-										game.state.isBasicTrash(id) || id.rank == 1
+					pre.resetImportant(action.playerIndex).pipe: g =>
+						checkOcm(prev, action) match
+							case None =>
+								g.withMove(PlayInterp.None)
+							case Some(orders) =>
+								val chop = orders.min
+								val mistake = game.state.deck(chop).id().exists: id =>
+									game.state.isBasicTrash(id) || id.rank == 1
 
-									if mistake then
-										Log.warn("bad ocm!")
+								if mistake then
+									Log.warn("bad ocm!")
 
-									performCM(g, orders).withMove:
-										if mistake then PlayInterp.Mistake else PlayInterp.OrderCM
-						} {
-							_.withMove(PlayInterp.None)
-						}
-						.copy(
-							dcStatus = DcStatus.None,
-							dda = None
-						)
+								performCM(g, orders).withMove:
+									if mistake then PlayInterp.Mistake else PlayInterp.OrderCM
+					.copy(
+						dcStatus = DcStatus.None,
+						dda = None
+					)
 			.elim()
 
 		def takeAction(game: HGroup): IO[PerformAction] =
 			val (state, me) = (game.state, game.me)
+
+			Log.info(s"ptd? ${game.chop(state.ourPlayerIndex).map(game.meta(_).status)}")
 
 			val solveEndgame =
 				if state.remScore <= state.variant.suits.length + 1 && state.pace + state.cardsLeft <= 7 then
@@ -742,7 +796,7 @@ object HGroup:
 								val value = evalAction(game, action)
 								(PerformAction.tryPlay(game, o), action, value)
 
-							val allDiscards = discardOrders.view.map: o =>
+							val allDiscards = discardOrders.map: o =>
 								val action = DiscardAction(state.ourPlayerIndex, o, me.thoughts(o).id(infer = true))
 								val value = evalAction(game, action)
 								(PerformAction.tryDiscard(game, o), action, value)
@@ -801,7 +855,22 @@ object HGroup:
 								allActions.maxBy(_._3)._1
 
 		def updateTurn(game: HGroup, action: TurnAction) =
-			game
+			val currentPlayerIndex = action.currentPlayerIndex
+
+			game.chop(currentPlayerIndex).fold(game): chop =>
+				val hasPtd =
+					game.state.clueTokens < 8 &&
+					game.dcStatus == DcStatus.None &&
+					game.meta(chop).status != CardStatus.PermissionToDiscard &&
+					!game.common.thinksLoaded(game, currentPlayerIndex) &&
+					!game.common.thinksLocked(game, currentPlayerIndex) &&
+					game.availableClue(currentPlayerIndex).isEmpty
+
+				if hasPtd then
+					Log.info(s"writing ptd on ${game.state.names(currentPlayerIndex)}")
+					game.withMeta(chop)(_.copy(status = CardStatus.PermissionToDiscard))
+				else
+					game
 
 		override def cleanHypo(game: HGroup) =
 			game.waiting.foldLeft(game): (acc, wc) =>

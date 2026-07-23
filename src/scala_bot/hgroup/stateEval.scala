@@ -103,7 +103,6 @@ def getResult(game: HGroup, hypo: HGroup, action: ClueAction): Double =
 
 	hypo.lastMove match
 		case Some(ClueInterp.Useless)  => value - 10
-		case Some(ClueInterp.Fix)      => value + 2
 		case _ => value
 
 private def clueFilter(game: HGroup, giver: Int) =
@@ -239,7 +238,9 @@ def advance(orig: HGroup, game: HGroup, offset: Int): Double =
 
 				if state.canClue && state.numPlayers > 2 then
 					val clueProb = if offset == 1 then
-						if common.thinksLoaded(game, bob) then
+						if game.lastActions(state.ourPlayerIndex).exists(_.isInstanceOf[DiscardAction]) then
+							0.8
+						else if common.thinksLoaded(game, bob) then
 							0.2
 						else if bobChop.isDefined then
 							if state.isBasicTrash(state.deck(bobChop.get).id().get) then 0.2 else 0.7
@@ -291,7 +292,14 @@ def _evalAction(game: HGroup, action: Action): Double =
 			if hypoGame.lastMove == Some(ClueInterp.Mistake) || clueValue == -100 then
 				-100.0
 			else
-				val bonus = if hypoGame.lastMove == Some(ClueInterp.Fix) then 0.5 else 0
+				val bonus =
+					if hypoGame.lastMove == Some(ClueInterp.Fix) then
+						0.5
+					else if clue.clue.kind == ClueKind.Colour then
+						0.05
+					else
+						0
+
 				val value =
 					if game.me.thinksPlayables(game, state.ourPlayerIndex).nonEmpty && game.inEndgame then
 						-1 + 0.5 * clueValue
@@ -318,7 +326,7 @@ def _evalAction(game: HGroup, action: Action): Double =
 				best + bonus
 
 		case PlayAction(playerIndex, order, _, _) =>
-			val uniqueInfs = game.me.thoughts(order).inferred.toList.filterNot: id =>
+			val uniqueInfs = game.me.thoughts(order).possibilities.toList.filterNot: id =>
 				visibleFind(state, game.me, id, cond = (playerIndex, _) => playerIndex != state.ourPlayerIndex).exists(state.deck(_).clued)
 
 			uniqueInfs.foldLeftOpt(0.0): (value, id) =>
@@ -337,7 +345,7 @@ def _evalAction(game: HGroup, action: Action): Double =
 				Log.highlight(Console.GREEN, f"average for ${action.fmt(state)}%s: $average%.2f")
 				average
 
-		case DiscardAction(_, order, suitIndex, rank, _) if (suitIndex != -1 && rank != -1) || game.me.orderTrash(game, order) =>
+		case DiscardAction(_, order, suitIndex, rank, _) if game.me.orderKt(game, order) || game.me.thoughts(order).inferred.isEmpty =>
 			val hypoGame = game.copy(allowFindOwn = false).simulate(action)
 
 			if hypoGame.lastMove == Some(DiscardInterp.Mistake) then
@@ -353,12 +361,12 @@ def _evalAction(game: HGroup, action: Action): Double =
 			if hypoGame.lastMove == Some(DiscardInterp.Mistake) then
 				-100.0
 			else
-				val best = -0.5 + advance(game, hypoGame, 1)
+				val best = (if game.meta(order).status == CardStatus.PermissionToDiscard then 0 else -0.5) + advance(game, hypoGame, 1)
 				Log.info(f"${action.fmt(state)}%s: $best%.2f (${hypoGame.lastMove.get}%s)")
 				best
 
 		case DiscardAction(playerIndex, order, _, _, failed) =>
-			game.me.thoughts(order).inferred.toList.foldLeftOpt(0.0): (value, i) =>
+			game.me.thoughts(order).possibilities.toList.foldLeftOpt(0.0): (value, i) =>
 				Log.highlight(Console.GREEN, s"discarding ${state.logId(i)}")
 				val hypoGame = game.copy(allowFindOwn = false).simulate(DiscardAction(playerIndex, order, i.suitIndex, i.rank, failed))
 
@@ -369,7 +377,7 @@ def _evalAction(game: HGroup, action: Action): Double =
 					Log.info(f"${action.fmt(state)}%s: $best%.2f (${hypoGame.lastMove.get}%s)")
 					Right(best + value)
 			.when(_ != -100):
-				_ / game.me.thoughts(order).inferred.length
+				_ / game.me.thoughts(order).possibilities.length
 
 		case _ => throw new Error("impossible")
 
@@ -385,7 +393,7 @@ def evalState(state: State, inEndgame: Boolean, offset: Int): Double =
 		if inEndgame then
 			2 * state.score
 		else
-			state.score.min(2 * state.variant.suits.length) * 0.5 + state.score
+			state.score.min(2 * state.variant.suits.length) * 0.25 + state.score
 
 	val clueVal: Double =
 		if inEndgame then 0 else
@@ -396,7 +404,7 @@ def evalState(state: State, inEndgame: Boolean, offset: Int): Double =
 			case c 					 => c / 2.0
 
 	val scoreLoss = state.variant.suits.length * 5 - state.maxScore
-	val dcCritVal = -20 * scoreLoss
+	val dcCritVal = -15 * scoreLoss
 
 	val strikesVal = state.strikes match
 		case 1 => if inEndgame then -0.5 else -2.5
@@ -412,6 +420,10 @@ def evalGame(orig: HGroup, game: HGroup, offset: Int): Double =
 
 	if state.score == state.maxScore && state.score == orig.state.maxScore then
 		return 100
+
+	if offset == state.numPlayers && game.me.thinksLocked(game, state.ourPlayerIndex) && state.clueTokens == 0 then
+		Log.warn(s"back to us with zero clues and locked!")
+		return -10
 
 	val stateVal = evalState(state, inEndgame = orig.inEndgame || orig.state.remScore < 5, offset)
 
@@ -453,7 +465,7 @@ def evalGame(orig: HGroup, game: HGroup, offset: Int): Double =
 				case _ => -0.5
 
 	val touchVal = 0.5 * state.heldOrders.summing: o =>
-		if !state.deck(o).clued && game.meta(o).status == CardStatus.None then
+		if !state.deck(o).clued && (game.meta(o).status == CardStatus.None || game.meta(o).status == CardStatus.PermissionToDiscard) then
 			0
 		else if game.common.orderTrash(game, o) then
 			0.05

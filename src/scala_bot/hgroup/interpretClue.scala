@@ -16,7 +16,7 @@ def evaluateCM(ctx: ClueContext, chopMoved: Seq[Int]): ClueInterp =
 	val state = game.state
 	val ClueAction(giver, target, list, clue) = action
 
-	if chopMoved.forall(state.deck(_).id().exists(state.isBasicTrash)) then
+	if chopMoved.forall(state.deck(_).id().exists(id => state.isBasicTrash(id) || id.rank == 1)) then
 		if chopMoved.forall(game.common.orderKt(game, _)) then
 			ClueInterp.Useless
 		else
@@ -371,7 +371,6 @@ def interpClue(ctx: ClueContext): HGroup =
 					game.withThought(focus)(t => t.copy(inferred = IdentitySet.empty))
 						.withMeta(focus)(_.copy(trash = true))
 						.withMove(ClueInterp.Fix)
-
 				else
 					game.withMove(ClueInterp.Mistake)
 			else

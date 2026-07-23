@@ -288,7 +288,7 @@ extension (p: Player)
 			// !thought.reset &&
 			game.meta(order).status != CardStatus.CalledToDiscard &&
 			!thought.id(symmetric = true).isDefined &&
-			!thought.inferred.isEmpty &&
+			thought.inferred.nonEmpty &&
 			thought.possible.difference(state.trashSet).nonEmpty &&
 			game.isTouched(order)
 

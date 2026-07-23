@@ -39,6 +39,8 @@ case class RefSieve(
 ) extends Game:
 	val goodTouch = true
 
+	override def loadedOnPtd = state.numPlayers == 2
+
 	override def filterPlayables(player: Player, playerIndex: Int, orders: Seq[Int], assume: Boolean): Seq[Int] =
 		orders.filter: o =>
 			!player.links.exists(l => l.getOrders.contains(o) && l.getOrders.max != o) &&

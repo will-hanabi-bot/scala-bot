@@ -89,7 +89,7 @@ def occamsRazor(ctx: ClueContext, fps: Seq[FocusPossibility], playerIndex: Int, 
 				(min, acc, impossible)
 	}
 	.pipe: (min, acc, impossible) =>
-		acc.reverse ++ impossible.filter(fpSimplicity(_, playerIndex, state.ourPlayerIndex) <= min)
+		acc.reverse ++ impossible.filter(fpSimplicity(_, playerIndex, state.ourPlayerIndex) == min)
 
 	.when(_ => playerIndex == state.ourPlayerIndex): simplest =>
 		// If a simplest possibility involves X finessing, followed by a self-finesse,

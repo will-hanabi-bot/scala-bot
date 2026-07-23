@@ -215,9 +215,9 @@ def interpretUsefulDcH(ctx: DiscardContext): Option[HGroup] =
 	val id = Identity(suitIndex, rank)
 
 	val valid = !failed &&
-		action.suitIndex != -1 && action.rank != -1 &&
+		suitIndex != -1 && rank != -1 &&
 		!game.state.isBasicTrash(id) &&
-		prev.isTouched(action.order) // && prev.isDefinite(order)
+		prev.isTouched(order) // && prev.isDefinite(order)
 
 	Option.when(valid):
 		(checkUsefulDcH(ctx) match

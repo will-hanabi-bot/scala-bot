@@ -184,7 +184,7 @@ class PositionalDiscards extends munit.FunSuite:
 		.pipe(takeTurn("Alice discards y1 (slot 5)"))
 		.pipe(takeTurn("Bob discards b1", "b5"))
 
-		hasStatus(game, Alice, 5, CardStatus.None)
+		hasStatus(game, Alice, 5, CardStatus.PermissionToDiscard)
 
 	test("recognizes a pos dc on the last player"):
 		val game = setup(HGroup.atLevel(8), Vector(

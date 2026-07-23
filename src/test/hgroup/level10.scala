@@ -243,6 +243,82 @@ class GentlemansDiscards extends munit.FunSuite:
 
 		assert(_evalAction(game, DiscardAction(Alice.ordinal, game.state.hands(Alice.ordinal)(4), -1, -1, false)) < 0)
 
+	test("interprets a tcm with info from a layered gd"):
+		val game = setup(HGroup.atLevel(10), Vector(
+			Vector("xx", "xx", "xx", "xx", "xx"),
+			Vector("r1", "r4", "y4", "y4", "g4")
+		),
+			playStacks = Some(Vector(0, 0, 1, 1, 1))
+		)
+		.pipe(takeTurn("Alice clues red to Bob"))
+		.pipe(takeTurn("Bob discards r1", "g4"))
+		.pipe(takeTurn("Alice plays y1 (slot 1)"))
+		.pipe(takeTurn("Bob clues 1 to Alice (slots 1,2)"))
+
+		// This is a Trash CM on slot 1, with r1 in slot 2.
+		assertEquals(game.common.thinksPlayables(game, Alice.ordinal), Vector(game.state.hands(Alice.ordinal)(1)))
+		assertEquals(game.takeAction.unsafeRunSync(), PerformAction.Play(game.state.hands(Alice.ordinal)(1)))
+		hasStatus(game, Alice, 3, CardStatus.ChopMoved)
+		assertEquals(game.lastMove, Some(ClueInterp.Discard))
+
+	test("doesn't ocm with info from a layered gd"):
+		val game = setup(HGroup.atLevel(10), Vector(
+			Vector("xx", "xx", "xx", "xx", "xx"),
+			Vector("r1", "r4", "y4", "y4", "g4")
+		),
+			playStacks = Some(Vector(0, 0, 0, 1, 1))
+		)
+		.pipe(takeTurn("Alice clues red to Bob"))
+		.pipe(takeTurn("Bob discards r1", "g4"))
+		.pipe(takeTurn("Alice plays y1 (slot 1)"))
+		.pipe(takeTurn("Bob clues 1 to Alice (slots 1,2)"))
+		.tap: g =>
+			// r1 must be in slot 2, so g1 must be in slot 1: playing slot 1 is not an OCM.
+			hasInfs(g, None, Alice, 1, Vector("g1"))
+			hasInfs(g, None, Alice, 2, Vector("r1"))
+		.pipe(takeTurn("Alice plays g1 (slot 1)"))
+
+		hasStatus(game, Bob, 5, CardStatus.PermissionToDiscard)
+
+	test("allows an ocm with ambiguous info from a layered gd"):
+		val game = setup(HGroup.atLevel(10), Vector(
+			Vector("xx", "xx", "xx", "xx", "xx"),
+			Vector("r1", "r4", "y4", "y4", "g4")
+		))
+		.pipe(takeTurn("Alice clues red to Bob"))
+		.pipe(takeTurn("Bob discards r1", "g4"))
+		.pipe(takeTurn("Alice plays y1 (slot 1)"))
+		.pipe(takeTurn("Bob clues 1 to Alice (slots 1,2,3)"))
+		.pipe(takeTurn("Alice plays p1 (slot 3)"))
+
+		// Alice doesn't know where r1 is, and slot 1 can be a good 1, so playing slot 3 is a single OCM.
+		hasStatus(game, Bob, 4, CardStatus.PermissionToDiscard)
+		hasStatus(game, Bob, 5, CardStatus.ChopMoved)
+
+	test("disambiguates without ocming with ambiguous info from a layered gd"):
+		val game = setup(HGroup.atLevel(10), Vector(
+			Vector("xx", "xx", "xx", "xx", "xx"),
+			Vector("r1", "r4", "y4", "y4", "g4")
+		),
+			playStacks = Some(Vector(0, 0, 0, 1, 1))
+		)
+		.pipe(takeTurn("Alice clues red to Bob"))
+		.pipe(takeTurn("Bob discards r1", "g4"))
+		.pipe(takeTurn("Alice plays y1 (slot 1)"))
+		.pipe(takeTurn("Bob clues 1 to Alice (slots 1,2,3)"))
+
+		// Alice doesn't know where r1 is, and slot 1 might not be a good 1, so Alice should always play slot 2.
+		// e.g. slots 1,2,3 could be [trash, g1, r1] or [g1, r1, trash]
+		assertEquals(game.common.thinksPlayables(game, Alice.ordinal), Vector(game.state.hands(Alice.ordinal)(1)))
+
+		val game1 = takeTurn("Alice plays g1 (slot 2)")(game)
+		hasInfs(game1, None, Alice, 3, Vector("r1"))
+		hasStatus(game1, Bob, 5, CardStatus.PermissionToDiscard)
+
+		val game2 = takeTurn("Alice plays r1 (slot 2)")(game)
+		hasInfs(game2, None, Alice, 2, Vector("g1"))
+		hasStatus(game2, Bob, 5, CardStatus.PermissionToDiscard)
+
 	test("correctly interprets a play clue after gd"):
 		val game = setup(HGroup.atLevel(10), Vector(
 			Vector("xx", "xx", "xx", "xx", "xx"),

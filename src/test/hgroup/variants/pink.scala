@@ -517,7 +517,7 @@ class PinkFixes extends munit.FunSuite:
 		val game = setup(HGroup.atLevel(3), Vector(
 			Vector("xx", "xx", "xx", "xx", "xx"),
 			Vector("r3", "i3", "i1", "r5", "g4"),
-			Vector("g4", "y3", "r2", "i1", "i2")
+			Vector("g4", "y3", "r3", "i1", "i2")
 		),
 			starting = Bob,
 			variant = TestVariant.Pink5,

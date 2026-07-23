@@ -64,8 +64,8 @@ def handleTcm(ctx: ClueContext, tcm: Seq[Int], notStall: Boolean) =
 				case _ =>
 					game.withMove(ClueInterp.Reveal)
 	else
-		// All newly cards are trash
-		list.foldLeft(game): (acc, order) =>
+		// All newly cards are trash, except to the right of a gd note
+		list.takeWhile(game.meta(_).status != CardStatus.GentlemansDiscard).foldLeft(game): (acc, order) =>
 			if prev.state.deck(order).clued then acc else
 				acc.withThought(order): t =>
 					val newInferred = t.possible.intersect(state.trashSet)
@@ -144,13 +144,29 @@ def interpret5cm(ctx: ClueContext): Option[Vector[Int]] =
 			Some(Vector(chop.get))
 	}
 
-def checkOcm(prev: HGroup, action: PlayAction | DiscardAction) =
+def checkOcm(prev: HGroup, action: PlayAction | DiscardAction): Option[List[Int]] =
 	val state = prev.state
-	val (playerIndex, order) = action match
-		case PlayAction(p, o, _, _) => (p, o)
-		case DiscardAction(p, o, _, _, _) => (p, o)
+	val (playerIndex, order, rank) = action match
+		case PlayAction(p, o, _, rank) => (p, o, rank)
+		case DiscardAction(p, o, _, rank, _) => (p, o, rank)
 
-	val ordered1s = prev.order1s(state.hands(playerIndex).filter(prev.unknown1))
+	if prev.level < Level.BasicCM || rank != 1 || prev.state.variant.pinkish || prev.state.playStacks.count(_ == 0) <= 1 then
+		return None
+
+	val unknown1s = state.hands(playerIndex).filter(prev.unknown1)
+	val ordered1s = prev.order1s(unknown1s)
+
+	val ambiguous1s = unknown1s.nonEmpty && {
+		val possibleGDtargets = unknown1s.dropWhile(prev.meta(_).status != CardStatus.GentlemansDiscard)
+		possibleGDtargets.length > 1 &&
+		unknown1s.length > state.playStacks.count(_ == 0) &&
+		possibleGDtargets.length < unknown1s.length
+	}
+
+	if ambiguous1s then
+		Log.highlight(Console.CYAN, s"needed to disambiguate 1s! not ocm")
+		return None
+
 	val offset = ordered1s.indexOf(order)
 	val target = (playerIndex + offset) % state.numPlayers
 
@@ -177,7 +193,7 @@ def checkOcm(prev: HGroup, action: PlayAction | DiscardAction) =
 def interpretBombOcm(ctx: DiscardContext): Option[HGroup] =
 	val DiscardContext(prev, game, action) = ctx
 
-	if !(action.failed && action.rank == 1) then None else
+	if !action.failed then None else
 		checkOcm(prev, action).map: orders =>
 			val chop = orders.min
 			val mistake = game.state.deck(chop).id().exists(game.state.isBasicTrash)

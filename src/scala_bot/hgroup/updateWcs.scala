@@ -110,8 +110,11 @@ def refreshWCs(prev: HGroup, game: HGroup, action: Action, beforeClueInterp: Boo
 			case UpdateResult.SelfPassback =>
 				struct.copy(wcs = struct.wcs :+ wc.copy(selfPassback = true))
 
-			case UpdateResult.Demonstrated(nextIndex, skipped) =>
-				struct.copy(
+			case UpdateResult.Demonstrated(nextIndex, skipped)  =>
+				if wc.ambiguousSelf then
+					Log.warn(s"not demonstrating ambiguous wc!")
+					struct
+				else struct.copy(
 					wcs = nextIndex.fold(struct.wcs)(i => struct.wcs :+ wc.copy(connections = conns.drop(i))),
 					toRemove = struct.toRemove :++ (if !skipped then struct.toRemove else nextIndex.fold(conns)(conns.take)),
 					demos = struct.demos :+ nextIndex.fold(wc)(i => wc.copy(connections = conns.drop(i)))

@@ -1,5 +1,6 @@
 package tests.hgroup
 
+import scala_bot.basics._
 import scala_bot.test.{hasInfs, Player, setup, takeTurn, TestVariant}, Player._
 import scala_bot.hgroup.HGroup
 
@@ -129,3 +130,19 @@ class Muddy extends munit.FunSuite:
 		.pipe(takeTurn("Donald clues blue to Alice (slots 1,2,3)"))
 
 		hasInfs(game, None, Alice, 2, Vector("m1"))
+
+	test("plays into a potential muddy bluff"):
+		val game = setup(HGroup.atLevel(11), Vector(
+			Vector("xx", "xx", "xx", "xx"),
+			Vector("b1", "r2", "y4", "y4"),
+			Vector("g4", "g4", "b4", "b4"),
+			Vector("r4", "r4", "m4", "m4")
+		),
+			starting = Cathy,
+			variant = TestVariant.Muddy5
+		)
+		.pipe(takeTurn("Cathy clues 2 to Alice (slot 3)"))
+		.pipe(takeTurn("Donald clues 2 to Bob"))
+
+		// If we play m1, then r2 won't connect.
+		assertEquals(game.me.thinksPlayables(game, game.state.ourPlayerIndex), Vector(3))

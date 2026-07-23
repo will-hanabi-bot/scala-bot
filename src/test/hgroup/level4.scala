@@ -148,7 +148,7 @@ class CM5 extends munit.FunSuite:
 		)
 		.pipe(takeTurn("Bob clues 5 to Alice (slots 3,5)"))
 
-		hasStatus(game, Alice, 4, CardStatus.None)
+		hasStatus(game, Alice, 4, CardStatus.PermissionToDiscard)
 
 class OrderCM extends munit.FunSuite:
 	override def beforeAll() = Logger.setLevel(LogLevel.Off)
@@ -205,7 +205,20 @@ class OrderCM extends munit.FunSuite:
 		.pipe(takeTurn("Bob plays y1", "p4"))
 
 		// Slot 4 is not chop moved.
-		hasStatus(game, Alice, 4, CardStatus.None)
+		hasStatus(game, Alice, 4, CardStatus.PermissionToDiscard)
+
+	test("doesn't try to ocm with one 1 left to play"):
+		val game = setup(HGroup.atLevel(4), Vector(
+			Vector("xx", "xx", "xx", "xx", "xx"),
+			Vector("r4", "r4", "y4", "y4", "g4")
+		),
+			starting = Bob,
+			playStacks = Some(Vector(1, 1, 1, 1, 0))
+		)
+		.pipe(takeTurn("Bob clues 1 to Alice (slots 3,4)"))
+
+		// Only slot 4 is playable.
+		assertEquals(game.common.thinksPlayables(game, Alice.ordinal), Vector(game.state.hands(Alice.ordinal)(3)))
 
 class GeneralCM extends munit.FunSuite:
 	override def beforeAll() = Logger.setLevel(LogLevel.Off)

@@ -345,3 +345,21 @@ class General extends munit.FunSuite:
 
 		// The r1 -> r2 connection is still on.
 		assert(game.waiting.nonEmpty)
+
+	test("plays into a reverse finesse"):
+		val game = setup(HGroup.atLevel(4), Vector(
+			Vector("xx", "xx", "xx", "xx", "xx"),
+			Vector("r3", "g3", "y4", "b3", "b4"),	// for some reason, holding y4 caused the reverse finesse to be missed
+			Vector("g1", "y3", "y3", "r1", "p4")
+		),
+			starting = Bob,
+			playStacks = Some(Vector(0, 0, 0, 0, 2)),
+			discarded = Vector("y4"),
+			clueTokens = 4
+		)
+		.pipe(takeTurn("Bob clues 4 to Cathy"))
+		.pipe(takeTurn("Cathy discards r1", "r5"))
+
+		// hasInfs(game, None, Cathy, 5, Vector("r4", "y4"))
+		hasInfs(game, None, Alice, 1, Vector("p3"))
+		hasStatus(game, Alice, 1, CardStatus.Finessed)
