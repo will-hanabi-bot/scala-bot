@@ -1,7 +1,7 @@
 package scala_bot.endgame
 
 import scala_bot.basics._
-import scala_bot.fraction.Frac
+import scala_bot.lib.{FastBitSet, Frac}
 import scala_bot.utils._
 // import scala_bot.logger.Log
 import scala_bot.utils.playersUntil
@@ -35,7 +35,7 @@ def unwinnableState(state: State, playerTurn: Int, remaining: RemainingMap, dept
 
 	loop(state.numPlayers - 1, _ >= 0, _ - 1): i =>
 		val hand = state.hands(i)
-		val void = hand.fastForall(state.deck(_).id().forall(state.isBasicTrash))
+		val void = hand.forall(state.deck(_).id().forall(state.isBasicTrash))
 
 		if void then
 			isVoid(i) = true

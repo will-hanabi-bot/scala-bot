@@ -239,7 +239,7 @@ def interpretTccm(ctx: ClueContext): Option[List[Int]] =
 			return None
 		case _ => ()
 
-	if state.hands.exists(_.exists(o => !prev.isBlindPlaying(o) && game.isBlindPlaying(o))) then
+	if state.heldOrders.exists(o => !prev.isBlindPlaying(o) && game.isBlindPlaying(o)) then
 		Log.info(s"caused finesse, not tccm")
 		return None
 

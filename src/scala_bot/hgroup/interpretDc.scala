@@ -1,6 +1,7 @@
 package scala_bot.hgroup
 
 import scala_bot.basics._
+import scala_bot.lib.FastBitSet
 import scala_bot.utils._
 import scala_bot.logger.Log
 
@@ -181,7 +182,7 @@ def transferWCs(ctx: DiscardContext, result: DiscardResult): HGroup =
 						Log.info(s"rewriting wc ${state.logConns(wc.connections, wc.inference)}")
 						val order =
 							if orders.exists(game.unknown1) then
-								game.order1s(orders).head
+								game.next1(orders).get
 							else
 								orders.head
 
@@ -265,7 +266,7 @@ def interpretUsefulDcH(ctx: DiscardContext): Option[HGroup] =
 			case (DiscardResult.Sarcastic(orders), _) =>
 				game.copy(
 					common = if !orders.forall(game.state.deck(_).clued) then game.common else game.common.copy(
-						links = Link.Sarcastic(orders, id) +: game.common.links
+						links = Link.Sarcastic(FastBitSet.from(orders), id) +: game.common.links
 					),
 					dda = None
 				)

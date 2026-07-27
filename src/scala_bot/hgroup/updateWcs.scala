@@ -200,7 +200,7 @@ def refreshWCs(prev: HGroup, game: HGroup, action: Action, beforeClueInterp: Boo
 				acc
 	.copy(waiting = retainWCs.toList)
 	.when(_ => elim):
-		_.elim(except = hypo)
+		_.elim(except = hypo, skipHypoStacks = hypo.isDefined)
 
 def updateWc(prev: HGroup, game: HGroup, action: Action, wc: WaitingConnection, toRemove: Vector[Connection], beforeClueInterp: Boolean): UpdateResult =
 	if wc.connections.isEmpty then

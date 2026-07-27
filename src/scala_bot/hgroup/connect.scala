@@ -1,6 +1,7 @@
 package scala_bot.hgroup
 
 import scala_bot.basics._
+import scala_bot.lib.FastBitSet
 import scala_bot.utils._
 
 import scala_bot.logger.{Log, Logger, LogLevel}
@@ -63,7 +64,7 @@ def findKnownConn(ctx: ClueContext, id: Identity, ignore: FastBitSet, findOwn: B
 			!game.meta(o).hidden &&
 			!game.xmeta(o).fStatus.contains(FStatus.PossiblyOn(giver)) &&
 			(game.assumePlays || !game.xmeta(o).fStatus.contains(FStatus.PossiblyOn(state.ourPlayerIndex))) &&
-			!common.linkedOrders(state).contains(o)
+			!common.isLinked(state, o)
 
 		Option.when(validKnown)(KnownConn(state.holderOf(o), o, id))
 
@@ -95,14 +96,14 @@ def findKnownConn(ctx: ClueContext, id: Identity, ignore: FastBitSet, findOwn: B
 			common.orderKp(game, order, excludeTrash = true) || {
 				// Mimic common.orderPlayable, except we can also try playing previously-known unrelated plays
 				!game.meta(order).trash &&
-				!common.linkedOrders(state, unpromisedOnly = true).contains(order) && {
+				!common.isLinked(state, order, unpromisedOnly = true) && {
 					val poss = common.thoughts(order).possibilities.difference(state.trashSet)
 
 					poss.nonEmpty && poss.forall: i =>
 						state.isPlayable(i) ||
 						(state.playStacks(i.suitIndex) + 1 until i.rank).forall: rank =>
-							common.hypoPlays.exists: o =>
-								state.deck(o).matches(Identity(i.suitIndex, rank))
+							val id = Identity(i.suitIndex, rank)
+							common.hypoPlays.exists(state.deck(_).matches(id))
 				}
 			}
 		} &&
@@ -142,7 +143,6 @@ def findUnknownConnecting(ctx: ClueContext, reacting: Int, id: Identity, connect
 	val ClueContext(prev, game, action) = ctx
 	val (state, level) = (game.state, game.level)
 	val ClueAction(giver, target, _, _) = action
-	val FocusResult(focus, _, _) = game.determineFocus(prev, action)
 
 	// val flags = List(
 	// 	opts.findOwn.map(own => s"own ($own)"),

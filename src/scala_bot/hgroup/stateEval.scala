@@ -145,7 +145,7 @@ def advance(orig: HGroup, game: HGroup, offset: Int): Double =
 
 	else if allPlayables.nonEmpty then
 		val unknown1s = allPlayables.filter(game.unknown1)
-		val next1 = game.order1s(unknown1s).headOption
+		val next1 = game.next1(unknown1s)
 		val playables = allPlayables.find(meta(_).urgent) match
 			case Some(order) => List(order)
 			case None => allPlayables.filter: o =>

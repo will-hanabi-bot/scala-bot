@@ -1,6 +1,7 @@
 package scala_bot.hgroup
 
 import scala_bot.basics._
+import scala_bot.lib.FastBitSet
 import scala_bot.utils._
 import scala_bot.logger.Log
 
@@ -164,13 +165,13 @@ def assignConns(game: HGroup, action: ClueAction, fps: Seq[FocusPossibility], fo
 						val target = fp.connections.lift(connI + 1).map(_.order).getOrElse(focus)
 						val existingLink = g.common.links.existsM:
 							case Link.Promised(orders, id, target) =>
-								id == c.id && orders.toSet == c.linked.toSet
+								id == c.id && orders == FastBitSet.from(c.linked)
 
 						if existingLink then g else
 							Log.info(s"adding promised link ${c.linked} ${conn.ids.map(state.logId).mkString(",")} $target")
 							g.copy(
 								common = g.common.copy(
-									links = Link.Promised(c.linked, c.id, target) +: g.common.links))
+									links = Link.Promised(FastBitSet.from(c.linked), c.id, target) +: g.common.links))
 					case _ => g
 			.pipe: g =>
 				conn match

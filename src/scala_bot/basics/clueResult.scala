@@ -103,10 +103,9 @@ def badTouchResult(prev: Game, game: Game, action: ClueAction) =
 	val (badTouch, trash) = state.hands(target).foldRight(inter) { case (order, (badTouch, trash)) =>
 		val duplicated =
 			(!prev.state.deck(order).clued && state.deck(order).clued && !badTouch.contains(order) && !trash.contains(order)) &&
-			state.hands.exists: hand =>
-				hand.exists: o =>
-					(prev.isTouched(o) || game.isTouched(o)) &&
-					areDupes(order, o, badTouch, trash)
+			state.heldOrders.exists: o =>
+				(prev.isTouched(o) || game.isTouched(o)) &&
+				areDupes(order, o, badTouch, trash)
 
 		if duplicated then
 			(order +: badTouch, trash)

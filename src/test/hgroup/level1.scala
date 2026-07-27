@@ -3,6 +3,7 @@ package tests.hgroup.level1
 import cats.effect.unsafe.implicits.global
 
 import scala_bot.basics._
+import scala_bot.lib.FastBitSet
 import scala_bot.test.{hasInfs, hasStatus, Player, setup, takeTurn}, Player._
 import scala_bot.hgroup.{getResult, HGroup}
 
@@ -93,7 +94,7 @@ class General extends munit.FunSuite:
 			// Alice is promised to have y1, since Cathy will never self-finesse.
 			assert(g.common.links.exists:
 				case Link.Promised(orders, id, _) =>
-					orders.toSet == Set(0, 1, 2) && id == g.state.expandShort("y1")
+					orders == FastBitSet(0, 1, 2) && id == g.state.expandShort("y1")
 				case _ => false
 			)
 			assertEquals(g.lastMove, Some(ClueInterp.Play))

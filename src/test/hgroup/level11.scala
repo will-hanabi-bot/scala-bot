@@ -210,7 +210,7 @@ class IndirectBluffs extends munit.FunSuite:
 		assert(game.common.links.exists {
 			case Link.Promised(orders, id, _) =>
 				id == game.state.expandShort("r3") &&
-				orders.length == 2 && orders.contains(13) && orders.contains(14)
+				orders.size == 2 && orders.contains(13) && orders.contains(14)
 			case _ => false
 		})
 

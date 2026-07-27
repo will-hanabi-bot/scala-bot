@@ -3,8 +3,8 @@ package tests
 import scala_bot.reactor.Reactor
 import scala_bot.hgroup.HGroup
 import scala_bot.basics._
+import scala_bot.lib.Frac
 import scala_bot.endgame.EndgameSolver
-import scala_bot.fraction.Frac
 
 import scala_bot.test.{Colour, fullyKnown, Player, preClue, setup, TestVariant}, Player._
 import scala_bot.logger.{Logger, LogLevel}

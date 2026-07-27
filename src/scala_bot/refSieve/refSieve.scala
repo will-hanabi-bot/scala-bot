@@ -4,9 +4,9 @@ import cats.effect.IO
 
 import scala_bot.basics._
 import scala_bot.endgame.EndgameSolver
+import scala_bot.lib.{FastBitSet, Frac}
 import scala_bot.utils._
 import scala_bot.logger.{Log, Logger, LogLevel}
-import scala_bot.fraction.Frac
 
 enum UpdateResult:
 	case Remove
@@ -456,7 +456,7 @@ object RefSieve:
 
 						case DiscardResult.Sarcastic(orders) =>
 							game.copy(
-								common = game.common.copy(links = Link.Sarcastic(orders, id) +: game.common.links)
+								common = game.common.copy(links = Link.Sarcastic(FastBitSet.from(orders), id) +: game.common.links)
 							)
 							.withMove(DiscardInterp.Sarcastic)
 

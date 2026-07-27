@@ -4,9 +4,9 @@ import cats.effect.IO
 
 import scala_bot.basics._
 import scala_bot.endgame.EndgameSolver
+import scala_bot.lib.{FastBitSet, Frac}
 import scala_bot.logger._
 import scala_bot.utils._
-import scala_bot.fraction.Frac
 
 case class ReactorWC(
 	giver: Int,
@@ -360,7 +360,7 @@ object Reactor:
 									.withMove(DiscardInterp.GentlemansDiscard)
 
 								case DiscardResult.Sarcastic(orders) =>
-									g.copy(common = g.common.copy(links = Link.Sarcastic(orders, id) +: g.common.links))
+									g.copy(common = g.common.copy(links = Link.Sarcastic(FastBitSet.from(orders), id) +: g.common.links))
 										.withMove(DiscardInterp.Sarcastic)
 
 								case DiscardResult.Baton(_, _) =>

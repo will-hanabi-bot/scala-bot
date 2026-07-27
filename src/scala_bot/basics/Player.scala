@@ -1,5 +1,6 @@
 package scala_bot.basics
 
+import scala_bot.lib.{CertainMapEntry, FastBitSet}
 import scala_bot.utils._
 import scala_bot.logger.{Logger, LogLevel}
 
@@ -10,15 +11,15 @@ enum Link:
 	  * @param id     The promised identity.
 	  * @param target The order of the card this link connects to.
 	  */
-	case Promised(orders: Seq[Int], id: Identity, target: Int)
+	case Promised(orders: FastBitSet, id: Identity, target: Int)
 	/** A link created from a *Sarcastic Discard*. */
-	case Sarcastic(orders: Seq[Int], id: Identity)
+	case Sarcastic(orders: FastBitSet, id: Identity)
 	/** A link created from *Good Touch*. It's possible none of the cards are the identity.
 	  * @example With two blue cards when the blue stack is at 4, an Unpromised link would exist for r5.
 	  */
-	case Unpromised(orders: Seq[Int], ids: IdentitySet)
+	case Unpromised(orders: FastBitSet, ids: IdentitySet)
 
-	def getOrders: Seq[Int] = this match
+	def getOrders: FastBitSet = this match
 		case Promised(orders, _, _) => orders
 		case Sarcastic(orders, _) => orders
 		case Unpromised(orders, _) => orders
@@ -65,7 +66,10 @@ case class Player(
 	/** The set of orders whose inferences have been modified since the last call to elim(). */
 	dirty: FastBitSet = FastBitSet.empty,
 	/** Maps each identity (by ordinal) to the orders known to be that identity. */
-	certainMap: Vector[List[MatchEntry]]
+	certainMap: Vector[CertainMapEntry],
+
+	/** Maps each identity (by ordinal) to the orders that could be that identity. */
+	possibleMap: Array[FastBitSet] = Array()
 ):
 	def withThought(order: Int)(f: Thought => Thought) =
 		copy(
@@ -122,7 +126,7 @@ case class Player(
 	  */
 	def isDuped(game: Game, id: Identity, excludeOrder: Int) =
 		val candidates = if game.goodTouch then
-			game.state.hands.view.flatten.filter(game.isTouched)
+			game.state.heldOrders.filter(game.isTouched).toList
 		else
 			game.state.hands(game.state.holderOf(excludeOrder))
 
@@ -147,18 +151,18 @@ case class Player(
 		val meta = game.meta(order)
 		val thought = thoughts(order)
 
-		lazy val conventionalTrash =
-			thought.possible.forall(isTrash(game, _, order)) ||
-			thought.infoLock.existsO(_.forall(isTrash(game, _, order))) ||
-			meta.trash ||
-			meta.status == CardStatus.CalledToDiscard ||
-			(game.loadedOnPtd && meta.status == CardStatus.PermissionToDiscard)
-
 		if orderKt(game, order) then
 			true
 		else if thought.possible.difference(game.state.criticalSet).isEmpty then
 			false
 		else
+			val conventionalTrash =
+				thought.possible.forall(isTrash(game, _, order)) ||
+				thought.infoLock.existsO(_.forall(isTrash(game, _, order))) ||
+				meta.trash ||
+				meta.status == CardStatus.CalledToDiscard ||
+				(game.loadedOnPtd && meta.status == CardStatus.PermissionToDiscard)
+
 			conventionalTrash || thought.possibilities.forall(isTrash(game, _, order))
 
 	/** Returns true if this order is known trash, conventonally promised trash, or duplicated in the same hand. */
@@ -199,7 +203,7 @@ case class Player(
 				case CardStatus.Sarcastic | CardStatus.GentlemansDiscard =>
 					possPlayable(thought.inferred)
 
-				case _ if linkedOrders(state, unpromisedOnly = true).contains(order) =>
+				case _ if isLinked(state, order, unpromisedOnly = true) =>
 					false
 
 				case _ =>
@@ -215,7 +219,7 @@ case class Player(
 			true
 		else if game.meta(order).trash then
 			false
-		else if linkedOrders(state, unpromisedOnly = true).contains(order) then
+		else if isLinked(state, order, unpromisedOnly = true) then
 			false
 		else
 			val infer =
@@ -234,16 +238,30 @@ case class Player(
 
 	/** Returns the obvious and inferred playable orders in the given player's hand. (See [[orderPlayable]].) */
 	def thinksPlayables(game: Game, playerIndex: Int, excludeTrash: Boolean = false, assume: Boolean = true) =
-		game.state.hands(playerIndex).filter(o => orderPlayable(game, o, excludeTrash = !thoughts(o).reset && excludeTrash && game.isTouched(o)))
-			.pipe: playables =>
-				// Exclude unknown cards if there is a duplicate that is fully known.
-				playables.filterNot: p1 =>
-					thoughts(p1).id().isEmpty &&
-					playables.exists: p2 =>
-						p1 != p2 &&
-						thoughts(p2).id().exists(thoughts(p1).matches(_, infer = true))
-			.pipe:
-				game.filterPlayables(this, playerIndex, _, assume)
+		val hand = game.state.hands(playerIndex)
+
+		// -1 = not playable, -2 = playable and always kept, >=0 = playable with an inferred id
+		val idOrds = Array.fill(hand.length)(-1)
+		var certainIds = IdentitySet.empty
+
+		loop(0, _ < hand.length, _ + 1): i =>
+			val order = hand(i)
+			if orderPlayable(game, order, excludeTrash = !thoughts(order).reset && excludeTrash && game.isTouched(order)) then
+				thoughts(order).id() match
+					case Some(id) =>
+						certainIds = certainIds.union(id)
+						idOrds(i) = -2
+					case None =>
+						idOrds(i) = thoughts(order).id(infer = true).map(_.toOrd).getOrElse(-2)
+
+		// Exclude unknown cards if there is a duplicate that is fully known.
+		var unduplicatedPlays = List.empty[Int]
+		loop(hand.length - 1, _ >= 0, _ - 1): i =>
+			val ord = idOrds(i)
+			if ord == -2 || (ord >= 0 && !certainIds.contains(Identity.fromOrd(ord))) then
+				unduplicatedPlays = hand(i) +: unduplicatedPlays
+
+		game.filterPlayables(this, playerIndex, unduplicatedPlays, assume)
 
 	/** Returns the trash orders in the given player's hand. (See [[Player.orderTrash]].) */
 	def thinksTrash(game: Game, playerIndex: Int) =
@@ -387,17 +405,31 @@ case class Player(
 		val visibleCount = state.heldOrders.filter(thoughts(_).matches(id)).size
 		state.cardCount(id.toOrd) - state.baseCount(id.toOrd) - visibleCount
 
+	def isLinked(state: State, order: Int, unpromisedOnly: Boolean = false) =
+		links.exists: link =>
+			link match
+				case Link.Promised(orders, id, _) =>
+					!unpromisedOnly && orders.contains(order) && orders.size > unknownIds(state, id)
+
+				case Link.Sarcastic(orders, id) if !unpromisedOnly =>
+					!unpromisedOnly && orders.contains(order) && orders.size > unknownIds(state, id)
+
+				case Link.Unpromised(orders, ids) =>
+					orders.contains(order) && orders.size > ids.iter.summing(unknownIds(state, _))
+
+				case _ => false
+
 	def linkedOrders(state: State, unpromisedOnly: Boolean = false): FastBitSet =
 		links.foldLeft(FastBitSet.empty): (acc, link) =>
 			link match
 				case Link.Promised(orders, id, _) if !unpromisedOnly =>
-					if orders.length > unknownIds(state, id) then acc.union(orders) else acc
+					if orders.size > unknownIds(state, id) then acc.union(orders) else acc
 
 				case Link.Sarcastic(orders, id) if !unpromisedOnly =>
-					if orders.length > unknownIds(state, id) then acc.union(orders) else acc
+					if orders.size > unknownIds(state, id) then acc.union(orders) else acc
 
 				case Link.Unpromised(orders, ids) =>
-					if orders.length > ids.iter.summing(unknownIds(state, _)) then acc.union(orders) else acc
+					if orders.size > ids.iter.summing(unknownIds(state, _)) then acc.union(orders) else acc
 
 				case _ => acc
 
@@ -445,7 +477,7 @@ case class Player(
 					case None if state.deck(order).id().exists(id => state.variant.suits(id.suitIndex).suitType.inverted) =>
 						// println(s"not known orange! $order")
 					case None =>
-						links.fastForeach: link =>
+						links.foreach: link =>
 							val orders = link.getOrders
 							if orders.contains(order) && orders.forall(o => o == order || played.contains(o)) then
 								hypo = link.promise.fold(hypo): id =>
@@ -498,10 +530,10 @@ case class Player(
 							changed = true
 					}
 
-				player.playLinks.fastForeach: link =>
-					val allPlayed = link.orders.fastForall(played.contains)
+				player.playLinks.foreach: link =>
+					val allPlayed = link.orders.forall(played.contains)
 
-					if allPlayed && !played.contains(link.target) && state.hands.exists(_.contains(link.target)) then
+					if allPlayed && !played.contains(link.target) && state.heldOrders.contains(link.target) then
 						val order = link.target
 						val id = state.deck(order).id()
 
@@ -528,5 +560,5 @@ object Player:
 			allPossible = allPossible,
 			hypoStacks = hypoStacks,
 			isCommon = playerIndex == -1,
-			certainMap = Vector.fill(allPossible.length)(Nil)
+			certainMap = Vector.fill(allPossible.length)(CertainMapEntry.empty)
 		)

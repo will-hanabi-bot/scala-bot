@@ -1,6 +1,7 @@
 package scala_bot.hgroup
 
 import scala_bot.basics._
+import scala_bot.lib.FastBitSet
 import scala_bot.utils._
 import scala_bot.logger.Log
 
@@ -70,24 +71,21 @@ def checkHFix(ctx: ClueContext): Option[HGroup] =
 					val old1s = list.filter: o =>
 						prev.common.thoughts(o).inferred.forall(_.rank == 1) &&
 						!prev.common.thoughts(o).possible.forall(_.rank == 1)
-					val oldOrdered1s = prev.order1s(old1s)
-					val fixedOrder = oldOrdered1s.head
+					val fixedOrder = prev.next1(old1s).get
 
 					if state.deck(fixedOrder).id().forall(_.rank == clue.value) then
 						Log.info(s"pink fix promise! $fixedOrder")
-						val newGame =
+						Some:
 							game.withThought(fixedOrder)(t => t.copy(
 								inferred = t.possible.filter(i => i.rank == clue.value && !state.isPlayable(i))
 							))
 							.pipe: g =>
-								list.filter(oldOrdered1s.contains).foldLeft(g): (acc, o) =>
+								list.filter(old1s.contains).foldLeft(g): (acc, o) =>
 									if o == fixedOrder then
 										acc
 									else
 										acc.withThought(o)(t => t.copy(inferred = t.possible))
 							.withMove(ClueInterp.Fix)
-
-						Some(newGame)
 
 					else
 						Log.error("looked like pink fix but didn't match possible interpretations?")
@@ -248,7 +246,7 @@ def interpClue(ctx: ClueContext): HGroup =
 	if prev.state.deck(focus).clued && !positional then
 		if game.level >= Level.Fix then
 			val fixTarget = Option.when(clue == BaseClue(ClueKind.Rank, 1)):
-				prev.order1s(list.filter(prev.unknown1)).headOption
+				prev.next1(list.filter(prev.unknown1))
 			.flatten.getOrElse(focus)
 
 			if prev.common.hypoPlays.contains(fixTarget) && common.thoughts(fixTarget).possible.intersect(state.trashSet).nonEmpty then

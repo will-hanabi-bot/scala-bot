@@ -1,6 +1,7 @@
 package scala_bot.hgroup
 
 import scala_bot.basics._
+import scala_bot.lib.FastBitSet
 // import scala_bot.logger.Log
 
 def validBluff(game: HGroup, action: ClueAction, blind: Identity, truth: Identity, reacting: Int, connected: FastBitSet, symmetric: Boolean = false) =

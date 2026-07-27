@@ -151,17 +151,17 @@ class BotClient(queue: Queue[IO, String], gameRef: Ref[IO, Option[Game]], config
 						Log.error(s"Player $name not found.")
 						IO.unit
 					case i =>
-						val player = from.fold(game.common): name =>
+						val player = from.fold(Some(game.common)): name =>
 							state.names.indexOf(name) match
 								case -1 =>
 									println(s"Player $from not found.")
-									null
+									None
 								case index =>
-									game.players(index)
+									Some(game.players(index))
 
-						if player != null then
+						player.fold(IO.unit): p =>
 							val output = List(
-								s"viewing from ${player.name}",
+								s"viewing from ${p.name}",
 								s"===================="
 							).concat:
 								state.hands(i).flatMap: order =>
@@ -171,22 +171,20 @@ class BotClient(queue: Queue[IO, String], gameRef: Ref[IO, Option[Game]], config
 										Option.when(meta.hidden)("hidden"),
 										Option.when(meta.trash)("trash"),
 										Option.when(meta.urgent)("urgent"),
-										Option.when(player.thoughts(order).reset)("reset")
+										Option.when(p.thoughts(order).reset)("reset")
 									).flatten
 
 									List(
 										Some(s"$order: ${state.logId(order)} ${meta.status}"),
-										Some(s"inferred: [${player.strInfs(state, order)}]"),
-										player.thoughts(order).infoLock.mapA(info => s"info lock: [${info.fmt(state)}]"),
-										Some(s"possible: [${player.strPoss(state, order)}]"),
+										Some(s"inferred: [${p.strInfs(state, order)}]"),
+										p.thoughts(order).infoLock.mapA(info => s"info lock: [${info.fmt(state)}]"),
+										Some(s"possible: [${p.strPoss(state, order)}]"),
 										Some(s"reasoning: ${meta.reasoning}"),
 										Option.when(!flags.isEmpty)(s"flags: $flags"),
 										Some("====================")
 									).flatten
 
 							IO.println(output.mkString("\n"))
-						else
-							IO.unit
 				case ConsoleCmd.Navigate(arg) =>
 					val turn = arg match
 						case NavArg.Turn(turn) => turn
@@ -445,7 +443,7 @@ class BotClient(queue: Queue[IO, String], gameRef: Ref[IO, Option[Game]], config
 			val pattern = """/analyze (\d+) (\w+) ?(\d+)?""".r
 
 			msg match
-				case pattern(id, conv, level) if Convention.from(conv).isRight =>
+				case pattern(id, conv, level) if conv != null && Convention.from(conv).isRight =>
 					val args = List(
 						Some(s"id=$id"),
 						Some(s"convention=$conv"),

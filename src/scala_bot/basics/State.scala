@@ -1,6 +1,7 @@
 package scala_bot.basics
 
 import scala_bot.TableOptions
+import scala_bot.lib.FastBitSet
 import scala_bot.utils._
 import scala.util.matching.Regex
 

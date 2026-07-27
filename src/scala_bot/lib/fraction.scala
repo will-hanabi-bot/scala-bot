@@ -1,4 +1,4 @@
-package scala_bot.fraction
+package scala_bot.lib
 
 import scala.math.Numeric
 
@@ -112,5 +112,5 @@ object Frac:
 		def parseString(str: String) =
 			val pattern = """(\d+)/(\d+)""".r
 			str match
-				case pattern(numer, denom) => Some(Frac(numer.toInt, denom.toInt))
+				case pattern(numer, denom) if numer != null && denom != null => Some(Frac(numer.toInt, denom.toInt))
 				case _ => None

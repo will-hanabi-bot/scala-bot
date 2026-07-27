@@ -1,6 +1,7 @@
 package scala_bot.hgroup
 
 import scala_bot.basics._
+import scala_bot.lib.FastBitSet
 import scala_bot.utils._
 import scala_bot.logger.Log
 

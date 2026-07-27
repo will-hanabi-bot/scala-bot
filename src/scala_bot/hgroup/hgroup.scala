@@ -4,9 +4,9 @@ import cats.effect.IO
 
 import scala_bot.basics._
 import scala_bot.endgame.EndgameSolver
+import scala_bot.lib.{FastBitSet, Frac}
 import scala_bot.utils._
 import scala_bot.logger.{Log, Logger, LogLevel}
-import scala_bot.fraction.Frac
 
 case class FocusResult(
 	focus: Int,
@@ -90,14 +90,14 @@ case class HGroup(
 
 	override def filterPlayables(player: Player, playerIndex: Int, orders: Seq[Int], assume: Boolean = true) =
 		val unknown1s = orders.filter(this.unknown1)
-		val ordered1s = this.order1s(unknown1s)
+		val next1 = this.next1(unknown1s)
 
 		orders.filter: o =>
 			if this.meta(o).bluffed then
 				true
 			else
 				val possibleFocusDupe =
-					!ordered1s.contains(o) &&
+					!unknown1s.contains(o) &&
 					!this.knownAs(o, PINKISH) &&
 					!meta(o).focused &&
 					state.deck(o).clued &&
@@ -121,7 +121,7 @@ case class HGroup(
 						wc.connections.tail.exists(c => c.order == o && c.hidden)
 					}
 
-				val unordered1 = (state.variant.pinkish || this.level < Level.BasicCM) && ordered1s.nonEmpty && ordered1s.tail.contains(o)
+				val unordered1 = (state.variant.pinkish || this.level < Level.BasicCM) && unknown1s.contains(o) && !next1.contains(o)
 
 				val ambiguous1 = unknown1s.nonEmpty && {
 					val possibleGDtargets = unknown1s.dropWhile(this.meta(_).status != CardStatus.GentlemansDiscard)
@@ -267,6 +267,20 @@ case class HGroup(
 		meta(order).status != CardStatus.Finessed &&
 		clues.nonEmpty &&
 		clues.forall(_.isEq(BaseClue(ClueKind.Rank, 1)))
+
+	def next1(orders: Seq[Int]) =
+		orders.minByOption: o =>
+			// play fresh 1s from a later turn before chop-focus on an earlier turn
+			state.deck(o).clues.head.turn * -1000 + {
+				if clued1sOnChop.contains(o) then
+					-100 - o
+				else if meta(o).cm then
+					100 - o
+				else if state.inStartingHand(o) then
+					o
+				else
+					-o
+			}
 
 	def order1s(orders: Seq[Int]) =
 		orders.sortBy: o =>
@@ -602,6 +616,14 @@ object HGroup:
 		def copyWith(game: HGroup, updates: GameUpdates) =
 			val meta = updates.meta.getOrElse(game.meta)
 
+			val newXMeta =
+				if meta.length > game.xmeta.length + 1 then
+					throw new Error("meta grew twice!")
+				else if meta.length == game.xmeta.length + 1 then
+					game.xmeta :+ XConvData()
+				else
+					game.xmeta
+
 			game.copy(
 				tableID = updates.tableID.getOrElse(game.tableID),
 				state = updates.state.getOrElse(game.state),
@@ -621,7 +643,7 @@ object HGroup:
 				noRecurse = updates.noRecurse.getOrElse(game.noRecurse),
 				hypothetical = updates.hypothetical.getOrElse(game.hypothetical),
 
-				xmeta = game.xmeta.padTo(meta.length, XConvData())
+				xmeta = newXMeta
 			)
 
 		def blank(game: HGroup, keepDeck: Boolean) =

@@ -4,7 +4,7 @@ import cats.effect.IO
 import cats.effect.unsafe.IORuntime
 
 import scala_bot.endgame.EndgameSolver
-import scala_bot.fraction.Frac
+import scala_bot.lib.Frac
 import scala_bot.utils._
 import scala_bot.logger._
 
@@ -585,7 +585,7 @@ extension[G <: Game](game: G)
 		val (cmds, newNotes) = game.state.heldOrders.foldLeft((List.empty[(String, String)], notes)): (acc, order) =>
 			val (cmds, newNotes) = acc
 			val card = state.deck(order)
-			lazy val note = getNote(order)
+			val note = getNote(order)
 
 			if (!card.clued && game.meta(order).status == CardStatus.None) || note.isEmpty then
 				acc

@@ -127,18 +127,6 @@ extension [A](a: Iterable[A])
 	def existsM(cond: PartialFunction[A, Boolean]): Boolean =
 		a.iterator.fastExists(_.matchesP(cond))
 
-	inline def fastForeach(inline f: A => Unit): Unit =
-		a.iterator.fastForeach(f)
-
-	inline def fastForall(inline f: A => Boolean): Boolean =
-		a.iterator.fastForall(f)
-
-	inline def fastCount(inline f: A => Boolean): Int =
-		a.iterator.fastCount(f)
-
-	inline def fastExists(inline f: A => Boolean): Boolean =
-		a.iterator.fastExists(f)
-
 	/** A left fold, but the reducer must return an Either wrapping the result.
 	  * Left() means that the fold should stop.
 	  * Right() means to continue reducing.

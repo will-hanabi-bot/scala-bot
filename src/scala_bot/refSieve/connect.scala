@@ -1,6 +1,7 @@
 package scala_bot.refSieve
 
 import scala_bot.basics._
+import scala_bot.lib.FastBitSet
 import scala_bot.logger.Log
 
 import scala.annotation.tailrec

@@ -1,4 +1,4 @@
-package scala_bot.basics
+package scala_bot.lib
 
 /** A faster bitset that only supports storing integers between 0 and 63. */
 opaque type FastBitSet = Long
@@ -9,6 +9,9 @@ object FastBitSet:
 	/** Creates an FastBitSet of size 1, containing this number. */
 	inline def single(num: Int): FastBitSet =
 		1L << num
+
+	inline def apply(nums: Int*): FastBitSet =
+		from(nums)
 
 	/** Creates an FastBitSet from an iterable sequence of numbers. */
 	inline def from(set: Iterable[Int]): FastBitSet =
@@ -139,7 +142,7 @@ object FastBitSet:
 					res &= ~(1L << tz)
 			res
 
-		inline def foldLeft[A](init: A)(f: (A, Int) => A): A =
+		inline def foldLeft[A](init: A)(inline f: (A, Int) => A): A =
 			var acc = init
 			set.foreach: i =>
 				acc = f(acc, i)
@@ -175,6 +178,13 @@ object FastBitSet:
 			set.foreach: i =>
 				res = numeric.plus(res, f(i))
 			res
+
+		inline def max: Int =
+			var m = set.head
+			set.foreach: i =>
+				if i > m then
+					m = i
+			m
 
 		/** If empty, returns alternative, otherwise returns this. */
 		inline def whenEmpty(inline alternative: => FastBitSet) =

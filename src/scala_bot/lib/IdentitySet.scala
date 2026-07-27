@@ -84,7 +84,7 @@ object IdentitySet:
 		inline def find(inline cond: Identity => Boolean): Option[Identity] =
 			var bits = ids
 			var found = false
-			var foundId: Identity = null
+			var foundId: Option[Identity] = None
 
 			while bits != 0 && !found do
 				val tz = java.lang.Long.numberOfTrailingZeros(bits)
@@ -93,9 +93,9 @@ object IdentitySet:
 				val id = Identity.fromOrd(tz)
 				if cond(id) then
 					found = true
-					foundId = id
+					foundId = Some(id)
 
-			if found then Some(foundId) else None
+			foundId
 
 		def toList =
 			var res = List.empty[Identity]

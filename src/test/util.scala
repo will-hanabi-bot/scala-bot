@@ -66,13 +66,17 @@ def setup[G <: Game](
 						hypoStacks = stacks,
 						certainMap = stacks.zipWithIndex
 							.flatMap((stack, suitIndex) => (1 to stack).map(Identity(suitIndex, _)))
-							.foldLeft(p.certainMap)((acc, id) => acc.updated(id.toOrd, MatchEntry(61, -1) +: acc(id.toOrd)))
+							.zipWithIndex
+							.foldLeft(p.certainMap):
+								case (acc, (id, i)) => acc.updated(id.toOrd, acc(id.toOrd).update(63 - i, unknownTo = -1))
 					))),
 					common = Some(g.common.copy(
 						hypoStacks = stacks,
 						certainMap = stacks.zipWithIndex
 							.flatMap((stack, suitIndex) => (1 to stack).map(Identity(suitIndex, _)))
-							.foldLeft(g.common.certainMap)((acc, id) => acc.updated(id.toOrd, MatchEntry(61, -1) +: acc(id.toOrd)))
+							.zipWithIndex
+							.foldLeft(g.common.certainMap):
+								case (acc, (id, i)) => acc.updated(id.toOrd, acc(id.toOrd).update(63 - i, unknownTo = -1))
 					))
 				))
 		.pipe: g =>
@@ -95,17 +99,18 @@ def setup[G <: Game](
 
 			drawActions.foldLeft(g)(_.handleAction(_))
 		.pipe: g =>
-			discarded.foldLeft(g): (game, short) =>
-				val id = game.state.expandShort(short)
-				game.withState(_.withDiscard(id, 99)).pipe: g =>
-					ops.copyWith(g, GameUpdates(
-						common = Some(g.common.copy(
-							certainMap = g.common.certainMap.updated(id.toOrd, MatchEntry(61, -1) +: g.common.certainMap(id.toOrd)))
-						),
-						players = Some(g.players.map: p =>
-							p.copy(certainMap = p.certainMap.updated(id.toOrd, MatchEntry(61, -1) +: p.certainMap(id.toOrd)))
-						)
-					))
+			discarded.zipWithIndex.foldLeft(g):
+				case (game, (short, i)) =>
+					val id = game.state.expandShort(short)
+					game.withState(_.withDiscard(id, 99)).pipe: g =>
+						ops.copyWith(g, GameUpdates(
+							common = Some(g.common.copy(
+								certainMap = g.common.certainMap.updated(id.toOrd, g.common.certainMap(id.toOrd).update(63 - g.state.score - i, unknownTo = -1)))
+							),
+							players = Some(g.players.map: p =>
+								p.copy(certainMap = p.certainMap.updated(id.toOrd, p.certainMap(id.toOrd).update(63 - g.state.score - i, unknownTo = -1)))
+							)
+						))
 		.tap: g =>
 			for id <- g.state.variant.allIds do
 				val count =	g.state.baseCount(id.toOrd) + visibleFind(g.state, g.me, id).length
@@ -190,7 +195,7 @@ def parseAction(state: State, action: String) =
 		index
 
 	action match
-		case cluePattern(giverS, valueS, targetS, slotsS) =>
+		case cluePattern(giverS, valueS, targetS, slotsS) if giverS != null && valueS != null && targetS != null =>
 			if !state.canClue then
 				throw new IllegalArgumentException(s"Tried to clue with 0 clue tokens")
 
@@ -214,7 +219,7 @@ def parseAction(state: State, action: String) =
 				val list = slotsS.split(",").map(s => state.ourHand(s.toInt - 1))
 				ClueAction(giver, target, list.toSeq, clue)
 
-		case playPattern(playerS, short, slotS) =>
+		case playPattern(playerS, short, slotS) if playerS != null && short != null =>
 			val playerIndex = parsePlayer(playerS)
 			val id = state.expandShort(short)
 			val Identity(suitIndex, rank) = id
@@ -248,7 +253,7 @@ def parseAction(state: State, action: String) =
 				val order = state.hands(state.ourPlayerIndex)(slotS.toInt - 1)
 				PlayAction(playerIndex, order, suitIndex, rank)
 
-		case discardPattern(playerS, action, short, slotS) =>
+		case discardPattern(playerS, action, short, slotS) if playerS != null && short != null =>
 			if state.clueTokens == 8 && action != "bombs" then
 				throw new IllegalArgumentException(s"Tried to discard with 8 clue tokens")
 

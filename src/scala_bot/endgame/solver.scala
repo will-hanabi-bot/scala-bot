@@ -1,7 +1,7 @@
 package scala_bot.endgame
 
 import scala_bot.basics._
-import scala_bot.fraction.Frac
+import scala_bot.lib.Frac
 import scala_bot.logger.{Log, Logger, LogLevel}
 import scala_bot.utils._
 
@@ -545,7 +545,6 @@ case class EndgameSolver[G <: Game](
 					break(List((perform, winrate)))
 
 				(perform, winrate)
-
 			.toList
 			.sortBy(-_._2)
 
