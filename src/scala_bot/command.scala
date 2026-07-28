@@ -119,7 +119,7 @@ class BotClient(queue: Queue[IO, String], gameRef: Ref[IO, Option[Game]], config
 	private var tables: Map[Int, Table] = Map()
 	private var convention: Convention = Convention.Reactor
 	private var fastMode: Boolean = false
-	private var lastJoinRequester: Option[String] = None
+	private var lastRequester: Option[String] = None
 
 	private def newGameFromSettings(tID: Int, state: State, convention: Convention): Game =
 		convention match
@@ -288,7 +288,7 @@ class BotClient(queue: Queue[IO, String], gameRef: Ref[IO, Option[Game]], config
 				IO:
 					tableID = Some(id)
 					gameStarted = false
-					lastJoinRequester = None
+					lastRequester = None
 				.flatMap: _ =>
 					tables.get(id).fold(IO.unit): table =>
 						checkSupportedSettings(table)
@@ -342,15 +342,15 @@ class BotClient(queue: Queue[IO, String], gameRef: Ref[IO, Option[Game]], config
 			case "tableStart" =>
 				val id = ujson.read(args)("tableID").num.toInt
 
-				IO { gameStarted = true } *>
+				IO { gameStarted = true; lastRequester = None } *>
 				sendCmd("getGameInfo1", ujson.write(ujson.Obj("tableID" -> id)))
 
 			case "warning" =>
 				val msg = ujson.read(args)("warning").str
 
-				lastJoinRequester.fold(IO.unit): who =>
+				lastRequester.fold(IO.unit): who =>
 					sendPM(who, msg) *>
-					IO { lastJoinRequester = None }
+					IO { lastRequester = None }
 				*>
 				IO { println(s"warn: $args") }
 
@@ -408,7 +408,7 @@ class BotClient(queue: Queue[IO, String], gameRef: Ref[IO, Option[Game]], config
 				case Some(t) if t.passwordProtected =>
 					msg.split(" ").lift(1) match
 						case Some(password) =>
-							IO { lastJoinRequester = Some(who) } *>
+							IO { lastRequester = Some(who) } *>
 							sendCmd("tableJoin", ujson.write(ujson.Obj("tableID" -> t.id, "password" -> password)))
 						case None =>
 							sendPM(who, "Room is password protected, please provide a password.")
@@ -427,8 +427,24 @@ class BotClient(queue: Queue[IO, String], gameRef: Ref[IO, Option[Game]], config
 						case Some(t) => sendCmd("tableReattend", ujson.write(ujson.Obj("tableID" -> t.id)))
 						case None => sendPM(who, "Could not rejoin, as the bot is not a player in any open room.")
 
+		else if msg.startsWith("/start") then
+			tableID match
+				case Some(id) =>
+					IO { lastRequester = Some(who) } *>
+					sendCmd("tableStart", ujson.write(ujson.Obj("tableID" -> id)))
+				case None => sendPM(who, "Cannot start table, as the bot is not in a table.")
+
 		else if msg.startsWith("/leave") then
 			leaveRoom()
+
+		else if msg.startsWith("/terminate") then
+			gameRef.get.flatMap:
+				case Some(game) if game.inProgress =>
+					if game.state.names.contains(data.who) then
+						sendCmd("tableTerminate", ujson.write(ujson.Obj("tableID" -> game.tableID)))
+					else
+						sendPM(who, "Could not terminate, as you are not one of the players in the game.")
+				case _ => sendPM(who, "Could not terminate, as the bot is not in a game.")
 
 		else if msg.startsWith("/settings") then
 			assignSettings(data, true)
