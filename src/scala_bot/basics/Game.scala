@@ -577,7 +577,7 @@ extension[G <: Game](game: G)
 			case CardStatus.Finessed => s"[f]${if note.isEmpty then "" else s" [$note]"}"
 			case CardStatus.ChopMoved => s"[cm]${if note.isEmpty then "" else s" [$note]"}"
 			case CardStatus.CalledToDiscard => "dc"
-			case CardStatus.PermissionToDiscard => "ptd"
+			case CardStatus.PermissionToDiscard if !game.state.deck(order).clued => "ptd"
 			case _ => note
 
 	def updateNotes()(using ops: GameOps[G]): G =

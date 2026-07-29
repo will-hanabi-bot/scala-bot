@@ -3,7 +3,7 @@ package tests.hgroup.level4
 import cats.effect.unsafe.implicits.global
 
 import scala_bot.basics._
-import scala_bot.test.{hasInfs, hasStatus, Player, preClue, setup, takeTurn}, Player._
+import scala_bot.test.{hasInfs, hasStatus, Player, preClue, setup, takeTurn, TestVariant}, Player._
 import scala_bot.hgroup.HGroup
 
 import scala_bot.utils.{pipe, tap}
@@ -213,7 +213,8 @@ class OrderCM extends munit.FunSuite:
 			Vector("r4", "r4", "y4", "y4", "g4")
 		),
 			starting = Bob,
-			playStacks = Some(Vector(1, 1, 1, 1, 0))
+			playStacks = Some(Vector(1, 1, 1, 0, 0)),
+			variant = TestVariant.Brown5
 		)
 		.pipe(takeTurn("Bob clues 1 to Alice (slots 3,4)"))
 

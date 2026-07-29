@@ -29,9 +29,8 @@ def interpretTcm(ctx: ClueContext): Option[Seq[Int]] =
 
 	val oldestTrash = list.filter(!prev.state.deck(_).clued).min
 
-	val cmOrders = state.hands(target).filter{ o =>
+	val cmOrders = state.hands(target).filter: o =>
 		o < oldestTrash && !state.deck(o).clued && !game.meta(o).cm
-	}
 
 	if cmOrders.isEmpty then
 		Log.highlight(Console.CYAN, s"no cards to tcm")
@@ -62,11 +61,12 @@ def handleTcm(ctx: ClueContext, tcm: Seq[Int], notStall: Boolean) =
 					Log.info("stalling situation, tempo clue stall!")
 					game.withMove(ClueInterp.Stall).copy(stallInterp = Some(StallInterp.Tempo))
 				case _ =>
+					Log.info(s"valuable tempo clue!")
 					game.withMove(ClueInterp.Reveal)
 	else
 		// All newly cards are trash, except to the right of a gd note
 		list.takeWhile(game.meta(_).status != CardStatus.GentlemansDiscard).foldLeft(game): (acc, order) =>
-			if prev.state.deck(order).clued then acc else
+			if prev.state.deck(order).clued || common.thoughts(order).id().isDefined then acc else
 				acc.withThought(order): t =>
 					val newInferred = t.possible.intersect(state.trashSet)
 					t.copy(
@@ -223,7 +223,7 @@ def interpretTccm(ctx: ClueContext): Option[List[Int]] =
 		Log.info("target was locked, not tccm")
 		return None
 
-	if list.exists(o => !prev.state.deck(o).clued && !common.orderKt(game, o)) then
+	if list.exists(o => !prev.state.deck(o).clued && !common.orderTrash(game, o)) then
 		Log.info("touched at least 1 new card, not tccm")
 		return None
 

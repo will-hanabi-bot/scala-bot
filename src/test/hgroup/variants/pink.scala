@@ -1,4 +1,4 @@
-package tests.hgroup.pink
+package tests.hgroup
 
 import cats.effect.unsafe.implicits.global
 
@@ -550,6 +550,21 @@ class PinkFixes extends munit.FunSuite:
 
 		assertEquals(game.common.thinksTrash(game, Alice.ordinal),
 			Vector(game.state.hands(Alice.ordinal)(4)))
+
+	test("doesn't give a finesse that looks like a fix"):
+		val game = setup(HGroup.atLevel(3), Vector(
+			Vector("xx", "xx", "xx", "xx", "xx"),
+			Vector("b2", "y4", "i1", "b1", "r1")
+		),
+			variant = TestVariant.Pink5,
+		)
+		.pipe(takeTurn("Alice clues 1 to Bob"))
+		.pipe(takeTurn("Bob plays r1", "b3"))
+		.pipe(takeTurn("Alice clues 3 to Bob"))
+
+		// This is a pink fix, not a self-finesse.
+		assertEquals(game.common.thinksPlayables(game, Bob.ordinal), Vector(game.state.hands(Bob.ordinal)(4)))
+		assertEquals(game.lastMove, Some(ClueInterp.Mistake))
 
 	test("doesn't interpret a pink trash fix after a prompt"):
 		val game = setup(HGroup.atLevel(3), Vector(

@@ -47,9 +47,12 @@ case class State(
 
 		val (newMax, newCritical, newTrash, newPlayable) =
 			if criticalSet.contains(id) then
+				val newTrash = (rank to maxRanks(suitIndex)).foldLeft(trashSet): (acc, rank) =>
+					acc.union(Identity(suitIndex, rank))
+
 				(maxRanks.updated(suitIndex, math.min(maxRanks(suitIndex), rank - 1)),
-				criticalSet.difference(id),
-				trashSet.union(id),
+				criticalSet.difference(newTrash),
+				newTrash,
 				playableSet.difference(id))
 			else
 				val critical = cardCount(id.toOrd) - newBase(id.toOrd) == 1 && !isBasicTrash(id)

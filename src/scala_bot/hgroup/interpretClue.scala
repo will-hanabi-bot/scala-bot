@@ -50,7 +50,7 @@ def checkHFix(ctx: ClueContext): Option[HGroup] =
 		case FixResult.None if state.variant.pinkish && prev.common.hypoStacks.contains(0) =>
 			val fixed = list.filter: o =>
 				!prev.meta(o).focused &&
-				state.deck(o).rank != 1 &&
+				// state.deck(o).rank != 1 &&
 				prev.common.thoughts(o).inferred.forall(_.rank == 1) &&
 				!prev.common.thoughts(o).possible.forall(_.rank == 1) &&
 				!prev.waiting.exists(wc => wc.connections.exists(_.order == o) && !prev.xmeta(o).idUncertain) && (
@@ -73,23 +73,23 @@ def checkHFix(ctx: ClueContext): Option[HGroup] =
 						!prev.common.thoughts(o).possible.forall(_.rank == 1)
 					val fixedOrder = prev.next1(old1s).get
 
-					if state.deck(fixedOrder).id().forall(_.rank == clue.value) then
-						Log.info(s"pink fix promise! $fixedOrder")
-						Some:
-							game.withThought(fixedOrder)(t => t.copy(
-								inferred = t.possible.filter(i => i.rank == clue.value && !state.isPlayable(i))
-							))
-							.pipe: g =>
-								list.filter(old1s.contains).foldLeft(g): (acc, o) =>
-									if o == fixedOrder then
-										acc
-									else
-										acc.withThought(o)(t => t.copy(inferred = t.possible))
-							.withMove(ClueInterp.Fix)
+					Log.info(s"pink fix promise! $fixedOrder")
 
-					else
+					val mistake = !state.deck(fixedOrder).id().forall(_.rank == clue.value)
+					if mistake then
 						Log.error("looked like pink fix but didn't match possible interpretations?")
-						None
+
+					Some:
+						game.withThought(fixedOrder)(t => t.copy(
+							inferred = t.possible.filter(i => i.rank == clue.value && !state.isPlayable(i))
+						))
+						.pipe: g =>
+							list.filter(old1s.contains).foldLeft(g): (acc, o) =>
+								if o == fixedOrder then
+									acc
+								else
+									acc.withThought(o)(t => t.copy(inferred = t.possible))
+						.withMove(if !mistake then ClueInterp.Fix else ClueInterp.Mistake)
 
 		case FixResult.Normal(cluedResets, duplicateReveals) =>
 			Log.info(s"fix clue! not inferring anything else $cluedResets $duplicateReveals")

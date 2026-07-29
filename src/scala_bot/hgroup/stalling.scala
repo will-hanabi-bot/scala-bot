@@ -64,7 +64,8 @@ def isStall(ctx: ClueContext, severity: Int): Option[StallInterp] =
 
 	val notStall = severity == 0 ||
 		(chop && game.players(target).thoughts(focus).possible.forall(isSave)) ||
-		(focusNew && (game.common.orderKp(game, focus) || trash))
+		(focusNew && (game.common.orderKp(game, focus) || trash)) ||
+		(!state.variant.pinkish && clue.kind == ClueKind.Rank && clue.value == 1)		// cluing 1 is never a stall
 
 	if notStall then
 		return None

@@ -377,6 +377,23 @@ class BatonDiscards extends munit.FunSuite:
 		hasInfs(game, None, Alice, 1, Vector("b4"))
 		hasStatus(game, Alice, 1, CardStatus.Sarcastic)
 
+	test("doesn't baton to a locked hand"):
+		val game = setup(HGroup.atLevel(10), Vector(
+			Vector("xx", "xx", "xx", "xx", "xx"),
+			Vector("b3", "g5", "y2", "b2", "r2")
+		),
+			clueTokens = 4,
+			init =
+				preClue[HGroup](Bob, 2, Seq("5")) andThen
+				preClue[HGroup](Bob, 3, Seq("2")) andThen
+				preClue[HGroup](Bob, 4, Seq("2")) andThen
+				preClue[HGroup](Bob, 5, Seq("2")) andThen
+				fullyKnown[HGroup](Alice, 3, "b3")
+		)
+
+		// Alice should discard chop instead of performing a Baton Discard.
+		assertEquals(game.takeAction.unsafeRunSync(), PerformAction.Discard(game.state.hands(Alice.ordinal)(4)))
+
 class CompositionFinesses extends munit.FunSuite:
 	override def beforeAll() = Logger.setLevel(LogLevel.Off)
 
@@ -404,16 +421,14 @@ class CompositionFinesses extends munit.FunSuite:
 	test("performs a certain discard"):
 		val game = setup(HGroup.atLevel(10), Vector(
 			Vector("xx", "xx", "xx", "xx", "xx"),
-			Vector("p3", "p3", "p5", "r3", "r2"),
+			Vector("p3", "p3", "p5", "y4", "r3"),
 			Vector("y3", "g4", "y2", "r4", "b3")
 		),
-			playStacks = Some(Vector(1, 0, 0, 0, 0))
+			starting = Bob,
+			playStacks = Some(Vector(2, 0, 0, 0, 0)),
+			clueTokens = 5,
+			init = preClue(Bob, 5, Seq("red"))
 		)
-		.pipe(takeTurn("Alice clues red to Bob"))
-		.pipe(takeTurn("Bob plays r2", "g2"))
-		.pipe(takeTurn("Cathy clues 5 to Alice (slot 5)"))
-
-		.pipe(takeTurn("Alice clues 5 to Bob"))
 		.pipe(takeTurn("Bob clues red to Cathy"))	// Composition f, getting r3 on Alice's finesse
 		.pipe(takeTurn("Cathy discards b3", "y1"))
 

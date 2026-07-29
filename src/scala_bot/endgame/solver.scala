@@ -164,9 +164,9 @@ case class EndgameSolver[G <: Game](
 			linked match
 				case Some(link) =>
 					Log.info(s"arranging: $order is linked to ${link.getOrders} for ${state.logId(link.promise.get)} but others are already trash, can't assign ${state.logId(id)}")
-					return true
+					true
 				case None =>
-					return false
+					false
 
 		def expandArr(arrangement: Arrangement, tryFilter: Boolean): Iterable[Arrangement] =
 			if Instant.now.isAfter(deadline) then
@@ -462,15 +462,17 @@ case class EndgameSolver[G <: Game](
 
 			val ignoreDc = state.pace == 0 ||
 				state.clueTokens == 8 ||
-				playables.exists: p =>
-					game.players(playerTurn).thoughts(p).id(infer = true).exists: id =>
-						// Always play a 5 over dc
-						id.rank == 5 ||
-						(state.hands(playerTurn).exists(o => o != p && state.deck(o).clued && game.common.thoughts(o).possible.difference(state.criticalSet).isEmpty) && {
-							state.isCritical(id) ||
-							// Always play a duped card in hand over dc
-							state.hands(playerTurn).exists(o => o != p && game.players(playerTurn).thoughts(o).matches(id, infer = true))
-						})
+				{
+					state.variant.name == "No Variant" && playables.exists: p =>
+						game.players(playerTurn).thoughts(p).id(infer = true).exists: id =>
+							// Always play a 5 over dc
+							id.rank == 5 ||
+							(state.hands(playerTurn).exists(o => o != p && state.deck(o).clued && game.common.thoughts(o).possible.difference(state.criticalSet).isEmpty) && {
+								state.isCritical(id) ||
+								// Always play a duped card in hand over dc
+								state.hands(playerTurn).exists(o => o != p && game.players(playerTurn).thoughts(o).matches(id, infer = true))
+							})
+				}
 				|| {
 					val holdingCrit = state.hands(playerTurn).exists(o => state.isCritical(state.deck(o).id().get))
 

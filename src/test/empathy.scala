@@ -1,4 +1,4 @@
-package tests.empathy
+package tests
 
 import scala_bot.hgroup.HGroup
 import scala_bot.reactor.Reactor
@@ -28,6 +28,19 @@ class Empathy extends munit.FunSuite:
 		.pipe(takeTurn("Bob clues red to Alice (slot 5)"))
 
 		hasPoss(game, Some(Alice), Alice, 5, Vector("r3", "r4", "r5"))
+
+	test("it marks trash correctly when losing all copies of a card"):
+		val game = setup(Reactor.apply, Vector(
+			Vector("xx", "xx", "xx", "xx", "xx"),
+			Vector("r1", "r1", "r1", "b5", "b3")
+		),
+			clueTokens = 4
+		)
+		.pipe(takeTurn("Alice discards b3 (slot 5)"))
+		.pipe(takeTurn("Bob discards b3", "b1"))
+
+		assert(List("b3", "b4", "b5").map(game.state.expandShort).forall(game.state.trashSet.contains))
+		assert(!game.state.criticalSet.contains(game.state.expandShort("b5")))
 
 	test("it visibly elims 5s"):
 		val game = setup(Reactor.apply, Vector(

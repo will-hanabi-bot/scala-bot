@@ -265,36 +265,28 @@ case class HGroup(
 		val clues = state.deck(order).clues
 
 		meta(order).status != CardStatus.Finessed &&
+		common.thoughts(order).possible.length > 1 &&
 		clues.nonEmpty &&
 		clues.forall(_.isEq(BaseClue(ClueKind.Rank, 1)))
 
+	private def priority1(order: Int) =
+		// play fresh 1s from a later turn before chop-focus on an earlier turn
+		state.deck(order).clues.head.turn * -1000 + {
+			if clued1sOnChop.contains(order) then
+				-100 - order
+			else if meta(order).cm then
+				100 - order
+			else if state.inStartingHand(order) then
+				order
+			else
+				-order
+		}
+
 	def next1(orders: Seq[Int]) =
-		orders.minByOption: o =>
-			// play fresh 1s from a later turn before chop-focus on an earlier turn
-			state.deck(o).clues.head.turn * -1000 + {
-				if clued1sOnChop.contains(o) then
-					-100 - o
-				else if meta(o).cm then
-					100 - o
-				else if state.inStartingHand(o) then
-					o
-				else
-					-o
-			}
+		orders.minByOption(priority1)
 
 	def order1s(orders: Seq[Int]) =
-		orders.sortBy: o =>
-			// play fresh 1s from a later turn before chop-focus on an earlier turn
-			state.deck(o).clues.head.turn * -1000 + {
-				if clued1sOnChop.contains(o) then
-					-100 - o
-				else if meta(o).cm then
-					100 - o
-				else if state.inStartingHand(o) then
-					o
-				else
-					-o
-			}
+		orders.sortBy(priority1)
 
 	def priority(orders: List[Int]) =
 		val initial = (0 to 5).map(_ => Vector.empty[Int])
@@ -369,14 +361,12 @@ case class HGroup(
 			state.variant.colourableSuits(clue.value).name.contains("Brown") &&
 			reclue
 
-		lazy val muddySuitIndex = state.variant.suits.indexWhere(suit => MUDDY.matches(suit.name))
-		lazy val muddyCards = list.filter(this.knownAs(_, MUDDY, if state.variant.rainbowS then state.variant.specialRank else None)).sortBy(o => -o)
-		lazy val mudClue = clue.kind == ClueKind.Colour &&
+		val muddyCards = list.filter(this.knownAs(_, MUDDY, if state.variant.rainbowS then state.variant.specialRank else None)).sortBy(o => -o)
+		val mudClue = clue.kind == ClueKind.Colour &&
 			(state.variant.muddy || state.variant.rainbowS) &&
-			muddyCards.nonEmpty &&
 			reclue &&
 			// Mud clues should only work if the leftmost card is muddy.
-			common.thoughts(list.max).possible.exists(_.suitIndex == muddySuitIndex)
+			muddyCards.contains(list.max)
 
 		lazy val pinkStall5 =
 			val valid = clue.isEq(BaseClue(ClueKind.Rank, 5)) &&
@@ -818,46 +808,42 @@ object HGroup:
 								val value = evalAction(game, action)
 								(PerformAction.tryPlay(game, o), action, value)
 
-							val allDiscards = discardOrders.map: o =>
+							val cantDiscard =
+								state.clueTokens == 8 ||
+								(state.pace == 0 && (allClues.exists(_._3 > 0) || allPlays.nonEmpty))
+
+							Log.highlight(Console.YELLOW, s"can discard: ${!cantDiscard}")
+
+							val allDiscards = if cantDiscard then Vector.empty else discardOrders.map: o =>
 								val action = DiscardAction(state.ourPlayerIndex, o, me.thoughts(o).id(infer = true))
 								val value = evalAction(game, action)
 								(PerformAction.tryDiscard(game, o), action, value)
 
-							val earlyGameClue = game.earlyGameClue(state.ourPlayerIndex)
-
-							// Log.info(s"early game clue? ${earlyGameClue.map(_.fmt(state))}")
-
-							val hasEarlyGameClue = earlyGameClue.isDefined &&
-								!(state.clueTokens == 1 && valid1ClueScream(game, state.nextPlayerIndex(state.ourPlayerIndex))) &&
-								allDiscards.forall(_._3 == -100)
-
-							if hasEarlyGameClue then
-								Log.highlight(Console.YELLOW,s"must clue in early game! (found ${earlyGameClue.get.fmt(state)})")
-
-							val cantDiscard =
-								state.clueTokens == 8 ||
-								game.dcStatus != DcStatus.None ||
-								(state.pace == 0 && (allClues.exists(_._3 > 0) || allPlays.nonEmpty)) ||
-								hasEarlyGameClue
-
-							Log.info(s"can discard: ${!cantDiscard}")
+							val screamAt1Clue = state.clueTokens == 1 && valid1ClueScream(game, state.nextPlayerIndex(state.ourPlayerIndex))
+							val noKtToDiscard = allDiscards.forall((_, action, value) => !me.orderTrash(game, action.order) || value == -100)
 
 							val chop = game.chop(state.ourPlayerIndex)
 
 							val canDiscardChop =
 								chop.isDefined &&
 								!cantDiscard &&
-								!me.thinksLocked(game, state.ourPlayerIndex) &&
-								!hasEarlyGameClue &&
+								game.dcStatus == DcStatus.None &&
 								game.dda.isEmpty &&
+								!me.thinksLocked(game, state.ourPlayerIndex) &&
 								{
-									((!state.canClue || allPlays.isEmpty) && allDiscards.forall(_._3 == -100)) ||
+									((!state.canClue || allPlays.isEmpty) && noKtToDiscard) ||
 									state.clueTokens == 0 ||
-									(state.clueTokens == 1 && valid1ClueScream(game, state.nextPlayerIndex(state.ourPlayerIndex)))
+									screamAt1Clue
+								} &&
+								{
+									screamAt1Clue ||
+									game.earlyGameClue(state.ourPlayerIndex).fold(true): clue =>
+										Log.highlight(Console.YELLOW,s"must clue in early game! (found ${clue.fmt(state)})")
+										false
 								}
 
 							val allActions =
-								allClues.concat(allPlays).concat(allDiscards).when(_ => canDiscardChop): as =>
+								allClues.concat(allPlays).when(_ => !cantDiscard)(_ ++ allDiscards).when(_ => canDiscardChop): as =>
 									val action = DiscardAction(state.ourPlayerIndex, chop.get, -1, -1, false)
 									val value = evalAction(game, action)
 									as :+ (PerformAction.tryDiscard(game, chop.get), action, value)
@@ -941,7 +927,12 @@ object HGroup:
 							.partition((_, value) => value > -2)
 							.pipe: (better, worse) =>
 								if better.isEmpty then
-									worse.filter(_._2 > -11).maxByOption(_._2).toList
+									worse.filter(_._2 > -11)
+										.maxByOption(_._2)
+										.orElse:
+											useless.find(clueValue(_) > -11).map((_, 0))
+										.toList
+
 								else
 									better.sortBy((_, value) => -value)
 							// .tap: clues =>
@@ -966,9 +957,9 @@ object HGroup:
 					game.players(playerIndex).orderTrash(game, o) &&
 					state.hands.zipWithIndex.exists: (hand, i) =>
 						i != playerIndex &&
-						hand.lift(index).exists: o =>
-							state.deck(o).id().exists(state.isUseful) &&
-							!game.common.hypoPlays.contains(o)
+						hand.lift(index).exists: o2 =>
+							state.deck(o2).id().exists(state.isUseful) &&
+							!game.common.hypoPlays.contains(o2)
 				.flatMap(o => Seq(PerformAction.tryDiscard(game, o), PerformAction.tryPlay(game, o)))
 
 				if positionals.contains(expected) then positionals else expected +: positionals

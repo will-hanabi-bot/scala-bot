@@ -395,7 +395,12 @@ private def playablePoss(game: HGroup, playerIndex: Int, discarder: Int) =
 	yield
 		id
 
-private def checkPosDc(ctx: DiscardContext): Option[IndexedSeq[(Int, Vector[Identity])]] =
+enum PosDcResult:
+	case NotPosDc
+	case Mistake
+	case PosDc(targets: IndexedSeq[(Int, Vector[Identity])])
+
+private def checkPosDc(ctx: DiscardContext): PosDcResult =
 	val DiscardContext(prev, game, action) = ctx
 	val DiscardAction(playerIndex, order, _, _, failed) = action
 	val state = game.state
@@ -416,7 +421,7 @@ private def checkPosDc(ctx: DiscardContext): Option[IndexedSeq[(Int, Vector[Iden
 			thought.possible.intersect(state.playableSet).nonEmpty
 
 	if unintended then
-		return None
+		return PosDcResult.NotPosDc
 
 	val numPlays = if action.failed && order != expectedDc.get then 2 else 1
 
@@ -442,10 +447,10 @@ private def checkPosDc(ctx: DiscardContext): Option[IndexedSeq[(Int, Vector[Iden
 
 	if targets.length < numPlays then
 		Log.warn(s"weird discard detected, but not enough pos dc targets! ${targets.map(t => state.names(t._1))}")
-		None
+		PosDcResult.Mistake
 	else
 		// Only take the last N reacting players.
-		Some(targets.takeRight(numPlays))
+		PosDcResult.PosDc(targets.takeRight(numPlays))
 
 def interpretPosDc(ctx: DiscardContext): Option[HGroup] =
 	val DiscardContext(prev, game, action) = ctx
@@ -456,45 +461,49 @@ def interpretPosDc(ctx: DiscardContext): Option[HGroup] =
 	if game.level < Level.Endgame || (!game.inEndgame && state.remScore > 5) then
 		return None
 
-	checkPosDc(ctx).map: targets =>
-		targets.foldRight((game, List.empty[Connection])):
-			case ((reacting, poss), (g, conns)) =>
-				val order = state.hands(reacting)(slot - 1)
-				val newGame = g.withThought(order): t =>
-					t.copy(
-						oldInferred = t.inferred.toOpt,
-						inferred = t.inferred.intersect(poss),
-					)
-				.withMeta(order): m =>
-					m.copy(
-						status = CardStatus.CalledToPlay,
-						focused = true
+	checkPosDc(ctx) match
+		case PosDcResult.NotPosDc => None
+		case PosDcResult.Mistake => Some(game.withMove(DiscardInterp.Mistake))
+		case PosDcResult.PosDc(targets) =>
+			targets.foldRight((game, List.empty[Connection])):
+				case ((reacting, poss), (g, conns)) =>
+					val order = state.hands(reacting)(slot - 1)
+					val newGame = g.withThought(order): t =>
+						t.copy(
+							oldInferred = t.inferred.toOpt,
+							inferred = t.inferred.intersect(poss),
+						)
+					.withMeta(order): m =>
+						m.copy(
+							status = CardStatus.CalledToPlay,
+							focused = true
+						)
+
+					val conn = PositionalConn(
+						reacting,
+						order,
+						newGame.common.thoughts(order).inferred.toList,
+						ambiguousOwn =
+							if targets.exists(_._1 == state.ourPlayerIndex) || playerIndex == state.ourPlayerIndex then None else
+								state.ourHand.lift(slot - 1).map:
+									_ -> playablePoss(g, state.ourPlayerIndex, playerIndex).toList
 					)
 
-				val conn = PositionalConn(
-					reacting,
-					order,
-					newGame.common.thoughts(order).inferred.toList,
-					ambiguousOwn =
-						if targets.exists(_._1 == state.ourPlayerIndex) || playerIndex == state.ourPlayerIndex then None else
-							state.ourHand.lift(slot - 1).map:
-								_ -> playablePoss(g, state.ourPlayerIndex, playerIndex).toList
-				)
-
-				Log.info(s"interpreting pos on ${state.names(reacting)} slot $slot!")
-				(newGame, conn +: conns)
-		.pipe: (g, conns) =>
-			val focus = conns.last.order
-			g.copy(
-				waiting = WaitingConnection(
-					connections = conns,
-					giver = playerIndex,
-					target = targets.last._1,
-					turn = state.turnCount,
-					focus = focus,
-					inference = state.deck(focus).id().getOrElse(Identity(0, 1))
-				) +: g.waiting,
-				dcStatus = DcStatus.None,
-				dda = None
-			)
-			.withMove(DiscardInterp.Positional)
+					Log.info(s"interpreting pos on ${state.names(reacting)} slot $slot!")
+					(newGame, conn +: conns)
+			.pipe: (g, conns) =>
+				val focus = conns.last.order
+				Some:
+					g.copy(
+						waiting = WaitingConnection(
+							connections = conns,
+							giver = playerIndex,
+							target = targets.last._1,
+							turn = state.turnCount,
+							focus = focus,
+							inference = state.deck(focus).id().getOrElse(Identity(0, 1))
+						) +: g.waiting,
+						dcStatus = DcStatus.None,
+						dda = None
+					)
+					.withMove(DiscardInterp.Positional)

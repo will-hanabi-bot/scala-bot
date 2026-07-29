@@ -135,7 +135,7 @@ def advance(orig: HGroup, game: HGroup, offset: Int): Double =
 	val bobChop = Option.when(state.numPlayers > 2)(game.chop(bob)).flatten
 
 	lazy val trash = player.thinksTrash(game, playerIndex)
-	val allPlayables = player.thinksPlayables(game, playerIndex)
+	val allPlayables = player.thinksPlayables(game, playerIndex).filter(o => !player.orderTrash(game, o))
 
 	lazy val earlyGameClue = game.earlyGameClue(playerIndex)
 
@@ -320,7 +320,7 @@ def _evalAction(game: HGroup, action: Action): Double =
 			if hypoGame.lastMove == Some(PlayInterp.Mistake) then
 				-100.0
 			else
-				val bonus = if game.isBlindPlaying(order) then 1.0 else 0
+				val bonus = if game.isBlindPlaying(order) && !game.findDiscardable(state.ourPlayerIndex).contains(order) then 1.0 else 0
 				val best = advance(game, hypoGame, 1)
 				Log.info(f"${action.fmt(state)}%s: $best%.2f (${hypoGame.lastMove.get}%s) + $bonus")
 				best + bonus
@@ -467,7 +467,7 @@ def evalGame(orig: HGroup, game: HGroup, offset: Int): Double =
 	val touchVal = 0.5 * state.heldOrders.summing: o =>
 		if !state.deck(o).clued && (game.meta(o).status == CardStatus.None || game.meta(o).status == CardStatus.PermissionToDiscard) then
 			0
-		else if game.common.orderTrash(game, o) then
+		else if game.players(state.holderOf(o)).orderTrash(game, o) then
 			0.05
 		else
 			state.deck(o).id() match

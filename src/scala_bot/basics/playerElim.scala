@@ -310,7 +310,7 @@ extension (p: Player)
 		(resets, p.copy(thoughts = newThoughts, dirty = dirty))
 
 	def elimLink(game: Game, matches: FastBitSet, focus: Int, id: Identity): Player =
-		Log.info(s"eliminating ${game.state.logId(id)} link from focus (${p.name})! $matches --> $focus")
+		Log.info(s"eliminating ${game.state.logId(id)} link from focus (${p.name})! ${matches.fmt} --> $focus")
 
 		val newThoughts = matches.foldLeft(p.thoughts): (thoughts, order) =>
 			val thought = thoughts(order)
