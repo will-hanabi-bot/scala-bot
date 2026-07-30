@@ -124,7 +124,7 @@ def _forceClue(orig: HGroup, game: HGroup, offset: Int, only: Option[Int] = None
 	val adv = (game: HGroup) =>
 		advance(orig, game.copy(dcStatus = DcStatus.None), offset + 1)
 
-	forceClue(game.copy(allowFindOwn = false), giver, adv, offset + 1, only, clueFilter = clueFilter(game, giver))
+	forceClue(game.copy(allowFindOwn = false), giver, adv, offset, only, clueFilter = clueFilter(game, giver))
 
 def advance(orig: HGroup, game: HGroup, offset: Int): Double =
 	val (state, common, meta) = (game.state, game.common, game.meta)
@@ -140,7 +140,7 @@ def advance(orig: HGroup, game: HGroup, offset: Int): Double =
 	lazy val earlyGameClue = game.earlyGameClue(playerIndex)
 
 	// Reduce lookahead in early game
-	if (orig.inEarlyGame && state.variant.rainbowish && state.variant.pinkish && offset == 2) || playerIndex == state.ourPlayerIndex || state.endgameTurns.contains(0) then
+	if (orig.inEarlyGame && state.variant.rainbowish && state.variant.pinkish && offset == 2) || (playerIndex == state.ourPlayerIndex && offset > 2) || state.endgameTurns.contains(0) then
 		evalGame(orig, game, offset)
 
 	else if allPlayables.nonEmpty then
@@ -185,6 +185,8 @@ def advance(orig: HGroup, game: HGroup, offset: Int): Double =
 
 				if strikes > 0 then
 					(knownPlays ++ unknownPlays).min
+				else if state.numPlayers == 2 && playerIndex != state.ourPlayerIndex then
+					maxPlay		// assume they won't clue us
 				else
 					maxPlay.max(_forceClue(orig, game, offset))
 
@@ -198,7 +200,7 @@ def advance(orig: HGroup, game: HGroup, offset: Int): Double =
 					val lockedDc = player.lockedDiscard(state, playerIndex)
 					(lockedDc, false)
 
-			val id = state.deck(order).id().get
+			val id = state.deck(order).id()
 			val action =
 				if isAnxiety ^ game.players(playerIndex).thinksInverted(state, order) then
 					Action.dragPlay(state, playerIndex, order)
@@ -232,49 +234,51 @@ def advance(orig: HGroup, game: HGroup, offset: Int): Double =
 			case None =>
 				val chop = game.chop(playerIndex).getOrElse:
 					throw new Exception(s"Player ${state.names(playerIndex)} not locked but no chop! ${state.hands(playerIndex).map(o => s"${state.deck(o).clued} ${game.meta(o).status}").mkString(", ")}")
-				val id = state.deck(chop).id().get
+				val id = state.deck(chop).id()
 				val action = Action.dragDiscard(state, playerIndex, chop)
 				val dcGame = game.simulate(action)
 
-				if state.canClue && state.numPlayers > 2 then
-					val clueProb = if offset == 1 then
-						if game.lastActions(state.ourPlayerIndex).exists(_.isInstanceOf[DiscardAction]) then
-							0.8
-						else if common.thinksLoaded(game, bob) then
-							0.2
-						else if bobChop.isDefined then
-							if state.isBasicTrash(state.deck(bobChop.get).id().get) then 0.2 else 0.7
+				if state.canClue && (state.numPlayers > 2 || playerIndex == state.ourPlayerIndex) then
+					val clueProb =
+						if playerIndex == state.ourPlayerIndex then
+							1
+						else if offset == 1 then
+							if game.lastActions(state.ourPlayerIndex).exists(_.isInstanceOf[DiscardAction]) then
+								0.8
+							else if common.thinksLoaded(game, bob) then
+								0.2
+							else if bobChop.isDefined then
+								if state.isBasicTrash(state.deck(bobChop.get).id().get) then 0.2 else 0.7
+							else
+								0.5
 						else
-							0.5
-					else
-						0.8
+							0.8
 
 					Log.info(s"${indent(offset)}${state.names(playerIndex)} might clue: $clueProb")
 					val clueVal = _forceClue(orig, game, offset)
 					Log.info(s"${indent(offset)}${state.names(playerIndex)} ${Action.gerund(action)} ${state.logId(id)}:")
 					val dcVal = advance(orig, dcGame, offset + 1)
 
-					if clueVal < evalGame(orig, game, offset) then
+					if clueVal < dcVal then
 						val drewNew = state.hands.zipWithIndex.indexWhere((hand, i) => i != state.ourPlayerIndex && hand.exists(state.deck(_).id().isEmpty))
 
 						if drewNew != -1 then
 							val hypoVal = 0.2 * (clueVal + 1) + 0.8 * dcVal
-							Log.highlight(Console.CYAN, f"${indent(offset)}no visible clue available for ${state.names(playerIndex)} but ${state.names(drewNew)} may have drawn something ($hypoVal%.2f)")
+							Log.highlight(Console.CYAN, f"${indent(offset)}clue is too low value ($clueVal%.2f < $dcVal%.2f) for ${state.names(playerIndex)} but ${state.names(drewNew)} may have drawn something ($hypoVal%.2f)")
 							hypoVal
 						else
-							Log.highlight(Console.CYAN, f"${indent(offset)}no visible clue available for ${state.names(playerIndex)}, lowering clue prob to 0 ($dcVal%.2f)")
+							Log.highlight(Console.CYAN, f"${indent(offset)}clue is too low value ($clueVal%.2f < $dcVal%.2f) for ${state.names(playerIndex)}, lowering clue prob to 0 ($dcVal%.2f)")
 							dcVal
-					else if clueVal < dcVal then
-						Log.highlight(Console.CYAN, f"${indent(offset)}won't assume ${state.names(playerIndex)} will clue! too low value ($clueVal%.2f < $dcVal%.2f)")
-						dcVal
 					else
-						clueProb * clueVal + (1.0 - clueProb) * dcVal
+						val value = clueProb * clueVal + (1.0 - clueProb) * dcVal
+						Log.highlight(Console.CYAN, f"${indent(offset)}overall: $value%.2f")
+						value
 				else
 					Log.info(s"${indent(offset)}${state.names(playerIndex)} ${Action.gerund(action)} ${state.logId(id)}")
 					advance(orig, dcGame, offset + 1)
 
 			case Some(order) =>
-				val id = state.deck(order).id().get
+				val id = state.deck(order).id()
 				val action = game.players(playerIndex).tryDiscard(state, order)
 
 				Log.info(s"${indent(offset)}${state.names(playerIndex)} ${Action.gerund(action)} trash ${state.logId(id)}")

@@ -166,7 +166,17 @@ trait GameOps[G <: Game]:
 
 	def evalAction(game: G, action: Action): Double
 
+	/** Returns true if the endgame solver should try cluing before playing in this situation.
+	*   (The solver normally tries playing before cluing.)
+	*/
 	def preferEndgameClue(game: G): Boolean =
+		false
+
+	/** Returns true if the endgame solver should try discarding before cluing in this situation.
+	*   However, it will always try playing before discarding.
+	*   (The solver normally tries discarding before cluing.)
+	*/
+	def preferEndgameDiscard(game: G, playerIndex: Int): Boolean =
 		false
 
 	/** A processing function that runs just before replaying the most recent turn.

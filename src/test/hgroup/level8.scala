@@ -3,8 +3,10 @@ package tests.hgroup.level8
 import cats.effect.unsafe.implicits.global
 
 import scala_bot.basics._
+import scala_bot.lib.Frac
 import scala_bot.test.{fullyKnown, hasInfs, hasStatus, Player, preClue, setup, takeTurn, TestVariant}, Player._
 import scala_bot.hgroup.HGroup
+import scala_bot.endgame.EndgameSolver
 
 import scala_bot.utils.{pipe, tap}
 import scala_bot.logger.{Logger, LogLevel}
@@ -289,6 +291,56 @@ class PositionalDiscards extends munit.FunSuite:
 
 		// Alice should not attempt to play.
 		hasStatus(game, Alice, 3, CardStatus.None)
+
+	test("doesn't bomb from a mistake"):
+		val game = setup(HGroup.atLevel(8), Vector(
+			Vector("xx", "xx", "xx", "xx", "xx"),
+			Vector("r4", "y4", "g4", "b5", "b4"),
+			Vector("g2", "b3", "r5", "p2", "p3")
+		),
+			playStacks = Some(Vector(4, 5, 5, 4, 5)),
+			discarded = Vector(
+				"r1", "r2", "r3",
+				"y1", "y2", "y3",
+				"g1",       "g3",
+				"b1", "b2",
+				"p1"
+			),	// Missing: r1, y1, g1, b1, p1, p4
+			clueTokens = 1,
+			init = _.copy(inEarlyGame = false)
+		)
+		.tap: g =>
+			assertEquals(g.state.cardsLeft, 1)
+		.pipe(takeTurn("Alice clues red to Cathy"))
+		.pipe(takeTurn("Bob discards g4", "r1"))
+
+		// Alice should not attempt to play.
+		hasStatus(game, Alice, 3, CardStatus.None)
+
+	test("prefers to positional discard rather than clue for the last card"):
+		val game = setup(HGroup.atLevel(8), Vector(
+			Vector("xx", "xx", "xx", "xx", "xx"),
+			Vector("n4", "n5", "r4", "b2", "r3")
+		),
+			playStacks = Some(Vector(5, 5, 5, 5, 4)),
+			discarded = Vector(
+				"r1", "r1",
+				"y1", "y1", "y2", "y4",
+				"g1", "g3",
+				"b1", "b1", "b3",
+				"n1", "n1", "n2", "n3"
+			),
+			clueTokens = 3,
+			variant = TestVariant.Brown5
+		)
+
+		assertEquals(game.state.cardsLeft, 1)
+
+		EndgameSolver().solve(game) match
+			case Left(msg) => throw new Exception(s"Game should be winnable! $msg")
+			case Right((perform, winrate)) =>
+				assertEquals(winrate, Frac.one)
+				assertEquals(perform, PerformAction.Discard(game.state.hands(Alice.ordinal)(1)))
 
 class PositionalMisplays extends munit.FunSuite:
 	override def beforeAll() = Logger.setLevel(LogLevel.Off)

@@ -8,14 +8,14 @@ Before opening a bug report:
 - Verify the bot is playing with the expected settings.
 	- On hanab.live, it writes a note containing its settings on the oldest card of the first player.
 - Check whether a similar issue has already been reported. If so, leave a like or comment rather than opening a duplicate.
-- Double-check convention docs.
-- If a human mistake is made earlier on in the game, the bot may behave erratically later on.
+- Double-check the convention docs.
+- If a mistake is made earlier on in the game, the bot may behave erratically later on.
 	- Indicate in the bug report if a mistake happened, even if potentially irrelevant.
 
 To open a bug report:
 1. In the [Issues section](https://github.com/will-hanabi-bot/scala-bot/issues), click `New issue` -> `Bug report`.
 2. Fill out the description with information from a game where the bug occurred.
-	- If on hanab.live, make sure to provide a replay link (contains `/replay/`) and not a table link (contains `/game/`).
+	- If on hanab.live, make sure to provide a replay link (which contains `/replay/`) and not a table link (which contains `/game/`).
 3. Include any information that might be helpful, such as the relevant turns and surrounding context.
 	- Follow-up questions may be asked to clarify details.
 
@@ -30,11 +30,11 @@ To open a feature request:
 2. Fill out the description with your idea. The more specific the idea is, the easier it will be to implement.
 	- Follow-up questions may be asked to clarify details.
 
-Features related to mistake recovery and context are generally very complex and hard to implement, but if you have ideas, please share!
+Features related to mistake recovery and context are generally very complex to implement, but if you have ideas, please share!
 
 ## Local development
 
-- You'll need to have Scala 3. There are instructions [here](https://www.scala-lang.org/download/).
+- You'll need to have the Scala 3 compiler installed. There are instructions [here](https://www.scala-lang.org/download/).
 - Fork this repository and clone it to your computer.
 - To verify the bot works, start it with `scala-cli . --main-class scala_bot.main -- index=<index>`.
 
@@ -43,6 +43,7 @@ scala-bot has several main modules:
 - `replay` loads a completed game and allows jumping between turns
 - `selfPlay` plays with copies of itself on randomly-generated decks
 - `analyze` loads a completed game and logs turns where it would have done something different
+- `benchmark` runs self-play repeatedly and measures the elapsed time, and is used to measure performance changes
 
 Debugging is typically done with the `replay` module. During a replay, logs will show up in the console, detailing what the bot thinks about every action. Two commands can be entered into the console while the program is running:
 - `hand <playerName> [observerName]` displays the information on that player's hand from a particular perspective.
@@ -69,7 +70,7 @@ There are a suite of tests in the `src/test/` folder.
 
 Once you have a completed fix or feature, a pull request (PR) allows your change to be merged into this repository. Guidelines for PRs:
 - Focuses on one topic and doesn't contain several unrelated changes
-- PR description contains a list of the fixes/features
+- Description contains a list of the fixes/features
 - All existing tests pass, and contains new tests verifying the changed functionality
 - Code is organized and clean
 
@@ -77,7 +78,7 @@ Don't worry about getting everything perfect right away! A maintainer will revie
 
 ### Packaging and distribution
 
-- Before packaging, set the compile log priority to 0 (in `logger.scala`) so that debug logs are removed from the outputted binary.
+- Before packaging, set the compile log priority to 0 (in `logger.scala`) so that debug logs are removed from the binary.
 - `make build` will package a JAR file based on the current state of the repository.
 - To reduce memory usage even further, GraalVM's [native-image](https://www.graalvm.org/latest/reference-manual/native-image/) can create an executable that doesn't require the JVM.
 	- Once `native-image` is installed, add its path to the Makefile, then run `make build-native`.

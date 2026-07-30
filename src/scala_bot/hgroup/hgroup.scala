@@ -977,6 +977,31 @@ object HGroup:
 			game.chop(nextPlayerIndex).exists: o =>
 				state.deck(o).id().exists(state.isCritical)
 
+		override def preferEndgameDiscard(game: HGroup, playerIndex: Int): Boolean =
+			val state = game.state
+
+			if state.remScore > 2 then
+				return false
+
+			// Remaining score can be 2 if the player knows about their own 5
+			if state.remScore == 2 then
+				val order5s = state.hands(playerIndex).count:
+					game.players(playerIndex).thoughts(_).id(infer = true).exists(_.rank == 5)
+
+				if order5s != 1 then
+					return false
+
+			// Look for the remaining card in everyone else's hand
+			val remaining = state.hands.zipWithIndex.findSome: (hand, holder) =>
+				if holder == playerIndex then None else
+					val usefulOrder = hand.find(state.deck(_).id().exists(state.isUseful))
+					usefulOrder.map((holder, _))
+
+			// Prefer discarding when no clue can focus the remaining card.
+			remaining.exists: (holder, order) =>
+				!state.allValidClues(holder).exists: clue =>
+					game.determineFocus(game, Action.fromClue(game.state, clue, playerIndex)).focus == order
+
 		override def injectReplay(orig: HGroup, hypo: HGroup): HGroup =
 			hypo.copy(
 				allowFindOwn = orig.allowFindOwn,

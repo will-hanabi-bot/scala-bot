@@ -491,6 +491,9 @@ class BotClient(queue: Queue[IO, String], gameRef: Ref[IO, Option[Game]], config
 				case Convention.HGroup(level) =>
 					sendPM(data.who, "H-Group: https://hanabi.github.io/reference")
 
+		else if msg.startsWith("/bugreport") then
+			sendPM(data.who, s"The bots aren't perfect! Please report bugs on the issue tracker: https://github.com/will-hanabi-bot/scala-bot/issues")
+
 		else
 			IO.unit
 
@@ -559,7 +562,7 @@ class BotClient(queue: Queue[IO, String], gameRef: Ref[IO, Option[Game]], config
 						reply(s"Currently playing with ${convention} conventions.${if fastMode then " [fast mode]" else ""}")
 
 	def sendHelp(who: String) =
-		sendPM(who, "Commands: /analyze, /doc, /fastmode, /help, /join, /leave, /settings, /version. See https://github.com/will-hanabi-bot/scala-bot#supported-commands for more info.")
+		sendPM(who, "Commands: /analyze, /bugreport, /doc, /fastmode, /help, /join, /leave, /settings, /start, /terminate, /version. See https://github.com/will-hanabi-bot/scala-bot#supported-commands for more info.")
 
 	def checkSupportedSettings(table: Table): IO[Unit] =
 		val unsupportedOptions = List(

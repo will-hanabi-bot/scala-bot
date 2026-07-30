@@ -295,6 +295,8 @@ case class EndgameSolver[G <: Game](
 
 				val totalWinrate = inner(hypos.tail, winrate, Frac.one - winrate)
 
+				// println(s"total winrate for ${action.fmt(game)}: $totalWinrate")
+
 				if totalWinrate == Frac.one then
 					(action, totalWinrate)
 				else if totalWinrate > bestWinrate then
@@ -494,10 +496,13 @@ case class EndgameSolver[G <: Game](
 			// 	ownCrits < minCrits
 
 			// If no playables are visible, try discarding before cluing
-			val preferDc = state.hands.zipWithIndex.forall: (hand, i) =>
-				i == playerTurn || hand.forall(o => !state.isPlayable(state.deck(o).id().get))
+			val preferDc = !ignoreDc && {
+				ops.preferEndgameDiscard(game, playerTurn) ||
+				state.hands.zipWithIndex.forall: (hand, i) =>
+					i == playerTurn || hand.forall(o => !state.isPlayable(state.deck(o).id().get))
+			}
 
-			if depth == 0 && ops.preferEndgameClue(game) then
+			if depth == 0 && clueWinnable && ops.preferEndgameClue(game) then
 				clueActions.concat(playActions).concat(dcActions)
 			else if preferDc then
 				playActions.concat(dcActions).concat(clueActions)

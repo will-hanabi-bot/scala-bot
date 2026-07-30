@@ -23,6 +23,7 @@ def checkFix(prev: Game, game: Game, action: ClueAction): FixResult =
 		lazy val duplicated = prev.state.deck(order).clued && game.common.thoughts(order).id().isDefined && list.exists: o =>
 			o != order &&
 			prev.state.deck(o).clued &&
+			!prev.common.thoughts(o).reset &&
 			game.state.deck(order).matches(game.state.deck(o)) &&
 			prev.common.thoughts(order).id().isEmpty
 

@@ -173,7 +173,9 @@ case class Player(
 			thought.possible.forall: id =>
 				game.state.isBasicTrash(id) ||
 				game.state.hands(game.state.holderOf(order)).exists: o =>
-					o != order && thoughts(o).matches(id)
+					o != order &&
+					thoughts(o).matches(id) &&
+					(!game.meta(order).focused || game.meta(o).focused)
 
 		(game.meta(order).trash && thought.possible.intersect(game.state.criticalSet).isEmpty) ||
 		sameHandDupe
@@ -219,7 +221,7 @@ case class Player(
 			true
 		else if game.meta(order).trash then
 			false
-		else if isLinked(state, order, unpromisedOnly = true) then
+		else if isLinked(state, order, unpromisedOnly = true) && !thoughts(order).possible.forall(_.rank == 1) then
 			false
 		else
 			val infer =
@@ -523,12 +525,11 @@ case class Player(
 
 					val it = playables.iterator
 
-					while (it.hasNext && !changed) {
+					while (it.hasNext && !changed) do
 						val o = it.next()
 						if !played.contains(o) && !attempted.contains(o) && hypo.state.hasConsistentInfs(thoughts(o)) then
 							play(o)
 							changed = true
-					}
 
 				player.playLinks.foreach: link =>
 					val allPlayed = link.orders.forall(played.contains)

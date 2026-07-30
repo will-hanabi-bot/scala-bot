@@ -18,7 +18,8 @@ def forceClue[G <: Game](game: G, giver: Int, advance: G => Double, offset: Int,
 	if !state.canClue then
 		return -999
 
-	if state.numPlayers == 2 then
+	if state.numPlayers == 2 && giver != state.ourPlayerIndex then
+		Log.info(s"${indent(offset)}${state.names(giver)} cluing (hypothetically)")
 		return advance(game.withState(s => s.copy(clueTokens = s.clueTokens - 1)))
 
 	val allClues =
