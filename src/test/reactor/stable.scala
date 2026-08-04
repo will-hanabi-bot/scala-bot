@@ -231,3 +231,38 @@ class Stable extends munit.FunSuite:
 
 		// Bob should clue 5 and not 2.
 		assertEquals(game.takeAction.unsafeRunSync(), PerformAction.Rank(Bob.ordinal, 5))
+
+	test("understands a tempo clue"):
+		val game = setup(Reactor.apply, Vector(
+			Vector("xx", "xx", "xx", "xx", "xx"),
+			Vector("r4", "y4", "g4", "b4", "p4"),
+			Vector("r4", "y4", "g4", "b4", "p4"),
+		),
+			starting = Cathy,
+			playStacks = Some(Vector(1, 0, 0, 0, 0)),
+			clueTokens = 7,
+			init =
+				preClue[Reactor](Alice, 1, Seq("2")) andThen
+				preClue[Reactor](Alice, 2, Seq("2"))
+		)
+		.pipe(takeTurn("Cathy clues 2 to Alice (slots 1,2)"))
+
+		// Only slot 1 is playable.
+		assertEquals(game.common.obviousPlayables(game, Alice.ordinal), Vector(game.state.hands(Alice.ordinal)(0)))
+
+	test("reacts to a reclue that isn't tempo"):
+		val game = setup(Reactor.apply, Vector(
+			Vector("xx", "xx", "xx", "xx", "xx"),
+			Vector("y2", "r2", "g4", "b4", "p4"),
+			Vector("r4", "y4", "g4", "b4", "p4"),
+		),
+			starting = Cathy,
+			playStacks = Some(Vector(1, 0, 0, 0, 0)),
+			init =
+				preClue[Reactor](Bob, 1, Seq("2")) andThen
+				preClue[Reactor](Bob, 2, Seq("2"))
+		)
+		.pipe(takeTurn("Cathy clues 2 to Bob"))
+
+		// We need to react, since Bob will bomb y2.
+		assertEquals(game.lastMove, Some(ClueInterp.Reactive))

@@ -31,7 +31,7 @@ private def reactiveContext(prev: Reactor, game: Reactor, action: ClueAction, re
 
 	(possibleConns, knownPlays, hypoState)
 
-def interpretReactiveColour(prev: Reactor, game: Reactor, action: ClueAction, focusSlot: Int, reacter: Int, looksStable: Boolean): (Option[ClueInterp], Reactor) =
+def interpretReactiveColour(prev: Reactor, game: Reactor, action: ClueAction, focusSlot: Int, reacter: Int, looksStable: Boolean): (ClueInterp, Reactor) =
 	val ClueAction(giver = giver, target = receiver, clue = _, list = _) = action
 	val state = game.state
 	val (possibleConns, knownPlays, hypoState) = reactiveContext(prev, game, action, reacter)
@@ -51,7 +51,7 @@ def interpretReactiveColour(prev: Reactor, game: Reactor, action: ClueAction, fo
 			if uncluedDupe then 99 else i
 
 	// Try targeting all play targets
-	playTargets.view.flatMap: (order, index) =>
+	playTargets.findSome: (order, index) =>
 		val targetSlot = index + 1
 		val reactSlot = calcSlot(focusSlot, targetSlot)
 
@@ -74,13 +74,13 @@ def interpretReactiveColour(prev: Reactor, game: Reactor, action: ClueAction, fo
 						targetPlay(game.copy(common = newCommon), action, reactOrder, urgent = true, stable = false)
 					else
 						targetDiscard(game.copy(common = newCommon), action, reactOrder, urgent = true)
-				interp match
-					case None => Some(None, newGame)
-					case Some(_) =>
-						Log.info(s"reactive dc+play, reacter ${state.names(reacter)} (slot $reactSlot) receiver ${state.names(receiver)} (slot $targetSlot), focus slot $focusSlot")
-						Some((Some(ClueInterp.Reactive), newGame))
-	.headOption
-	.getOrElse {
+
+				if interp == ClueInterp.Mistake then
+					Some(ClueInterp.Mistake, newGame)
+				else
+					Log.info(s"reactive dc+play, reacter ${state.names(reacter)} (slot $reactSlot) receiver ${state.names(receiver)} (slot $targetSlot), focus slot $focusSlot")
+					Some((ClueInterp.Reactive, newGame))
+	.getOrElse:
 		// Didn't work, so target trash (NOTE: this was temporarily giver's trash. why?)
 		val prevKt = prev.common.thinksTrash(prev, receiver)
 		val dcTargets =
@@ -116,7 +116,7 @@ def interpretReactiveColour(prev: Reactor, game: Reactor, action: ClueAction, fo
 
 		if dcTargets.isEmpty then
 			Log.warn(s"reactive clue but receiver had no playable, trash or sacrifice targets!")
-			(None, game)
+			(ClueInterp.Mistake, game)
 		else
 			dcTargets.findSome: (target, index) =>
 				if state.nextPlayerIndex(giver) != reacter && game.meta(target).status == CardStatus.CalledToPlay then
@@ -138,23 +138,23 @@ def interpretReactiveColour(prev: Reactor, game: Reactor, action: ClueAction, fo
 							Log.warn(s"reaction would involve playing unplayable ${state.logId(reactOrder)} $reactOrder!")
 							None
 						case Some(reactOrder) =>
-							val newCommon = game.common.withThought(reactOrder) { t =>
+							val newCommon = game.common.withThought(reactOrder): t =>
 								t.copy(oldInferred = t.inferred.toOpt)
-							}
+
 							val (interp, newGame) =
 								if state.variant.suits(state.deck(target).suitIndex).suitType.inverted then
 									targetDiscard(game.copy(common = newCommon), action, reactOrder, urgent = true)
 								else
 									targetPlay(game.copy(common = newCommon), action, reactOrder, urgent = true, stable = false)
-							interp match
-								case None => Some(None, newGame)
-								case Some(_) =>
-									Log.info(s"reactive play+dc, reacter ${state.names(reacter)} (slot ${reactSlot}) receiver ${state.names(receiver)} (slot ${targetSlot}), focus slot ${focusSlot}")
-									Some(Some(ClueInterp.Reactive), newGame)
-			.getOrElse(None, game)
-	}
 
-def interpretReactiveRank(prev: Reactor, game: Reactor, action: ClueAction, focusSlot: Int, reacter: Int): (Option[ClueInterp], Reactor) =
+							if interp == ClueInterp.Mistake then
+								Some(ClueInterp.Mistake, newGame)
+							else
+								Log.info(s"reactive play+dc, reacter ${state.names(reacter)} (slot ${reactSlot}) receiver ${state.names(receiver)} (slot ${targetSlot}), focus slot ${focusSlot}")
+								Some(ClueInterp.Reactive, newGame)
+			.getOrElse(ClueInterp.Mistake, game)
+
+def interpretReactiveRank(prev: Reactor, game: Reactor, action: ClueAction, focusSlot: Int, reacter: Int): (ClueInterp, Reactor) =
 	val ClueAction(giver = _, target = receiver, clue = _, list = _) = action
 	val state = game.state
 	val (possibleConns, knownPlays, hypoState) = reactiveContext(prev, game, action, reacter)
@@ -172,7 +172,7 @@ def interpretReactiveRank(prev: Reactor, game: Reactor, action: ClueAction, focu
 
 			if uncluedDupe then 99 else i
 
-	playTargets.view.flatMap: (target, index) =>
+	playTargets.findSome: (target, index) =>
 		val targetSlot = index + 1
 		val reactSlot = calcSlot(focusSlot, targetSlot)
 		val receiveOrder = target
@@ -197,19 +197,18 @@ def interpretReactiveRank(prev: Reactor, game: Reactor, action: ClueAction, focu
 				val nextGame = newGame.withThought(reactOrder): t =>
 					t.copy(inferred = t.inferred.difference(state.deck(receiveOrder).id().get))
 
-				interp match
-					case None => Some(None, nextGame)
-					case Some(_) =>
-						Log.info(s"reactive play+play, reacter ${state.names(reacter)} (slot ${reactSlot}) receiver ${state.names(receiver)} (slot ${targetSlot}), focus slot ${focusSlot}")
-						Some((Some(ClueInterp.Reactive), nextGame))
-	.headOption
+				if interp == ClueInterp.Mistake then
+					Some(ClueInterp.Mistake, newGame)
+				else
+					Log.info(s"reactive play+play, reacter ${state.names(reacter)} (slot ${reactSlot}) receiver ${state.names(receiver)} (slot ${targetSlot}), focus slot ${focusSlot}")
+					Some((ClueInterp.Reactive, nextGame))
 	.getOrElse:
 		val finesseTargets = state.hands(receiver).zipWithIndex.filter: (order, _) =>
 			state.playableAway(state.deck(order).id().get) == 1
 
 		if finesseTargets.isEmpty then
 			Log.warn("reactive clue but receiver had no playable targets!")
-			(None, game)
+			(ClueInterp.Mistake, game)
 		else
 			(for
 				reactSlot <- List(1, 5, 4, 3, 2).view
@@ -237,13 +236,14 @@ def interpretReactiveRank(prev: Reactor, game: Reactor, action: ClueAction, focu
 							targetDiscard(game.copy(common = newCommon), action, reactOrder, urgent = true)
 						else
 							targetPlay(game.copy(common = newCommon), action, reactOrder, urgent = true, stable = false)
-					interp match
-						case None => Some(None, newGame)
-						case Some(_) =>
-							val newGame2 = newGame.withThought(reactOrder): t =>
-								t.copy(inferred = IdentitySet.single(state.deck(receiveOrder).id().get.prev.get))
 
-							Log.info(s"reactive finesse, reacter ${state.names(reacter)} (slot ${reactSlot}) receiver ${state.names(receiver)} (slot ${targetSlot}), focus slot ${focusSlot}")
-							Some((Some(ClueInterp.Reactive), newGame2))
+					if interp == ClueInterp.Mistake then
+						Some(ClueInterp.Mistake, newGame)
+					else
+						val newGame2 = newGame.withThought(reactOrder): t =>
+							t.copy(inferred = IdentitySet.single(state.deck(receiveOrder).id().get.prev.get))
+
+						Log.info(s"reactive finesse, reacter ${state.names(reacter)} (slot ${reactSlot}) receiver ${state.names(receiver)} (slot ${targetSlot}), focus slot ${focusSlot}")
+						Some((ClueInterp.Reactive, newGame2))
 			).flatten.headOption
-			.getOrElse((None, game))
+			.getOrElse((ClueInterp.Mistake, game))

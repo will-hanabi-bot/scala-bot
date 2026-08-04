@@ -65,6 +65,25 @@ class Variants extends munit.FunSuite:
 		assertEquals(game.common.obviousPlayables(game, Alice.ordinal), Vector(game.state.hands(Alice.ordinal)(0)))
 		hasStatus(game, Alice, 1, CardStatus.CalledToPlay)
 
+	test("understands a brown tempo clue"):
+		val game = setup(Reactor.apply, Vector(
+			Vector("xx", "xx", "xx", "xx", "xx"),
+			Vector("y2", "r2", "g4", "b4", "n4"),
+			Vector("r4", "y4", "g4", "b4", "n4"),
+		),
+			starting = Cathy,
+			variant = TestVariant.Brown5,
+			clueTokens = 4,
+			init =
+				preClue[Reactor](Alice, 2, Seq("brown")) andThen
+				preClue[Reactor](Alice, 4, Seq("brown"))
+		)
+		.pipe(takeTurn("Cathy clues brown to Alice (slots 2,4)"))
+
+		// This is a tempo clue on slot 4.
+		assertEquals(game.common.obviousPlayables(game, Alice.ordinal), Vector(game.state.hands(Alice.ordinal)(3)))
+		hasStatus(game, Alice, 4, CardStatus.CalledToPlay)
+
 	test("it uses value cluing for pink"):
 		val game = setup(Reactor.apply, Vector(
 			Vector("xx", "xx", "xx", "xx", "xx"),
@@ -78,6 +97,25 @@ class Variants extends munit.FunSuite:
 
 		// 3 + 1 = 4, not 2 + 1 = 3
 		hasStatus(game, Alice, 3, CardStatus.CalledToPlay)
+
+	test("understands a pink tempo clue"):
+		val game = setup(Reactor.apply, Vector(
+			Vector("xx", "xx", "xx", "xx", "xx"),
+			Vector("y2", "r2", "g4", "b4", "i4"),
+			Vector("r4", "y4", "g4", "b4", "i4"),
+		),
+			starting = Cathy,
+			variant = TestVariant.Pink5,
+			clueTokens = 4,
+			init =
+				preClue[Reactor](Alice, 2, Seq("pink")) andThen
+				preClue[Reactor](Alice, 4, Seq("pink"))
+		)
+		.pipe(takeTurn("Cathy clues 4 to Alice (slots 2,4)"))
+
+		// This is a tempo clue on slot 4.
+		assertEquals(game.common.obviousPlayables(game, Alice.ordinal), Vector(game.state.hands(Alice.ordinal)(3)))
+		hasStatus(game, Alice, 4, CardStatus.CalledToPlay)
 
 	test("it uses value cluing for rainbow"):
 		val game = setup(Reactor.apply, Vector(

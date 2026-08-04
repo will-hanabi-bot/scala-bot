@@ -5,7 +5,7 @@ import scala_bot.lib.FastBitSet
 import scala_bot.utils._
 import scala_bot.logger.Log
 
-def assignConns(game: HGroup, action: ClueAction, fps: Seq[FocusPossibility], focus: Int, ambiguousOwn: Seq[FocusPossibility] = Nil) =
+def assignConns(game: HGroup, action: ClueAction, fps: Seq[FocusPossibility], focus: Int, ambiguousOwn: Seq[FocusPossibility] = Nil, retroactive: Boolean = false) =
 	val state = game.state
 	val ClueAction(giver, target, _, clue) = action
 
@@ -175,7 +175,7 @@ def assignConns(game: HGroup, action: ClueAction, fps: Seq[FocusPossibility], fo
 					case _ => g
 			.pipe: g =>
 				conn match
-					case f: PlayableConn if f.insertingInto.isDefined =>
+					case f: PlayableConn if f.insertingInto.isDefined && !retroactive =>
 						val insertOrders = f.insertingInto.get
 						if target == state.ourPlayerIndex then
 							// Write the shifted connections when we insert into our own layered finesse

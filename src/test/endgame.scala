@@ -6,8 +6,9 @@ import scala_bot.basics._
 import scala_bot.lib.Frac
 import scala_bot.endgame.EndgameSolver
 
-import scala_bot.test.{Colour, fullyKnown, Player, preClue, setup, TestVariant}, Player._
+import scala_bot.test.{Colour, fullyKnown, Player, preClue, setup, takeTurn, TestVariant}, Player._
 import scala_bot.logger.{Logger, LogLevel}
+import scala_bot.utils.{pipe}
 
 class Endgame extends munit.FunSuite:
 	override def beforeAll() = Logger.setLevel(LogLevel.Off)
@@ -198,8 +199,8 @@ class Endgame extends munit.FunSuite:
 		EndgameSolver(monteCarlo = false).solve(game) match
 			case Left(msg) => throw new Exception(s"Game should be winnable! $msg")
 			case Right((perform, winrate)) =>
-				// We win if Bob draws y5, and lose if Bob doesn't. There are 6 locations that y5 could be.
-				assertEquals(winrate, Frac(1, 6))
+				// We win if either Bob draws y5 (and we clue), or we draw y5 (and yolo). There are 6 locations that y5 could be.
+				assertEquals(winrate, Frac(1, 3))
 				// Alice should play r3.
 				assertEquals(perform, PerformAction.Play(game.state.hands(Alice.ordinal)(4)))
 
@@ -324,5 +325,36 @@ class Endgame extends munit.FunSuite:
 				assertEquals(winrate, Frac.one)
 				assert(perform match
 					case p: PerformAction.Colour => p.target == Bob.ordinal
+					case _ => false
+				)
+
+	test("tries bombing slot 1 in the final round"):
+		val game = setup(Reactor.apply, Vector(
+			Vector("xx", "xx", "xx", "xx", "xx"),
+			Vector("r5", "y1", "g1", "b1", "p1"),
+			Vector("r1", "y1", "g1", "b1", "p1"),
+		),
+			starting = Cathy,
+			playStacks = Some(Vector(4, 4, 5, 5, 5)),
+			discarded =  Vector(
+				"r2", "r3",
+				"y2", "y3",
+				"g2", "g3",
+				"b2", "b3",
+				"p2", "p3", "p4"
+			),	// Missing: r1, r4, y5, y4, g4, b4
+			clueTokens = 0,
+			init = fullyKnown[Reactor](Bob, 1, "r5")
+		)
+		.pipe(takeTurn("Cathy discards p1", "r1"))
+
+		assertEquals(game.state.cardsLeft, 0)
+
+		EndgameSolver().solve(game) match
+			case Left(msg) => throw new Exception(s"Game should be winnable! $msg")
+			case Right((perform, winrate)) =>
+				assert(winrate > Frac.zero)
+				assert(perform match
+					case p: PerformAction.Play => p.target == game.state.hands(Alice.ordinal)(0)
 					case _ => false
 				)

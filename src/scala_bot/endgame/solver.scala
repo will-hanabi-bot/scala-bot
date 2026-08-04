@@ -419,10 +419,21 @@ case class EndgameSolver[G <: Game](
 			if urgentAction.isDefined then
 				return Seq(urgentAction.get)
 
-			val playables = if infer || game.goodTouch || game.state.endgameTurns.isDefined then
-				game.players(playerTurn).thinksPlayables(game, playerTurn, excludeTrash = true)
-			else
-				game.players(playerTurn).obviousPlayables(game, playerTurn)
+			val playables =
+				val plays =
+					if infer || game.goodTouch || state.endgameTurns.isDefined then
+						game.players(playerTurn).thinksPlayables(game, playerTurn, excludeTrash = true)
+					else
+						game.players(playerTurn).obviousPlayables(game, playerTurn)
+
+				val slot1 = state.hands(playerTurn)(0)
+				val poss = game.players(playerTurn).thoughts(slot1).possibilities
+
+				// Allow bombing slot 1 when no plays and a playable card could be in slot 1
+				if state.endgameTurns.isDefined && plays.isEmpty && poss.intersect(state.playableSet).nonEmpty then
+					Seq(slot1)
+				else
+					plays
 
 			val playActions = playables.map: order =>
 				if Instant.now.isAfter(deadline) then

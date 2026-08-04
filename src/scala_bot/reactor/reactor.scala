@@ -224,7 +224,7 @@ object Reactor:
 					val (interp, interpGame) = g.nextInterp match
 						case _ if g.state.options.emptyClues && list.length == 0 =>
 							Log.highlight(Console.YELLOW, "empty clue!")
-							(Some(ClueInterp.Useless), g)
+							(ClueInterp.Useless, g)
 
 						case Some(interp) =>
 							Log.info(s"forcing rewinded interp $interp!")
@@ -260,7 +260,7 @@ object Reactor:
 							val allowableFix = target == state.nextPlayerIndex(giver) && fixed.nonEmpty
 
 							reacter match
-								case None => (Option.when(allowableFix)(ClueInterp.Fix), g)
+								case None => (if allowableFix then ClueInterp.Fix else ClueInterp.Mistake, g)
 
 								case Some(reacter) if reacter == target =>
 									interpretStable(prev, g, action, stall = false)
@@ -270,14 +270,14 @@ object Reactor:
 
 									// Urgent fix on previous playable
 									if allowableFix && fixed.exists(prevPlayables.contains) then
-										(Some(ClueInterp.Fix), g)
+										(ClueInterp.Fix, g)
 									else
 										interpretReactive(prev, g, action, reacter, looksStable = false)
 
-					if interp.isEmpty then
+					if interp == ClueInterp.Mistake then
 						Log.warn("interpreted mistake!")
 
-					interpGame.withMove(interp.getOrElse(ClueInterp.Mistake))
+					interpGame.withMove(interp)
 
 			val signalledPlays = interpretedGame.state.heldOrders.filter: o =>
 				prev.meta(o).status != CardStatus.CalledToPlay && interpretedGame.meta(o).status == CardStatus.CalledToPlay

@@ -331,7 +331,7 @@ def interpClue(ctx: ClueContext): HGroup =
 				Log.warn("no inferences!")
 
 				if game.inEndgame && clue.kind == ClueKind.Colour && list.length == 1 && game.common.thoughts(focus).id().nonEmpty && state.numPlayers == 2 then
-					game.withMove(ClueInterp.Stall)
+					game.withMove(ClueInterp.Useless)
 				else
 					game.withMove(ClueInterp.Mistake)
 			else

@@ -172,6 +172,12 @@ extension[G <: Game](game: G)
 				)),
 				meta = Some(g.meta :+ ConvData(order))
 			)))
+		.pipe:
+			_.withThought(order): t =>
+				t.copy(
+					oldInferred = t.inferred.toOpt,
+					oldPossible = t.possible.toOpt
+				)
 		.when(_ => suitIndex != -1 && rank != -1):
 			_.withState(_.withPlay(id))
 			.withId(order, id)
@@ -180,9 +186,7 @@ extension[G <: Game](game: G)
 					suitIndex,
 					rank,
 					inferred = IdentitySet.single(id),
-					oldInferred = t.inferred.toOpt,
 					possible = IdentitySet.single(id),
-					oldPossible = t.possible.toOpt
 				)
 
 	/** Returns the updated game after performing empathy operations, including good touch if the convention uses it.
