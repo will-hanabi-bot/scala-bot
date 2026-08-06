@@ -102,7 +102,7 @@ def setup[G <: Game](
 			discarded.zipWithIndex.foldLeft(g):
 				case (game, (short, i)) =>
 					val id = game.state.expandShort(short)
-					game.withState(_.withDiscard(id, 99)).pipe: g =>
+					game.withState(_.withDiscard(id, 63 - g.state.score - i)).pipe: g =>
 						ops.copyWith(g, GameUpdates(
 							common = Some(g.common.copy(
 								certainMap = g.common.certainMap.updated(id.toOrd, g.common.certainMap(id.toOrd).update(63 - g.state.score - i, unknownTo = -1)))
@@ -119,14 +119,15 @@ def setup[G <: Game](
 					throw new IllegalArgumentException(s"Found $count copies of ${g.state.logId(id)}!")
 		.pipe:
 			_.withState: s =>
+				val trashSet = s.allIds.filter(id => id.rank <= s.playStacks(id.suitIndex) || id.rank > s.maxRanks(id.suitIndex))
 				s.copy(
 					cardsLeft = s.cardsLeft - s.score - discarded.length,
 					currentPlayerIndex = starting.ordinal,
 					clueTokens = clueTokens,
 					strikes = strikes,
-					playableSet = s.allIds.filter(i => s.isPlayable(i) && !s.isBasicTrash(i)),
-					criticalSet = s.allIds.filter(s.isCritical),
-					trashSet = s.allIds.filter(s.isBasicTrash)
+					playableSet = s.allIds.difference(trashSet).filter(id => id.rank <= s.maxRanks(id.suitIndex) && id.rank == s.playStacks(id.suitIndex) + 1),
+					criticalSet = s.allIds.difference(trashSet).filter(id => s.discardStacks(id.suitIndex)(id.rank - 1).length == s.cardCount(id.toOrd) - 1),
+					trashSet = trashSet
 				)
 		.pipe(init)
 		.elim()

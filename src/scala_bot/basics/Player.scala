@@ -66,7 +66,7 @@ case class Player(
 	/** The set of orders whose inferences have been modified since the last call to elim(). */
 	dirty: FastBitSet = FastBitSet.empty,
 	/** Maps each identity (by ordinal) to the orders known to be that identity. */
-	certainMap: Vector[CertainMapEntry],
+	certainMap: Array[CertainMapEntry],
 
 	/** Maps each identity (by ordinal) to the orders that could be that identity. */
 	possibleMap: Array[FastBitSet] = Array()
@@ -169,16 +169,13 @@ case class Player(
 	def orderKt(game: Game, order: Int) =
 		val thought = thoughts(order)
 
-		val sameHandDupe =
-			thought.possible.forall: id =>
-				game.state.isBasicTrash(id) ||
-				game.state.hands(game.state.holderOf(order)).exists: o =>
-					o != order &&
-					thoughts(o).matches(id) &&
-					(!game.meta(order).focused || game.meta(o).focused)
-
 		(game.meta(order).trash && thought.possible.intersect(game.state.criticalSet).isEmpty) ||
-		sameHandDupe
+		thought.possible.forall: id =>
+			game.state.isBasicTrash(id) ||
+			game.state.hands(game.state.holderOf(order)).exists: o =>
+				o != order &&
+				thoughts(o).matches(id) &&
+				(!game.meta(order).focused || game.meta(o).focused)
 		// (thought.inferred.isEmpty && thought.reset)
 
 	/** Returns true if this order is known playable or conventionally promised playable.
@@ -275,9 +272,9 @@ case class Player(
 			orderTrash(game, order) ||
 			thoughts(order).possibilities.forall(isSieved(game, _, order)) || {
 				allowLockedSacrifice &&
-				game.common.thinksLocked(game, playerIndex) &&
 				game.state.deck(order).clued &&
-				thoughts(order).possibilities.intersect(game.state.criticalSet).isEmpty
+				thoughts(order).possibilities.intersect(game.state.criticalSet).isEmpty &&
+				game.common.thinksLocked(game, playerIndex)
 			}
 
 	/** Returns true if the given player has at least one playable or trash order in their hand. */
@@ -561,5 +558,5 @@ object Player:
 			allPossible = allPossible,
 			hypoStacks = hypoStacks,
 			isCommon = playerIndex == -1,
-			certainMap = Vector.fill(allPossible.length)(CertainMapEntry.empty)
+			certainMap = CertainMapEntry.filledArray(allPossible.length)
 		)

@@ -209,10 +209,10 @@ extension[G <: Game](game: G)
 					_.withThought(order)(_.copy(infoLock = IdentitySetOpt.empty))
 
 		.pipe: g =>
-			val (resets, newCommon) = g.common.cardElim(state)
-				.when(_ => g.goodTouch): (r, c) =>
-					val (resets, newCommon) = c.goodTouchElim(g, except)
-					(resets.union(r), newCommon)
+			val ElimOutcome(resets, newCommon) = g.common.cardElim(state)
+				.when(_ => g.goodTouch): outcome =>
+					val ElimOutcome(resets, newCommon) = outcome.player.goodTouchElim(g, except)
+					ElimOutcome(resets.union(outcome.resets), newCommon)
 
 			resets.foldLeft(ops.copyWith(g, GameUpdates(common = Some(newCommon)))): (acc, order) =>
 				val entry = acc.meta(order)
@@ -235,32 +235,34 @@ extension[G <: Game](game: G)
 		.pipe: g =>
 			val newPlayers = g.players.map: p =>
 				p.copy(
-					thoughts = p.thoughts.map: t =>
-						if !g.common.dirty.contains(t.order) then t else
-							val thought = g.common.thoughts(t.order)
-							val newInferred =
-								thought.inferred.intersect(t.possible).whenEmpty(t.possible)
+					thoughts = g.common.dirty.foldLeft(p.thoughts): (acc, order) =>
+						val thought = g.common.thoughts(order)
+						val t = acc(order)
 
-							val newInfoLock =
-								if !thought.infoLock.isDefined then
-									thought.infoLock
+						val newInferred =
+							thought.inferred.intersect(t.possible).whenEmpty(t.possible)
+
+						val newInfoLock =
+							if !thought.infoLock.isDefined then
+								thought.infoLock
+							else
+								val ids = thought.infoLock.get.intersect(t.possible)
+								if ids.isEmpty then
+									IdentitySetOpt.empty
 								else
-									val ids = thought.infoLock.get.intersect(t.possible)
-									if ids.isEmpty then
-										IdentitySetOpt.empty
-									else
-										ids.toOpt
-							t.copy(
-								possible = thought.possible.intersect(t.possible),
-								inferred = newInferred,
-								infoLock = newInfoLock,
-								reset = thought.reset
-							),
+									ids.toOpt
+						acc.updated(order, t.copy(
+							possible = thought.possible.intersect(t.possible),
+							inferred = newInferred,
+							infoLock = newInfoLock,
+							reset = thought.reset
+						))
+					,
 					links = g.common.links,
 					playLinks = g.common.playLinks,
 					dirty = g.common.dirty
 				)
-				.cardElim(state)._2
+				.cardElim(state).player
 				.when(_ => g.goodTouch):
 					_.goodTouchElim(g, except)._2
 				.refreshLinks(g)._2

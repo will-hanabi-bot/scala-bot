@@ -53,7 +53,7 @@ object IdentitySet:
 		inline def contains(id: Identity): Boolean =
 			(ids & IdentitySet.single(id)) != 0
 
-		inline def foreach(f: Identity => Unit): Unit =
+		inline def foreach(inline f: Identity => Unit): Unit =
 			var remaining = ids
 			while remaining != 0L do
 				val bit = java.lang.Long.numberOfTrailingZeros(remaining)
@@ -162,7 +162,7 @@ object IdentitySet:
 				remaining &= (remaining - 1)
 			res
 
-		def summing[N](f: Identity => N)(using numeric: Numeric[N]) =
+		inline def summing[N](inline f: Identity => N)(using numeric: Numeric[N]) =
 			var res = numeric.zero
 			ids.foreach: i =>
 				res = numeric.plus(res, f(i))

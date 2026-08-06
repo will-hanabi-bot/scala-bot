@@ -40,7 +40,7 @@ case class Variant(
 	deceptiveS: Boolean,
 	scarce1s: Boolean
 ):
-	def allIds =
+	val allIds =
 		for
 			suitIndex <- 0 until suits.length
 			rank      <- 1 to 5

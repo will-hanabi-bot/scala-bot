@@ -20,6 +20,9 @@ object FastBitSet:
 	def unapplySeq(set: FastBitSet): Option[Seq[Int]] =
 		Some(set.toList)
 
+	def filledArray(length: Int): Array[FastBitSet] =
+		new Array[Long](length).asInstanceOf[Array[FastBitSet]]
+
 	extension(set: FastBitSet)
 		inline def value: Long = set
 		/** The number of numbers contained. */
@@ -44,7 +47,7 @@ object FastBitSet:
 		inline def contains(num: Int): Boolean =
 			(set & FastBitSet.single(num)) != 0
 
-		inline def foreach(f: Int => Unit): Unit =
+		inline def foreach(inline f: Int => Unit): Unit =
 			var remaining = set
 			while remaining != 0L do
 				val bit = java.lang.Long.numberOfTrailingZeros(remaining)
@@ -173,7 +176,7 @@ object FastBitSet:
 				remaining &= (remaining - 1)
 			res
 
-		def summing[N](f: Int => N)(using numeric: Numeric[N]) =
+		inline def summing[N](inline f: Int => N)(using numeric: Numeric[N]) =
 			var res = numeric.zero
 			set.foreach: i =>
 				res = numeric.plus(res, f(i))

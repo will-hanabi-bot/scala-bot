@@ -166,12 +166,13 @@ private def tryStable(prev: Reactor, game: Reactor, action: ClueAction, stall: B
 
 					case None =>
 						val focus =
+							lazy val muddyCards = list.filter(game.knownAs(_, MUDDY, if state.variant.rainbowS then state.variant.specialRank else None)).sortBy(o => -o)
+
 							if state.variant.pinkish && clue.kind == ClueKind.Rank then
 								// Pink positional
 								state.hands(target).lift(clue.value - 1)
-							else if (state.variant.rainbowS || state.variant.muddy || (state.variant.rainbowish && state.variant.pinkish)) && clue.kind == ClueKind.Colour then
+							else if (state.variant.rainbowS || state.variant.muddy || (state.variant.rainbowish && state.variant.pinkish)) && clue.kind == ClueKind.Colour && muddyCards.nonEmpty then
 								// Mud clue
-								val muddyCards = list.filter(game.knownAs(_, MUDDY, if state.variant.rainbowS then state.variant.specialRank else None)).sortBy(o => -o)
 								val coloursAvailable = state.variant.colourableSuits.length
 								val focusIndex = (clue.value - coloursAvailable + 6*muddyCards.length) % muddyCards.length
 

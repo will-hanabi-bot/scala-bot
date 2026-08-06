@@ -22,7 +22,8 @@ def benchmark(args: String*) =
 
 	val seed = 314
 	val numGames = 5
-	val repetitions = 10
+	val repetitions = 50
+	val warmup = 30
 
 	Logger.setLevel(LogLevel.Off)
 	Variant.init()
@@ -53,8 +54,8 @@ def benchmark(args: String*) =
 				case Convention.RefSieve      => simulateGame(states.map(RefSieve(0, _, inProgress = false)), shuffledDeck)
 				case Convention.HGroup(level) => simulateGame(states.map(HGroup(0, _, inProgress = false, level)), shuffledDeck)
 
-		if i > 3 then
+		if i >= warmup then
 			sumTimes = sumTimes + start.until(Instant.now()).toMillis()
 
-	val avgTime = sumTimes / 6.0
+	val avgTime = sumTimes / (repetitions - warmup)
 	println(s"average time: $avgTime ms")

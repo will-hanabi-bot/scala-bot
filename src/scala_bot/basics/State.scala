@@ -40,13 +40,16 @@ case class State(
 ):
 	def withDiscard(id: Identity, order: Int) =
 		val Identity(suitIndex, rank) = id
+		val ord = id.toOrd
 		val newStacks = discardStacks.updated(suitIndex,
 			discardStacks(suitIndex).updated(rank - 1, order +: discardStacks(suitIndex)(rank - 1)))
 
-		val newBase = baseCount.updated(id.toOrd, baseCount(id.toOrd) + 1)
+		val newBase = baseCount.updated(ord, baseCount(ord) + 1)
 
 		val (newMax, newCritical, newTrash, newPlayable) =
-			if criticalSet.contains(id) then
+			if isBasicTrash(id) then
+				(maxRanks, criticalSet, trashSet, playableSet)
+			else if newStacks(suitIndex)(rank - 1).length == cardCount(ord) then
 				val newTrash = (rank to maxRanks(suitIndex)).foldLeft(trashSet): (acc, rank) =>
 					acc.union(Identity(suitIndex, rank))
 
@@ -55,7 +58,7 @@ case class State(
 				newTrash,
 				playableSet.difference(id))
 			else
-				val critical = cardCount(id.toOrd) - newBase(id.toOrd) == 1 && !isBasicTrash(id)
+				val critical = cardCount(ord) - newBase(ord) == 1
 				(maxRanks,
 				if critical then criticalSet.union(id) else criticalSet,
 				trashSet,
@@ -112,20 +115,20 @@ case class State(
 		(playerIndex + 1) % numPlayers
 
 	inline def isBasicTrash(id: Identity) =
-		id.rank <= playStacks(id.suitIndex) || id.rank > maxRanks(id.suitIndex)
+		trashSet.contains(id)
 
 	inline def isUseful(id: Identity) =
-		id.rank > playStacks(id.suitIndex) && id.rank <= maxRanks(id.suitIndex)
+		!trashSet.contains(id)
 
 	def playableAway(id: Identity) =
 		id.rank - (playStacks(id.suitIndex) + 1)
 
-	def isPlayable(id: Identity) = playableAway(id) == 0
+	inline def isPlayable(id: Identity) = playableSet.contains(id)
 
-	def isCritical(id: Identity) =
-		!isBasicTrash(id) && discardStacks(id.suitIndex)(id.rank - 1).length == cardCount(id.toOrd) - 1
+	inline def isCritical(id: Identity) =
+		criticalSet.contains(id)
 
-	def ourHand = hands(ourPlayerIndex)
+	inline def ourHand = hands(ourPlayerIndex)
 
 	def clueTouched(orders: Seq[Int], clue: ClueLike) =
 		orders.filter(order => variant.cardTouched(deck(order), clue))

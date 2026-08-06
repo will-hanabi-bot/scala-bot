@@ -58,6 +58,8 @@ def checkHFix(ctx: ClueContext): Option[HGroup] =
 					(clue.kind == ClueKind.Colour && game.knownAs(o, PINKISH) && !prev.knownAs(o, PINKISH))
 				)
 
+			val fixed1s = fixed.filter(prev.unknown1)
+
 			if fixed.isEmpty then None else
 				if clue.kind == ClueKind.Colour || (chop && (clue.value == 2 || clue.value == 5)) then
 					Log.info(s"pink fix! $fixed")
@@ -67,11 +69,8 @@ def checkHFix(ctx: ClueContext): Option[HGroup] =
 							))
 						).withMove(ClueInterp.Fix))
 
-				else
-					val old1s = list.filter: o =>
-						prev.common.thoughts(o).inferred.forall(_.rank == 1) &&
-						!prev.common.thoughts(o).possible.forall(_.rank == 1)
-					val fixedOrder = prev.next1(old1s).get
+				else if fixed1s.nonEmpty then
+					val fixedOrder = prev.next1(fixed1s).get
 
 					Log.info(s"pink fix promise! $fixedOrder")
 
@@ -84,12 +83,14 @@ def checkHFix(ctx: ClueContext): Option[HGroup] =
 							inferred = t.possible.filter(i => i.rank == clue.value && !state.isPlayable(i))
 						))
 						.pipe: g =>
-							list.filter(old1s.contains).foldLeft(g): (acc, o) =>
+							list.foldLeft(g): (acc, o) =>
 								if o == fixedOrder then
 									acc
 								else
 									acc.withThought(o)(t => t.copy(inferred = t.possible))
 						.withMove(if !mistake then ClueInterp.Fix else ClueInterp.Mistake)
+				else
+					None
 
 		case FixResult.Normal(cluedResets, duplicateReveals) =>
 			Log.info(s"fix clue! not inferring anything else $cluedResets $duplicateReveals")

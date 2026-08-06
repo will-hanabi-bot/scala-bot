@@ -19,6 +19,9 @@ object CertainMapEntry:
 	inline def orderMask = ((1 << orderBits) - 1) << unknownBits
 	inline def unknownMask = (1 << unknownBits) - 1
 
+	def filledArray(length: Int): Array[CertainMapEntry] =
+		new Array[Int](length).asInstanceOf[Array[CertainMapEntry]]
+
 	extension (e: CertainMapEntry)
 		def size = e & (1 << sizeBits) - 1
 
@@ -37,7 +40,7 @@ object CertainMapEntry:
 			val cleared = e & ~(((1 << slotBits) - 1) << shift)
 			(replacement << shift) | cleared
 
-		inline def foreach(f: (order: Int, unknownTo: Int, slot: Int) => Unit): Unit =
+		inline def foreach(inline f: (order: Int, unknownTo: Int, slot: Int) => Unit): Unit =
 			var bits = e >> sizeBits	// shift past size
 
 			loop(0, _ < e.size, _ + 1): s =>

@@ -39,8 +39,8 @@ class Empathy extends munit.FunSuite:
 		.pipe(takeTurn("Alice discards b3 (slot 5)"))
 		.pipe(takeTurn("Bob discards b3", "b1"))
 
-		assert(List("b3", "b4", "b5").map(game.state.expandShort).forall(game.state.trashSet.contains))
-		assert(!game.state.criticalSet.contains(game.state.expandShort("b5")))
+		assert(List("b3", "b4", "b5").map(game.state.expandShort).forall(game.state.isBasicTrash))
+		assert(!game.state.isCritical(game.state.expandShort("b5")))
 
 	test("it visibly elims 5s"):
 		val game = setup(Reactor.apply, Vector(
