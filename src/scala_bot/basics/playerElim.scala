@@ -397,7 +397,7 @@ extension (p: Player)
 
 					else if orders.size > inferred.length then
 						// We have enough inferred cards to elim elsewhere
-						Log.info(s"adding link $orders infs ${inferred.fmt(state)} (${p.name})")
+						Log.info(s"adding link ${orders.fmt} infs ${inferred.fmt(state)} (${p.name})")
 						newPlayer = newPlayer.copy(links = Link.Unpromised(orders, inferred) +: newPlayer.links)
 
 		newPlayer
@@ -463,7 +463,7 @@ extension (p: Player)
 					else
 						ids.find(i => orders.exists(!player.thoughts(_).inferred.contains(i))) match
 							case Some(lostInf) =>
-								Log.info(s"linked orders $orders lost inference ${state.logId(lostInf)}")
+								Log.info(s"linked orders ${orders.fmt} lost inference ${state.logId(lostInf)}")
 								(player, sarcastics)
 							case None =>
 								(player.copy(links = link +: player.links), sarcastics)

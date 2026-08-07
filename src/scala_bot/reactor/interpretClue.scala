@@ -450,7 +450,8 @@ def targetDiscard(game: Reactor, action: ClueAction, target: Int, urgent: Boolea
 
 	val newGame = game.copy(
 		common = game.common.withThought(target)(t => t.copy(
-			inferred = t.inferred.filter(!state.isCritical(_))
+			inferred = t.inferred.difference(state.criticalSet),
+			oldInferred = t.inferred.toOpt
 		)),
 		meta = game.meta.updated(target, meta.copy(
 			status = CardStatus.CalledToDiscard,
@@ -464,7 +465,7 @@ def targetDiscard(game: Reactor, action: ClueAction, target: Int, urgent: Boolea
 	if newGame.common.thoughts(target).inferred.isEmpty then
 		Log.warn(s"target $target was reset!")
 
-		val resetGame = newGame.copy(common = newGame.common.withThought(target)(_.resetInferences()))
+		val resetGame = newGame.withThought(target)(_.resetInferences())
 		(ClueInterp.Mistake, resetGame)
 	else
 		Log.info(s"targeting discard $target (${state.names(state.holderOf(target))}), infs ${game.common.strInfs(state, target)}${if urgent then ", urgent" else ""}")

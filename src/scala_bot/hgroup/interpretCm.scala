@@ -21,7 +21,12 @@ def interpretTcm(ctx: ClueContext): Option[Seq[Int]] =
 		thought.possible
 
 	val notTcm = prev.state.deck(focus).clued ||
-		!promisedIds.forall(game.common.isTrash(game, _, focus)) ||
+		!promisedIds.forall: id =>
+			state.isBasicTrash(id) ||
+			visibleFind(state, game.common, id, excludeOrder = focus).nonEmpty ||
+			// If we allow inferring, the card must have been clued before this clue
+			visibleFind(state, game.common, id, infer = true, excludeOrder = focus, cond = (_, o) => prev.isTouched(o)).nonEmpty
+		||
 		thought.inferred.forall(i => state.isPlayable(i) && !game.common.isTrash(game, i, focus))
 
 	if notTcm then

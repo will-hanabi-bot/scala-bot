@@ -134,8 +134,13 @@ case class Thought(
 			Some(possible.head)
 		else if !symmetric && suitIndex != -1 then
 			Some(Identity(suitIndex, rank))
-		else if infer && inferred.length == 1 then
-			Some(inferred.head)
+		else if infer then
+			if inferred.length == 1 then
+				Some(inferred.head)
+			else if infoLock.existsO(_.length == 1) then
+				infoLock.mapA(_.head)
+			else
+				None
 		else if partial then
 			val Identity(suitIndex, rank) = possible.head
 			if possible.forall(_.suitIndex == suitIndex) then

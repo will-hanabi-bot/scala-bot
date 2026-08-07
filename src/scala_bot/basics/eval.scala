@@ -37,6 +37,7 @@ def forceClue[G <: Game](game: G, giver: Int, advance: G => Double, offset: Int,
 
 		if hypoGame.lastMove == Some(ClueInterp.Mistake) then
 			Logger.setLevel(level)
+			// Log.highlight(Console.YELLOW, s"${indent(offset)}${action.fmt(state)}: -100 (mistake)")
 			-100
 		else if hypoGame.lastMove == Some(ClueInterp.Useless) then
 			Logger.setLevel(level)

@@ -104,7 +104,7 @@ class GentlemansDiscards extends munit.FunSuite:
 		val game = setup(HGroup.atLevel(10), Vector(
 			Vector("xx", "xx", "xx", "xx"),
 			Vector("b3", "g4", "y2", "b4"),
-			Vector("g1", "y4", "r4", "y3"),
+			Vector("g2", "y4", "r4", "y3"),
 			Vector("r1", "b1", "b4", "g3")
 		),
 			starting = Donald,

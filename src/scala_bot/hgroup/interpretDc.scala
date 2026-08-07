@@ -53,7 +53,7 @@ def interpretTransfer(ctx: DiscardContext, holder: Int, dupe: Option[Int]): (Dis
 			Log.info("looked like out-of-level gd/baton! ignoring")
 			(result = DiscardResult.Mistake, dda = true)
 
-		else if state.isPlayable(id) || prev.common.hypoPlays.contains(order) || prev.common.orderPlayable(prev, order) then
+		else if state.isPlayable(id) || (prev.common.hypoPlays.contains(order) && !game.common.thoughts(order).reset) || prev.common.orderPlayable(prev, order) then
 			def findGD(hypoGame: HGroup, connected: FastBitSet): Option[List[Int]] =
 				val hypoState = hypoGame.state
 				(if inverted then hypoGame.chop(holder) else hypoGame.findFinesse(holder, connected)) match
@@ -212,13 +212,21 @@ def transferWCs(ctx: DiscardContext, result: DiscardResult): HGroup =
 
 def interpretUsefulDcH(ctx: DiscardContext): Option[HGroup] =
 	val DiscardContext(prev, game, action) = ctx
+	val state = game.state
+
 	val DiscardAction(playerIndex, order, suitIndex, rank, failed) = action
 	val id = Identity(suitIndex, rank)
 
 	val valid = !failed &&
 		suitIndex != -1 && rank != -1 &&
-		!game.state.isBasicTrash(id) &&
-		prev.isTouched(order) // && prev.isDefinite(order)
+		!state.isBasicTrash(id) &&
+		prev.isTouched(order) && {
+			val dupe = (0 until state.numPlayers).find: i =>
+				state.hands(i).exists(state.deck(_).matches(id))
+
+			// Discarding a dupe in the same hand doesn't count as a useful dc
+			dupe.forall(_ != playerIndex)
+		}
 
 	Option.when(valid):
 		(checkUsefulDcH(ctx) match
@@ -236,7 +244,7 @@ def interpretUsefulDcH(ctx: DiscardContext): Option[HGroup] =
 				.withMove(DiscardInterp.Mistake)
 
 			case (DiscardResult.GentlemansDiscard(targets, inverted), _) =>
-				targets.foldLeft((game, game.state)):
+				targets.foldLeft((game, state)):
 					case ((acc, hypoState), o) =>
 						val hidden = o != targets.last
 						val inferred = if hidden then hypoState.playableSet else IdentitySet.single(id)
@@ -265,7 +273,7 @@ def interpretUsefulDcH(ctx: DiscardContext): Option[HGroup] =
 
 			case (DiscardResult.Sarcastic(orders), _) =>
 				game.copy(
-					common = if !orders.forall(game.state.deck(_).clued) then game.common else game.common.copy(
+					common = if !orders.forall(state.deck(_).clued) then game.common else game.common.copy(
 						links = Link.Sarcastic(FastBitSet.from(orders), id) +: game.common.links
 					),
 					dda = None
@@ -351,6 +359,13 @@ def interpretSdcm(ctx: DiscardContext): Option[HGroup] =
 
 		else if (status == DcStatus.Scream || status == DcStatus.Shout) && bobChop.isEmpty then
 			Log.warn(s"interpreted scream/shout but ${state.names(bob)} has no chop! interpreting mistake")
+			Some:
+				game.copy(dcStatus = DcStatus.None)
+					.checkDDA(action.playerIndex, Identity(action.suitIndex, action.rank))
+					.withMove(DiscardInterp.Mistake)
+
+		else if status == DcStatus.Scream && game.common.thinksLoaded(prev, bob) then
+			Log.warn(s"${state.names(action.playerIndex)} discarded with a playable/kt but next player was safe! (echo?) interpreting mistake")
 			Some:
 				game.copy(dcStatus = DcStatus.None)
 					.checkDDA(action.playerIndex, Identity(action.suitIndex, action.rank))

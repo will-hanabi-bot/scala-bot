@@ -97,6 +97,7 @@ case class HGroup(
 				true
 			else
 				val possibleFocusDupe =
+					player.thoughts(o).id().isEmpty &&
 					!unknown1s.contains(o) &&
 					!this.knownAs(o, PINKISH) &&
 					!meta(o).focused &&
@@ -131,6 +132,10 @@ case class HGroup(
 					o != possibleGDtargets.head
 				}
 
+				val potentialClandestine =
+					val dependentConns = waiting.filter(_.connections.exists(_.order == o))
+					dependentConns.nonEmpty && dependentConns.forall(this.potentialClandestineWc(playerIndex, o, _).isDefined)
+
 				// ((assume && !xmeta(o).fStatus.contains(FStatus.PossiblyOn(state.ourPlayerIndex))) || isDefinite(o)) &&
 				(assume || isDefinite(o)) &&
 				!possibleFocusDupe &&
@@ -138,7 +143,7 @@ case class HGroup(
 				unrevealedHidden.isEmpty &&
 				!unordered1 &&
 				!ambiguous1 &&
-				!waiting.find(_.connections.exists(_.order == o)).exists(this.potentialClandestineWc(playerIndex, o, _).isDefined)
+				!potentialClandestine
 
 	override def validArr(id: Identity, order: Int): Boolean =
 		val playables = this.me.thinksPlayables(this, state.ourPlayerIndex)
@@ -361,7 +366,20 @@ case class HGroup(
 			state.variant.colourableSuits(clue.value).name.contains("Brown") &&
 			reclue
 
-		val muddyCards = list.filter(this.knownAs(_, MUDDY, if state.variant.rainbowS then state.variant.specialRank else None)).sortBy(o => -o)
+		val muddyCards = list.filter: o =>
+			// All possible ids are rainbowish
+			this.common.thoughts(o).possible.forall: i =>
+				(state.variant.rainbowS && i.rank == state.variant.specialRank.get) ||
+				state.variant.suits(i.suitIndex).suitType.rainbowish
+			&& {
+				// Rank-clued cards can't be muddy unless it's an omni card
+				!state.deck(o).clues.exists(_.kind == ClueKind.Rank) ||
+				this.common.thoughts(o).possible.forall: i =>
+					val suitType = state.variant.suits(i.suitIndex).suitType
+					suitType.pinkish && suitType.rainbowish
+			}
+		.sortBy(o => -o)
+
 		val mudClue = clue.kind == ClueKind.Colour &&
 			(state.variant.muddy || state.variant.rainbowS) &&
 			reclue &&
@@ -519,6 +537,7 @@ case class HGroup(
 	  */
 	def potentialClandestineWc(playerIndex: Int, order: Int, containingWc: WaitingConnection) =
 		waiting.find: wc =>
+			wc != containingWc &&
 			!wc.symmetric && !wc.ambiguousSelf &&
 			wc.focus == containingWc.focus &&
 			wc.target == playerIndex &&
@@ -930,7 +949,7 @@ object HGroup:
 									worse.filter(_._2 > -11)
 										.maxByOption(_._2)
 										.orElse:
-											useless.find(clueValue(_) > -11).map((_, 0))
+											useless.find(clueValue(_) > -11).map((_, 0.0))
 										.toList
 
 								else

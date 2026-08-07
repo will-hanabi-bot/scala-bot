@@ -100,7 +100,7 @@ def assignConns(game: HGroup, action: ClueAction, fps: Seq[FocusPossibility], fo
 						state.hands(conn.reacting).foldLeft(state.playableSet): (acc, order) =>
 							if !g.isBlindPlaying(order) then acc else
 								acc.union(acc.flatMap(_.next))
-						.filter(state.isUseful)
+						.difference(state.trashSet)
 
 				val maybeFinessed =
 					conn.matchesP:
