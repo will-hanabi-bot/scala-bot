@@ -117,8 +117,13 @@ def findKnownConn(ctx: ClueContext, id: Identity, ignore: FastBitSet, findOwn: B
 	val playable = state.hands.zipWithIndex.findSome: (hand, playerIndex) =>
 		if playerIndex == giver then None else
 			val playables = hand.filter(validPlayable(playerIndex, _))
-			val playableOrder = playables.find: p =>
-				state.deck(p).matches(id, assume = game.allowFindOwn && findOwn) && game.isTouched(p)
+			val playableOrder =
+				playables.filter: p =>
+					state.deck(p).matches(id, assume = game.allowFindOwn && findOwn) && game.isTouched(p)
+				.minByOption: p =>
+					// Prefer playing the option with the most info first
+					val thought = game.common.thoughts(p)
+					thought.infoLock.getOrElse(thought.possibilities).length
 
 			playableOrder.map(PlayableConn(playerIndex, _, id, linked = playables.toList))
 
@@ -179,7 +184,8 @@ def findUnknownConnecting(ctx: ClueContext, reacting: Int, id: Identity, connect
 					// Log.warn(s"wrong prompt on ${state.logId(order)} $order, stacks ${state.playStacks}")
 					None
 
-	val prompt = prev.common.findPrompt(prev, reacting, id, connected, ignore)
+	// Need to use 'game' to exclude non-omni cards after a colour clue
+	val prompt = game.common.findPrompt(game, reacting, id, connected, ignore)
 	// Need to use 'game' to exclude newly clued cards
 	val potentialFinesse = game.findFinesseId(
 		reacting,

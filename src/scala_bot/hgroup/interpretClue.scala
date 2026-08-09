@@ -159,7 +159,13 @@ def interpClue(ctx: ClueContext): HGroup =
 				if game.inEndgame then
 					return game.withMove(ClueInterp.Useless)
 				else
-					return handleTcm(ctx, tcm, stall.isEmpty || thinksStall.isEmpty)
+					return handleTcm(ctx, tcm, stall.isEmpty || thinksStall.isEmpty).pipe: g =>
+						g.copy(
+							savedCtx = g.savedCtx.updated(giver, Some(ctx.copy(
+								prev = prev.copy(savedCtx = Vector.fill(state.numPlayers)(None)),
+								game = game.copy(savedCtx = Vector.fill(state.numPlayers)(None))
+							)
+						)))
 
 		interpret5cm(ctx) match
 			case None => ()
@@ -167,7 +173,13 @@ def interpClue(ctx: ClueContext): HGroup =
 				if game.inEndgame then
 					return game.withMove(ClueInterp.Useless)
 				else
-					return performCM(game, cm5).withMove(evaluateCM(ctx, cm5))
+					return performCM(game, cm5).withMove(evaluateCM(ctx, cm5)).pipe: g =>
+						g.copy(
+							savedCtx = g.savedCtx.updated(giver, Some(ctx.copy(
+								prev = prev.copy(savedCtx = Vector.fill(state.numPlayers)(None)),
+								game = game.copy(savedCtx = Vector.fill(state.numPlayers)(None))
+							)
+						)))
 
 	val pinkTrashFix = state.variant.pinkish &&
 		!positional && clue.kind == ClueKind.Rank &&

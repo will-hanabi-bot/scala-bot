@@ -211,7 +211,6 @@ case class HGroup(
 						meta(o).status == CardStatus.PermissionToDiscard
 					}
 
-
 	def mustClue(playerIndex: Int) =
 		val bob = state.nextPlayerIndex(playerIndex)
 
@@ -276,16 +275,17 @@ case class HGroup(
 
 	private def priority1(order: Int) =
 		// play fresh 1s from a later turn before chop-focus on an earlier turn
-		state.deck(order).clues.head.turn * -1000 + {
-			if clued1sOnChop.contains(order) then
-				-100 - order
-			else if meta(order).cm then
-				100 - order
-			else if state.inStartingHand(order) then
-				order
-			else
-				-order
-		}
+		state.deck(order).clues.headOption.fold(Int.MaxValue): clue =>
+			clue.turn * -1000 + {
+				if clued1sOnChop.contains(order) then
+					-100 - order
+				else if meta(order).cm then
+					100 - order
+				else if state.inStartingHand(order) then
+					order
+				else
+					-order
+			}
 
 	def next1(orders: Seq[Int]) =
 		orders.minByOption(priority1)
@@ -353,7 +353,8 @@ case class HGroup(
 		val ClueAction(giver, target, list, clue) = action
 		val hand = state.hands(target)
 		val chop = prev.chop(target)
-		val reclue = list.forall(prev.state.deck(_).clued)
+		val newlyClued = list.filter(!prev.state.deck(_).clued)
+		val reclue = newlyClued.isEmpty
 
 		lazy val pinkChoiceTempo = clue.kind == ClueKind.Rank &&
 			state.variant.pinkish &&
@@ -381,7 +382,7 @@ case class HGroup(
 		.sortBy(o => -o)
 
 		val mudClue = clue.kind == ClueKind.Colour &&
-			(state.variant.muddy || state.variant.rainbowS) &&
+			(state.variant.muddy || (state.variant.suits.exists(s => s.suitType.pinkish && s.suitType.rainbowish)) || state.variant.rainbowS) &&
 			reclue &&
 			// Mud clues should only work if the leftmost card is muddy.
 			muddyCards.contains(list.max)
@@ -392,7 +393,7 @@ case class HGroup(
 				stallSeverity(prev, prev.common, giver) > 0
 
 			if !valid then None else
-				list.filter(o => !prev.state.deck(o).clued && !prev.isCM(o)).minOption
+				newlyClued.filterNot(prev.isCM).minOption
 
 		if chop.exists(list.contains) then
 			FocusResult(chop.get, chop = true)
@@ -403,7 +404,7 @@ case class HGroup(
 		else if brownTempo then
 			FocusResult(list.min, positional = true)
 
-		else if clue.isEq(BaseClue(ClueKind.Rank, 1)) then
+		else if clue.isEq(BaseClue(ClueKind.Rank, 1)) && newlyClued.length > 1 then
 			// Custom implementation of ordered1s: chop is already covered above
 			val focus = list.minBy: o =>
 				if meta(o).cm then
@@ -992,9 +993,24 @@ object HGroup:
 			val state = game.state
 			val nextPlayerIndex = state.nextPlayerIndex(state.ourPlayerIndex)
 
-			!game.players(nextPlayerIndex).thinksLoaded(game, nextPlayerIndex) &&
-			game.chop(nextPlayerIndex).exists: o =>
-				state.deck(o).id().exists(state.isCritical)
+			val saveBob =
+				!game.players(nextPlayerIndex).thinksLoaded(game, nextPlayerIndex) &&
+				game.chop(nextPlayerIndex).exists: o =>
+					state.deck(o).id().exists(state.isCritical)
+
+			val clueLastCard =
+				state.cardsLeft == 1 &&
+				state.heldOrders.exists: o =>
+					val holder = state.holderOf(o)
+
+					// Someone else is holding a focusable, useful card that they don't know about
+					holder != state.ourPlayerIndex &&
+					state.deck(o).id().exists(state.isUseful) &&
+					game.players(holder).thoughts(o).id(infer = true).isEmpty &&
+					state.allValidClues(holder).exists: clue =>
+						game.determineFocus(game, Action.fromClue(state, clue, state.ourPlayerIndex)).focus == o
+
+			saveBob || clueLastCard
 
 		override def preferEndgameDiscard(game: HGroup, playerIndex: Int): Boolean =
 			val state = game.state

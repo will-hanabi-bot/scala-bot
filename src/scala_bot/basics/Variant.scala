@@ -210,7 +210,7 @@ object Variant:
 		Variant(id, name, suits, shortForms, colourableSuits,
 			suits.exists(_.suitType.whitish),
 			suits.exists(_.suitType.rainbowish),
-			suits.exists(_.suitType.pinkish),
+			suits.exists(_.suitType.pinkish || pinkS),
 			suits.exists(_.suitType.brownish),
 			suits.exists(_.suitType.dark),
 			suits.exists(_.suitType.prism),

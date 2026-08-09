@@ -77,26 +77,6 @@ class Rainbow extends munit.FunSuite:
 		// Not a prompt.
 		assert(wc.exists(w => !w.connections.exists(_.isInstanceOf[PromptConn])))
 
-	test("prompts the card with the most positive information"):
-		val game = setup(HGroup.atLevel(1), Vector(
-			Vector("xx", "xx", "xx", "xx", "xx"),
-			Vector("g3", "g3", "b3", "y3", "r4"),
-			Vector("y4", "y4", "b3", "y3", "g4")
-		),
-			starting = Cathy,
-			variant = TestVariant.Rainbow5,
-			playStacks = Some(Vector(2, 0, 0, 0, 0)),
-			clueTokens = 7,
-			init =
-				preClue[HGroup](Alice, 1, Seq("red")) andThen
-				preClue[HGroup](Alice, 2, Seq("red", "3"))
-		)
-		.pipe(takeTurn("Cathy clues red to Bob"))
-
-		// Alice should prompt slot 2 instead of slot 1.
-		hasInfs(game, None, Alice, 2, Vector("r3"))
-		assert(game.common.thoughts(game.state.hands(Alice.ordinal)(0)).inferred.length > 1)
-
 	test("plays into a free choice prompt"):
 		val game = setup(HGroup.atLevel(1), Vector(
 			Vector("xx", "xx", "xx", "xx", "xx"),

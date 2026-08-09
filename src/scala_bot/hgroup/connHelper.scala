@@ -104,8 +104,9 @@ def assignConns(game: HGroup, action: ClueAction, fps: Seq[FocusPossibility], fo
 
 				val maybeFinessed =
 					conn.matchesP:
-						case _: FinesseConn =>
+						case f: FinesseConn =>
 							// Finesse that could be ambiguous
+							f.fKind != FinesseKind.Certain &&
 							fps.length + ambiguousOwn.length > 1 &&
 							!(fps ++ ambiguousOwn).forall: fp =>
 								fp.connections.existsM:
@@ -242,7 +243,15 @@ def urgentSave(ctx: ClueContext): Boolean =
 
 	// Log.info(s"checking if ${state.names(action.giver)} performed an urgent save")
 
-	if !ctx.focusResult.chop then
+	val validSave =
+		ctx.focusResult.chop ||
+		interpretTcm(ctx, log = false).exists: orders =>
+			orders.forall(state.deck(_).id().exists(state.isCritical))
+		||
+		interpret5cm(ctx, log = false).exists: orders =>
+			orders.forall(state.deck(_).id().exists(state.isCritical))
+
+	if !validSave then
 		return false
 
 	val earlyGameClue = game.withMove(ClueInterp.Save).earlyGameClue(action.target)

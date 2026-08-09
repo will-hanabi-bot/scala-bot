@@ -8,14 +8,14 @@ import scala_bot.logger.Log
   * Checks whether a Trash Chop Move was performed.
   * Returns the orders of any chop moved cards.
  */
-def interpretTcm(ctx: ClueContext): Option[Seq[Int]] =
+def interpretTcm(ctx: ClueContext, log: Boolean = true): Option[Seq[Int]] =
 	val ClueContext(prev, game, action) = ctx
 	val state = ctx.state
 	val ClueAction(_, target, list, clue) = action
 	val focus = ctx.focusResult.focus
 	val thought = ctx.common.thoughts(focus)
 
-	lazy val promisedIds = if clue.kind == ClueKind.Rank then
+	val promisedIds = if clue.kind == ClueKind.Rank then
 		thought.possible.filter(_.rank == clue.value)
 	else
 		thought.possible
@@ -27,7 +27,7 @@ def interpretTcm(ctx: ClueContext): Option[Seq[Int]] =
 			// If we allow inferring, the card must have been clued before this clue
 			visibleFind(state, game.common, id, infer = true, excludeOrder = focus, cond = (_, o) => prev.isTouched(o)).nonEmpty
 		||
-		thought.inferred.forall(i => state.isPlayable(i) && !game.common.isTrash(game, i, focus))
+		ctx.common.orderKp(game, focus)
 
 	if notTcm then
 		return None
@@ -38,10 +38,10 @@ def interpretTcm(ctx: ClueContext): Option[Seq[Int]] =
 		o < oldestTrash && !state.deck(o).clued && !game.meta(o).cm
 
 	if cmOrders.isEmpty then
-		Log.highlight(Console.CYAN, s"no cards to tcm")
+		if log then Log.highlight(Console.CYAN, s"no cards to tcm")
 		None
 	else
-		Log.highlight(Console.CYAN, s"trash chop move on ${cmOrders.map(state.logId)}")
+		if log then Log.highlight(Console.CYAN, s"trash chop move on ${cmOrders.map(state.logId)}")
 		Some(cmOrders)
 
 def handleTcm(ctx: ClueContext, tcm: Seq[Int], notStall: Boolean) =
@@ -114,7 +114,7 @@ def handleTcm(ctx: ClueContext, tcm: Seq[Int], notStall: Boolean) =
   * Checks whether a 5's Chop Move was performed.
   * Returns the orders of any chop moved cards.
  */
-def interpret5cm(ctx: ClueContext): Option[Vector[Int]] =
+def interpret5cm(ctx: ClueContext, log: Boolean = true): Option[Vector[Int]] =
 	val ClueContext(prev, game, action) = ctx
 	val state = game.state
 	val ClueAction(_, target, list, clue) = action
@@ -133,19 +133,19 @@ def interpret5cm(ctx: ClueContext): Option[Vector[Int]] =
 		val distance = prev.chopDistance(target, oldest5)
 
 		if distance != 1 then
-			Log.info(s"rightmost 5 was clued $distance-away from chop, not 5cm!")
+			if log then Log.info(s"rightmost 5 was clued $distance-away from chop, not 5cm!")
 			None
 
 		else if state.deck(oldest5).id().exists(_.rank != 5) then
-			Log.info(s"not a 5, not 5cm!")
+			if log then Log.info(s"not a 5, not 5cm!")
 			None
 
 		else if game.common.orderKt(game, chop.get) then
-			Log.info(s"saved card $chop has only trash possibilities!")
+			if log then Log.info(s"saved card $chop has only trash possibilities!")
 			None
 
 		else
-			Log.info(s"5cm, saving ${state.logId(chop.get)} ${chop.get}")
+			if log then Log.info(s"5cm, saving ${state.logId(chop.get)} ${chop.get}")
 			Some(Vector(chop.get))
 	}
 

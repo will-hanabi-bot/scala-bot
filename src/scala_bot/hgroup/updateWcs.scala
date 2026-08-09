@@ -272,7 +272,7 @@ def updateWc(prev: HGroup, game: HGroup, action: Action, wc: WaitingConnection, 
 				case DiscardAction(playerIndex, order, _, _, failed) =>
 					Log.highlight(Console.YELLOW, s"waiting card ${state.logId(wc.currConn.order)} discarded?? ${prev.chop(playerIndex)}")
 
-					if prev.chop(playerIndex).contains(order) then
+					if prev.chop(playerIndex).contains(order) && !wc.currConn.matchesP { case f: FinesseConn => f.certain } then
 						UpdateResult.Remove
 					else
 						// Will be updated when the dc is interpreted

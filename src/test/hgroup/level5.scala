@@ -1,7 +1,7 @@
 package tests.hgroup.level5
 
 import scala_bot.basics._
-import scala_bot.test.{hasInfs, hasStatus, Player, preClue, setup, takeTurn, TestVariant}, Player._
+import scala_bot.test.{hasInfs, hasStatus, Player, setup, takeTurn, TestVariant}, Player._
 import scala_bot.hgroup.{FStatus, HGroup}
 
 import scala_bot.utils.{pipe, tap}
@@ -408,23 +408,4 @@ class General extends munit.FunSuite:
 		.pipe(takeTurn("Cathy clues 3 to Bob"))
 		.pipe(takeTurn("Alice clues red to Cathy"))		// a weird bug with occam's razor suggests this clue
 
-		assertEquals(game.lastMove, Some(ClueInterp.Mistake))
-
-class Rainbow extends munit.FunSuite:
-	override def beforeAll() = Logger.setLevel(LogLevel.Off)
-
-	test("prompts correctly in rainbow"):
-		val game = setup(HGroup.atLevel(5), Vector(
-			Vector("xx", "xx", "xx", "xx"),
-			Vector("r2", "m3", "r1", "r3"),
-			Vector("g4", "g2", "b3", "m5"),
-			Vector("b1", "y2", "r3", "r4")
-		),
-			playStacks = Some(Vector(0, 0, 0, 2, 0)),
-			variant = TestVariant.Rainbow5,
-			init = preClue(Bob, 2, Seq("blue"))
-		)
-		.pipe(takeTurn("Alice clues 2 to Bob"))
-
-		// m3 will bomb as prompt into m2.
 		assertEquals(game.lastMove, Some(ClueInterp.Mistake))

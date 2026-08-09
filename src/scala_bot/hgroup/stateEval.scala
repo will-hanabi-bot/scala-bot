@@ -331,9 +331,9 @@ def _evalAction(game: HGroup, action: Action): Double =
 	val state = game.state
 
 	val value = action match
-		case clue: ClueAction =>
+		case clueAction: ClueAction =>
 			val hypoGame = game.copy(allowFindOwn = false).simulate(action)
-			val clueValue = getResult(game, hypoGame, clue)
+			val clueValue = getResult(game, hypoGame, clueAction)
 
 			if hypoGame.lastMove == Some(ClueInterp.Mistake) || clueValue == -100 then
 				-100.0
@@ -341,7 +341,7 @@ def _evalAction(game: HGroup, action: Action): Double =
 				val bonus =
 					if hypoGame.lastMove == Some(ClueInterp.Fix) then
 						0.5
-					else if clue.clue.kind == ClueKind.Colour then
+					else if clueAction.clue.kind == ClueKind.Colour && hypoGame.lastMove == Some(ClueInterp.Play) then
 						0.05
 					else
 						0

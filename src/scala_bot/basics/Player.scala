@@ -347,8 +347,44 @@ case class Player(
 		val hand = state.hands(playerIndex).when(_ => rightmost)(_.reverse)
 		val validPrompts = hand.filter(validPrompt(prev, _, id, connected, forcePink))
 
+		def posInfo(order: Int): Int =
+			case class PosInfo(
+				ranksClued: FastBitSet,
+				coloursClued: FastBitSet,
+				rankInfo: Int,
+				colourInfo: Int
+			)
+			val initial = PosInfo(FastBitSet.empty, FastBitSet.empty, 0, 0)
+			val info = state.deck(order).clues.foldLeftOpt(initial): (acc, clue) =>
+				if acc.rankInfo == 2 && acc.colourInfo == 2 then
+					Left(acc)
+				else if clue.kind == ClueKind.Rank && acc.rankInfo < 2 && !acc.ranksClued.contains(clue.value) then
+					val omniXorPink =
+						state.variant.suits.exists(s => s.suitType.pinkish && s.suitType.rainbowish) ^
+						state.variant.suits.exists(s => s.suitType.pinkish && !s.suitType.rainbowish)
+
+					Right(acc.copy(
+						ranksClued = acc.ranksClued.incl(clue.value),
+						rankInfo = acc.rankInfo + 1,
+						colourInfo = if omniXorPink then 2 else acc.colourInfo
+					))
+				else if clue.kind == ClueKind.Colour && acc.colourInfo < 2 && !acc.coloursClued.contains(clue.value) then
+					val omniWithoutRainbow =
+						state.variant.suits.exists(s => s.suitType.pinkish && s.suitType.rainbowish) &&
+						!state.variant.suits.exists(s => !s.suitType.pinkish && s.suitType.rainbowish)
+
+					Right(acc.copy(
+						coloursClued = acc.coloursClued.incl(clue.value),
+						colourInfo = acc.colourInfo + 1,
+						rankInfo = if omniWithoutRainbow || state.variant.colourableSuits(clue.value).suitType.pinkish then 2 else acc.rankInfo
+					))
+				else
+					Right(acc)
+
+			info.rankInfo + info.colourInfo
+
 		// Prompt the card with the most positive information
-		validPrompts.maxByOption(state.deck(_).clues.map(_.base).distinct.length)
+		validPrompts.maxByOption(posInfo)
 			.filter(!ignore.contains(_))
 
 	def findClued(prev: Game, playerIndex: Int, id: Identity, ignore: FastBitSet = FastBitSet.empty) =

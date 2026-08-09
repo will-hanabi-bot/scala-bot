@@ -311,13 +311,16 @@ private def checkSdcm(prev: HGroup, game: Game, action: DiscardAction): Option[D
 			(state.clueTokens == 1 && valid1ClueScream(prev, bob))
 		}
 
-	val shout = common.thinksPlayables(prev, playerIndex).exists(_ != order) &&
+	val shout =
+		prev.isSaved(order) &&
+		common.thinksPlayables(prev, playerIndex).exists(_ != order) &&
 		prev.me.thinksPlayables(prev, playerIndex).exists(_ != order) &&
 		game.me.thinksPlayables(game, playerIndex).nonEmpty 	// still needs to be playable
 
-	val result = if scream then DcStatus.Scream else DcStatus.Shout
 
 	Option.when(scream || shout):
+		val result = if scream then DcStatus.Scream else DcStatus.Shout
+
 		if state.numPlayers == 2 then
 			result
 		// else if state.clueTokens == 0 && common.thinksLoaded(prev, bob) then
