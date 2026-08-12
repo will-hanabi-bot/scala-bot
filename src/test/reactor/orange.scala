@@ -84,3 +84,18 @@ class Orange extends munit.FunSuite:
 
 		hasStatus(game, Alice, 2, CardStatus.CalledToPlay)
 		assertEquals(game.takeAction.unsafeRunSync(), PerformAction.Play(game.state.hands(Alice.ordinal)(1)))
+
+	test("interprets an orange clue targeting chop as a ref dc"):
+		val game = setup(Reactor.apply, Vector(
+			Vector("xx", "xx", "xx", "xx", "xx"),
+			Vector("r4", "y4", "g4", "b4", "o4"),
+			Vector("r4", "y4", "g4", "b4", "o4")
+		),
+			starting = Cathy,
+			variant = TestVariant.Orange5,
+			clueTokens = 7
+		)
+		.pipe(takeTurn("Cathy clues orange to Alice (slots 1,2)"))
+
+		hasStatus(game, Alice, 1, CardStatus.None)
+		hasStatus(game, Alice, 3, CardStatus.CalledToDiscard)

@@ -79,7 +79,7 @@ def _forceClue(orig: Reactor, game: Reactor, offset: Int): Double =
 	// They can always give an equal or better clue than what we can see
 	if bob == state.ourPlayerIndex then
 		val nextGame = game.withState(s => s.copy(clueTokens = s.clueTokens - 1))
-		advance(orig, nextGame, offset + 1) + 1.0
+		advance(orig, nextGame, offset + 1) + (if game.inEndgame then 0.5 else 1.5)
 	else
 		forceClue(game, giver, advance(orig, _, offset + 1), offset, only = Some(bob)) + 0.5
 
@@ -96,7 +96,7 @@ def advance(orig: Reactor, game: Reactor, offset: Int): Double =
 	val allPlayables = player.obviousPlayables(game, playerIndex)
 
 	if playerIndex == state.ourPlayerIndex || state.endgameTurns.contains(0) then
-		evalGame(orig, game)
+		evalGame(orig, game, offset)
 
 	else if urgentDc.isEmpty && allPlayables.nonEmpty then
 		val playables = allPlayables.find(meta(_).urgent) match
@@ -108,14 +108,14 @@ def advance(orig: Reactor, game: Reactor, offset: Int): Double =
 		var strike = false
 
 		val playActions = playables.map: order =>
-			val (id, action) = state.deck(order).id() match
+			val (id, action) = game.me.thoughts(order).id(infer = true) match
 				case None =>     (None,     PlayAction(playerIndex, order, -1, -1))
 				case Some(id) => (Some(id), game.players(playerIndex).tryPlay(state, order))
 
-			Log.info(s"${state.names(playerIndex)} ${Action.gerund(action)} ${state.logId(id)}")
+			Log.info(s"${indent(offset)}${state.names(playerIndex)} ${Action.gerund(action)} ${state.logId(id)}")
 
 			val advancedGame = game.simulate(action)
-			if advancedGame.state.strikes > game.state.strikes then
+			if advancedGame.state.strikes > game.state.strikes || advancedGame.state.maxScore < game.state.maxScore then
 				strike = true
 
 			advance(orig, advancedGame, offset + 1)
@@ -124,42 +124,49 @@ def advance(orig: Reactor, game: Reactor, offset: Int): Double =
 		if strike then
 			playActions.min
 		else
-			Log.info(s"also seeing if they can clue instead!")
+			Log.info(s"${indent(offset)}also seeing if they can clue instead!")
 			playActions.max.max(_forceClue(orig, game, offset))
 
 	else if player.obviousLocked(game, playerIndex) then
 		if !state.canClue then
 			val lockedDc = player.lockedDiscard(state, playerIndex)
 			val action = game.players(playerIndex).tryDiscard(state, lockedDc)
-			Log.info(s"locked discard! $lockedDc")
+			Log.info(s"${indent(offset)}locked discard! $lockedDc")
 			advance(orig, game.simulate(action), offset + 1)
 		else
 			_forceClue(orig, game, offset)
 
 	else if state.clueTokens == 8 then
-		Log.info("forced clue at 8 clues!")
+		Log.info("${indent(offset)}forced clue at 8 clues!")
 		_forceClue(orig, game, offset)
 
 	else if urgentDc.isDefined then
 		val order = urgentDc.get
-		val id = state.deck(order).id().get
+		val id = game.me.thoughts(order).id(infer = true)
 		val action = Action.dragDiscard(state, playerIndex, order)
 
-		Log.info(s"${state.names(playerIndex)} urgently ${Action.gerund(action)} ${state.logId(id)}")
+		Log.info(s"${indent(offset)}${state.names(playerIndex)} urgently ${Action.gerund(action)} ${state.logId(id)}")
 		advance(orig, game.simulate(action), offset + 1)
 
 	else
 		def tryDiscard(order: Int, alwaysDiscard: Boolean) =
-			val id = state.deck(order).id().get
+			val id = game.me.thoughts(order).id(infer = true)
 			val action =
 				if alwaysDiscard then
 					Action.dragDiscard(state, playerIndex, order)
 				else
 					game.players(playerIndex).tryDiscard(state, order)
 
-			Log.info(s"${state.names(playerIndex)} ${Action.gerund(action)} ${state.logId(id)} but might clue")
+			Log.info(s"${indent(offset)}${state.names(playerIndex)} ${Action.gerund(action)} ${state.logId(id)} but might clue")
 
-			val dcValue = advance(orig, game.simulate(action), offset + 1)
+			val dcValue =
+				if id.isEmpty then
+					if game.meta(order).status == CardStatus.PermissionToDiscard || game.zcsTurn.nonEmpty then
+						-0.25
+					else
+						-1.5
+				else
+					 advance(orig, game.simulate(action), offset + 1)
 
 			if state.clueTokens < 2 then dcValue else
 				val clueValue = _forceClue(orig, game, offset)
@@ -175,14 +182,14 @@ def advance(orig: Reactor, game: Reactor, offset: Int): Double =
 					0.8
 
 				if clueValue < dcValue then
-					Log.highlight(Console.CYAN, s"won't assume ${state.names(playerIndex)} will clue! too low value")
+					Log.highlight(Console.CYAN, s"${indent(offset)}won't assume ${state.names(playerIndex)} will clue! too low value")
 					dcValue
 				else
 					clueProb * clueValue + (1.0 - clueProb) * dcValue
 
 		urgentDc.orElse(trash.headOption) match
-			case _ if offset == 1 && !game.withState(_.copy(currentPlayerIndex = playerIndex)).hasPtd =>
-				Log.info(s"${state.names(playerIndex)} doesn't have ptd, must clue!")
+			case _ if offset == 1 && game.withState(_.copy(currentPlayerIndex = playerIndex)).mustClue =>
+				Log.info(s"${indent(offset)}${state.names(playerIndex)} doesn't have ptd, must clue!")
 				_forceClue(orig, game, offset)
 
 			case None =>
@@ -230,11 +237,17 @@ def _evalAction(game: Reactor, action: Action): Double =
 			val chop = game.chop(state.holderOf(order))
 
 			if game.inEndgame then
-				-1.0
+				if game.lastActions.zipWithIndex.forall((action, i) => i == state.ourPlayerIndex || action.existsM { case _: ClueAction => true }) then
+					0		// Everyone stalled previously, stop stalling
+				else
+					-1.0
 			else if trash then
 				0
 			else if chop.contains(order) then
-				-0.25
+				if game.meta(order).status == CardStatus.PermissionToDiscard || game.zcsTurn.nonEmpty then
+					-0.25
+				else
+					-1.5
 			else if suitIndex == -1 || rank == -1 then
 				-1.5	 // discarding unknown doesn't incur bdr loss, so this should be punishing
 			else
@@ -252,20 +265,20 @@ def _evalAction(game: Reactor, action: Action): Double =
 		Log.info(f"${action.fmt(state)}%s: $best%.2f (${hypoGame.lastMove}%s)")
 		best
 
-def evalState(state: State, inEndgame: Boolean): Double =
+def evalState(state: State, inEndgame: Boolean, offset: Int): Double =
 	// The first 2 * (# suits) pts are worth 1.5.
 	val scoreVal: Double = state.score.min(2 * state.variant.suits.length) * 0.5 + state.score
 
 	val clueVal: Double =
 		if inEndgame then 0 else
 			state.clueTokens match
-			case 0 					 => 0
-			case _ if !state.canClue => 0
-			case c if c > 6 		 => 3 + (c - 6) * 0.25
-			case c 					 => c / 2.0
+				case 0 					 => -1
+				case _ if !state.canClue => -1
+				case c if c > 6 		 => 3 + (c - 6) * 0.25
+				case c 					 => c / 2.0
 
 	val scoreLoss = state.variant.suits.length * 5 - state.maxScore
-	val dcCritVal = -20 * scoreLoss
+	val dcCritVal = if scoreLoss == 0 then 0 else -20 - scoreLoss
 
 	val strikesVal = state.strikes match
 		case 1 => -1.5
@@ -273,16 +286,16 @@ def evalState(state: State, inEndgame: Boolean): Double =
 		case 3 => -100
 		case _ => 0
 
-	Log.info(s"state eval: score: $scoreVal, clues: $clueVal, dc crit: $dcCritVal, strikes: $strikesVal")
+	Log.info(s"${indent(offset)}state eval: score: $scoreVal, clues: $clueVal, dc crit: $dcCritVal, strikes: $strikesVal")
 	scoreVal + clueVal + dcCritVal + strikesVal
 
-def evalGame(orig: Reactor, game: Reactor): Double =
+def evalGame(orig: Reactor, game: Reactor, offset: Int): Double =
 	val state = game.state
 
 	if state.score == orig.state.maxScore then
 		return 100
 
-	val stateVal = evalState(state, inEndgame = orig.inEndgame || orig.state.remScore < state.variant.suits.length)
+	val stateVal = evalState(state, inEndgame = orig.inEndgame || orig.state.remScore < state.variant.suits.length, offset)
 
 	def inverted(order: Int) = state.deck(order).id().exists(id => state.variant.suits(id.suitIndex).suitType.inverted)
 
@@ -297,9 +310,7 @@ def evalGame(orig: Reactor, game: Reactor): Double =
 				else
 					0.4
 
-	def evalDiscard(order: Int) =
-		val by = game.meta(order).by.getOrElse(throw new Exception(s"order $order doesn't have a by!"))
-
+	def evalDiscard(order: Int, by: Int) =
 		state.deck(order).id() match
 			case None =>
 				// Trust others to discard trash
@@ -319,12 +330,30 @@ def evalGame(orig: Reactor, game: Reactor): Double =
 				else
 					-(5 - state.playableAway(id)) * 0.5
 
+	val playerIndex = (state.ourPlayerIndex + offset) % state.numPlayers
+	val currChop =
+		if state.clueTokens == 8 || game.withState(_.copy(currentPlayerIndex = playerIndex)).mustClue then
+			None
+		else
+			game.chop(playerIndex)
+
+	if currChop.isDefined then
+		Log.highlight(Console.CYAN, s"${indent(offset)}curr player ${state.names(playerIndex)} may discard $currChop!")
+
 	val futureVal = state.heldOrders.summing: order =>
 		val inv = inverted(order)
-		game.meta(order).status match
-			case CardStatus.CalledToPlay => if inv then evalDiscard(order) else evalPlay(order)
-			case CardStatus.CalledToDiscard => if inv then evalPlay(order) else evalDiscard(order)
-			case _ => 0
+
+		if currChop.contains(order) then
+			if inv then evalPlay(order) else evalDiscard(order, by = -1)
+		else
+			game.meta(order).status match
+				case CardStatus.CalledToPlay =>
+					val by = game.meta(order).by.getOrElse(throw new Exception(s"order $order doesn't have a by!"))
+					if inv then evalDiscard(order, by) else evalPlay(order)
+				case CardStatus.CalledToDiscard =>
+					val by = game.meta(order).by.getOrElse(throw new Exception(s"order $order doesn't have a by!"))
+					if inv then evalPlay(order) else evalDiscard(order, by)
+				case _ => 0
 
 	val bdrVal = 2.5 * state.variant.allIds.summing: id =>
 		val discarded = state.discardStacks(id.suitIndex)(id.rank - 1)
@@ -370,5 +399,5 @@ def evalGame(orig: Reactor, game: Reactor): Double =
 
 		(finalScore - state.maxScore) * 5
 
-	Log.info(s"state: $stateVal, future: $futureVal, bdr: $bdrVal${if lockPenalty != 0 then s" lock penalty: ${lockPenalty}" else ""}${if endgamePenalty != 0 then s" endgame penalty: ${endgamePenalty}" else ""}")
+	Log.info(s"${indent(offset)}state: $stateVal, future: $futureVal, bdr: $bdrVal${if lockPenalty != 0 then s" lock penalty: ${lockPenalty}" else ""}${if endgamePenalty != 0 then s" endgame penalty: ${endgamePenalty}" else ""}")
 	stateVal + futureVal + bdrVal + lockPenalty + endgamePenalty

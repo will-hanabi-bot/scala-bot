@@ -21,9 +21,12 @@ extension[G <: Game] (solver: EndgameSolver[G])
 				val newState = advanceState(state, perform, playerTurn, draw = None)
 				solver.cluelessWinnable(newState, state.nextPlayerIndex(playerTurn), remaining, deadline, depth + 1).isDefined
 
+			def isInv(order: Int) =
+				state.deck(order).id().exists(id => state.variant.suits(id.suitIndex).suitType.inverted)
+
 			state.hands(playerTurn).collectFirst:
 				case order if state.deck(order).id().exists(state.isPlayable) && actionWinnable(PerformAction.Play(order)) =>
-					PerformAction.Play(order)
+					if isInv(order) then PerformAction.Discard(order) else PerformAction.Play(order)
 			.orElse:
 				if !state.canClue then None else
 					val action = PerformAction.Rank(0, 0)
@@ -33,7 +36,7 @@ extension[G <: Game] (solver: EndgameSolver[G])
 					discardable <- state.hands(playerTurn).find(state.deck(_).id().isEmpty)
 					action = PerformAction.Discard(discardable) if actionWinnable(action)
 				yield
-					action
+					if isInv(discardable) then PerformAction.Play(discardable) else action
 
 	def winnableSimpler(state: State, playerTurn: Int, remaining: RemainingMap, deadline: Instant, depth: Int): Boolean =
 		if state.score == state.maxScore then

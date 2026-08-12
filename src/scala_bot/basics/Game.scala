@@ -471,13 +471,16 @@ extension[G <: Game](game: G)
 		val actions = game.state.actionList
 
 		ops.blank(game, keepDeck = false)
-			.cond(_ => turn == 1 && game.state.ourPlayerIndex == 0)
-				(actions.flatten.takeWhile(_.isInstanceOf[DrawAction]).foldLeft(_)(_.handleAction(_)))
-				{
+			.pipe: g =>
+				val allActions = actions.flatten
+
+				if turn == 1 && game.state.ourPlayerIndex == 0 then
+					allActions.takeWhile(_.isInstanceOf[DrawAction]).foldLeft(g)(_.handleAction(_))
+				else if allActions.nonEmpty then
 					val level = Logger.level
 					Logger.setLevel(LogLevel.Off)
 
-					actions.flatten.foldLeftOpt(_): (g, action) =>
+					actions.flatten.foldLeftOpt(g): (g, action) =>
 						if g.state.turnCount == turn - 1 then
 							Logger.setLevel(level)
 
@@ -487,7 +490,8 @@ extension[G <: Game](game: G)
 							Right(g)
 						else
 							Right(g.handleAction(action))
-				}
+				else
+					g
 			.pipe(ops.copyWith(_, GameUpdates(catchup = Some(game.catchup))))
 			.when(g => !g.catchup && g.state.currentPlayerIndex == g.state.ourPlayerIndex): g =>
 				val perform = g.takeAction.unsafeRunSync().fmt(g, accordingTo = Some(g.me))
@@ -583,9 +587,9 @@ extension[G <: Game](game: G)
 			"..."
 
 		game.meta(order).status match
-			case CardStatus.CalledToPlay => s"[f]${if note.isEmpty then "" else s" [$note]"}"
-			case CardStatus.Finessed => s"[f]${if note.isEmpty then "" else s" [$note]"}"
-			case CardStatus.ChopMoved => s"[cm]${if note.isEmpty then "" else s" [$note]"}"
+			case CardStatus.CalledToPlay => s"[f]${if note.isEmpty then "" else s"[$note]"}"
+			case CardStatus.Finessed => s"[f]${if note.isEmpty then "" else s"[$note]"}"
+			case CardStatus.ChopMoved => s"[cm]${if note.isEmpty then "" else s"[$note]"}"
 			case CardStatus.CalledToDiscard => "dc"
 			case CardStatus.PermissionToDiscard if !game.state.deck(order).clued => "ptd"
 			case _ => note
@@ -628,3 +632,17 @@ extension[G <: Game](game: G)
 					acc
 
 		ops.copyWith(game, GameUpdates(notes = Some(newNotes), queuedCmds = Some(game.queuedCmds ++ cmds)))
+
+	def justGainedClue(playerIndex: Int) =
+		val state = game.state
+
+		state.clueTokens == 1 &&
+		game.lastActions(state.lastPlayerIndex(playerIndex)).existsM:
+			case _: DiscardAction => true
+			case p: PlayAction => p.rank == 5
+
+	/** Returns true when the card is clued and is orange by empathy. */
+	def knownInverted(order: Int) =
+		game.state.deck(order).clued &&
+		game.common.thoughts(order).possible.forall: id =>
+			game.state.variant.suits(id.suitIndex).suitType.inverted

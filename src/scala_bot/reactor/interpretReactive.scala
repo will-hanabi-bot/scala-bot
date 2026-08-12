@@ -65,21 +65,26 @@ def interpretReactiveColour(prev: Reactor, game: Reactor, action: ClueAction, fo
 			case Some(reactOrder) if game.common.thoughts(reactOrder).possible.difference(state.criticalSet).isEmpty =>
 				Log.warn(s"attempted dc+play would result in reacter discarding known critical ${state.logId(reactOrder)} $reactOrder!")
 				None
+			case Some(reactOrder) if state.variant.suits(state.deck(order).suitIndex).suitType.inverted && prev.common.obviousPlayables(prev, reacter).contains(reactOrder) =>
+				Log.warn(s"attempted dc+play would result in reacter naturally playing ${state.logId(reactOrder)} $reactOrder!")
+				None
 			case Some(reactOrder) =>
 				val newCommon = game.common.withThought(reactOrder): t =>
 					t.copy(oldInferred = t.inferred.toOpt)
 
-				val (interp, newGame) =
+				val result =
 					if state.variant.suits(state.deck(order).suitIndex).suitType.inverted then
 						targetPlay(game.copy(common = newCommon), action, reactOrder, urgent = true, stable = false)
 					else
 						targetDiscard(game.copy(common = newCommon), action, reactOrder, urgent = true)
 
-				if interp == ClueInterp.Mistake then
-					Some(ClueInterp.Mistake, newGame)
-				else
-					Log.info(s"reactive dc+play, reacter ${state.names(reacter)} (slot $reactSlot) receiver ${state.names(receiver)} (slot $targetSlot), focus slot $focusSlot")
-					Some((ClueInterp.Reactive, newGame))
+				result match
+					case StableResult.Stable(interp, newGame) =>
+						Log.info(s"reactive dc+play, reacter ${state.names(reacter)} (slot $reactSlot) receiver ${state.names(receiver)} (slot $targetSlot), focus slot $focusSlot")
+						Some((ClueInterp.Reactive, newGame))
+					case _ =>
+						Some(ClueInterp.Mistake, game)
+
 	.getOrElse:
 		// Didn't work, so target trash (NOTE: this was temporarily giver's trash. why?)
 		val prevKt = prev.common.thinksTrash(prev, receiver)
@@ -125,7 +130,7 @@ def interpretReactiveColour(prev: Reactor, game: Reactor, action: ClueAction, fo
 				else
 					val targetSlot = index + 1
 					val reactSlot = calcSlot(focusSlot, targetSlot)
-					lazy val prevPlays = prev.common.obviousPlayables(prev, reacter)
+					val prevPlays = prev.common.obviousPlayables(prev, reacter)
 
 					state.hands(reacter).lift(reactSlot - 1) match
 						case None =>
@@ -137,21 +142,25 @@ def interpretReactiveColour(prev: Reactor, game: Reactor, action: ClueAction, fo
 						case Some(reactOrder) if !game.common.thoughts(reactOrder).possible.exists(i => state.isPlayable(i) || possibleConns.exists(_._2 == i)) =>
 							Log.warn(s"reaction would involve playing unplayable ${state.logId(reactOrder)} $reactOrder!")
 							None
+						case Some(reactOrder) if state.variant.suits(state.deck(target).suitIndex).suitType.inverted && prev.common.thinksTrash(prev, reacter).contains(reactOrder) && looksStable && prev.common.obviousPlayables(prev, reacter).isEmpty =>
+							Log.warn(s"attempted play+dc would result in reacter naturally discarding ${state.logId(reactOrder)} $reactOrder!")
+							None
 						case Some(reactOrder) =>
 							val newCommon = game.common.withThought(reactOrder): t =>
 								t.copy(oldInferred = t.inferred.toOpt)
 
-							val (interp, newGame) =
+							val result =
 								if state.variant.suits(state.deck(target).suitIndex).suitType.inverted then
 									targetDiscard(game.copy(common = newCommon), action, reactOrder, urgent = true)
 								else
 									targetPlay(game.copy(common = newCommon), action, reactOrder, urgent = true, stable = false)
 
-							if interp == ClueInterp.Mistake then
-								Some(ClueInterp.Mistake, newGame)
-							else
-								Log.info(s"reactive play+dc, reacter ${state.names(reacter)} (slot ${reactSlot}) receiver ${state.names(receiver)} (slot ${targetSlot}), focus slot ${focusSlot}")
-								Some(ClueInterp.Reactive, newGame)
+							result match
+								case StableResult.Stable(interp, newGame) =>
+									Log.info(s"reactive play+dc, reacter ${state.names(reacter)} (slot ${reactSlot}) receiver ${state.names(receiver)} (slot ${targetSlot}), focus slot ${focusSlot}")
+									Some(ClueInterp.Reactive, newGame)
+								case _ =>
+									Some(ClueInterp.Mistake, game)
 			.getOrElse(ClueInterp.Mistake, game)
 
 def interpretReactiveRank(prev: Reactor, game: Reactor, action: ClueAction, focusSlot: Int, reacter: Int): (ClueInterp, Reactor) =
@@ -189,19 +198,20 @@ def interpretReactiveRank(prev: Reactor, game: Reactor, action: ClueAction, focu
 				Log.warn(s"reaction would involve playing unplayable ${state.logId(reactOrder)} $reactOrder!")
 				None
 			case Some(reactOrder) =>
-				val (interp, newGame) =
+				val result =
 					if state.variant.suits(state.deck(target).suitIndex).suitType.inverted then
 						targetDiscard(game, action, reactOrder, urgent = true)
 					else
 						targetPlay(game, action, reactOrder, urgent = true, stable = false)
-				val nextGame = newGame.withThought(reactOrder): t =>
-					t.copy(inferred = t.inferred.difference(state.deck(receiveOrder).id().get))
 
-				if interp == ClueInterp.Mistake then
-					Some(ClueInterp.Mistake, newGame)
-				else
-					Log.info(s"reactive play+play, reacter ${state.names(reacter)} (slot ${reactSlot}) receiver ${state.names(receiver)} (slot ${targetSlot}), focus slot ${focusSlot}")
-					Some((ClueInterp.Reactive, nextGame))
+				result match
+					case StableResult.Stable(interp, newGame) =>
+						val nextGame = newGame.withThought(reactOrder): t =>
+							t.copy(inferred = t.inferred.difference(state.deck(receiveOrder).id().get))
+						Log.info(s"reactive play+play, reacter ${state.names(reacter)} (slot ${reactSlot}) receiver ${state.names(receiver)} (slot ${targetSlot}), focus slot ${focusSlot}")
+						Some((ClueInterp.Reactive, nextGame))
+					case _ =>
+						Some(ClueInterp.Mistake, game)
 	.getOrElse:
 		val finesseTargets = state.hands(receiver).zipWithIndex.filter: (order, _) =>
 			state.playableAway(state.deck(order).id().get) == 1
@@ -231,19 +241,18 @@ def interpretReactiveRank(prev: Reactor, game: Reactor, action: ClueAction, focu
 					val newCommon = game.common.withThought(reactOrder): t =>
 						t.copy(oldInferred = t.inferred.toOpt)
 
-					val (interp, newGame) =
+					val result =
 						if state.variant.suits(state.deck(receiveOrder).suitIndex).suitType.inverted then
 							targetDiscard(game.copy(common = newCommon), action, reactOrder, urgent = true)
 						else
 							targetPlay(game.copy(common = newCommon), action, reactOrder, urgent = true, stable = false)
 
-					if interp == ClueInterp.Mistake then
-						Some(ClueInterp.Mistake, newGame)
-					else
-						val newGame2 = newGame.withThought(reactOrder): t =>
-							t.copy(inferred = IdentitySet.single(state.deck(receiveOrder).id().get.prev.get))
-
-						Log.info(s"reactive finesse, reacter ${state.names(reacter)} (slot ${reactSlot}) receiver ${state.names(receiver)} (slot ${targetSlot}), focus slot ${focusSlot}")
-						Some((ClueInterp.Reactive, newGame2))
+					result match
+						case StableResult.Stable(interp, newGame) =>
+							val nextGame = newGame.withThought(reactOrder): t =>
+								t.copy(inferred = IdentitySet.single(state.deck(receiveOrder).id().get.prev.get))
+							Some((ClueInterp.Reactive, nextGame))
+						case _ =>
+							Some(ClueInterp.Mistake, game)
 			).flatten.headOption
 			.getOrElse((ClueInterp.Mistake, game))

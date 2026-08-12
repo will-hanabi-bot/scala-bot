@@ -83,38 +83,39 @@ case class Reactor(
 			state.hands(playerIndex).find: order =>
 				zcsTurn.forall(_ >= state.deck(order).turnDrawn) &&
 				!state.deck(order).clued &&
-				meta(order).status == CardStatus.None
+				(meta(order).status == CardStatus.None || meta(order).status == CardStatus.PermissionToDiscard)
 
-	def hasPtd: Boolean =
-		val playerIndex = state.currentPlayerIndex
-		val zelda = state.lastPlayerIndex(playerIndex)
-		val bob = state.nextPlayerIndex(playerIndex)
-		val bobChop = chop(bob)
-		val bobChopId = bobChop.flatMap(state.deck(_).id())
+	def mustClue: Boolean =
+		if !state.canClue then false else
+			val playerIndex = state.currentPlayerIndex
+			val zelda = state.lastPlayerIndex(playerIndex)
+			val bob = state.nextPlayerIndex(playerIndex)
+			val bobChop = chop(bob)
+			val bobChopId = bobChop.flatMap(state.deck(_).id())
 
-		lazy val knownDupe = bobChopId.exists: id =>
-			state.hands(bob).exists: o =>
-				!bobChop.contains(o) &&
-				players(zelda).thoughts(o).matches(id) &&
-				this.me.thoughts(o).matches(id)
+			lazy val knownDupe = bobChopId.exists: id =>
+				state.hands(bob).exists: o =>
+					!bobChop.contains(o) &&
+					players(zelda).thoughts(o).matches(id) &&
+					this.me.thoughts(o).matches(id)
 
-		lazy val unknownPlay = lastActions(zelda).existsM:
-			case PlayAction(_, order, suitIndex, rank) =>
-				bobChopId.contains(Identity(suitIndex, rank)) &&
-				common.thoughts(order).oldInferred.get != IdentitySet.single(Identity(suitIndex, rank))
+			lazy val unknownPlay = lastActions(zelda).existsM:
+				case PlayAction(_, order, suitIndex, rank) =>
+					bobChopId.contains(Identity(suitIndex, rank)) &&
+					common.thoughts(order).oldInferred.get != IdentitySet.single(Identity(suitIndex, rank))
 
-		if common.obviousLoaded(this, bob) then
-			true
-		else if bobChopId.exists(state.isCritical) then
-			false
-		else if bobChopId.exists(state.isBasicTrash) then
-			!unknownPlay
-		else if knownDupe then
-			true
-		else if bobChopId.exists(id => state.isPlayable(id) || id.rank == 2) then
-			false
-		else
-			true
+			if common.obviousLoaded(this, bob) then
+				false
+			else if bobChopId.exists(state.isCritical) then
+				true
+			else if bobChopId.exists(state.isBasicTrash) then
+				unknownPlay
+			else if knownDupe then
+				false
+			else if bobChopId.exists(id => (state.isPlayable(id) && !state.variant.suits(id.suitIndex).suitType.inverted) || id.rank == 2) then
+				true
+			else
+				false
 
 	def reinterpPlay(prev: Reactor, action: PlayAction | DiscardAction): Option[Reactor] =
 		val (order, suitIndex, rank) = action match
@@ -302,22 +303,22 @@ object Reactor:
 
 			checkMissed(game, playerIndex, order)
 				.when(_ => failed): g =>
-					Log.warn("bombed! clearing all information")
+					Log.warn("bombed! clearing waiting")
 
-					val initial = (g.common, g.meta)
-					val (clearedC, clearedM) = state.heldOrders.foldLeft(initial) { case ((c, m), order) =>
-						val newC = c.withThought(order)(t => t.copy(
-							inferred = t.possible,
-							oldInferred = IdentitySetOpt.empty,
-							infoLock = IdentitySetOpt.empty,
-						))
-						val newM = m.updated(order, m(order).cleared)
-						(newC, newM)
-					}
+					// val initial = (g.common, g.meta)
+					// val (clearedC, clearedM) = state.heldOrders.foldLeft(initial) { case ((c, m), order) =>
+					// 	val newC = c.withThought(order)(t => t.copy(
+					// 		inferred = t.possible,
+					// 		oldInferred = IdentitySetOpt.empty,
+					// 		infoLock = IdentitySetOpt.empty,
+					// 	))
+					// 	val newM = m.updated(order, m(order).cleared)
+					// 	(newC, newM)
+					// }
 					g.copy(
-						waiting = None,
-						common = clearedC,
-						meta = clearedM
+						waiting = None
+						// common = clearedC,
+						// meta = clearedM
 					)
 				.pipe: g =>
 					lazy val usefulDc = !failed && prev.state.deck(order).clued &&
@@ -415,6 +416,19 @@ object Reactor:
 							g.copy(common = newCommon, meta = newMeta)
 						else
 							g.copy(common = game.common.withThought(order)(_.copy(inferred = newInferred)))
+				.when(g => !g.common.thinksLoaded(g, currentPlayerIndex)): g =>
+					g.chop(currentPlayerIndex).fold(g): chop =>
+						val hasPtd =
+							(state.clueTokens > 1 || (state.clueTokens == 1 && !g.justGainedClue(currentPlayerIndex))) &&
+							g.meta(chop).status != CardStatus.PermissionToDiscard &&
+							!g.common.thinksLocked(g, currentPlayerIndex) &&
+							!g.mustClue
+
+						if hasPtd then
+							Log.info(s"writing ptd on ${state.names(currentPlayerIndex)}")
+							g.withMeta(chop)(_.copy(status = CardStatus.PermissionToDiscard))
+						else
+							g
 				.elim()
 
 		def takeAction(game: Reactor): IO[PerformAction] =
@@ -545,7 +559,7 @@ object Reactor:
 					val expectedDiscards =
 						if trash.nonEmpty then
 							trash
-						else if !me.obviousLocked(game, state.ourPlayerIndex) && allPlays.isEmpty && game.hasPtd then
+						else if !me.obviousLocked(game, state.ourPlayerIndex) && allPlays.isEmpty && !game.mustClue then
 							game.chop(state.ourPlayerIndex).toVector
 						else
 							Vector.empty
@@ -557,7 +571,7 @@ object Reactor:
 						else
 							(expectedDiscards ++ me.discardable(game, state.ourPlayerIndex)).distinct
 
-					Log.info(s"discardable $discardOrders")
+					Log.info(s"discardable $discardOrders $expectedDiscards")
 					discardOrders.map: o =>
 						val action = DiscardAction(state.ourPlayerIndex, o, me.thoughts(o).id(infer = true))
 						(PerformAction.tryDiscard(game, o), action)
@@ -579,7 +593,6 @@ object Reactor:
 
 		def findAllClues(game: Reactor, giver: Int) =
 			val state = game.state
-
 			val level = Logger.level
 			Logger.setLevel(LogLevel.Off)
 

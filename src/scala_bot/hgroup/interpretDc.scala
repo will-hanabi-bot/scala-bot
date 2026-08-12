@@ -222,7 +222,9 @@ def interpretUsefulDcH(ctx: DiscardContext): Option[HGroup] =
 		!state.isBasicTrash(id) &&
 		prev.isTouched(order) && {
 			val dupe = (0 until state.numPlayers).find: i =>
-				state.hands(i).exists(state.deck(_).matches(id))
+				state.hands(i).exists: o =>
+					game.common.thoughts(o).matches(id, infer = true) &&
+					state.deck(o).matches(id, assume = true)
 
 			// Discarding a dupe in the same hand doesn't count as a useful dc
 			dupe.forall(_ != playerIndex)
@@ -307,6 +309,7 @@ private def checkSdcm(prev: HGroup, game: Game, action: DiscardAction): Option[D
 			common.thinksTrash(prev, playerIndex).exists(state.deck(_).clued)
 		} &&
 		{
+			state.numPlayers == 2 ||		// allow high-clue screams in 2p
 			state.clueTokens == 0 ||
 			(state.clueTokens == 1 && valid1ClueScream(prev, bob))
 		}
@@ -316,7 +319,6 @@ private def checkSdcm(prev: HGroup, game: Game, action: DiscardAction): Option[D
 		common.thinksPlayables(prev, playerIndex).exists(_ != order) &&
 		prev.me.thinksPlayables(prev, playerIndex).exists(_ != order) &&
 		game.me.thinksPlayables(game, playerIndex).nonEmpty 	// still needs to be playable
-
 
 	Option.when(scream || shout):
 		val result = if scream then DcStatus.Scream else DcStatus.Shout
@@ -431,7 +433,7 @@ private def checkPosDc(ctx: DiscardContext): PosDcResult =
 		.orElse(prev.chop(playerIndex))
 
 	// Locked hand, blind played a chop moved card that could be good, discarded expected card
-	val unintended = expectedDc.forall: o =>
+	val unintended = !prev.common.thinksPlayables(prev, playerIndex).nonEmpty && expectedDc.forall: o =>
 		if !failed then
 			order == o
 		else

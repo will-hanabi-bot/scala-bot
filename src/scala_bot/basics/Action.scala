@@ -512,7 +512,7 @@ object PerformAction:
 			case ClueKind.Rank   => PerformAction.Rank(target, value)
 
 	def tryPlay(game: Game, order: Int) =
-		if game.state.variant.inverted && game.me.thoughts(order).possibilities.forall(id => game.state.variant.suits(id.suitIndex).suitType.inverted) then
+		if game.state.variant.inverted && game.me.thinksInverted(game.state, order) then
 			// Prefer to play a card that is called to play, unless absolutely known orange
 			if game.meta(order).status == CardStatus.CalledToPlay && game.me.thoughts(order).possible.exists(!game.state.isPlayable(_)) then
 				PerformAction.Play(order)
@@ -522,7 +522,7 @@ object PerformAction:
 			PerformAction.Play(order)
 
 	def tryDiscard(game: Game, order: Int) =
-		if game.state.variant.inverted && game.me.thoughts(order).possibilities.forall(id => game.state.variant.suits(id.suitIndex).suitType.inverted) then
+		if game.state.variant.inverted && game.me.thinksInverted(game.state, order) then
 			// Prefer to discard a card that is called to discard, unless absolutely known orange
 			if game.meta(order).status == CardStatus.CalledToDiscard && game.me.thoughts(order).possible.exists(game.state.isPlayable) then
 				PerformAction.Discard(order)

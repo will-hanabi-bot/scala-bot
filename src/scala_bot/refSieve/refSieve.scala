@@ -254,10 +254,10 @@ object RefSieve:
 			val (prev, game) = if state.numPlayers > 2 then (_prev, _game.elim()) else
 				list.foldLeft((_prev, _game.elim())): (acc, o) =>
 					val (prev, game) = acc
-					// Remove PTD on clued cards that are not 1s/2s
+					// Remove PTD/CTD on clued cards that are not 1s/2s
 					val removePtd =
 						state.deck(o).clued &&
-						prev.meta(o).status == CardStatus.PermissionToDiscard &&
+						(prev.meta(o).status == CardStatus.PermissionToDiscard || prev.meta(o).status == CardStatus.CalledToDiscard) &&
 						!game.common.thoughts(o).id(partial = true).exists(id => id.rank == 1 || id.rank == 2)
 
 					if removePtd then

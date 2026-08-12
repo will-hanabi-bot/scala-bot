@@ -22,7 +22,7 @@ class Ptd extends munit.FunSuite:
 		.pipe(takeTurn("Cathy plays y1", "b5"))
 
 		// Alice has ptd.
-		assert(game.hasPtd)
+		assert(!game.mustClue)
 
 	test("it recognizes loaded ptd"):
 		val game = setup(Reactor.apply, Vector(
@@ -39,7 +39,7 @@ class Ptd extends munit.FunSuite:
 		.pipe(takeTurn("Cathy discards y4", "b4"))
 
 		// Since Bob is loaded on y1 dc, Alice has ptd.
-		assert(game.hasPtd)
+		assert(!game.mustClue)
 
 	test("it recognizes ptd when Bob has trash on chop"):
 		val game = setup(Reactor.apply, Vector(
@@ -53,7 +53,7 @@ class Ptd extends munit.FunSuite:
 		.pipe(takeTurn("Bob clues red to Cathy"))
 		.pipe(takeTurn("Cathy plays y1", "b5"))
 
-		assert(game.hasPtd)
+		assert(!game.mustClue)
 
 	test("it recognizes no ptd when Bob has a critical on chop"):
 		val game = setup(Reactor.apply, Vector(
@@ -66,7 +66,7 @@ class Ptd extends munit.FunSuite:
 		.pipe(takeTurn("Bob clues red to Cathy"))
 		.pipe(takeTurn("Cathy plays y1", "b5"))
 
-		assert(!game.hasPtd)
+		assert(game.mustClue)
 
 	test("it recognizes no ptd when Bob has a duplicated 2 on chop"):
 		val game = setup(Reactor.apply, Vector(
@@ -79,7 +79,7 @@ class Ptd extends munit.FunSuite:
 		.pipe(takeTurn("Bob clues red to Cathy"))
 		.pipe(takeTurn("Cathy plays y1", "b5"))
 
-		assert(!game.hasPtd)
+		assert(game.mustClue)
 
 	test("it recognizes no ptd when Bob has a copy of Zelda's unknown play"):
 		val game = setup(Reactor.apply, Vector(
@@ -92,4 +92,4 @@ class Ptd extends munit.FunSuite:
 		.pipe(takeTurn("Bob clues red to Cathy"))
 		.pipe(takeTurn("Cathy plays y1", "b5"))
 
-		assert(!game.hasPtd)
+		assert(game.mustClue)

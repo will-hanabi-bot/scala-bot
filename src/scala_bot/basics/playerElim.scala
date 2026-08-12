@@ -227,27 +227,37 @@ extension (p: Player)
 						certainMap(ord) = certainMap(ord).update(order, unknownTo = unknownTo)
 					case None => ()
 
+		var usedOrders = state.heldOrders
 		var nextFreeOrder = 0
 
 		def getNextFreeOrder() =
-			while state.heldOrders.contains(nextFreeOrder) do
+			while usedOrders.contains(nextFreeOrder) do
 				nextFreeOrder += 1
 
+			usedOrders = usedOrders.incl(nextFreeOrder)
 			nextFreeOrder
 
 		// Add all the certain entries for played/discarded cards
 		loop(0, _ < state.variant.suits.length, _ + 1): suitIndex =>
-			loop(1, _ <= state.playStacks(suitIndex), _ + 1): rank =>
-				val ord = Identity(suitIndex, rank).toOrd
-				certainMap(ord) = certainMap(ord).update(getNextFreeOrder(), unknownTo = -1)
-
 			loop(0, _ < state.discardStacks(suitIndex).length, _ + 1): rank =>
 				val discarded = state.discardStacks(suitIndex)(rank)
 				val ord = Identity(suitIndex, rank + 1).toOrd
 
 				loop(0, _ < discarded.length, _ + 1): i =>
-					val order = discarded(i)
-					certainMap(ord) = certainMap(ord).update(if order == -1 then getNextFreeOrder() else order, unknownTo = -1)
+					val order =
+						val dc = discarded(i)
+
+						if dc == -1 then
+							getNextFreeOrder()
+						else
+							usedOrders = usedOrders.incl(dc)
+							dc
+
+					certainMap(ord) = certainMap(ord).update(order, unknownTo = -1)
+
+			loop(1, _ <= state.playStacks(suitIndex), _ + 1): rank =>
+				val ord = Identity(suitIndex, rank).toOrd
+				certainMap(ord) = certainMap(ord).update(getNextFreeOrder(), unknownTo = -1)
 
 		(possibleMap, certainMap)
 

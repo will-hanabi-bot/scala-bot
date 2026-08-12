@@ -3,7 +3,7 @@ package tests.refSieve
 import cats.effect.unsafe.implicits.global
 
 import scala_bot.basics._
-import scala_bot.test.{Colour, Player, setup, takeTurn, TestVariant}, Player._
+import scala_bot.test.{Colour, hasStatus, Player, setup, takeTurn, TestVariant}, Player._
 import scala_bot.refSieve.RefSieve
 
 import scala_bot.utils.pipe
@@ -48,7 +48,7 @@ class Orange extends munit.FunSuite:
 
 		assertEquals(game.takeAction.unsafeRunSync(), PerformAction.Play(game.state.hands(Alice.ordinal)(0)))
 
-	test("drags an orange target of a ref play to the play stacks"):
+	test("interprets an orange clue targeting chop as a ref dc"):
 		val game = setup(RefSieve.apply, Vector(
 			Vector("xx", "xx", "xx", "xx", "xx"),
 			Vector("g4", "g4", "b4", "b4", "r4")
@@ -59,7 +59,7 @@ class Orange extends munit.FunSuite:
 		)
 		.pipe(takeTurn("Bob clues orange to Alice (slots 1,2)"))
 
-		assertEquals(game.takeAction.unsafeRunSync(), PerformAction.Play(game.state.hands(Alice.ordinal)(0)))
+		hasStatus(game, Alice, 3, CardStatus.CalledToDiscard)
 
 	test("gives an orange fix clue on a rank playable card"):
 		val game = setup(RefSieve.apply, Vector(

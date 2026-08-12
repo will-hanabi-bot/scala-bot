@@ -374,3 +374,21 @@ class Reactive extends munit.FunSuite:
 		.pipe(takeTurn("Alice discards g1 (slot 4)"))
 
 		hasStatus(game, Bob, 1, CardStatus.CalledToPlay)
+
+	test("it doesn't assume others will react to fix when they don't know"):
+		val game = setup(Reactor.apply, Vector(
+			Vector("xx", "xx", "xx", "xx", "xx"),
+			Vector("p4", "g1", "y4", "g3", "r1"),
+			Vector("r2", "g1", "b2", "r3", "r1"),
+		),
+			starting = Cathy
+		)
+		.pipe(takeTurn("Cathy clues 1 to Bob"))
+		.pipe(takeTurn("Alice plays y1 (slot 5)"))
+		.pipe(takeTurn("Bob clues blue to Cathy"))
+
+		.pipe(takeTurn("Cathy plays g1", "y1"))
+		.pipe(takeTurn("Alice clues 2 to Cathy"))
+
+		// Cathy will bomb g1 trying to play b1.
+		assertEquals(game.lastMove, Some(ClueInterp.Mistake))

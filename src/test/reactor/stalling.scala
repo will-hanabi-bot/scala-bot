@@ -21,7 +21,7 @@ class Stalling extends munit.FunSuite:
 		// Bob's slot 3 should be called to discard, as p4 is not playable.
 		hasStatus(game, Bob, 3, CardStatus.CalledToDiscard)
 
-	test("it doesnt react to a cathy play"):
+	test("it doesn't react to a cathy play"):
 		val game = setup(Reactor.apply, Vector(
 			Vector("xx", "xx", "xx", "xx", "xx"),
 			Vector("r4", "r4", "y4", "y4", "g4"),
@@ -30,7 +30,7 @@ class Stalling extends munit.FunSuite:
 		.pipe(takeTurn("Alice clues blue to Cathy"))
 
 		// Bob's slot 1 should not called to discard, as this is an allowable play clue on turn 1.
-		hasStatus(game, Bob, 1, CardStatus.None)
+		hasStatus(game, Bob, 1, CardStatus.PermissionToDiscard)
 
 	test("it reacts to cathy 1s"):
 		val game = setup(Reactor.apply, Vector(
@@ -43,7 +43,7 @@ class Stalling extends munit.FunSuite:
 		// Bob's slot 5 is called to play, since colour can be given to Cathy.
 		hasStatus(game, Bob, 5, CardStatus.CalledToPlay)
 
-	test("it doesnt react to untargetable cathy 1s"):
+	test("it doesn't react to untargetable cathy 1s"):
 		val game = setup(Reactor.apply, Vector(
 			Vector("xx", "xx", "xx", "xx", "xx"),
 			Vector("r4", "r4", "y4", "y4", "g1"),

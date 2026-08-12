@@ -79,9 +79,12 @@ def checkHFix(ctx: ClueContext): Option[HGroup] =
 						Log.error("looked like pink fix but didn't match possible interpretations?")
 
 					Some:
-						game.withThought(fixedOrder)(t => t.copy(
-							inferred = t.possible.filter(i => i.rank == clue.value && !state.isPlayable(i))
-						))
+						game.withThought(fixedOrder): t =>
+							val newInferred = t.possible.filter(i => i.rank == clue.value && !state.isPlayable(i))
+							t.copy(
+								inferred = newInferred,
+								infoLock = newInferred.toOpt
+							)
 						.pipe: g =>
 							list.foldLeft(g): (acc, o) =>
 								if o == fixedOrder then
@@ -225,18 +228,18 @@ def interpClue(ctx: ClueContext): HGroup =
 		val chopFix = chop && state.deck(focus).id().exists(id => state.isBasicTrash(id) || (id.rank == 3 || id.rank == 4))
 
 		if chopFix then
-			val poss = game.common.thoughts(focus).inferred.filter: id =>
+			val poss = game.common.thoughts(focus).possible.filter: id =>
 				!state.isPlayable(id) &&
 				(state.isBasicTrash(id) || (id.rank != 2 && id.rank != 5))
 
-			if poss.isEmpty then
+			if poss.forall(state.isBasicTrash) then
 				Log.info(s"orange fix on $focus! (trash)")
 
 				if giver == state.ourPlayerIndex && state.deck(focus).id().exists(state.isUseful) then
 					Log.error("mistake!")
 					return game.withMove(ClueInterp.Mistake)
 
-				return game.withThought(focus)(t => t.copy(inferred = IdentitySet.empty))
+				return game.withThought(focus)(_.copy(inferred = IdentitySet.empty))
 					.withMeta(focus)(_.copy(trash = true))
 					.withMove(ClueInterp.Reveal)
 			else
@@ -246,7 +249,7 @@ def interpClue(ctx: ClueContext): HGroup =
 					Log.error("mistake!")
 					return game.withMove(ClueInterp.Mistake)
 
-				return game.withThought(focus)(t => t.copy(inferred = poss))
+				return game.withThought(focus)(_.copy(inferred = poss))
 					.withMove(ClueInterp.Reveal)
 
 		val playFix = list.find: o =>

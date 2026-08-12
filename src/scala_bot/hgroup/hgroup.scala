@@ -982,7 +982,7 @@ object HGroup:
 							!game.common.hypoPlays.contains(o2)
 				.flatMap(o => Seq(PerformAction.tryDiscard(game, o), PerformAction.tryPlay(game, o)))
 
-				if positionals.contains(expected) then positionals else expected +: positionals
+				if positionals.contains(expected) then positionals else positionals :+ expected
 			else
 				Seq(PerformAction.tryDiscard(game, expectedDc))
 

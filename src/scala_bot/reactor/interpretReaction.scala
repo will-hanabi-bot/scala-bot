@@ -225,7 +225,7 @@ def reactPlay(prev: Reactor, game: Reactor, playerIndex: Int, order: Int, wc: Re
 		val knownPlayables = prev.common.obviousPlayables(prev, reacter)
 		// This should only trigger in 8 clue/locked/endgame situations, since
 		// it wouldn't be inverted or reacter would have obvious playables otherwise.
-		.when(_.isEmpty)(_ => prev.players(reacter).thinksPlayables(prev, reacter).toVector)
+		// .when(_.isEmpty)(_ => prev.players(reacter).thinksPlayables(prev, reacter).toVector)
 
 		if !knownPlayables.contains(order) then
 			game.rewind(turn, InterpAction(ClueInterp.Reactive)) match
@@ -245,6 +245,7 @@ def reactPlay(prev: Reactor, game: Reactor, playerIndex: Int, order: Int, wc: Re
 					val (newCommon, newMeta) = targetIDiscard(prev, game, wc, targetSlot)
 					elimPlayDc(prev.state, newCommon, newMeta, reacter, receiverHand, focusSlot, targetSlot)
 			val action = if clue.kind == ClueKind.Colour then "dc" else "play"
+
 			Log.info(s"reactive play+$action, reacter ${state.names(reacter)} (slot $reactSlot) receiver ${state.names(receiver)} (slot $targetSlot), focus slot $focusSlot (order ${state.hands(receiver)(targetSlot - 1)})")
 			game.copy(common = newCommon, meta = newMeta)
 		.withMove(PlayInterp.None)

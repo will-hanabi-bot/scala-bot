@@ -182,6 +182,21 @@ class ShoutDiscards extends munit.FunSuite:
 		// Alice is not chop moved.
 		hasStatus(game, Alice, 5, CardStatus.None)
 
+	test("interprets a shout when discarding a dupe"):
+		val game = setup(HGroup.atLevel(7), Vector(
+			Vector("xx", "xx", "xx", "xx", "xx"),
+			Vector("r4", "y4", "g4", "b4", "p4"),
+			Vector("r4", "y4", "g4", "b4", "p4")
+		),
+			starting = Bob,
+			playStacks = Some(Vector(1, 0, 0, 0, 0))
+		)
+		.pipe(takeTurn("Bob clues 2 to Alice (slots 3,4)"))
+		.pipe(takeTurn("Cathy clues red to Alice (slots 3,4)"))
+		.pipe(takeTurn("Alice discards r2 (slot 4)"))
+
+		hasStatus(game, Bob, 5, CardStatus.ChopMoved)
+
 class GenDiscards extends munit.FunSuite:
 	override def beforeAll() = Logger.setLevel(LogLevel.Off)
 
