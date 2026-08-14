@@ -646,3 +646,18 @@ extension[G <: Game](game: G)
 		game.state.deck(order).clued &&
 		game.common.thoughts(order).possible.forall: id =>
 			game.state.variant.suits(id.suitIndex).suitType.inverted
+
+	/** Returns true when the player will assume the card is inverted. */
+	def assumeInverted(player: Player, order: Int) =
+		val state = game.state
+
+		val status = game.meta(order).status
+		val knownTouched =
+			state.deck(order).clued ||
+			status == CardStatus.Finessed ||
+			status == CardStatus.Bluffed ||
+			status == CardStatus.GDInverted
+
+		state.variant.inverted &&
+		knownTouched &&
+		player.thoughts(order).possibilities.forall(id => game.state.variant.suits(id.suitIndex).suitType.inverted)

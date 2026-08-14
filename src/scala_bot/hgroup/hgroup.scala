@@ -222,9 +222,18 @@ case class HGroup(
 	def invalidFocus(giver: Int, clue: ClueLike, id: Identity, focusResult: FocusResult) =
 		val FocusResult(focus, chop, positional) = focusResult
 
+		val orangePlayClueAssumption =
+			!chop &&
+			state.variant.inverted &&
+			state.variant.rainbowish &&
+			clue.kind == ClueKind.Colour &&
+			state.variant.colourableSuits(clue.value).suitType.inverted &&
+			state.variant.suits(id.suitIndex).suitType.rainbowish
+
 		state.isBasicTrash(id) ||
 		(state.variant.pinkish && !positional && clue.kind == ClueKind.Rank && clue.value != id.rank) ||
 		(state.variant.inverted && chop && state.variant.suits(id.suitIndex).suitType.inverted && state.isPlayable(id)) ||
+		orangePlayClueAssumption ||
 		visibleFind(state, common, id, infer = true, excludeOrder = focus).exists: o =>
 			this.me.thoughts(o).matches(id) ||
 			(this.me.thoughts(o).matches(id, assume = true) && this.me.thoughts(o).possible.contains(id))
@@ -353,19 +362,41 @@ case class HGroup(
 		val ClueAction(giver, target, list, clue) = action
 		val hand = state.hands(target)
 		val chop = prev.chop(target)
+
+		if chop.exists(list.contains) then
+			return FocusResult(chop.get, chop = true)
+
 		val newlyClued = list.filter(!prev.state.deck(_).clued)
 		val reclue = newlyClued.isEmpty
 
-		lazy val pinkChoiceTempo = clue.kind == ClueKind.Rank &&
+		val pinkChoiceTempo = clue.kind == ClueKind.Rank &&
 			state.variant.pinkish &&
 			reclue &&
 			clue.value <= hand.length &&
 			list.contains(hand(clue.value - 1)) &&
 			List(list.max, hand(clue.value - 1)).forall(this.knownAs(_, PINKISH))
 
-		lazy val brownTempo = clue.kind == ClueKind.Colour &&
+		if pinkChoiceTempo then
+			return FocusResult(hand(clue.value - 1), positional = true)
+
+		val brownTempo = clue.kind == ClueKind.Colour &&
 			state.variant.colourableSuits(clue.value).name.contains("Brown") &&
 			reclue
+
+		if brownTempo then
+			return FocusResult(list.min, positional = true)
+
+		if clue.isEq(BaseClue(ClueKind.Rank, 1)) && newlyClued.length > 1 then
+			// Custom implementation of ordered1s: chop is already covered above
+			val focus = list.minBy: o =>
+				if meta(o).cm then
+					100 - o
+				else if state.inStartingHand(o) then
+					o
+				else
+					-o
+
+			return FocusResult(focus)
 
 		val muddyCards = list.filter: o =>
 			// All possible ids are rainbowish
@@ -387,7 +418,13 @@ case class HGroup(
 			// Mud clues should only work if the leftmost card is muddy.
 			muddyCards.contains(list.max)
 
-		lazy val pinkStall5 =
+		if mudClue then
+			val coloursAvailable = state.variant.colourableSuits.length
+			val focusIndex = (clue.value - coloursAvailable + 6*muddyCards.length) % muddyCards.length
+			// Log.info(s"mud clue! value ${clue.value} focusing index ${focusIndex} slot ${state.hands(target).indexOf(muddyCards(focusIndex)) + 1}")
+			return FocusResult(muddyCards(focusIndex), positional = true)
+
+		val pinkStall5 =
 			val valid = clue.isEq(BaseClue(ClueKind.Rank, 5)) &&
 				state.variant.pinkish &&
 				stallSeverity(prev, prev.common, giver) > 0
@@ -395,34 +432,7 @@ case class HGroup(
 			if !valid then None else
 				newlyClued.filterNot(prev.isCM).minOption
 
-		if chop.exists(list.contains) then
-			FocusResult(chop.get, chop = true)
-
-		else if pinkChoiceTempo then
-			FocusResult(hand(clue.value - 1), positional = true)
-
-		else if brownTempo then
-			FocusResult(list.min, positional = true)
-
-		else if clue.isEq(BaseClue(ClueKind.Rank, 1)) && newlyClued.length > 1 then
-			// Custom implementation of ordered1s: chop is already covered above
-			val focus = list.minBy: o =>
-				if meta(o).cm then
-					100 - o
-				else if state.inStartingHand(o) then
-					o
-				else
-					-o
-
-			FocusResult(focus)
-
-		else if mudClue then
-			val coloursAvailable = state.variant.colourableSuits.length
-			val focusIndex = (clue.value - coloursAvailable + 6*muddyCards.length) % muddyCards.length
-			// Log.info(s"mud clue! value ${clue.value} focusing index ${focusIndex} slot ${state.hands(target).indexOf(muddyCards(focusIndex)) + 1}")
-			FocusResult(muddyCards(focusIndex), positional = true)
-
-		else if pinkStall5.isDefined then
+		if pinkStall5.isDefined then
 			FocusResult(pinkStall5.get)
 
 		else

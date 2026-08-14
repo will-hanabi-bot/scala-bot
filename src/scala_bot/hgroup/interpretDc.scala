@@ -370,11 +370,13 @@ def interpretSdcm(ctx: DiscardContext): Option[HGroup] =
 					.withMove(DiscardInterp.Mistake)
 
 		else if status == DcStatus.Scream && game.common.thinksLoaded(prev, bob) then
-			Log.warn(s"${state.names(action.playerIndex)} discarded with a playable/kt but next player was safe! (echo?) interpreting mistake")
-			Some:
-				game.copy(dcStatus = DcStatus.None)
-					.checkDDA(action.playerIndex, Identity(action.suitIndex, action.rank))
-					.withMove(DiscardInterp.Mistake)
+			Log.warn(s"${state.names(action.playerIndex)} discarded with a playable/kt but next player was safe! (echo?) checking pos dc")
+
+			interpretPosDc(ctx).orElse:
+				Some:
+					game.copy(dcStatus = DcStatus.None)
+						.checkDDA(action.playerIndex, Identity(action.suitIndex, action.rank))
+						.withMove(DiscardInterp.Mistake)
 
 		else
 			val bobChopId = bobChop.flatMap(state.deck(_).id())
@@ -433,7 +435,7 @@ private def checkPosDc(ctx: DiscardContext): PosDcResult =
 		.orElse(prev.chop(playerIndex))
 
 	// Locked hand, blind played a chop moved card that could be good, discarded expected card
-	val unintended = !prev.common.thinksPlayables(prev, playerIndex).nonEmpty && expectedDc.forall: o =>
+	val unintended = prev.common.thinksPlayables(prev, playerIndex).isEmpty && expectedDc.forall: o =>
 		if !failed then
 			order == o
 		else
@@ -443,7 +445,7 @@ private def checkPosDc(ctx: DiscardContext): PosDcResult =
 	if unintended then
 		return PosDcResult.NotPosDc
 
-	val numPlays = if action.failed && order != expectedDc.get then 2 else 1
+	val numPlays = if action.failed && !expectedDc.contains(order) then 2 else 1
 
 	val targets = {
 		for

@@ -471,17 +471,17 @@ case class Player(
 	def thinksInverted(state: State, order: Int) =
 		thoughts(order).possibilities.forall(id => state.variant.suits(id.suitIndex).suitType.inverted)
 
-	def tryPlay(state: State, order: Int) =
-		if thinksInverted(state, order) then
-			Action.dragDiscard(state, playerIndex, order)
+	def tryPlay(game: Game, order: Int) =
+		if game.assumeInverted(this, order) && this.thoughts(order).possibilities.difference(game.state.playableSet).isEmpty then
+			Action.dragDiscard(game.state, playerIndex, order)
 		else
-			Action.dragPlay(state, playerIndex, order)
+			Action.dragPlay(game.state, playerIndex, order)
 
-	def tryDiscard(state: State, order: Int) =
-		if thinksInverted(state, order) then
-			Action.dragPlay(state, playerIndex, order)
+	def tryDiscard(game: Game, order: Int) =
+		if game.assumeInverted(this, order) then
+			Action.dragPlay(game.state, playerIndex, order)
 		else
-			Action.dragDiscard(state, playerIndex, order)
+			Action.dragDiscard(game.state, playerIndex, order)
 
 	/** Returns the predicted score if all delayed playable cards are played. */
 	def hypoScore = hypoStacks.sum + unknownPlays.size - linkedPlays
@@ -551,10 +551,18 @@ case class Player(
 
 				loop(0, _ < state.numPlayers, _ + 1): i =>
 					val playables =
-						if game.goodTouch then
-							player.thinksPlayables(hypo, i, excludeTrash = true)
-						else
-							player.obviousPlayables(hypo, i)
+						val normalPlays =
+							if game.goodTouch then
+								player.thinksPlayables(hypo, i, excludeTrash = true)
+							else
+								player.obviousPlayables(hypo, i)
+
+						val invertedPlays =
+							player.thinksTrash(hypo, i).filter: o =>
+								// This player knows that the card is inverted
+								player.thoughts(o).id().exists(id => state.variant.suits(id.suitIndex).suitType.inverted)
+
+						normalPlays ++ invertedPlays
 
 					val it = playables.iterator
 

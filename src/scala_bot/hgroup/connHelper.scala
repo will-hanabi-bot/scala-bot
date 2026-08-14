@@ -440,7 +440,7 @@ def resolveClue(ctx: ClueContext, fps: Seq[FocusPossibility], ambiguousOwn: Seq[
 
 							conn.linked.length >= 1 &&
 							!allFps.exists: fp2 =>
-								lazy val matchingIndex = fp2.connections.indexWhere:
+								val matchingIndex = fp2.connections.indexWhere:
 									case p: PlayableConn => p.order == conn.order
 									case _ => false
 
@@ -453,14 +453,20 @@ def resolveClue(ctx: ClueContext, fps: Seq[FocusPossibility], ambiguousOwn: Seq[
 
 						conn match
 							case conn @ PlayableConn(reacting, order, id, linked, hidden, insertingInto) if writePlayLink(conn) =>
+								val allLinked = allFps.foldLeft(linked): (acc, fp2) =>
+									if fp2.symmetric || fp2.ambiguous || fp2 == fp then acc else
+										fp2.connections.find(c => !acc.contains(c.order) && c.ids.forall(_.rank == id.rank)) match
+											case None => acc
+											case Some(conn) => conn.order +: acc
+
 								val playLinks = acc.common.playLinks
 								val target = fp.connections.lift(i + 1).map(_.order).getOrElse(focus)
 								val existingIndex = playLinks.indexWhere: l =>
-									l.orders == linked && l.target == target
+									l.orders == allLinked && l.target == target
 
 								if existingIndex == -1 then
-									val link = PlayLink(linked, IdentitySet.single(id), target)
-									Log.info(s"adding play link $linked -> $target for fp ${state.logConns(fp.connections, fp.id)}")
+									val link = PlayLink(allLinked, IdentitySet.single(id), target)
+									Log.info(s"adding play link $allLinked -> $target for fp ${state.logConns(fp.connections, fp.id)}")
 									acc.copy(common = acc.common.copy(playLinks = link +: playLinks))
 								else
 									val existing = playLinks(existingIndex)

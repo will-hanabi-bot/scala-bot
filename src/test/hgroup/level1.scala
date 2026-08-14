@@ -4,7 +4,7 @@ import cats.effect.unsafe.implicits.global
 
 import scala_bot.basics._
 import scala_bot.lib.FastBitSet
-import scala_bot.test.{hasInfs, hasStatus, Player, setup, takeTurn}, Player._
+import scala_bot.test.{hasInfs, hasStatus, Player, preClue, setup, takeTurn}, Player._
 import scala_bot.hgroup.{getResult, HGroup}
 
 import scala_bot.utils.{pipe, tap}
@@ -192,3 +192,17 @@ class General extends munit.FunSuite:
 		.pipe(takeTurn("Donald plays r2", "y5"))
 
 		hasInfs(game, None, Alice, 4, Vector("r3", "b3"))
+
+	test("doesn't write a play link too early when another player could connect"):
+		val game = setup(HGroup.atLevel(1), Vector(
+			Vector("xx", "xx", "xx", "xx", "xx"),
+			Vector("r1", "y4", "g4", "b4", "p4"),
+		),
+			init = preClue(Alice, 5, Seq("1"))
+		)
+		.pipe(takeTurn("Alice clues red to Bob"))
+		.pipe(takeTurn("Bob clues 2 to Alice (slot 2)"))
+		.pipe(takeTurn("Alice plays b1 (slot 5)"))
+
+		// Alice's slot 3 (previously slot 2) can still be r2.
+		hasInfs(game, None, Alice, 3, Vector("r2", "b2"))

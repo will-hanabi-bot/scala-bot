@@ -134,7 +134,7 @@ def interpretReactiveColour(prev: Reactor, game: Reactor, action: ClueAction, fo
 
 					state.hands(reacter).lift(reactSlot - 1) match
 						case None =>
-							Log.warn(s"Reacter doesn't have slot $reactSlot!")
+							Log.warn(s"reacter doesn't have slot $reactSlot!")
 							None
 						case Some(reactOrder) if prevPlays.contains(reactOrder) =>
 							Log.warn(s"attempted play+dc would result in reacter naturally playing ${state.logId(reactOrder)} $reactOrder!")

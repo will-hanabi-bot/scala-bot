@@ -117,7 +117,7 @@ def advance(orig: RefSieve, game: RefSieve, offset: Int): Double =
 		val (knownPlays, unknownPlays) = playables.partitionMap: order =>
 			val (id, action) = state.deck(order).id() match
 				case None =>     (None,     PlayAction(playerIndex, order, -1, -1))
-				case Some(id) => (Some(id), game.players(playerIndex).tryPlay(state, order))
+				case Some(id) => (Some(id), game.players(playerIndex).tryPlay(game, order))
 
 			Log.info(s"${state.names(playerIndex)} ${Action.gerund(action)} ${state.logId(id)}")
 			val value = advance(orig, game.simulate(action), offset + 1)
@@ -136,7 +136,7 @@ def advance(orig: RefSieve, game: RefSieve, offset: Int): Double =
 				if game.chop(playerIndex).contains(dc) then
 					Action.dragDiscard(state, playerIndex, dc)
 				else
-					game.players(playerIndex).tryDiscard(state, dc)
+					game.players(playerIndex).tryDiscard(game, dc)
 
 			val dcValue = advance(orig, game.simulate(action), offset + 1)
 			0.5 * dcValue + 0.5 * playValue
@@ -146,7 +146,7 @@ def advance(orig: RefSieve, game: RefSieve, offset: Int): Double =
 	else if player.thinksLocked(game, playerIndex) then
 		if !state.canClue then
 			val lockedDc = player.lockedDiscard(state, playerIndex)
-			val action = game.players(playerIndex).tryDiscard(state, lockedDc)
+			val action = game.players(playerIndex).tryDiscard(game, lockedDc)
 			Log.info(s"locked discard! $lockedDc")
 			advance(orig, game.simulate(action), offset + 1)
 		else
@@ -168,7 +168,7 @@ def advance(orig: RefSieve, game: RefSieve, offset: Int): Double =
 				if alwaysDiscard then
 					Action.dragDiscard(state, playerIndex, order)
 				else
-					game.players(playerIndex).tryDiscard(state, order)
+					game.players(playerIndex).tryDiscard(game, order)
 
 			val dcValue = advance(orig, game.simulate(action), offset + 1)
 

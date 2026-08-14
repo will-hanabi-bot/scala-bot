@@ -396,6 +396,7 @@ object Reactor:
 				val nextQueuedPlayable =
 					state.hands(currentPlayerIndex).filter: o =>
 						game.meta(o).status == CardStatus.CalledToPlay &&
+						!game.knownInverted(o) &&
 						game.common.thoughts(o).id(infer = true).isEmpty
 					.minByOption: o =>
 						game.meta(o).signalTurn

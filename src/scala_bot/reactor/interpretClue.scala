@@ -151,7 +151,7 @@ private def tryStable(prev: Reactor, game: Reactor, action: ClueAction, stall: B
 				connectId.map(o -> _)
 
 		if newlyTouched.isEmpty then
-			val safeActions = playables.concat(common.thinksTrash(g, target))
+			val safeActions = playables.concat(common.thinksTrash(g, target).filter(prev.state.deck(_).clued))
 			val oldSafeActions = prevPlayables.concat(prev.common.thinksTrash(prev, target))
 
 			lazy val connectable = connectableSimple(game.withMove(ClueInterp.Reveal), game.common, state.nextPlayerIndex(giver), target)
@@ -420,13 +420,13 @@ def refPlay(prev: Reactor, game: Reactor, action: ClueAction): StableResult =
 		Log.warn("targeting a card called to discard!")
 		StableResult.TryReactive
 	else if game.state.deck(target).clued && game.common.thinksInverted(game.state, target) then
-		Log.warn(s"orange colour clue focusing chop, treating as ref dc!")
+		Log.warn(s"orange colour clue focusing chop, treating as dc!")
 
-		// The chop is also known !playable.
-		val newGame = game.withThought(target): t =>
-			t.copy(inferred = t.inferred.difference(game.state.playableSet))
-
-		refDiscard(prev, newGame, action, stall = false)
+		val newGame =
+			game.withThought(target): t =>
+				t.copy(inferred = t.inferred.intersect(game.state.trashSet))
+			.withMeta(target)(_.copy(trash = true))
+		StableResult.Stable(ClueInterp.Reveal, newGame)
 	else
 		targetPlay(game, action, target, urgent = false, stable = true)
 
@@ -461,7 +461,16 @@ def targetPlay(game: Reactor, action: ClueAction, target: Int, urgent: Boolean, 
 	.withMeta(target):
 		_.reason(state.turnCount).signal(state.turnCount)
 	.pipe: g =>
-		if newInferred.isEmpty || !state.hasConsistentInfs(g.common.thoughts(target)) then
+		if newInferred.forall(id => state.variant.suits(id.suitIndex).suitType.inverted) then
+			Log.warn(s"target $target had only orange inferences! targeting dc")
+			val newGame = g.withMeta(target):
+				_.copy(
+					status = CardStatus.CalledToDiscard,
+					by = Some(action.giver),
+					trash = true
+				)
+			StableResult.Stable(ClueInterp.Discard, newGame)
+		else if newInferred.isEmpty || !state.hasConsistentInfs(g.common.thoughts(target)) then
 			Log.warn(s"target $target was reset!")
 
 			val newGame = g.withThought(target)(_.resetInferences())

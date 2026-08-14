@@ -137,7 +137,7 @@ private def forceSdcm(orig: HGroup, game: HGroup, playerIndex: Int, order: Int, 
 	val id = game.me.thoughts(order).id(infer = true)
 	val action =
 		if knownTrash then
-			game.players(playerIndex).tryDiscard(state, order)
+			game.players(playerIndex).tryDiscard(game, order)
 		else
 			Action.dragDiscard(state, playerIndex, order)
 
@@ -177,7 +177,7 @@ def advance(orig: HGroup, game: HGroup, offset: Int): Double =
 		def orderToAction(order: Int) =
 			game.me.thoughts(order).id(infer = true) match
 				case None =>     (None,     PlayAction(playerIndex, order, -1, -1))
-				case Some(id) => (Some(id), game.players(playerIndex).tryPlay(state, order))
+				case Some(id) => (Some(id), game.players(playerIndex).tryPlay(game, order))
 
 		playables.find(o => meta(o).status == CardStatus.Finessed || game.isBlindPlaying(o)) match
 			case Some(order) =>
@@ -270,7 +270,7 @@ def advance(orig: HGroup, game: HGroup, offset: Int): Double =
 		val id = game.me.thoughts(dcOrder).id(infer = true)
 		val action =
 			if trash.contains(dcOrder) then
-				game.players(playerIndex).tryDiscard(state, dcOrder)
+				game.players(playerIndex).tryDiscard(game, dcOrder)
 			else
 				Action.dragDiscard(state, playerIndex, dcOrder)
 		val dcGame = game.simulate(action)

@@ -16,7 +16,10 @@ def getResult(game: Reactor, hypo: Reactor, action: ClueAction): Double =
 		hypo.state.deck(o).clued && !common.thinksTrash(game, target).contains(o)
 
 	val newPlayables = state.heldOrders.filter: o =>
-		meta(o).status != CardStatus.CalledToPlay && hypo.meta(o).status == CardStatus.CalledToPlay
+		(meta(o).status != CardStatus.CalledToPlay && hypo.meta(o).status == CardStatus.CalledToPlay) || {
+			state.deck(o).id().exists(id => state.variant.suits(id.suitIndex).suitType.inverted) &&
+			meta(o).status != CardStatus.CalledToDiscard && hypo.meta(o).status == CardStatus.CalledToDiscard
+		}
 
 	val badPlayable = newPlayables.find(o =>
 		!(hypo.me.hypoPlays.contains(o) || (game.inEndgame && state.deck(o).id().exists(state.isPlayable))))
@@ -92,7 +95,7 @@ def advance(orig: Reactor, game: Reactor, offset: Int): Double =
 	val bobChop = if state.numPlayers == 2 then None else game.chop(bob)
 
 	val trash = player.thinksTrash(game, playerIndex)
-	lazy val urgentDc = trash.find(meta(_).urgent)
+	val urgentDc = trash.find(meta(_).urgent)
 	val allPlayables = player.obviousPlayables(game, playerIndex)
 
 	if playerIndex == state.ourPlayerIndex || state.endgameTurns.contains(0) then
@@ -110,7 +113,7 @@ def advance(orig: Reactor, game: Reactor, offset: Int): Double =
 		val playActions = playables.map: order =>
 			val (id, action) = game.me.thoughts(order).id(infer = true) match
 				case None =>     (None,     PlayAction(playerIndex, order, -1, -1))
-				case Some(id) => (Some(id), game.players(playerIndex).tryPlay(state, order))
+				case Some(id) => (Some(id), game.players(playerIndex).tryPlay(game, order))
 
 			Log.info(s"${indent(offset)}${state.names(playerIndex)} ${Action.gerund(action)} ${state.logId(id)}")
 
@@ -130,14 +133,14 @@ def advance(orig: Reactor, game: Reactor, offset: Int): Double =
 	else if player.obviousLocked(game, playerIndex) then
 		if !state.canClue then
 			val lockedDc = player.lockedDiscard(state, playerIndex)
-			val action = game.players(playerIndex).tryDiscard(state, lockedDc)
+			val action = game.players(playerIndex).tryDiscard(game, lockedDc)
 			Log.info(s"${indent(offset)}locked discard! $lockedDc")
 			advance(orig, game.simulate(action), offset + 1)
 		else
 			_forceClue(orig, game, offset)
 
 	else if state.clueTokens == 8 then
-		Log.info("${indent(offset)}forced clue at 8 clues!")
+		Log.info(s"${indent(offset)}forced clue at 8 clues!")
 		_forceClue(orig, game, offset)
 
 	else if urgentDc.isDefined then
@@ -155,7 +158,7 @@ def advance(orig: Reactor, game: Reactor, offset: Int): Double =
 				if alwaysDiscard then
 					Action.dragDiscard(state, playerIndex, order)
 				else
-					game.players(playerIndex).tryDiscard(state, order)
+					game.players(playerIndex).tryDiscard(game, order)
 
 			Log.info(s"${indent(offset)}${state.names(playerIndex)} ${Action.gerund(action)} ${state.logId(id)} but might clue")
 
@@ -300,15 +303,18 @@ def evalGame(orig: Reactor, game: Reactor, offset: Int): Double =
 	def inverted(order: Int) = state.deck(order).id().exists(id => state.variant.suits(id.suitIndex).suitType.inverted)
 
 	def evalPlay(order: Int) =
-		game.me.thoughts(order).id(infer = true) match
-			case None => 0.4
-			case Some(id) =>
-				if state.isBasicTrash(id) then
-					-1.5
-				else if id.rank == 5 then
-					0.8
-				else
-					0.4
+		if !game.me.hypoPlays.contains(order) then
+			-1.5
+		else
+			game.me.thoughts(order).id(infer = true) match
+				case None => 0.4
+				case Some(id) =>
+					if state.isBasicTrash(id) then
+						-1.5
+					else if id.rank == 5 then
+						0.8
+					else
+						0.4
 
 	def evalDiscard(order: Int, by: Int) =
 		state.deck(order).id() match

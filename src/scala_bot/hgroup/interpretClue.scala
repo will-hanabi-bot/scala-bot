@@ -254,7 +254,8 @@ def interpClue(ctx: ClueContext): HGroup =
 
 		val playFix = list.find: o =>
 			prev.common.orderPlayable(prev, o) &&
-			!prev.common.thinksInverted(prev.state, o)
+			!prev.common.thinksInverted(prev.state, o) &&
+			state.deck(o).id().exists(id => state.variant.suits(id.suitIndex).suitType.inverted)
 
 		if playFix.isDefined then
 			Log.info(s"orange play fix! ${playFix.get}")

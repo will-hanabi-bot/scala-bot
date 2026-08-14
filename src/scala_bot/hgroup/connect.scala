@@ -185,7 +185,8 @@ def findUnknownConnecting(ctx: ClueContext, reacting: Int, id: Identity, connect
 					None
 
 	// Need to use 'game' to exclude non-omni cards after a colour clue
-	val prompt = game.common.findPrompt(game, reacting, id, connected, ignore)
+	// But we also can't use newly clued cards
+	val prompt = game.common.findPrompt(game, reacting, id, connected, ignore.union(state.hands(reacting).filter(!prev.state.deck(_).clued)))
 	// Need to use 'game' to exclude newly clued cards
 	val potentialFinesse = game.findFinesseId(
 		reacting,

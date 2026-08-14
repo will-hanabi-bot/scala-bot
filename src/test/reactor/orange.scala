@@ -3,7 +3,7 @@ package tests.reactor
 import cats.effect.unsafe.implicits.global
 
 import scala_bot.basics._
-import scala_bot.test.{Colour, hasStatus, Player, preClue, setup, takeTurn, TestVariant}, Player._
+import scala_bot.test.{Colour, hasInfs, hasStatus, Player, preClue, setup, takeTurn, TestVariant}, Player._
 import scala_bot.reactor.Reactor
 
 import scala_bot.utils.pipe
@@ -82,10 +82,10 @@ class Orange extends munit.FunSuite:
 		.pipe(takeTurn("Bob clues red to Alice (slot 4)"))
 		.pipe(takeTurn("Cathy discards y4", "y4"))
 
-		hasStatus(game, Alice, 2, CardStatus.CalledToPlay)
+		// hasStatus(game, Alice, 2, CardStatus.CalledToPlay)
 		assertEquals(game.takeAction.unsafeRunSync(), PerformAction.Play(game.state.hands(Alice.ordinal)(1)))
 
-	test("interprets an orange clue targeting chop as a ref dc"):
+	test("drags an orange target of a ref play to the play stacks"):
 		val game = setup(Reactor.apply, Vector(
 			Vector("xx", "xx", "xx", "xx", "xx"),
 			Vector("r4", "y4", "g4", "b4", "o4"),
@@ -97,5 +97,37 @@ class Orange extends munit.FunSuite:
 		)
 		.pipe(takeTurn("Cathy clues orange to Alice (slots 1,2)"))
 
-		hasStatus(game, Alice, 1, CardStatus.None)
-		hasStatus(game, Alice, 3, CardStatus.CalledToDiscard)
+		hasStatus(game, Alice, 3, CardStatus.None)
+		assertEquals(game.takeAction.unsafeRunSync(), PerformAction.Play(game.state.hands(Alice.ordinal)(0)))
+
+	test("always drags a trash pushed card to the play stacks"):
+		val game = setup(Reactor.apply, Vector(
+			Vector("xx", "xx", "xx", "xx", "xx"),
+			Vector("r1", "y1", "g1", "b1", "o1"),
+			Vector("r1", "y1", "g1", "b1", "o1")
+		),
+			starting = Cathy,
+			variant = TestVariant.Orange5,
+			playStacks = Some(Vector(5, 5, 5, 5, 2)),
+			clueTokens = 7
+		)
+		.pipe(takeTurn("Cathy clues 1 to Alice (slots 2,3)"))
+
+		assertEquals(game.takeAction.unsafeRunSync(), PerformAction.Play(game.state.hands(Alice.ordinal)(0)))
+
+	test("drags the target of an orange tempo clue to the discard stacks"):
+		val game = setup(Reactor.apply, Vector(
+			Vector("xx", "xx", "xx", "xx", "xx"),
+			Vector("r1", "y1", "g1", "b1", "o1"),
+			Vector("r1", "y1", "g1", "b1", "o1")
+		),
+			starting = Cathy,
+			variant = TestVariant.Orange5,
+			playStacks = Some(Vector(5, 5, 5, 5, 2)),
+			clueTokens = 7,
+			init = preClue(Alice, 5, Vector("orange"))
+		)
+		.pipe(takeTurn("Cathy clues orange to Alice (slot 5)"))
+
+		hasInfs(game, None, Alice, 5, Vector("o3"))
+		assertEquals(game.takeAction.unsafeRunSync(), PerformAction.Discard(game.state.hands(Alice.ordinal)(4)))

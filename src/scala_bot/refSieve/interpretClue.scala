@@ -47,13 +47,13 @@ def refPlay(ctx: ClueContext, right: Boolean = false): (Option[ClueInterp], RefS
 		Log.info(s"targeting a card called to discard!")
 		(None, game)
 	else if game.state.deck(target).clued && game.common.thinksInverted(game.state, target) then
-		Log.warn(s"orange colour clue focusing chop, treating as ref dc!")
+		Log.warn(s"orange colour clue focusing chop, treating as dc!")
 
-		// The chop is also known !playable.
-		val newGame = game.withThought(target): t =>
-			t.copy(inferred = t.inferred.difference(game.state.playableSet))
-
-		refDiscard(ctx.copy(game = newGame))
+		val newGame =
+			game.withThought(target): t =>
+				t.copy(inferred = t.inferred.intersect(game.state.trashSet))
+			.withMeta(target)(_.copy(trash = true))
+		(Some(ClueInterp.Reveal), newGame)
 	else
 		targetPlay(ctx, target) match
 			case res @ (None, _) => res
