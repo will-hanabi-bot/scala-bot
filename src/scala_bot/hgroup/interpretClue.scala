@@ -5,15 +5,18 @@ import scala_bot.lib.FastBitSet
 import scala_bot.utils._
 import scala_bot.logger.Log
 
-case class ClueContext(prev: HGroup, game: HGroup, action: ClueAction):
+case class ClueContext(prev: HGroup, game: HGroup, action: ClueAction, focusOverride: Option[FocusResult] = None):
 	inline def common = game.common
 	inline def state = game.state
 
-	lazy val focusResult = game.determineFocus(prev, action)
+	lazy val focusResult = focusOverride.getOrElse(game.determineFocus(prev, action))
+
+	def withFocus(newFocus: Int): ClueContext =
+		copy(focusOverride = Some(focusResult.copy(focus = newFocus)))
 
 /** Returns the appropriate clue interpretation given the newly chop moved cards. */
 def evaluateCM(ctx: ClueContext, chopMoved: Seq[Int]): ClueInterp =
-	val ClueContext(prev, game, action) = ctx
+	val ClueContext(prev, game, action, _) = ctx
 	val state = game.state
 	val ClueAction(giver, target, list, clue) = action
 
@@ -40,7 +43,7 @@ def unacceptableClue(prev: HGroup, game: HGroup, @annotation.unused action: Clue
 		false
 
 def checkHFix(ctx: ClueContext): Option[HGroup] =
-	val ClueContext(prev, game, action) = ctx
+	val ClueContext(prev, game, action, _) = ctx
 	val state = game.state
 	val FocusResult(focus, chop, _) = ctx.focusResult
 	val ClueAction(giver, _, list, clue) = action
@@ -102,7 +105,7 @@ def checkHFix(ctx: ClueContext): Option[HGroup] =
 		case _ => None
 
 def interpClue(ctx: ClueContext): HGroup =
-	val ClueContext(prev, game, action) = ctx
+	val ClueContext(prev, game, action, _) = ctx
 	val (common, state) = (game.common, game.state)
 	val ClueAction(giver, target, list, clue) = action
 
@@ -185,7 +188,7 @@ def interpClue(ctx: ClueContext): HGroup =
 						)))
 
 	val pinkTrashFix = state.variant.pinkish &&
-		!positional && clue.kind == ClueKind.Rank &&
+		!positional.contains(Positional.Pink) && clue.kind == ClueKind.Rank &&
 		list.forall(o => prev.state.deck(o).clued && game.knownAs(o, PINKISH)) &&
 		state.variant.suits.zipWithIndex.forall: (suit, suitIndex) =>
 			!suit.suitType.pinkish ||
@@ -261,7 +264,7 @@ def interpClue(ctx: ClueContext): HGroup =
 			Log.info(s"orange play fix! ${playFix.get}")
 			return game.withMove(ClueInterp.Fix)
 
-	if prev.state.deck(focus).clued && !positional then
+	if prev.state.deck(focus).clued && positional.isEmpty then
 		if game.level >= Level.Fix then
 			val fixTarget = Option.when(clue == BaseClue(ClueKind.Rank, 1)):
 				prev.next1(list.filter(prev.unknown1))
@@ -315,7 +318,7 @@ def interpClue(ctx: ClueContext): HGroup =
 
 	val focusPoss =
 		val looksDirect = common.thoughts(focus).id().isEmpty &&
-			(action.clue.kind == ClueKind.Colour || savePoss.nonEmpty || positional)
+			(action.clue.kind == ClueKind.Colour || savePoss.nonEmpty || positional.isDefined)
 
 		common.thoughts(focus).inferred.filter: inf =>
 			!prev.invalidFocus(giver, clue, inf, ctx.focusResult) &&
@@ -361,7 +364,7 @@ def interpClue(ctx: ClueContext): HGroup =
 			val ownFps =
 				val looksDirect = game.players(target).thoughts(focus).id().isEmpty && {
 					// clue.kind == ClueKind.Colour ||
-					positional ||
+					positional.isDefined ||
 					savePoss.nonEmpty ||
 					// Looks like an existing possibility
 					focusPoss.exists: fp =>
@@ -387,6 +390,44 @@ def interpClue(ctx: ClueContext): HGroup =
 					game.withThought(focus)(t => t.copy(inferred = IdentitySet.empty))
 						.withMeta(focus)(_.copy(trash = true))
 						.withMove(ClueInterp.Fix)
+				else if game.level >= Level.Context && chop && list.size > 1 then
+					val newFocus = list.max
+					val newCtx = ctx.withFocus(newFocus)
+
+					Log.highlight(Console.YELLOW, s"attempting focus inversion to $newFocus!")
+
+					val looksDirect = common.thoughts(newFocus).id().isEmpty &&
+						(action.clue.kind == ClueKind.Colour || savePoss.nonEmpty || positional.isDefined)
+
+					val focusPoss = common.thoughts(newFocus).inferred.filter: inf =>
+						!prev.invalidFocus(giver, clue, inf, newCtx.focusResult) &&
+						!state.heldOrders.exists: o =>
+							o != newFocus &&
+							prev.state.deck(o).clued &&
+							game.players(giver).thoughts(o).matches(inf, infer = true) && {			// giver knows about it, and
+								game.players(target).thoughts(o).matches(inf, infer = true) ||		// either target knows about it too, or
+								(state.ourHand.contains(o) && game.me.thoughts(o).matches(inf, infer = true))	// we know we have it in our hand
+							}
+						&&
+						!savePoss.exists(_.id == inf)
+					.flatMap:
+						connect(newCtx, _, looksDirect, thinksStall)
+
+					val newSimplest =
+						val possible = focusPoss.filter: fp =>
+							game.players(target).thoughts(newFocus).possible.contains(fp.id) ||
+							game.players(giver).thoughts(newFocus).possible.contains(fp.id)
+
+						Log.info(s"focus poss ${focusPoss.map(_.id)} ${possible.map(_.id)} ${newCtx.focusResult.focus}")
+
+						occamsRazor(newCtx, possible, target)
+
+					if newSimplest.isEmpty then
+						Log.warn(s"no inferences! (still)")
+						game.withMove(ClueInterp.Mistake)
+					else
+						Log.info(s"simplest focus possibilities [${newSimplest.map(fp => state.logId(fp.id)).mkString(",")}]")
+						resolveClue(newCtx, newSimplest)
 				else
 					game.withMove(ClueInterp.Mistake)
 			else
@@ -403,7 +444,7 @@ def interpClue(ctx: ClueContext): HGroup =
 			case _ =>
 				g
 
-	.when(_.state.variant.pinkish && clue.kind == ClueKind.Rank && clue.value == 1): g =>
+	.when(_.state.variant.pinkish && clue.isEq(ClueKind.Rank, 1)): g =>
 		// Pink 1's Assumption
 		list.filter(g.unknown1).foldLeft(g): (acc, o) =>
 			acc.withThought(o)(t => t.copy(inferred = t.inferred.filter(_.rank == 1)))

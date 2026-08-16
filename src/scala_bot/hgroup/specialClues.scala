@@ -103,7 +103,7 @@ def rankSave(prev: HGroup, action: ClueAction, id: Identity, focus: Int): Boolea
 		return false
 
 	val loaded34 = prev.common.thinksLoaded(prev, target) &&
-		(state.variant.whitish || state.includesVariant("Dark Rainbow|Dark Prism".r)) &&
+		(state.variant.suits.exists(s => s.suitType.whitish && !s.suitType.brownish) || state.includesVariant("Dark Rainbow|Dark Prism".r)) &&
 		(rank == 3 || rank == 4)
 
 	if loaded34 then

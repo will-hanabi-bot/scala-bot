@@ -33,7 +33,7 @@ def forceClue[G <: Game](game: G, giver: Int, advance: G => Double, offset: Int,
 	val level = Logger.level
 	val value = allClues.maximizing(-100.0): action =>
 		Logger.setLevel(LogLevel.Off)
-		val hypoGame = game.simulate(action)
+		val hypoGame = game.simulate(action, log = Some(false))
 
 		if hypoGame.lastMove == Some(ClueInterp.Mistake) then
 			Logger.setLevel(level)

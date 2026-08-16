@@ -239,9 +239,6 @@ extension[G <: Game](game: G)
 						val thought = g.common.thoughts(order)
 						val t = acc(order)
 
-						val newInferred =
-							thought.inferred.intersect(t.possible).whenEmpty(t.possible)
-
 						val newInfoLock =
 							if !thought.infoLock.isDefined then
 								thought.infoLock
@@ -251,6 +248,11 @@ extension[G <: Game](game: G)
 									IdentitySetOpt.empty
 								else
 									ids.toOpt
+
+						val newInferred =
+							thought.inferred.intersect(t.possible)
+								.whenEmpty(newInfoLock.mapO(_.intersect(t.possible)).getOrElse(t.possible))
+
 						acc.updated(order, t.copy(
 							possible = thought.possible.intersect(t.possible),
 							inferred = newInferred,

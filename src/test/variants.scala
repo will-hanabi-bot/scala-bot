@@ -35,5 +35,4 @@ class Variants extends munit.FunSuite:
 			variant = TestVariant.Prism5
 		)
 
-		assert(!game.state.allValidClues(Bob.ordinal).exists(clue =>
-			clue.kind == ClueKind.Colour && clue.value == 4))
+		assert(!game.state.allValidClues(Bob.ordinal).exists(_.isEq(ClueKind.Colour, 4)))

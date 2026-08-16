@@ -238,7 +238,7 @@ def importantFinesse(state: State, action: ClueAction, fps: Seq[FocusPossibility
 		loop(state.nextPlayerIndex(giver))
 
 def urgentSave(ctx: ClueContext): Boolean =
-	val ClueContext(_, game, action) = ctx
+	val ClueContext(_, game, action, _) = ctx
 	val state = game.state
 
 	// Log.info(s"checking if ${state.names(action.giver)} performed an urgent save")
@@ -283,13 +283,13 @@ def urgentSave(ctx: ClueContext): Boolean =
 	loop(game.state, state.nextPlayerIndex(action.giver))
 
 def resolveClue(ctx: ClueContext, fps: Seq[FocusPossibility], ambiguousOwn: Seq[FocusPossibility] = Nil) =
-	val ClueContext(prev, game, action) = ctx
+	val ClueContext(prev, game, action, _) = ctx
 	val state = game.state
 	val ClueAction(giver, target, _, clue) = action
 	val FocusResult(focus, chop, positional) = ctx.focusResult
 
 	val looksDirect = game.common.thoughts(focus).id(symmetric = true).isEmpty && {
-		positional ||
+		positional.isDefined ||
 		fps.exists: fp =>
 			game.players(target).thoughts(focus).possible.contains(fp.id) &&
 			fp.connections.forall: c =>
@@ -536,6 +536,18 @@ def resolveClue(ctx: ClueContext, fps: Seq[FocusPossibility], ambiguousOwn: Seq[
 				game = game.copy(savedCtx = Vector.fill(state.numPlayers)(None))
 			)))
 		)
+
+	.when(_.level >= Level.Context): g =>
+		ctx.focusResult.positional match
+			case Some(Positional.Stale1(originalFocus)) =>
+				val newInferred = g.common.thoughts(originalFocus).inferred.difference(state.playableSet)
+				val trash = newInferred.difference(state.trashSet).isEmpty
+
+				Log.info(s"stale 1 on $originalFocus")
+
+				g.withThought(originalFocus)(_.copy(inferred = newInferred))
+					.withMeta(originalFocus)(_.copy(trash = trash))
+			case _ => g
 
 	// Perform 1 round of elim
 	.when(_.common.thoughts(focus).id(infer = true).exists(state.isCritical)): g =>

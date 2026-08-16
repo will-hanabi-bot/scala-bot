@@ -1,7 +1,7 @@
 package scala_bot
 
-val BOT_VERSION = "v1.0.10 (scala-bot)"
-val MAX_H_LEVEL = 11
+val BOT_VERSION = "v1.1.0 (scala-bot)"
+val MAX_H_LEVEL = 12
 
 enum Convention:
 	case Reactor
@@ -31,7 +31,7 @@ object Convention:
 			case refSievePattern()       => Right(Convention.RefSieve)
 			case HGroupPattern(level)    => makeH(if level == null then 1 else level.toInt)
 			case levelOnlyPattern(level) => makeH(if level == null then 1 else level.toInt)
-			case _ => Left(s"Unrecognized convention $s. Supported: HGroup[1-11], RefSieve, Reactor1.")
+			case _ => Left(s"Unrecognized convention $s. Supported: HGroup[1-$MAX_H_LEVEL], RefSieve, Reactor1.")
 
 def infoNote(convention: Convention): String =
 	s"[INFO: $BOT_VERSION, ${convention}]"

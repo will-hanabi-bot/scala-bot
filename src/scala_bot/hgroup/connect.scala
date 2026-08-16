@@ -25,7 +25,7 @@ case class ConnectOpts(
 )
 
 def findKnownConn(ctx: ClueContext, id: Identity, ignore: FastBitSet, findOwn: Boolean, preferOwn: Boolean = false): Option[Connection] =
-	val ClueContext(prev, game, action) = ctx
+	val ClueContext(prev, game, action, _) = ctx
 	val (common, state) = (game.common, game.state)
 	val giver = action.giver
 
@@ -145,7 +145,7 @@ def findKnownConn(ctx: ClueContext, id: Identity, ignore: FastBitSet, findOwn: B
 	playLinked
 
 def findUnknownConnecting(ctx: ClueContext, reacting: Int, id: Identity, connected: FastBitSet, ignore: FastBitSet, opts: ConnectOpts): Option[Connection] =
-	val ClueContext(prev, game, action) = ctx
+	val ClueContext(prev, game, action, _) = ctx
 	val (state, level) = (game.state, game.level)
 	val ClueAction(giver, target, _, _) = action
 
@@ -388,7 +388,7 @@ def findUnknownConnecting(ctx: ClueContext, reacting: Int, id: Identity, connect
 				None
 
 def findSingleConn(ctx: ClueContext, reacting: Int, id: Identity, connCtx: ConnectContext, opts: ConnectOpts, connections: List[Connection] = Nil): Option[List[Connection]] =
-	val ClueContext(prev, game, action) = ctx
+	val ClueContext(prev, game, action, _) = ctx
 	val state = game.state
 	val ClueAction(giver, target, _, _) = action
 
@@ -440,7 +440,7 @@ def findSingleConn(ctx: ClueContext, reacting: Int, id: Identity, connCtx: Conne
 				Some((conn +: connections).reverse)
 
 def findConnecting(ctx: ClueContext, id: Identity, connCtx: ConnectContext, opts: ConnectOpts): Option[List[Connection]] =
-	val ClueContext(prev, game, action) = ctx
+	val ClueContext(prev, game, action, _) = ctx
 	val state = game.state
 	val ClueAction(giver, target, _, _) = action
 
@@ -475,7 +475,7 @@ def findConnecting(ctx: ClueContext, id: Identity, connCtx: ConnectContext, opts
 		findSingleConn(ctx, reacting, id, connCtx, opts.copy(noLayer = mustPassback && i == 0))
 
 def connect(ctx: ClueContext, id: Identity, looksDirect: Boolean, thinksStall: FastBitSet, assumeTruth: Boolean = false, ignoreKnown: FastBitSet = FastBitSet.empty, findOwn: Option[Int] = None, preferOwn: Boolean = false): Option[FocusPossibility] =
-	val ClueContext(prev, game, action) = ctx
+	val ClueContext(prev, game, action, _) = ctx
 	val ClueAction(giver, target, _, clue) = action
 	val state = game.state
 	val FocusResult(focus, _, positional) = ctx.focusResult
@@ -545,7 +545,7 @@ def connect(ctx: ClueContext, id: Identity, looksDirect: Boolean, thinksStall: F
 				val newConnCtx = connCtx.copy(
 					looksDirect = connCtx.looksDirect && {
 						(clue.kind == ClueKind.Colour && nextId.next.exists(game.common.thoughts(focus).possible.contains)) ||
-						positional ||
+						positional.isDefined ||
 						!conns.existsM { case f: FinesseConn => f.reacting != target && !f.hidden }
 					},
 					connected = connCtx.connected.union(conns.map(_.order))
@@ -559,18 +559,25 @@ def connect(ctx: ClueContext, id: Identity, looksDirect: Boolean, thinksStall: F
 
 				loop(newGame, nextRank + 1, connections ++ conns, newConnCtx, newOpts)
 
-	val initialConnCtx = ConnectContext(looksDirect = looksDirect, thinksStall = thinksStall, connected = FastBitSet.single(focus), ignore = ignoreKnown)
+	val ignore =
+		// Assume mud clues aren't selfish
+		if ctx.focusResult.positional.contains(Positional.Mud) then
+			ignoreKnown.union(state.hands(giver))
+		else
+			ignoreKnown
+
+	val initialConnCtx = ConnectContext(looksDirect = looksDirect, thinksStall = thinksStall, connected = FastBitSet.single(focus), ignore = ignore)
 	val initialOpts = ConnectOpts(assumeTruth = assumeTruth)
 
 	loop(game, state.playStacks(id.suitIndex) + 1, Nil, initialConnCtx, initialOpts) match
 		case (Left(conns), _) if conns.existsM { case _: KnownConn => true } =>
-			val newIgnore = ignoreKnown.incl(conns.collectFirst { case c: KnownConn => c.order }.get)
+			val newIgnore = ignore.incl(conns.collectFirst { case c: KnownConn => c.order }.get)
 			connect(ctx, id, looksDirect, thinksStall, ignoreKnown = newIgnore, findOwn = findOwn, assumeTruth = assumeTruth, preferOwn = preferOwn)
 
 		case (Left(_), bluffed) if game.level >= Level.Bluffs && !assumeTruth && bluffed =>
 			// Log.highlight(Console.MAGENTA, "bluff connection failed, retrying true finesse")
 
-			connect(ctx, id, looksDirect, thinksStall, assumeTruth = true, findOwn = findOwn, ignoreKnown = ignoreKnown, preferOwn = preferOwn)
+			connect(ctx, id, looksDirect, thinksStall, assumeTruth = true, findOwn = findOwn, ignoreKnown = ignore, preferOwn = preferOwn)
 
 		case (Right(conns), _) =>
 			val symmetric = !state.deck(focus).matches(id, assume = true) ||

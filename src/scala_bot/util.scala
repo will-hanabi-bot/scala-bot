@@ -168,6 +168,18 @@ extension [A](a: Iterable[A])
 
 		currMin
 
+extension [A](iter: Iterable[A])(using numeric: Numeric[A])
+	def maxIf[N](cond: A => Boolean, initial: A): A =
+		val it = iter.iterator
+		var max = initial
+
+		while it.hasNext do
+			val value = it.next()
+			if cond(value) then
+				max = numeric.max(max, value)
+
+		max
+
 extension [A](seq: IndexedSeq[A])
 	inline def fastMap[B](inline f: A => B): IndexedSeq[B] =
 		var res = IndexedSeq.empty[B]
@@ -188,13 +200,13 @@ extension [A](seq: IndexedSeq[A])
 			i += 1
 		res
 
-extension [A](seq: IndexedSeq[Int])
-	inline def fastSum: Int =
+extension [A](seq: IndexedSeq[A])(using numeric: Numeric[A])
+	inline def fastSum: A =
 		var i = 0
-		var sum = 0
+		var sum = numeric.zero
 
 		while i < seq.length do
-			sum += seq(i)
+			sum = numeric.plus(sum, seq(i))
 			i += 1
 		sum
 

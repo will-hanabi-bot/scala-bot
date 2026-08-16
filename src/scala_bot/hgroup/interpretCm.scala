@@ -9,27 +9,31 @@ import scala_bot.logger.Log
   * Returns the orders of any chop moved cards.
  */
 def interpretTcm(ctx: ClueContext, log: Boolean = true): Option[Seq[Int]] =
-	val ClueContext(prev, game, action) = ctx
-	val state = ctx.state
+	val ClueContext(prev, game, action, _) = ctx
+	val (common, state) = (game.common, game.state)
+
 	val ClueAction(_, target, list, clue) = action
 	val focus = ctx.focusResult.focus
-	val thought = ctx.common.thoughts(focus)
+	val thought = common.thoughts(focus)
 
 	val promisedIds = if clue.kind == ClueKind.Rank then
 		thought.possible.filter(_.rank == clue.value)
 	else
 		thought.possible
 
-	val notTcm = prev.state.deck(focus).clued ||
-		!promisedIds.forall: id =>
+	val tcm =
+		!prev.state.deck(focus).clued &&
+		promisedIds.forall: id =>
 			state.isBasicTrash(id) ||
-			visibleFind(state, game.common, id, excludeOrder = focus).nonEmpty ||
+			visibleFind(state, common, id, excludeOrder = focus).nonEmpty ||
 			// If we allow inferring, the card must have been clued before this clue
-			visibleFind(state, game.common, id, infer = true, excludeOrder = focus, cond = (_, o) => prev.isTouched(o)).nonEmpty
-		||
-		ctx.common.orderKp(game, focus)
+			visibleFind(state, common, id, infer = true, excludeOrder = focus, cond = (_, o) => prev.isTouched(o)).nonEmpty ||
+			// Only touching 1 new card and stale
+			(game.level >= Level.Context && list.count(!prev.state.deck(_).clued) == 1 && game.meta(focus).staleIds.contains(id))
+		&&
+		!ctx.common.orderKp(game, focus)
 
-	if notTcm then
+	if !tcm then
 		return None
 
 	val oldestTrash = list.filter(!prev.state.deck(_).clued).min
@@ -45,7 +49,7 @@ def interpretTcm(ctx: ClueContext, log: Boolean = true): Option[Seq[Int]] =
 		Some(cmOrders)
 
 def handleTcm(ctx: ClueContext, tcm: Seq[Int], notStall: Boolean) =
-	val ClueContext(prev, game, action) = ctx
+	val ClueContext(prev, game, action, _) = ctx
 	val (common, state) = (game.common, game.state)
 	val ClueAction(giver, target, list, clue) = action
 
@@ -115,7 +119,7 @@ def handleTcm(ctx: ClueContext, tcm: Seq[Int], notStall: Boolean) =
   * Returns the orders of any chop moved cards.
  */
 def interpret5cm(ctx: ClueContext, log: Boolean = true): Option[Vector[Int]] =
-	val ClueContext(prev, game, action) = ctx
+	val ClueContext(prev, game, action, _) = ctx
 	val state = game.state
 	val ClueAction(_, target, list, clue) = action
 	val focus = ctx.focusResult.focus
@@ -211,7 +215,7 @@ def interpretBombOcm(ctx: DiscardContext): Option[HGroup] =
 				.withMove(if mistake then PlayInterp.Mistake else PlayInterp.OrderCM)
 
 def interpretTccm(ctx: ClueContext): Option[List[Int]] =
-	val ClueContext(prev, game, action) = ctx
+	val ClueContext(prev, game, action, _) = ctx
 	val (common, state) = (game.common.updateHypoStacks(game), game.state)
 	val ClueAction(_, target, list, clue) = action
 	val FocusResult(focus, _, positional) = ctx.focusResult
@@ -220,7 +224,7 @@ def interpretTccm(ctx: ClueContext): Option[List[Int]] =
 		Log.info("in endgame, not tccm")
 		return None
 
-	else if positional then
+	else if positional.isDefined then
 		Log.info("positional, not tccm")
 		return None
 

@@ -1,10 +1,10 @@
 package tests.hgroup.level6
 
 import scala_bot.basics._
-import scala_bot.test.{hasStatus, Player, preClue, setup, takeTurn}, Player._
+import scala_bot.test.{hasInfs, hasStatus, Player, preClue, setup, takeTurn}, Player._
 import scala_bot.hgroup.HGroup
 
-import scala_bot.utils.pipe
+import scala_bot.utils.{pipe, tap}
 import scala_bot.logger.{Logger, LogLevel}
 
 class General extends munit.FunSuite:
@@ -131,7 +131,7 @@ class General extends munit.FunSuite:
 		val game = setup(HGroup.atLevel(6), Vector(
 			Vector("xx", "xx", "xx", "xx", "xx"),
 			Vector("b4", "b4", "g4", "r5", "r4"),
-			Vector("g3", "y4", "y1", "y5", "b3"),
+			Vector("g3", "y4", "y1", "y5", "b3")
 		),
 			starting = Cathy,
 			playStacks = Some(Vector(4, 0, 0, 0, 0)),
@@ -142,3 +142,37 @@ class General extends munit.FunSuite:
 		// Slot 4 should be chop moved, but not slot 3.
 		hasStatus(game, Alice, 4, CardStatus.ChopMoved)
 		hasStatus(game, Alice, 3, CardStatus.None)
+
+class FocusShifting extends munit.FunSuite:
+	override def beforeAll() = Logger.setLevel(LogLevel.Off)
+
+	test("interprets a simple focus shift"):
+		val game = setup(HGroup.atLevel(6), Vector(
+			Vector("xx", "xx", "xx", "xx", "xx"),
+			Vector("r4", "y4", "g4", "b4", "p4"),
+			Vector("r4", "y4", "g4", "b4", "p4")
+		),
+			starting = Bob
+		)
+		.pipe(takeTurn("Bob clues blue to Alice (slots 2,3)"))
+		.pipe(takeTurn("Cathy clues blue to Alice (slots 2,3)"))
+
+		// Note that this also causes a tempo clue chop move.
+		hasInfs(game, None, Alice, 2, Vector("b1"))
+		hasInfs(game, None, Alice, 3, Vector("b2"))
+
+	test("interprets a focus shift when touching a finessed card"):
+		val game = setup(HGroup.atLevel(6), Vector(
+			Vector("xx", "xx", "xx", "xx"),
+			Vector("r4", "y4", "g4", "b4"),
+			Vector("r4", "y4", "g4", "b4"),
+			Vector("r2", "p4", "p4", "y3")
+		),
+			starting = Bob
+		)
+		.pipe(takeTurn("Bob clues red to Donald"))
+		.tap: g =>
+			hasInfs(g, None, Alice, 1, Vector("r1"))
+		.pipe(takeTurn("Cathy clues red to Alice (slots 1,3)"))
+
+		hasInfs(game, None, Alice, 3, Vector("r3"))

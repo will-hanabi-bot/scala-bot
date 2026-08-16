@@ -8,10 +8,14 @@ import scala_bot.lib.{FastBitSet, Frac}
 import scala_bot.utils._
 import scala_bot.logger.{Log, Logger, LogLevel}
 
+enum Positional:
+	case Brown, Mud, Pink
+	case Stale1(originalFocus: Int)
+
 case class FocusResult(
 	focus: Int,
 	chop: Boolean = false,
-	positional: Boolean = false
+	positional: Option[Positional] = None
 )
 
 enum StallInterp:
@@ -231,7 +235,7 @@ case class HGroup(
 			state.variant.suits(id.suitIndex).suitType.rainbowish
 
 		state.isBasicTrash(id) ||
-		(state.variant.pinkish && !positional && clue.kind == ClueKind.Rank && clue.value != id.rank) ||
+		(state.variant.pinkish && !positional.contains(Positional.Pink) && clue.kind == ClueKind.Rank && clue.value != id.rank) ||
 		(state.variant.inverted && chop && state.variant.suits(id.suitIndex).suitType.inverted && state.isPlayable(id)) ||
 		orangePlayClueAssumption ||
 		visibleFind(state, common, id, infer = true, excludeOrder = focus).exists: o =>
@@ -277,6 +281,7 @@ case class HGroup(
 	def unknown1(order: Int) =
 		val clues = state.deck(order).clues
 
+		!meta(order).trash &&
 		meta(order).status != CardStatus.Finessed &&
 		common.thoughts(order).possible.length > 1 &&
 		clues.nonEmpty &&
@@ -362,11 +367,17 @@ case class HGroup(
 		val ClueAction(giver, target, list, clue) = action
 		val hand = state.hands(target)
 		val chop = prev.chop(target)
+		val newlyClued = list.filter(!prev.state.deck(_).clued)
 
-		if chop.exists(list.contains) then
+		val stale1 =
+			prev.level >= Level.Context &&
+			clue.isEq(ClueKind.Rank, 1) &&
+			newlyClued.length > 1 &&
+			newlyClued.forall(state.inStartingHand)
+
+		if chop.exists(list.contains) && !stale1 then
 			return FocusResult(chop.get, chop = true)
 
-		val newlyClued = list.filter(!prev.state.deck(_).clued)
 		val reclue = newlyClued.isEmpty
 
 		val pinkChoiceTempo = clue.kind == ClueKind.Rank &&
@@ -377,52 +388,70 @@ case class HGroup(
 			List(list.max, hand(clue.value - 1)).forall(this.knownAs(_, PINKISH))
 
 		if pinkChoiceTempo then
-			return FocusResult(hand(clue.value - 1), positional = true)
+			return FocusResult(hand(clue.value - 1), positional = Some(Positional.Pink))
 
 		val brownTempo = clue.kind == ClueKind.Colour &&
 			state.variant.colourableSuits(clue.value).name.contains("Brown") &&
 			reclue
 
 		if brownTempo then
-			return FocusResult(list.min, positional = true)
+			val focus =
+				val sortedBrowns = list.filter(o => prev.knownAs(o, "Brown".r.unanchored)).sorted
 
-		if clue.isEq(BaseClue(ClueKind.Rank, 1)) && newlyClued.length > 1 then
-			// Custom implementation of ordered1s: chop is already covered above
-			val focus = list.minBy: o =>
-				if meta(o).cm then
+				if this.level >= Level.TempoClues then
+					sortedBrowns.find(o => !(prev.meta(o).focused && prev.common.hypoPlays.contains(o)))
+						.getOrElse(sortedBrowns.head)
+				else
+					sortedBrowns.head
+
+			return FocusResult(focus, positional = Some(Positional.Brown))
+
+		if clue.isEq(ClueKind.Rank, 1) && newlyClued.length > 1 then
+			// Custom implementation of ordered1s
+			val next1 = newlyClued.minBy: o =>
+				if chop.contains(o) then
+					-999
+				else if meta(o).cm then
 					100 - o
 				else if state.inStartingHand(o) then
 					o
 				else
 					-o
 
-			return FocusResult(focus)
+			if stale1 then
+				return FocusResult(newlyClued.max, positional = Some(Positional.Stale1(next1)))
+			else
+				return FocusResult(next1)
 
 		val muddyCards = list.filter: o =>
+			val variant = state.variant
+
 			// All possible ids are rainbowish
 			this.common.thoughts(o).possible.forall: i =>
-				(state.variant.rainbowS && i.rank == state.variant.specialRank.get) ||
-				state.variant.suits(i.suitIndex).suitType.rainbowish
+				(variant.rainbowS && variant.specialRank.contains(i.rank)) ||
+				variant.suits(i.suitIndex).suitType.rainbowish
 			&& {
-				// Rank-clued cards can't be muddy unless it's an omni card
+				// Rank-clued cards can't be muddy unless it's an omni card or rainbow-X
 				!state.deck(o).clues.exists(_.kind == ClueKind.Rank) ||
 				this.common.thoughts(o).possible.forall: i =>
-					val suitType = state.variant.suits(i.suitIndex).suitType
-					suitType.pinkish && suitType.rainbowish
+					val suitType = variant.suits(i.suitIndex).suitType
+
+					(suitType.pinkish && suitType.rainbowish) ||
+					(variant.specialRank.contains(i.rank) && variant.pinkS && variant.rainbowS)
 			}
 		.sortBy(o => -o)
 
 		val mudClue = clue.kind == ClueKind.Colour &&
 			(state.variant.muddy || (state.variant.suits.exists(s => s.suitType.pinkish && s.suitType.rainbowish)) || state.variant.rainbowS) &&
 			reclue &&
-			// Mud clues should only work if the leftmost card is muddy.
-			muddyCards.contains(list.max)
+			// Mud clues should only work if the leftmost (non-kt) card is muddy.
+			muddyCards.contains(list.maxIf(o => !prev.common.orderKt(prev, o), -1))
 
 		if mudClue then
 			val coloursAvailable = state.variant.colourableSuits.length
 			val focusIndex = (clue.value - coloursAvailable + 6*muddyCards.length) % muddyCards.length
 			// Log.info(s"mud clue! value ${clue.value} focusing index ${focusIndex} slot ${state.hands(target).indexOf(muddyCards(focusIndex)) + 1}")
-			return FocusResult(muddyCards(focusIndex), positional = true)
+			return FocusResult(muddyCards(focusIndex), positional = Some(Positional.Mud))
 
 		val pinkStall5 =
 			val valid = clue.isEq(BaseClue(ClueKind.Rank, 5)) &&
@@ -438,9 +467,11 @@ case class HGroup(
 		else
 			val sortedList = list.sortBy(o => -o)
 			val focus =
-				sortedList.find(o => !prev.state.deck(o).clued && prev.meta(o).status == CardStatus.None)
-				.orElse(sortedList.find(prev.isCM))
-				.orElse(sortedList.headOption)
+				sortedList.find(o => !prev.state.deck(o).clued && (prev.meta(o).status == CardStatus.None || prev.meta(o).status == CardStatus.PermissionToDiscard))
+					.orElse(sortedList.find(prev.isCM))
+					.when(_ => this.level >= Level.TempoClues):
+						_.orElse(sortedList.find(o => !(prev.meta(o).focused && prev.common.hypoPlays.contains(o))))
+					.orElse(sortedList.headOption)
 
 			focus match
 				case Some(order) => FocusResult(order)
@@ -749,7 +780,12 @@ object HGroup:
 						game.meta(order).status == CardStatus.PermissionToDiscard
 					}
 
-				g.copy(inEarlyGame = !endEarlyGame)
+				// Write staleness if ending early game
+				g.when(_ => endEarlyGame && g.level >= Level.Context): g =>
+					g.state.heldOrders.foldLeft(g): (acc, order) =>
+						acc.withMeta(order): m =>
+							m.copy(staleIds = m.staleIds.union(g.state.playableSet))
+				.copy(inEarlyGame = !endEarlyGame)
 			.elim()
 
 		def interpretPlay(prev: HGroup, game: HGroup, action: PlayAction): HGroup =

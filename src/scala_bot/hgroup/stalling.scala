@@ -45,7 +45,7 @@ def stallSeverity(game: HGroup, player: Player, giver: Int) =
 		0
 
 def isStall(ctx: ClueContext, severity: Int): Option[StallInterp] =
-	val ClueContext(prev, game, action) = ctx
+	val ClueContext(prev, game, action, _) = ctx
 	val state = ctx.state
 	val ClueAction(giver, target, list, clue) = action
 	val FocusResult(focus, chop, _) = ctx.focusResult
@@ -65,7 +65,7 @@ def isStall(ctx: ClueContext, severity: Int): Option[StallInterp] =
 	val notStall = severity == 0 ||
 		(chop && game.players(target).thoughts(focus).possible.forall(isSave)) ||
 		(focusNew && (game.common.orderKp(game, focus) || trash)) ||
-		(!state.variant.pinkish && clue.kind == ClueKind.Rank && clue.value == 1)		// cluing 1 is never a stall
+		(!state.variant.pinkish && clue.isEq(ClueKind.Rank, 1))		// cluing 1 is never a stall
 
 	if notStall then
 		return None
@@ -116,7 +116,7 @@ def isStall(ctx: ClueContext, severity: Int): Option[StallInterp] =
 
 /** Returns the set of player indices that see an alternative clue. */
 def alternativeClue(ctx: ClueContext, maxStall: Int) =
-	val ClueContext(prev, game, action) = ctx
+	val ClueContext(prev, game, action, _) = ctx
 	val ClueAction(giver, target, list, clue) = action
 	val state = game.state
 	val origClue = Clue(clue.kind, clue.value, target)
@@ -201,7 +201,7 @@ def alternativeClue(ctx: ClueContext, maxStall: Int) =
 	seenBy.foldLeft(FastBitSet.from(0 until state.numPlayers))(_.difference(_))
 
 def stallingSituation(ctx: ClueContext): Option[(StallInterp, FastBitSet)] =
-	val ClueContext(prev, game, action) = ctx
+	val ClueContext(prev, game, action, _) = ctx
 	val ClueAction(giver, target, list, clue) = action
 
 	val severity = stallSeverity(prev, prev.common, giver)

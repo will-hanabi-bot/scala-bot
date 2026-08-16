@@ -192,6 +192,8 @@ case class ConvData(
 	urgent: Boolean = false,
 	/** Whether this card is conventionally promised trash, even if it has non-trash possibilities. */
 	trash: Boolean = false,
+	/** The set of ids that this card is unlikely to be, based on staleness. */
+	staleIds: IdentitySet = IdentitySet.empty,
 	status: CardStatus = CardStatus.None,
 	/** Whether this card is unknown to the person playing (like in a *Hidden Finesse*). */
 	hidden: Boolean = false,

@@ -21,6 +21,9 @@ trait ClueLike:
 	def isEq(other: ClueLike): Boolean =
 		kind == other.kind && value == other.value
 
+	def isEq(kind: ClueKind, value: Int) =
+		this.kind == kind && this.value == value
+
 /** The pairing of a clue kind and value.
   * @param kind  Whether the clue is rank or colour.
   * @param value The rank of a rank clue, or the suitIndex of a colour clue.

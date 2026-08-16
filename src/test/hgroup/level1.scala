@@ -196,7 +196,7 @@ class General extends munit.FunSuite:
 	test("doesn't write a play link too early when another player could connect"):
 		val game = setup(HGroup.atLevel(1), Vector(
 			Vector("xx", "xx", "xx", "xx", "xx"),
-			Vector("r1", "y4", "g4", "b4", "p4"),
+			Vector("r1", "y4", "g4", "b4", "p4")
 		),
 			init = preClue(Alice, 5, Seq("1"))
 		)
@@ -206,3 +206,24 @@ class General extends munit.FunSuite:
 
 		// Alice's slot 3 (previously slot 2) can still be r2.
 		hasInfs(game, None, Alice, 3, Vector("r2", "b2"))
+
+	test("preserves info lock against good touch"):
+		val game = setup(HGroup.atLevel(1), Vector(
+			Vector("xx", "xx", "xx", "xx", "xx"),
+			Vector("r4", "y4", "g3", "b4", "p4"),
+			Vector("r4", "y4", "g2", "b3", "r5")
+		),
+			playStacks = Some(Vector(0, 2, 2, 0, 0))
+		)
+		.pipe(takeTurn("Alice clues 3 to Bob"))					// could be y3 or g3
+		.pipe(takeTurn("Bob clues green to Alice (slot 4)"))	// duping g3
+		.pipe(takeTurn("Cathy clues 5 to Alice (slot 5)"))		// neg 5 on our gree card
+
+		.pipe(takeTurn("Alice clues 5 to Cathy"))
+		.pipe(takeTurn("Bob plays g3", "y1"))
+		.tap: g =>
+			// Our slot 5 should be trash.
+			assertEquals(g.common.thinksTrash(g, Alice.ordinal), Vector(g.state.hands(Alice.ordinal)(3)))
+		.pipe(takeTurn("Cathy discards b3", "g1"))
+
+		assertEquals(game.takeAction.unsafeRunSync(), PerformAction.Discard(game.state.hands(Alice.ordinal)(3)))

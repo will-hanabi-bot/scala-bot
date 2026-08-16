@@ -34,7 +34,7 @@ def fpSimplicity(fp: FocusPossibility, playerIndex: Int, ourPlayerIndex: Int): I
 		1000 * blindPlays + 100 * prompts
 
 def filterFps(ctx: ClueContext, fps: Seq[FocusPossibility], target: Int) =
-	val ClueContext(_, game, action) = ctx
+	val ClueContext(_, game, action, _) = ctx
 	val state = game.state
 	val trueFp = state.deck(ctx.focusResult.focus).id().flatMap(id => fps.find(_.id == id))
 
@@ -68,7 +68,7 @@ def filterFps(ctx: ClueContext, fps: Seq[FocusPossibility], target: Int) =
 			!(selfBluff && startsKnown)
 
 def occamsRazor(ctx: ClueContext, fps: Seq[FocusPossibility], playerIndex: Int, actualId: Option[Identity] = None) =
-	val ClueContext(_, game, action) = ctx
+	val ClueContext(_, game, action, _) = ctx
 	val state = game.state
 
 	val initial = (99, Seq.empty[FocusPossibility], Seq.empty[FocusPossibility])

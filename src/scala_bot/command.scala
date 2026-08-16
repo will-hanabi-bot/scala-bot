@@ -11,7 +11,7 @@ import scala_bot.console.{ConsoleCmd, NavArg}
 import scala_bot.reactor.Reactor
 import scala_bot.logger._
 import scala_bot.refSieve.RefSieve
-import scala_bot.hgroup.HGroup
+import scala_bot.hgroup.{HGroup, Level}
 
 case class ChatMessage(
 	msg: String,
@@ -559,7 +559,13 @@ class BotClient(queue: Queue[IO, String], gameRef: Ref[IO, Option[Game]], config
 					case Left(msg) => reply(msg)
 					case Right(c) =>
 						convention = c
-						reply(s"Currently playing with ${convention} conventions.${if fastMode then " [fast mode]" else ""}")
+
+						reply(s"Currently playing with ${convention} conventions.${if fastMode then " [fast mode]" else ""}") *> {
+							c match
+								case Convention.HGroup(level) if level >= Level.Context =>
+									reply("Above level 11, the bot plys with minimal context: only stale 1s after early game and explicit focus inversion.")
+								case _ => IO.unit
+						}
 
 	def sendHelp(who: String) =
 		sendPM(who, "Commands: /analyze, /bugreport, /doc, /fastmode, /help, /join, /leave, /settings, /start, /terminate, /version. See https://github.com/will-hanabi-bot/scala-bot#supported-commands for more info.")

@@ -354,7 +354,7 @@ object RefSieve:
 							(Some(ClueInterp.Stall), game)
 						else if state.numPlayers == 2 && clue.kind == ClueKind.Colour then
 							targetPlay(ctx, list.max)
-						else if !trashPush && clue.kind == ClueKind.Rank && clue.value == 1 then
+						else if !trashPush && clue.isEq(ClueKind.Rank, 1) then
 							Log.info(s"reordering 1s!")
 							(Some(ClueInterp.Reveal), game)
 						else
