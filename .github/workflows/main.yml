@@ -1,0 +1,34 @@
+name: Build native-image (ARM64)
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04-arm
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install GraalVM
+        uses: graalvm/setup-graalvm@v1
+        with:
+          java-version: '25'
+          distribution: 'graalvm-community'
+          native-image-job-reports: 'true'
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Install scala-cli
+        run: |
+          curl -sL https://github.com/VirtusLab/scala-cli/releases/latest/download/scala-cli-aarch64-pc-linux.gz | gunzip > scala-cli
+          chmod +x scala-cli
+          sudo mv scala-cli /usr/local/bin/
+
+      - name: Build native-image
+        run: scala-cli --power package --native-image . --main-class scala_bot.main -o bot
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: bot-arm64
+          path: bot
