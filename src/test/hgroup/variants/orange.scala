@@ -6,7 +6,7 @@ import scala_bot.basics._
 import scala_bot.test.{fullyKnown, hasInfs, hasStatus, Player, preClue, setup, takeTurn, TestVariant}, Player._
 import scala_bot.hgroup.HGroup
 
-import scala_bot.utils.pipe
+import scala_bot.utils.{pipe, tap}
 import scala_bot.logger.{Logger, LogLevel}
 
 class Orange extends munit.FunSuite:
@@ -199,3 +199,21 @@ class Orange extends munit.FunSuite:
 		// hasStatus(game, Alice, 5, CardStatus.ChopMoved)
 
 		assertEquals(game.chop(Alice.ordinal), Some(1))
+
+	test("screams for an unplayable orange on chop"):
+		val game = setup(HGroup.atLevel(10), Vector(
+			Vector("xx", "xx", "xx", "xx", "xx"),
+			Vector("o3", "g4", "g4", "r1", "o3")
+		),
+			variant = TestVariant.Orange5,
+			clueTokens = 1,
+			init = preClue(Alice, 5, Seq("1"))
+		)
+		.pipe(takeTurn("Alice clues red to Bob"))
+		.pipe(takeTurn("Bob plays r1", "r5"))
+		.tap: g =>
+			assertEquals(g.takeAction.unsafeRunSync(), PerformAction.Discard(g.state.hands(Alice.ordinal)(3)))
+		.pipe(takeTurn("Alice discards b4 (slot 4)"))
+
+		assertEquals(game.lastMove, Some(DiscardInterp.Emergency))
+		hasStatus(game, Bob, 5, CardStatus.ChopMoved)

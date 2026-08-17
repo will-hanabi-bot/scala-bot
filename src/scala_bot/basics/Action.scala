@@ -281,7 +281,7 @@ object Action:
 	def dragDiscard(state: State, playerIndex: Int, order: Int) =
 		state.deck(order).id() match
 			case Some(id) =>
-				if state.variant.suits(id.suitIndex).suitType.inverted then
+				if state.isInverted(id) then
 					if state.isPlayable(id) then
 						PlayAction(playerIndex, order, id.suitIndex, id.rank)
 					else
@@ -298,7 +298,7 @@ object Action:
 	def dragPlay(state: State, playerIndex: Int, order: Int) =
 		state.deck(order).id() match
 			case Some(id) =>
-				if state.variant.suits(id.suitIndex).suitType.inverted then
+				if state.isInverted(id) then
 					DiscardAction(playerIndex, order, id.suitIndex, id.rank)
 				else if state.isPlayable(id) then
 					PlayAction(playerIndex, order, id.suitIndex, id.rank)
@@ -437,7 +437,7 @@ enum PerformAction:
 			case PerformAction.Play(target) =>
 				deckId(target) match
 					case Some(id) =>
-						if !retain && state.variant.suits(id.suitIndex).suitType.inverted then
+						if !retain && state.isInverted(id) then
 							DiscardAction(playerIndex, target, id.suitIndex, id.rank)
 						else if state.isPlayable(id) then
 							PlayAction(playerIndex, target, id.suitIndex, id.rank)
@@ -449,7 +449,7 @@ enum PerformAction:
 			case PerformAction.Discard(target) =>
 				deckId(target) match
 					case Some(id) =>
-						if !retain && state.variant.suits(id.suitIndex).suitType.inverted then
+						if !retain && state.isInverted(id) then
 							if state.isPlayable(id) then
 								PlayAction(playerIndex, target, id.suitIndex, id.rank)
 							else

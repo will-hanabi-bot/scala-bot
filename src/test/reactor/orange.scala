@@ -6,7 +6,7 @@ import scala_bot.basics._
 import scala_bot.test.{Colour, hasInfs, hasStatus, Player, preClue, setup, takeTurn, TestVariant}, Player._
 import scala_bot.reactor.Reactor
 
-import scala_bot.utils.pipe
+import scala_bot.utils.{pipe, tap}
 import scala_bot.logger.{Logger, LogLevel}
 
 class Orange extends munit.FunSuite:
@@ -131,3 +131,27 @@ class Orange extends munit.FunSuite:
 
 		hasInfs(game, None, Alice, 5, Vector("o3"))
 		assertEquals(game.takeAction.unsafeRunSync(), PerformAction.Discard(game.state.hands(Alice.ordinal)(4)))
+
+	test("keeps a call to discard in dark orange"):
+		val game = setup(Reactor.apply, Vector(
+			Vector("xx", "xx", "xx", "xx", "xx"),
+			Vector("r4", "y4", "g4", "o5", "b4"),
+			Vector("r1", "y4", "g4", "y1", "o4")
+		),
+			starting = Bob,
+			variant = TestVariant.DOrange5,
+			clueTokens = 7
+		)
+		.pipe(takeTurn("Bob clues red to Alice (slot 4)"))
+		.pipe(takeTurn("Cathy plays r1", "b4"))
+		.tap: g =>
+			hasStatus(g, Alice, 3, CardStatus.CalledToDiscard)
+		.pipe(takeTurn("Alice clues 5 to Bob"))
+		.pipe(takeTurn("Bob clues orange to Alice (slot 3)"))
+		.pipe(takeTurn("Cathy plays y1", "y3"))
+
+		hasStatus(game, Alice, 4, CardStatus.CalledToDiscard)
+
+		// Alice should discard the o1.
+		hasInfs(game, None, Alice, 3, Vector("o1"))
+		assertEquals(game.takeAction.unsafeRunSync(), PerformAction.Discard(game.state.hands(Alice.ordinal)(2)))

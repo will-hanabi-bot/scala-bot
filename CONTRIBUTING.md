@@ -45,7 +45,9 @@ scala-bot has several main modules:
 - `analyze` loads a completed game and logs turns where it would have done something different
 - `benchmark` runs self-play repeatedly and measures the elapsed time, and is used to measure performance changes
 
-Debugging is typically done with the `replay` module. During a replay, logs will show up in the console, detailing what the bot thinks about every action. Two commands can be entered into the console while the program is running:
+By default, scala-bot does not emit debug logs to the console, which detail what the bot thinks about every action. To enable them, set `Log.compileTimePriority` in `src/scala_bot/logger.scala` to 3 instead of 0.
+
+Debugging is typically done with the `replay` module. Two commands can be entered into the console while the program is running:
 - `hand <playerName> [observerName]` displays the information on that player's hand from a particular perspective.
 	- If no observer name is provided, the hand is logged from the common knowledge perspective.
 - `navigate <turn>` travels to a specific turn.

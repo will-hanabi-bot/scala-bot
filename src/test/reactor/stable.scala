@@ -10,7 +10,7 @@ import scala_bot.utils.pipe
 import scala_bot.logger.{Logger, LogLevel}
 
 class Stable extends munit.FunSuite:
-	override def beforeAll() = Logger.setLevel(LogLevel.Off)
+	// override def beforeAll() = Logger.setLevel(LogLevel.Off)
 
 	test("it understands a ref play"):
 		val game = setup(Reactor.apply, Vector(

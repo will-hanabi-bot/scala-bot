@@ -644,8 +644,7 @@ extension[G <: Game](game: G)
 	/** Returns true when the card is clued and is orange by empathy. */
 	def knownInverted(order: Int) =
 		game.state.deck(order).clued &&
-		game.common.thoughts(order).possible.forall: id =>
-			game.state.variant.suits(id.suitIndex).suitType.inverted
+		game.common.thoughts(order).possible.forall(game.state.isInverted)
 
 	/** Returns true when the player will assume the card is inverted. */
 	def assumeInverted(player: Player, order: Int) =
@@ -660,4 +659,4 @@ extension[G <: Game](game: G)
 
 		state.variant.inverted &&
 		knownTouched &&
-		player.thoughts(order).possibilities.forall(id => game.state.variant.suits(id.suitIndex).suitType.inverted)
+		player.thoughts(order).possibilities.forall(game.state.isInverted)

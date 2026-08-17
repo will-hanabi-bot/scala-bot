@@ -49,6 +49,21 @@ class Stale1s extends munit.FunSuite:
 		assertEquals(game.common.thinksTrash(game, Alice.ordinal), Vector(game.state.hands(Alice.ordinal)(3)))
 		hasStatus(game, Alice, 5, CardStatus.ChopMoved)
 
+	test("doesn't randomly skip a 1"):
+		val game = setup(HGroup.atLevel(12), Vector(
+			Vector("xx", "xx", "xx", "xx", "xx"),
+			Vector("r3", "y3", "g3", "b3", "p3"),
+			Vector("r4", "y4", "g4", "b4", "p4")
+		),
+			starting = Cathy,
+			playStacks = Some(Vector(1, 1, 1, 0, 0)),
+			clueTokens = 4
+		)
+		.pipe(takeTurn("Cathy clues 1 to Alice (slots 3,4)"))
+
+		assertEquals(game.common.thinksPlayables(game, Alice.ordinal), Vector(game.state.hands(Alice.ordinal)(2), game.state.hands(Alice.ordinal)(3)))
+		assertEquals(game.common.thinksTrash(game, Alice.ordinal), Vector.empty)
+
 	test("skips a stale 1"):
 		val game = setup(HGroup.atLevel(12), Vector(
 			Vector("xx", "xx", "xx", "xx", "xx"),
@@ -71,7 +86,6 @@ class Stale1s extends munit.FunSuite:
 
 		// This is not an OCM on Bob.
 		hasStatus(game, Bob, 5, CardStatus.PermissionToDiscard)
-		println(s"infs ${game.common.strInfs(game.state, game.state.hands(Alice.ordinal)(2))}")
 		assertEquals(game.common.thinksPlayables(game, Alice.ordinal), Vector(game.state.hands(Alice.ordinal)(2)))
 		assertEquals(game.common.thinksTrash(game, Alice.ordinal), Vector(game.state.hands(Alice.ordinal)(3)))
 
@@ -89,8 +103,6 @@ class Stale1s extends munit.FunSuite:
 		.tap: g =>
 			assertEquals(g.takeAction.unsafeRunSync(), PerformAction.Rank(Bob.ordinal, 1))
 		.pipe(takeTurn("Alice clues 1 to Bob"))
-
-		println(s"${game.common.strInfs(game.state, game.state.hands(Bob.ordinal)(3))}")
 
 		hasStatus(game, Bob, 5, CardStatus.ChopMoved)
 		assert(game.meta(game.state.hands(Bob.ordinal)(3)).trash)

@@ -65,7 +65,7 @@ def interpretReactiveColour(prev: Reactor, game: Reactor, action: ClueAction, fo
 			case Some(reactOrder) if game.common.thoughts(reactOrder).possible.difference(state.criticalSet).isEmpty =>
 				Log.warn(s"attempted dc+play would result in reacter discarding known critical ${state.logId(reactOrder)} $reactOrder!")
 				None
-			case Some(reactOrder) if state.variant.suits(state.deck(order).suitIndex).suitType.inverted && prev.common.obviousPlayables(prev, reacter).contains(reactOrder) =>
+			case Some(reactOrder) if state.isInverted(order) && prev.common.obviousPlayables(prev, reacter).contains(reactOrder) =>
 				Log.warn(s"attempted dc+play would result in reacter naturally playing ${state.logId(reactOrder)} $reactOrder!")
 				None
 			case Some(reactOrder) =>
@@ -73,7 +73,7 @@ def interpretReactiveColour(prev: Reactor, game: Reactor, action: ClueAction, fo
 					t.copy(oldInferred = t.inferred.toOpt)
 
 				val result =
-					if state.variant.suits(state.deck(order).suitIndex).suitType.inverted then
+					if state.isInverted(order) then
 						targetPlay(game.copy(common = newCommon), action, reactOrder, urgent = true, stable = false)
 					else
 						targetDiscard(game.copy(common = newCommon), action, reactOrder, urgent = true)
@@ -142,7 +142,7 @@ def interpretReactiveColour(prev: Reactor, game: Reactor, action: ClueAction, fo
 						case Some(reactOrder) if !game.common.thoughts(reactOrder).possible.exists(i => state.isPlayable(i) || possibleConns.exists(_._2 == i)) =>
 							Log.warn(s"reaction would involve playing unplayable ${state.logId(reactOrder)} $reactOrder!")
 							None
-						case Some(reactOrder) if state.variant.suits(state.deck(target).suitIndex).suitType.inverted && prev.common.thinksTrash(prev, reacter).contains(reactOrder) && looksStable && prev.common.obviousPlayables(prev, reacter).isEmpty =>
+						case Some(reactOrder) if state.isInverted(target) && prev.common.thinksTrash(prev, reacter).contains(reactOrder) && looksStable && prev.common.obviousPlayables(prev, reacter).isEmpty =>
 							Log.warn(s"attempted play+dc would result in reacter naturally discarding ${state.logId(reactOrder)} $reactOrder!")
 							None
 						case Some(reactOrder) =>
@@ -150,7 +150,7 @@ def interpretReactiveColour(prev: Reactor, game: Reactor, action: ClueAction, fo
 								t.copy(oldInferred = t.inferred.toOpt)
 
 							val result =
-								if state.variant.suits(state.deck(target).suitIndex).suitType.inverted then
+								if state.isInverted(target) then
 									targetDiscard(game.copy(common = newCommon), action, reactOrder, urgent = true)
 								else
 									targetPlay(game.copy(common = newCommon), action, reactOrder, urgent = true, stable = false)
@@ -199,7 +199,7 @@ def interpretReactiveRank(prev: Reactor, game: Reactor, action: ClueAction, focu
 				None
 			case Some(reactOrder) =>
 				val result =
-					if state.variant.suits(state.deck(target).suitIndex).suitType.inverted then
+					if state.isInverted(target) then
 						targetDiscard(game, action, reactOrder, urgent = true)
 					else
 						targetPlay(game, action, reactOrder, urgent = true, stable = false)
@@ -242,7 +242,7 @@ def interpretReactiveRank(prev: Reactor, game: Reactor, action: ClueAction, focu
 						t.copy(oldInferred = t.inferred.toOpt)
 
 					val result =
-						if state.variant.suits(state.deck(receiveOrder).suitIndex).suitType.inverted then
+						if state.isInverted(receiveOrder) then
 							targetDiscard(game.copy(common = newCommon), action, reactOrder, urgent = true)
 						else
 							targetPlay(game.copy(common = newCommon), action, reactOrder, urgent = true, stable = false)

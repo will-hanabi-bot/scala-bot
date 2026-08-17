@@ -17,7 +17,7 @@ def getResult(game: Reactor, hypo: Reactor, action: ClueAction): Double =
 
 	val newPlayables = state.heldOrders.filter: o =>
 		(meta(o).status != CardStatus.CalledToPlay && hypo.meta(o).status == CardStatus.CalledToPlay) || {
-			state.deck(o).id().exists(id => state.variant.suits(id.suitIndex).suitType.inverted) &&
+			state.isInverted(o) &&
 			meta(o).status != CardStatus.CalledToDiscard && hypo.meta(o).status == CardStatus.CalledToDiscard
 		}
 
@@ -201,7 +201,7 @@ def advance(orig: Reactor, game: Reactor, offset: Int): Double =
 					.getOrElse(throw new Exception(s"Player ${state.names(playerIndex)} not locked but no chop! ${state.hands(playerIndex).map(meta(_).status)}"))
 				tryDiscard(chop, alwaysDiscard = game.chop(playerIndex).isDefined)
 
-			case Some(order) => tryDiscard(order, alwaysDiscard = !game.players(playerIndex).thoughts(order).id().exists(id => state.variant.suits(id.suitIndex).suitType.inverted))
+			case Some(order) => tryDiscard(order, alwaysDiscard = !game.players(playerIndex).thoughts(order).id().exists(state.isInverted))
 
 def _evalAction(game: Reactor, action: Action): Double =
 	Log.highlight(Console.GREEN, s"===== Predicting value for ${action.fmt(game.state)} =====")
@@ -300,7 +300,7 @@ def evalGame(orig: Reactor, game: Reactor, offset: Int): Double =
 
 	val stateVal = evalState(state, inEndgame = orig.inEndgame || orig.state.remScore < state.variant.suits.length, offset)
 
-	def inverted(order: Int) = state.deck(order).id().exists(id => state.variant.suits(id.suitIndex).suitType.inverted)
+	def inverted(order: Int) = state.deck(order).id().exists(state.isInverted)
 
 	def evalPlay(order: Int) =
 		if !game.me.hypoPlays.contains(order) then

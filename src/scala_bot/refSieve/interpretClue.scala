@@ -118,7 +118,7 @@ def targetPlay(ctx: ClueContext, targetOrder: Int): (Option[ClueInterp], RefSiev
 	targetId match
 		case Some(id) if !focusPoss.exists(_.id == id) =>
 			if action.giver == state.ourPlayerIndex then
-				if !state.deck(targetOrder).clued && game.state.variant.suits(id.suitIndex).suitType.inverted then
+				if !state.deck(targetOrder).clued && game.state.isInverted(id) then
 					(Some(ClueInterp.Discard), resolvePlay(ctx, targetOrder, focusPoss, targetId))
 				else
 					(if game.inEndgame && common.orderTrash(game, targetOrder) then Some(ClueInterp.Stall) else None, game)

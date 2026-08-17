@@ -132,7 +132,8 @@ def targetIDiscard(prev: Reactor, game: Reactor, wc: ReactorWC, targetSlot: Int)
 	val order = wc.receiverHand(targetSlot - 1)
 	val meta = game.meta(order)
 
-	val newInferred = common.thoughts(order).inferred.difference(prev.state.criticalSet)
+	val unconventionalIds = prev.state.criticalSet.filter(id => !(game.state.isInverted(id) && game.state.isPlayable(id)))
+	val newInferred = common.thoughts(order).inferred.difference(unconventionalIds)
 
 	val newCommon = common.withThought(order)(t => t.copy(
 		oldInferred = t.inferred.toOpt,

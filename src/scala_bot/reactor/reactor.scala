@@ -112,7 +112,7 @@ case class Reactor(
 				unknownPlay
 			else if knownDupe then
 				false
-			else if bobChopId.exists(id => (state.isPlayable(id) && !state.variant.suits(id.suitIndex).suitType.inverted) || id.rank == 2) then
+			else if bobChopId.exists(id => (state.isPlayable(id) && !state.isInverted(id)) || id.rank == 2) then
 				true
 			else
 				false

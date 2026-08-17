@@ -73,10 +73,10 @@ def simulateGame[G <: Game](gs: Seq[G], deck: Vector[Identity])(using ops: GameO
 
 			val actualPerform = perform match
 				case PerformAction.Play(order) =>
-					val inverted = games(0).state.variant.suits(deck(order).suitIndex).suitType.inverted
+					val inverted = games(0).state.isInverted(deck(order))
 					if inverted then PerformAction.Discard(order) else PerformAction.Play(order)
 				case PerformAction.Discard(order) =>
-					val inverted = games(0).state.variant.suits(deck(order).suitIndex).suitType.inverted
+					val inverted = games(0).state.isInverted(deck(order))
 					if inverted then PerformAction.Play(order) else PerformAction.Discard(order)
 				case _ => perform
 

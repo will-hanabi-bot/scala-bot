@@ -461,7 +461,7 @@ def targetPlay(game: Reactor, action: ClueAction, target: Int, urgent: Boolean, 
 	.withMeta(target):
 		_.reason(state.turnCount).signal(state.turnCount)
 	.pipe: g =>
-		if newInferred.forall(id => state.variant.suits(id.suitIndex).suitType.inverted) then
+		if newInferred.forall(state.isInverted) then
 			Log.warn(s"target $target had only orange inferences! targeting dc")
 			val newGame = g.withMeta(target):
 				_.copy(
@@ -499,7 +499,7 @@ def targetDiscard(game: Reactor, action: ClueAction, target: Int, urgent: Boolea
 
 	val newGame = game.copy(
 		common = game.common.withThought(target)(t => t.copy(
-			inferred = t.inferred.difference(state.criticalSet),
+			inferred = t.inferred.difference(state.criticalSet.filter(id => !(state.isInverted(id) && state.isPlayable(id)))),
 			oldInferred = t.inferred.toOpt
 		)),
 		meta = game.meta.updated(target, meta.copy(

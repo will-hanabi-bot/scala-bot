@@ -158,8 +158,13 @@ def advance(orig: HGroup, game: HGroup, offset: Int): Double =
 
 	lazy val earlyGameClue = game.earlyGameClue(playerIndex)
 
+	val stopLookahead =
+		state.endgameTurns.contains(0) ||
+		playerIndex == state.ourPlayerIndex && (offset > 3 || (state.numPlayers > 2 && orig.state.clueTokens > 2)) ||
+		(orig.inEarlyGame && state.variant.rainbowish && state.variant.pinkish && offset == 2)
+
 	// Reduce lookahead in early game
-	if (orig.inEarlyGame && state.variant.rainbowish && state.variant.pinkish && offset == 2) || (playerIndex == state.ourPlayerIndex && offset > 3) || state.endgameTurns.contains(0) then
+	if stopLookahead then
 		evalGame(orig, game, offset)
 
 	else if allPlayables.nonEmpty then

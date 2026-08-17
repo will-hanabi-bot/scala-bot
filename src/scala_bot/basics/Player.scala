@@ -199,6 +199,12 @@ case class Player(
 					thought.possible.intersect(state.playableSet).nonEmpty &&
 					thought.infoLock.forallO(_.intersect(state.playableSet).nonEmpty)
 
+				case CardStatus.CalledToDiscard =>
+					thought.possible.intersect(state.playableSet).nonEmpty && {
+						val ids = thought.inferred.intersect(state.playableSet)
+						ids.nonEmpty && ids.forall(state.isInverted)
+					}
+
 				case CardStatus.Sarcastic | CardStatus.GentlemansDiscard =>
 					possPlayable(thought.inferred)
 
@@ -469,7 +475,7 @@ case class Player(
 				case _ => acc
 
 	def thinksInverted(state: State, order: Int) =
-		thoughts(order).possibilities.forall(id => state.variant.suits(id.suitIndex).suitType.inverted)
+		thoughts(order).possibilities.forall(state.isInverted)
 
 	def tryPlay(game: Game, order: Int) =
 		if game.assumeInverted(this, order) && this.thoughts(order).possibilities.difference(game.state.playableSet).isEmpty then
@@ -509,7 +515,7 @@ case class Player(
 
 				// NOTE: symmetric = true?
 				player.thoughts(order).id(infer = true) match
-					case None if state.deck(order).id().exists(id => state.variant.suits(id.suitIndex).suitType.inverted) =>
+					case None if state.deck(order).id().exists(state.isInverted) =>
 						// println(s"not known orange! $order")
 					case None =>
 						links.foreach: link =>
@@ -560,7 +566,7 @@ case class Player(
 						val invertedPlays =
 							player.thinksTrash(hypo, i).filter: o =>
 								// This player knows that the card is inverted
-								player.thoughts(o).id().exists(id => state.variant.suits(id.suitIndex).suitType.inverted)
+								player.thoughts(o).id().exists(state.isInverted)
 
 						normalPlays ++ invertedPlays
 

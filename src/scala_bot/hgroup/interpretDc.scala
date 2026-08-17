@@ -46,7 +46,7 @@ def interpretTransfer(ctx: DiscardContext, holder: Int, dupe: Option[Int]): (Dis
 		return result
 
 	val cluedTargets = state.hands(holder).filter(o => game.isTouched(o) && validTransfer(game, id)(o))
-	val inverted = state.variant.suits(suitIndex).suitType.inverted
+	val inverted = state.isInverted(id)
 
 	if cluedTargets.isEmpty then
 		if game.level < Level.SpecialDiscards then
@@ -380,11 +380,14 @@ def interpretSdcm(ctx: DiscardContext): Option[HGroup] =
 
 		else
 			val bobChopId = bobChop.flatMap(state.deck(_).id())
-			val mistake = status.matchesP:
-				case DcStatus.Scream =>
-					bobChopId.exists(i => prev.common.hypoStacks(i.suitIndex) + 1 != i.rank && !state.isCritical(i))
-				case DcStatus.Shout =>
-					bobChopId.exists(state.isBasicTrash)
+			val mistake = bobChopId.exists: i =>
+				!(state.isInverted(i) && !state.isPlayable(i)) &&
+				status.matchesP:
+					case DcStatus.Scream =>
+						prev.common.hypoStacks(i.suitIndex) + 1 != i.rank &&
+						!state.isCritical(i)
+					case DcStatus.Shout =>
+						state.isBasicTrash(i)
 
 			if mistake then
 				Log.warn(s"interpreted ${status.toString().toLowerCase()} but ${state.names(bob)}'s chop isn't worth saving!")

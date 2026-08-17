@@ -19,7 +19,7 @@ def getResult(game: RefSieve, hypo: RefSieve, action: ClueAction): Double =
 		meta(o).status != CardStatus.CalledToPlay && hypo.meta(o).status == CardStatus.CalledToPlay
 
 	val badPlayable = newPlayables.find: o =>
-		!state.deck(o).id().exists(id => state.variant.suits(id.suitIndex).suitType.inverted) &&
+		!state.isInverted(o) &&
 		!(hypo.me.hypoPlays.contains(o) || (game.inEndgame && state.deck(o).id().exists(state.isPlayable)))
 
 	badPlayable match

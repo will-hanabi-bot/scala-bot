@@ -236,7 +236,7 @@ case class HGroup(
 
 		state.isBasicTrash(id) ||
 		(state.variant.pinkish && !positional.contains(Positional.Pink) && clue.kind == ClueKind.Rank && clue.value != id.rank) ||
-		(state.variant.inverted && chop && state.variant.suits(id.suitIndex).suitType.inverted && state.isPlayable(id)) ||
+		(state.variant.inverted && chop && state.isInverted(id) && state.isPlayable(id)) ||
 		orangePlayClueAssumption ||
 		visibleFind(state, common, id, infer = true, excludeOrder = focus).exists: o =>
 			this.me.thoughts(o).matches(id) ||
@@ -418,7 +418,12 @@ case class HGroup(
 				else
 					-o
 
-			if stale1 then
+			val skip = prev.common.thoughts(next1).inferred.forall: id =>
+				id.rank != 1 ||
+				prev.meta(next1).staleIds.contains(id) ||
+				prev.state.trashSet.contains(id)
+
+			if stale1 && skip then
 				return FocusResult(newlyClued.max, positional = Some(Positional.Stale1(next1)))
 			else
 				return FocusResult(next1)
@@ -754,7 +759,7 @@ object HGroup:
 
 			val updatedGame = game.refreshUncertain.elim()
 
-			val reinterp = failed || prev.common.thoughts(order).possibilities.forall(id => prev.state.variant.suits(id.suitIndex).suitType.inverted)
+			val reinterp = failed || prev.common.thoughts(order).possibilities.forall(prev.state.isInverted)
 			val reinterpGame = if reinterp then updatedGame.reinterpPlay(prev, action) else None
 
 			if reinterpGame.isDefined then
@@ -908,8 +913,12 @@ object HGroup:
 										false
 								}
 
-							val allActions =
-								allClues.concat(allPlays).when(_ => !cantDiscard)(_ ++ allDiscards).when(_ => canDiscardChop): as =>
+							Log.highlight(Console.YELLOW, s"can discard chop: ${canDiscardChop}")
+
+							val allActions = allClues.concat(allPlays)
+								.when(_ => !cantDiscard):
+									_ ++ allDiscards
+								.when(_ => canDiscardChop): as =>
 									val action = DiscardAction(state.ourPlayerIndex, chop.get, -1, -1, false)
 									val value = evalAction(game, action)
 									as :+ (PerformAction.tryDiscard(game, chop.get), action, value)

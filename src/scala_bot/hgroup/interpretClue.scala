@@ -128,7 +128,7 @@ def interpClue(ctx: ClueContext): HGroup =
 		if thinksStall.size > 0 && thinksStall.size < state.numPlayers then
 			Log.warn(s"asymmetric! only ${thinksStall.map(state.names)} think stall")
 
-			if giver == state.ourPlayerIndex then
+			if game.hypothetical || giver == state.ourPlayerIndex then
 				return game.withMove(ClueInterp.Mistake)
 
 		else if thinksStall.size == state.numPlayers then
@@ -258,7 +258,7 @@ def interpClue(ctx: ClueContext): HGroup =
 		val playFix = list.find: o =>
 			prev.common.orderPlayable(prev, o) &&
 			!prev.common.thinksInverted(prev.state, o) &&
-			state.deck(o).id().exists(id => state.variant.suits(id.suitIndex).suitType.inverted)
+			state.isInverted(o)
 
 		if playFix.isDefined then
 			Log.info(s"orange play fix! ${playFix.get}")

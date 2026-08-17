@@ -24,8 +24,11 @@ jobs:
           chmod +x scala-cli
           sudo mv scala-cli /usr/local/bin/
 
+      - name: Build assembly jar
+        run: scala-cli --power package . --main-class scala_bot.main -o scala-bot.jar --assembly --preamble=false
+
       - name: Build native-image
-        run: scala-cli --power package --native-image . --main-class scala_bot.main -o bot
+        run: native-image -march=compatibility --enable-url-protocols=https --gc=G1 -jar ./scala-bot.jar -o bot
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4

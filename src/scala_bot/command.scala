@@ -524,15 +524,16 @@ class BotClient(queue: Queue[IO, String], gameRef: Ref[IO, Option[Game]], config
 							case r: RefSieve => r.takeAction
 							case h: HGroup   => h.takeAction
 
-						suggestedActionIO.flatMap: suggestedAction =>
-							Log.highlight(Console.BLUE, s"Suggested action: ${suggestedAction.fmt(newGame, accordingTo = Some(newGame.me))}")
-							val arg = suggestedAction.json(tableID.get)
+						IO.sleep(2.seconds).whenA(!fastMode).start.flatMap: sleepFiber =>
+							suggestedActionIO.flatMap: action =>
+								Log.highlight(Console.BLUE, s"Suggested action: ${action.fmt(newGame, accordingTo = Some(newGame.me))}")
+								val arg = action.json(tableID.get)
 
-							IO.whenA(newGame.inProgress):
-								IO.whenA(!fastMode):
-									IO.sleep(2.seconds)
-								*>
-								sendCmd("action", ujson.write(arg))
+								if newGame.inProgress then
+									// Race against 2 second timer, then send.
+									sleepFiber.join *> sendCmd("action", ujson.write(arg))
+								else
+									sleepFiber.cancel
 
 					val x = newGame match
 						case r: Reactor  => r.copy(queuedCmds = Nil)
@@ -563,7 +564,7 @@ class BotClient(queue: Queue[IO, String], gameRef: Ref[IO, Option[Game]], config
 						reply(s"Currently playing with ${convention} conventions.${if fastMode then " [fast mode]" else ""}") *> {
 							c match
 								case Convention.HGroup(level) if level >= Level.Context =>
-									reply("Above level 11, the bot plys with minimal context: only stale 1s after early game and explicit focus inversion.")
+									reply("Above level 11, the bot plays with minimal context: only stale 1s after early game and explicit focus inversion.")
 								case _ => IO.unit
 						}
 

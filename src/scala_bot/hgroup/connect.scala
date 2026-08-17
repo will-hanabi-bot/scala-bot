@@ -290,7 +290,7 @@ def findUnknownConnecting(ctx: ClueContext, reacting: Int, id: Identity, connect
 
 	finesse.flatMap(state.deck(_).id()) match
 		case _ if finesse.exists(o => game.future(o).length < game.common.thoughts(o).possible.length) =>
-			val inverted = state.variant.suits(id.suitIndex).suitType.inverted
+			val inverted = state.isInverted(id)
 			val possibleIds = if inverted then state.trashSet else state.playableSet
 			val futureIds = game.future(finesse.get).intersect(possibleIds)
 

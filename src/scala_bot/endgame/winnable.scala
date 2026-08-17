@@ -22,7 +22,7 @@ extension[G <: Game] (solver: EndgameSolver[G])
 				solver.cluelessWinnable(newState, state.nextPlayerIndex(playerTurn), remaining, deadline, depth + 1).isDefined
 
 			def isInv(order: Int) =
-				state.deck(order).id().exists(id => state.variant.suits(id.suitIndex).suitType.inverted)
+				state.deck(order).id().exists(state.isInverted)
 
 			state.hands(playerTurn).collectFirst:
 				case order if state.deck(order).id().exists(state.isPlayable) && actionWinnable(PerformAction.Play(order)) =>
