@@ -168,7 +168,10 @@ case class HGroup(
 	/** Marks DDA if the the next player could be double discarding. */
 	def checkDDA(discarder: Int, id: Identity): HGroup =
 		if level < Level.Stalling || state.numPlayers == 2 || id.suitIndex == -1 || id.rank == -1 || state.isBasicTrash(id) then
-			return this
+			if this.dda.isDefined then
+				return copy(dda = None)
+			else
+				return this
 
 		val nextPlayerIndex = state.nextPlayerIndex(discarder)
 		val nextPlayer = players(nextPlayerIndex)
@@ -236,7 +239,7 @@ case class HGroup(
 
 		state.isBasicTrash(id) ||
 		(state.variant.pinkish && !positional.contains(Positional.Pink) && clue.kind == ClueKind.Rank && clue.value != id.rank) ||
-		(state.variant.inverted && chop && state.isInverted(id) && state.isPlayable(id)) ||
+		(!this.inEndgame && state.variant.inverted && chop && state.isInverted(id) && state.isPlayable(id)) ||
 		orangePlayClueAssumption ||
 		visibleFind(state, common, id, infer = true, excludeOrder = focus).exists: o =>
 			this.me.thoughts(o).matches(id) ||
@@ -779,7 +782,8 @@ object HGroup:
 					.checkDDA(playerIndex, Identity(suitIndex, rank))
 					.withMove(DiscardInterp.None)
 			.when(_.inEarlyGame): g =>
-				val endEarlyGame = !failed &&
+				// Bombing an inverted card on chop ends early game
+				val endEarlyGame = (!failed || (prev.chop(playerIndex).contains(order) && g.state.isInverted(Identity(suitIndex, rank)))) &&
 					!game.state.deck(order).clued && {
 						game.meta(order).status == CardStatus.None ||
 						game.meta(order).status == CardStatus.PermissionToDiscard
@@ -823,6 +827,22 @@ object HGroup:
 						dcStatus = DcStatus.None,
 						dda = None
 					)
+			.when(_.inEarlyGame): g =>
+				// Dragging an inverted card to the discard stacks ends early game even if it plays
+				val endEarlyGame =
+					prev.chop(playerIndex).contains(order) &&
+					g.state.isInverted(Identity(suitIndex, rank)) &&
+					!game.state.deck(order).clued && {
+						game.meta(order).status == CardStatus.None ||
+						game.meta(order).status == CardStatus.PermissionToDiscard
+					}
+
+				// Write staleness if ending early game
+				g.when(_ => endEarlyGame && g.level >= Level.Context): g =>
+					g.state.heldOrders.foldLeft(g): (acc, order) =>
+						acc.withMeta(order): m =>
+							m.copy(staleIds = m.staleIds.union(g.state.playableSet))
+				.copy(inEarlyGame = !endEarlyGame)
 			.elim()
 
 		def takeAction(game: HGroup): IO[PerformAction] =

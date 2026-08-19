@@ -106,7 +106,7 @@ def targetPlay(ctx: ClueContext, targetOrder: Int): (Option[ClueInterp], RefSiev
 
 	val focusPoss =
 		for
-			inf   <- common.thoughts(targetOrder).inferred if visibleFind(state, common, inf, infer = true, excludeOrder = targetOrder).isEmpty
+			inf   <- common.thoughts(targetOrder).inferred if !state.isBasicTrash(inf) && visibleFind(state, common, inf, infer = true, excludeOrder = targetOrder).isEmpty
 			conns <- connect(ctx, targetOrder, inf, unknown)
 		yield
 			FocusPossibility(inf, conns, ClueInterp.Play)

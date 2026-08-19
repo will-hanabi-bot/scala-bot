@@ -420,7 +420,7 @@ extension (p: Player)
 			val (player, sarcastics) = acc
 			link match
 				case Link.Promised(orders, id, target) =>
-					lazy val viableOrders = orders.filter(player.thoughts(_).possible.contains(id))
+					val viableOrders = orders.filter(player.thoughts(_).possible.contains(id))
 
 					val skip = orders.exists(player.thoughts(_).matches(id, symmetric = true)) ||	// At least 1 card matches, promise resolved
 						!player.thoughts(target).possible.exists(_.suitIndex == id.suitIndex) ||
@@ -437,7 +437,7 @@ extension (p: Player)
 						(player.copy(links = Link.Promised(viableOrders, id, target) +: player.links), sarcastics)
 
 				case Link.Sarcastic(orders, id) =>
-					lazy val viableOrders = orders.filter(player.thoughts(_).possible.contains(id))
+					val viableOrders = orders.filter(player.thoughts(_).possible.contains(id))
 
 					// At least 1 card matches, promise resolved
 					if orders.exists(player.thoughts(_).matches(id)) then
@@ -463,7 +463,7 @@ extension (p: Player)
 						ids.exists(!thought.possible.contains(_)) ||
 						!state.heldOrders.contains(o)		// An unknown card was played/discarded hypothetically; in hypo, we would know what it is
 
-					lazy val focused = orders.filter(game.meta(_).focused)
+					val focused = orders.filter(game.meta(_).focused)
 
 					if revealed.nonEmpty then
 						acc

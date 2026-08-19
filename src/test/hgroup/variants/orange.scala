@@ -217,3 +217,33 @@ class Orange extends munit.FunSuite:
 
 		assertEquals(game.lastMove, Some(DiscardInterp.Emergency))
 		hasStatus(game, Bob, 5, CardStatus.ChopMoved)
+
+	test("discarding chop ends early game, even if it plays"):
+		val game = setup(HGroup.atLevel(1), Vector(
+			Vector("xx", "xx", "xx", "xx", "xx"),
+			Vector("r4", "y4", "g4", "b4", "o1")
+		),
+			variant = TestVariant.Orange5,
+			starting = Bob,
+			clueTokens = 2
+		)
+		.tap: g =>
+			assertEquals(g.inEarlyGame, true)
+		.pipe(takeTurn("Bob plays o1", "r5"))
+
+		assertEquals(game.inEarlyGame, false)
+
+	test("discarding chop ends early game, even if it bombs"):
+		val game = setup(HGroup.atLevel(1), Vector(
+			Vector("xx", "xx", "xx", "xx", "xx"),
+			Vector("r4", "y4", "g4", "b4", "o3")
+		),
+			variant = TestVariant.Orange5,
+			starting = Bob,
+			clueTokens = 2
+		)
+		.tap: g =>
+			assertEquals(g.inEarlyGame, true)
+		.pipe(takeTurn("Bob bombs o3", "r5"))
+
+		assertEquals(game.inEarlyGame, false)

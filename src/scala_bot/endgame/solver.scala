@@ -1,7 +1,7 @@
 package scala_bot.endgame
 
 import scala_bot.basics._
-import scala_bot.lib.Frac
+import scala_bot.lib.{FastBitSet, Frac}
 import scala_bot.logger.{Log, Logger, LogLevel}
 import scala_bot.utils._
 
@@ -330,32 +330,37 @@ case class EndgameSolver[G <: Game](
 			Log.info(s"${indent(depth)}trivially winnable!")
 			return trivialWin
 
-		val viableClueless =
+		val cluelessState =
 			for
 				suitIndex <- 0 until state.variant.suits.length
 				rank      <- state.playStacks(suitIndex) + 1 to state.maxRanks(suitIndex)
 			yield
 				Identity(suitIndex, rank)
-		.forall: id =>
-			val order = state.heldOrders.find(game.common.thoughts(_).matches(id, infer = true))
-			order.exists(state.deck(_).id().forall(_.matches(id)))
+		.foldLeftOpt((true, state, FastBitSet.empty)): (acc, id) =>
+			val (_, cluelessState, modified) = acc
 
-		if viableClueless then
-			val cluelessState = state.heldOrders.foldLeft(state): (acc, order) =>
-				val newCard = game.common.thoughts(order).id() match
-					case None => acc.deck(order).copy(suitIndex = -1, rank = -1)
-					case Some(id) => acc.deck(order).copy(suitIndex = id.suitIndex, rank = id.rank)
-				acc.copy(deck = acc.deck.updated(order, newCard))
+			state.heldOrders.find(game.common.thoughts(_).matches(id, infer = true)) match
+				case Some(order) if state.deck(order).id().forall(_.matches(id)) =>
+					val newCard = state.deck(order).copy(suitIndex = id.suitIndex, rank = id.rank)
+					val newState = cluelessState.copy(deck = cluelessState.deck.updated(order, newCard))
+					Right((true, newState, modified.incl(order)))
 
-			val cluelessWin = this.cluelessWinnable(cluelessState, playerTurn, remaining, deadline, depth)
-			if cluelessWin.isDefined then
+				case _ => Left((false, state, FastBitSet.empty))
+		.pipe: (viableClueless, cluelessState, modified) =>
+			Option.when(viableClueless):
+				state.heldOrders.difference(modified).foldLeft(cluelessState): (acc, order) =>
+					acc.copy(deck = acc.deck.updated(order, acc.deck(order).copy(suitIndex = -1, rank = -1)))
+
+		cluelessState.flatMap(this.cluelessWinnable(_, playerTurn, remaining, deadline, depth)) match
+			case Some(cluelessWin) =>
 				Log.info(s"${indent(depth)}clueless winnable!")
 
 				// Replace dummy action
-				if cluelessWin.get == PerformAction.Rank(0, 0) then
+				if cluelessWin == PerformAction.Rank(0, 0) then
 					return Right((ops.findAllClues(game, playerTurn).take(1), Frac.one))
 				else
-					return Right((List(cluelessWin.get), Frac.one))
+					return Right((List(cluelessWin), Frac.one))
+			case _ => ()
 
 		val bottomDecked = remaining.nonEmpty && remaining.keys.forall(id => state.isCritical(id) && id.rank < state.maxRanks(id.suitIndex))
 

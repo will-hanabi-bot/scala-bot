@@ -20,7 +20,10 @@ def evaluateCM(ctx: ClueContext, chopMoved: Seq[Int]): ClueInterp =
 	val state = game.state
 	val ClueAction(giver, target, list, clue) = action
 
-	if chopMoved.forall(state.deck(_).id().exists(id => state.isBasicTrash(id) || id.rank == 1)) then
+	// Chop is a playable inverted card
+	if state.deck(chopMoved.min).id().exists(id => state.isInverted(id) && state.isPlayable(id)) then
+		ClueInterp.Mistake
+	else if chopMoved.forall(state.deck(_).id().exists(id => state.isBasicTrash(id) || id.rank == 1)) then
 		if chopMoved.forall(game.common.orderKt(game, _)) then
 			ClueInterp.Useless
 		else

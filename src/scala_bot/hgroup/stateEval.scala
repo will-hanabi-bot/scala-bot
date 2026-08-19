@@ -210,6 +210,7 @@ def advance(orig: HGroup, game: HGroup, offset: Int): Double =
 				val canSdcm =
 					state.clueTokens < 8 &&
 					game.dcStatus == DcStatus.None &&
+					!game.inEndgame &&
 					earlyGameClue.isEmpty &&
 					!game.mustClue(playerIndex)
 
@@ -412,7 +413,13 @@ def _evalAction(game: HGroup, action: Action): Double =
 			if hypoGame.lastMove == Some(DiscardInterp.Mistake) then
 				-100.0
 			else
-				val best = (if game.meta(order).status == CardStatus.PermissionToDiscard then 0 else -0.5) + advance(game, hypoGame, 1)
+				val dcValue =
+					if game.meta(order).status == CardStatus.PermissionToDiscard && state.score >= state.variant.suits.length then
+						0
+					else
+						-0.5
+
+				val best = dcValue + advance(game, hypoGame, 1)
 				Log.info(f"${action.fmt(state)}%s: $best%.2f (${hypoGame.lastMove.get}%s)")
 				best
 
@@ -440,7 +447,7 @@ def _evalAction(game: HGroup, action: Action): Double =
 		value
 
 def evalState(state: State, inEndgame: Boolean, offset: Int): Double =
-	// The first 2 * (# suits) pts are worth 1.5.
+	// The first 2 * (# suits) pts are worth 1.25.
 	val scoreVal: Double =
 		if inEndgame then
 			2 * state.score
@@ -513,8 +520,8 @@ def evalGame(orig: HGroup, game: HGroup, offset: Int): Double =
 			id.rank match
 				case 1 => -math.pow(state.discardStacks(id.suitIndex)(id.rank - 1).length, 2)
 				case 2 => -6
-				case 3 => -1.5
-				case _ => -0.5
+				case 3 => if state.numPlayers == 2 && orig.state.score < 2 * state.variant.suits.length then -1.0 else -1.5
+				case _ => if orig.state.score < 2 * state.variant.suits.length then -0.5 else -0.75
 
 	val touchVal = 0.5 * state.heldOrders.summing: o =>
 		if !state.deck(o).clued && (game.meta(o).status == CardStatus.None || game.meta(o).status == CardStatus.PermissionToDiscard) then
@@ -533,7 +540,7 @@ def evalGame(orig: HGroup, game: HGroup, offset: Int): Double =
 		if !game.players(playerIndex).thinksLocked(game, playerIndex) then 0 else
 			state.clueTokens match
 				case c if c > 4 => -1
-				case _ => -1.9
+				case _          => -1.9
 
 	val endgamePenalty = if orig.state.endgameTurns.isEmpty then 0 else state.endgameTurns.fold(0): turns =>
 		val finalScore = (0 until turns).foldLeft(state.playStacks) { (stacks, i) =>

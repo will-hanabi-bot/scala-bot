@@ -378,8 +378,13 @@ def findUnknownConnecting(ctx: ClueContext, reacting: Int, id: Identity, connect
 					val uncertainFinesse = !possiblyBluff &&
 						state.hands(giver).exists(o => state.deck(o).clued && game.players(giver).thoughts(o).inferred.contains(id))
 
+					val orangeFib = state.isInverted(id) && !state.isInverted(finesseId)
+
 					if uncertainFinesse then
 						Log.warn(s"disallowed hidden finesse on ${state.names(reacting)}, ${state.logId(id)} could be duplicated in giver's hand")
+						None
+					else if orangeFib then
+						Log.warn("disallowed bluff when the focus is an orange card!")
 						None
 					else
 						Some(FinesseConn(reacting, finesse.get, List(finesseId), fKind = if possiblyBluff then FinesseKind.Bluff else FinesseKind.Hidden))

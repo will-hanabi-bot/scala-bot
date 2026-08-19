@@ -136,11 +136,11 @@ class Sarcastic extends munit.FunSuite:
 		.pipe(takeTurn("Bob clues blue to Alice (slot 1)"))
 		.pipe(takeTurn("Alice discards b2 (slot 1)"))
 
-		assert(List(1, 2, 4).forall { i =>
+		assert(List(1, 2, 4).forall: i =>
 			val order = game.state.hands(Bob.ordinal)(i)
 			val inferred = game.players(Bob.ordinal).thoughts(order).inferred
 			inferred.contains(game.state.expandShort("b2"))
-		})
+		)
 
 	test("preserves info lock after a sarcastic discard"):
 		val game = setup(HGroup.atLevel(3), Vector(

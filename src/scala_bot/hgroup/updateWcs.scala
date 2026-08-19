@@ -173,7 +173,7 @@ def refreshWCs(prev: HGroup, game: HGroup, action: Action, beforeClueInterp: Boo
 							)
 					case _ => acc
 				case _ =>
-					val shared = retainWCs.exists: wc =>
+					val shared = !conn.matchesP { case f: FinesseConn => f.isBluff } && retainWCs.exists: wc =>
 						(wc.focus == conn.order && conn.ids.forall(_ == wc.inference)) ||
 						(wc.connections.exists(c => c.order == conn.order && c.ids.length == conn.ids.length && c.ids.forall(conn.ids.contains)))
 

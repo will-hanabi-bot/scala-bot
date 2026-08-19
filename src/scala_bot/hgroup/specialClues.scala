@@ -59,7 +59,7 @@ def colourSave(prev: HGroup, action: ClueAction, id: Identity, focus: Int): Bool
 	if suit.suitType.brownish && prev.common.thinksLoaded(prev, target) then
 		return false
 
-	if "Dark Rainbow|Dark Prism".r.matches(suit.name) then
+	if "Dark Rainbow|Dark Prism".r.unanchored.matches(suit.name) then
 		val completed = prev.common.hypoStacks(suitIndex) == state.maxRanks(suitIndex)
 		val savedCrit = list.exists: o =>
 			val card = state.deck(o)
@@ -99,7 +99,7 @@ def rankSave(prev: HGroup, action: ClueAction, id: Identity, focus: Int): Boolea
 
 	// Don't consider save on k3,k4 (or dark i3,i4) with rank
 	// TODO: Florrat Save
-	if "Black|Dark Pink".r.matches(state.variant.suits(suitIndex).name) && (rank == 3 || rank == 4) then
+	if "Black|Dark Pink".r.unanchored.matches(state.variant.suits(suitIndex).name) && (rank == 3 || rank == 4) then
 		return false
 
 	val loaded34 = prev.common.thinksLoaded(prev, target) &&

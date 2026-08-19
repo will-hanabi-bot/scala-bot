@@ -67,13 +67,21 @@ def connect(ctx: ClueContext, targetOrder: Int, id: Identity, unknown: Boolean, 
 			val nextId = Identity(suitIndex, nextRank)
 			val connected = FastBitSet.from(connections.map(_.order)).incl(targetOrder)
 			val looksDirect = unknown && playerIndex == action.target
-			val own = findOwn && playerIndex == state.ourPlayerIndex
-			val connecting = findConnecting(ctx, nextId, playerIndex, connected, looksDirect, findOwn = own, alwaysConnect = alwaysConnect, preferF = remF > 0)
+			val connecting = findConnecting(ctx, nextId, playerIndex, connected, looksDirect, alwaysConnect = alwaysConnect, preferF = remF > 0)
 
 			val nextPlayerIndex = state.nextPlayerIndex(playerIndex)
 
 			connecting match
-				case None if (playerIndex == action.target && unknown) || (turnsSincePlay == state.numPlayers) => None
+				case None if (playerIndex == action.target && unknown) || (turnsSincePlay == state.numPlayers) =>
+					if !findOwn then None else
+						val direct = unknown && state.ourPlayerIndex == action.target
+						val connectOwn = findConnecting(ctx, nextId, state.ourPlayerIndex, connected, direct, findOwn = true, alwaysConnect = alwaysConnect, preferF = remF > 0)
+
+						connectOwn match
+							case None => None
+							case Some(conn) =>
+								val newRemF = if conn.isInstanceOf[FinesseConn] then remF - 1 else remF
+								loop(nextRank + 1, state.nextPlayerIndex(state.ourPlayerIndex), conn +: connections, 1, alwaysConnect, newRemF)
 				case None =>
 					loop(nextRank, nextPlayerIndex, connections, turnsSincePlay + 1, alwaysConnect, remF)
 				case Some(conn) =>

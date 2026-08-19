@@ -222,7 +222,7 @@ def visibleFind(
 	cond: (playerIndex: Int, order: Int) => Boolean = (_, _) => true
 ) =
 	state.hands.zipWithIndex.flatMap: (hand, playerIndex) =>
-		hand.filter { order =>
+		hand.filter: order =>
 			order != excludeOrder &&
 			player.thoughts(order).matches(
 				id,
@@ -235,7 +235,6 @@ def visibleFind(
 				orders.contains(excludeOrder) && orders.contains(order)
 			&&
 			cond(playerIndex, order)
-		}
 
 /** Returns all player indices between the start (inclusive) and end (exclusive) in play order. */
 def playersUntil(numPlayers: Int, start: Int, `end`: Int) =

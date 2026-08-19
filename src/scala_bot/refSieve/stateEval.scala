@@ -314,8 +314,10 @@ def evalState(state: State): Double =
 		case 3 => -100
 		case _ => 0
 
-	Log.info(s"state eval: score: $scoreVal, clues: $clueVal, dc crit: $dcCritVal, strikes: $strikesVal")
-	scoreVal + clueVal + dcCritVal + strikesVal
+	val paceVal = if state.pace < 0 then -10 else 0
+
+	Log.info(s"state eval: score: $scoreVal, clues: $clueVal, dc crit: $dcCritVal, strikes: $strikesVal, pace: $paceVal")
+	scoreVal + clueVal + dcCritVal + strikesVal + paceVal
 
 def evalGame(orig: RefSieve, game: RefSieve): Double =
 	val state = game.state

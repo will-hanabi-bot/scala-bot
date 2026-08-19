@@ -133,7 +133,7 @@ def interpret5cm(ctx: ClueContext, log: Boolean = true): Option[Vector[Int]] =
 	if not5cm then
 		return None
 
-	list.filter(o => o > chop.get && !prev.state.deck(o).clued).minOption.flatMap { oldest5 =>
+	list.filter(o => o > chop.get && !prev.state.deck(o).clued).minOption.flatMap: oldest5 =>
 		val distance = prev.chopDistance(target, oldest5)
 
 		if distance != 1 then
@@ -151,7 +151,6 @@ def interpret5cm(ctx: ClueContext, log: Boolean = true): Option[Vector[Int]] =
 		else
 			if log then Log.info(s"5cm, saving ${state.logId(chop.get)} ${chop.get}")
 			Some(Vector(chop.get))
-	}
 
 def checkOcm(prev: HGroup, action: PlayAction | DiscardAction): Option[List[Int]] =
 	val state = prev.state
@@ -274,9 +273,9 @@ def performCM(game: HGroup, cmOrders: Seq[Int]) =
 	val (newCommon, newMeta) = cmOrders.foldLeft((game.common, game.meta)) { (acc, order) =>
 		val (common, meta) = acc
 
-		(common.withThought(order) { t =>
+		(common.withThought(order): t =>
 			t.copy(inferred = t.inferred.filter(!common.isTrash(game, _, order)))
-		},
+		,
 			meta.updated(order, meta(order).copy(status = CardStatus.ChopMoved))
 		)
 	}

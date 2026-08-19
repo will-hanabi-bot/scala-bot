@@ -1,6 +1,6 @@
 package scala_bot
 
-val BOT_VERSION = "v1.1.1 (scala-bot)"
+val BOT_VERSION = "v1.1.2 (scala-bot)"
 val MAX_H_LEVEL = 12
 
 enum Convention:
