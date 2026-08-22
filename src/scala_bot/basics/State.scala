@@ -225,7 +225,7 @@ case class State(
 		s"[${conns.map(logConn).mkString(" -> ")}$terminator]"
 
 	inline def isInverted(id: Identity): Boolean =
-		variant.suits(id.suitIndex).suitType.inverted
+		id.suitIndex != -1 && variant.suits(id.suitIndex).suitType.inverted
 
 	inline def isInverted(order: Int): Boolean =
 		deck(order).id().exists(isInverted)

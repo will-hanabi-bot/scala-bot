@@ -155,7 +155,7 @@ case class HGroup(
 		if playables.contains(order) then
 			state.isPlayable(id)
 		else if this.isTouched(order) && !(if state.ourHand.contains(order) then this.me else this.common).thoughts(order).reset then
-			val good = this.me.thoughts(order).possible.difference(state.trashSet)
+			val good = this.me.thoughts(order).infoLock.getOrElse(this.me.thoughts(order).possible).difference(state.trashSet)
 			good.isEmpty || good.contains(id)
 		else if !state.canClue && state.isCritical(id) && chop(state.ourPlayerIndex).contains(order) then
 			false
@@ -174,13 +174,12 @@ case class HGroup(
 				return this
 
 		val nextPlayerIndex = state.nextPlayerIndex(discarder)
-		val nextPlayer = players(nextPlayerIndex)
 
 		val dda =
 			state.isCritical(id) &&
 			chop(nextPlayerIndex).exists: chop =>
-				nextPlayer.thoughts(chop).possible.contains(id) &&
-				!visibleFind(state, nextPlayer, id, infer = true).exists(this.isTouched)
+				this.common.thoughts(chop).possible.contains(id) &&
+				!visibleFind(state, this.common, id, infer = true).exists(this.isTouched)
 
 		if dda then copy(dda = Some(id)) else this
 
@@ -235,7 +234,7 @@ case class HGroup(
 			state.variant.rainbowish &&
 			clue.kind == ClueKind.Colour &&
 			state.variant.colourableSuits(clue.value).suitType.inverted &&
-			state.variant.suits(id.suitIndex).suitType.rainbowish
+			(state.variant.suits(id.suitIndex).suitType.rainbowish || (state.variant.rainbowS && state.variant.specialRank.contains(id.rank)))
 
 		state.isBasicTrash(id) ||
 		(state.variant.pinkish && !positional.contains(Positional.Pink) && clue.kind == ClueKind.Rank && clue.value != id.rank) ||
@@ -398,16 +397,17 @@ case class HGroup(
 			reclue
 
 		if brownTempo then
-			val focus =
-				val sortedBrowns = list.filter(o => prev.knownAs(o, "Brown".r.unanchored)).sorted
+			val sortedBrowns = list.filter(o => prev.knownAs(o, "Brown".r.unanchored)).sorted
 
-				if this.level >= Level.TempoClues then
-					sortedBrowns.find(o => !(prev.meta(o).focused && prev.common.hypoPlays.contains(o)))
-						.getOrElse(sortedBrowns.head)
-				else
-					sortedBrowns.head
+			if sortedBrowns.nonEmpty then
+				val focus =
+					if this.level >= Level.TempoClues then
+						sortedBrowns.find(o => !(prev.meta(o).focused && prev.common.hypoPlays.contains(o)))
+							.getOrElse(sortedBrowns.head)
+					else
+						sortedBrowns.head
 
-			return FocusResult(focus, positional = Some(Positional.Brown))
+				return FocusResult(focus, positional = Some(Positional.Brown))
 
 		if clue.isEq(ClueKind.Rank, 1) && newlyClued.length > 1 then
 			// Custom implementation of ordered1s
@@ -645,6 +645,17 @@ case class HGroup(
 	def importantAction(playerIndex: Int) =
 		importantFinesse(playerIndex) || savedCtx(playerIndex).fold(false)(urgentSave)
 
+	def writeExtraCMs(prev: HGroup, playerIndex: Int, dcOrder: Int) =
+		prev.chop(playerIndex) match
+			case Some(chop) if this.level >= Level.BasicCM && dcOrder > chop && !prev.state.deck(dcOrder).clued && prev.meta(dcOrder).status == CardStatus.None =>
+				val dcIndex = prev.state.hands(playerIndex).indexOf(dcOrder)
+				val chopIndex = prev.state.hands(playerIndex).indexOf(chop)
+				val cms = prev.state.hands(playerIndex).slice(dcIndex + 1, chopIndex + 1)
+
+				Log.info(s"writing extra chop moves on $cms!")
+				cms.foldLeft(this)(_.withMeta(_)(_.copy(status = CardStatus.ChopMoved)))
+
+			case _ => this
 object HGroup:
 	private def init(
 		tableID: Int,
@@ -741,13 +752,18 @@ object HGroup:
 
 					refreshWCs(prev, updatedPre, action)
 						.cond(_.waiting.count(wc => !wc.symmetric && !wc.ambiguousSelf) < pre.waiting.count(wc => !wc.symmetric && !wc.ambiguousSelf) && !game.noRecurse) { g =>
-							Log.highlight(Console.GREEN, "----- REINTERPRETING CLUE -----")
-							val res = interpClue(ClueContext(prev, g.copy(moveHistory = g.moveHistory.dropRight(1)), action))
-							Log.highlight(Console.GREEN, "----- DONE REINTERPRETING -----")
-							res
+							if g.hypothetical && action.giver == game.state.ourPlayerIndex then
+								Log.warn("lost wc! mistake")
+								g.withMove(ClueInterp.Mistake, overwrite = true)
+							else
+								Log.highlight(Console.GREEN, "----- REINTERPRETING CLUE -----")
+								val res = interpClue(ClueContext(prev, g.copy(moveHistory = g.moveHistory.dropRight(1)), action))
+								Log.highlight(Console.GREEN, "----- DONE REINTERPRETING -----")
+								res
 						} {
-							Log.highlight(Console.GREEN, s"refreshing interpreted!")
-							_ => refreshWCs(prev, interpreted, action)
+							_ =>
+								Log.highlight(Console.GREEN, s"refreshing interpreted!")
+								refreshWCs(prev, interpreted, action)
 						}
 						.pipe: g =>
 							g.copy(
@@ -778,9 +794,11 @@ object HGroup:
 			.orElse(interpretSdcm(ctx))
 			.orElse(interpretPosDc(ctx))
 			.getOrElse:
-				refreshedGame.copy(dcStatus = DcStatus.None)
-					.checkDDA(playerIndex, Identity(suitIndex, rank))
-					.withMove(DiscardInterp.None)
+				refreshedGame.when(g => !failed ^ g.state.isInverted(Identity(suitIndex, rank))): g =>
+					g.writeExtraCMs(prev, playerIndex, order)
+				.copy(dcStatus = DcStatus.None)
+				.checkDDA(playerIndex, Identity(suitIndex, rank))
+				.withMove(DiscardInterp.None)
 			.when(_.inEarlyGame): g =>
 				// Bombing an inverted card on chop ends early game
 				val endEarlyGame = (!failed || (prev.chop(playerIndex).contains(order) && g.state.isInverted(Identity(suitIndex, rank)))) &&
@@ -827,6 +845,8 @@ object HGroup:
 						dcStatus = DcStatus.None,
 						dda = None
 					)
+			.when(_.state.isInverted(Identity(suitIndex, rank))):
+				_.writeExtraCMs(prev, playerIndex, order)
 			.when(_.inEarlyGame): g =>
 				// Dragging an inverted card to the discard stacks ends early game even if it plays
 				val endEarlyGame =
@@ -919,7 +939,7 @@ object HGroup:
 								chop.isDefined &&
 								!cantDiscard &&
 								game.dcStatus == DcStatus.None &&
-								game.dda.isEmpty &&
+								!game.dda.exists(id => game.me.thoughts(chop.get).possible.contains(id) && visibleFind(state, game.me, id, infer = true).isEmpty) &&
 								!me.thinksLocked(game, state.ourPlayerIndex) &&
 								{
 									((!state.canClue || allPlays.isEmpty) && noKtToDiscard) ||

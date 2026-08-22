@@ -493,21 +493,23 @@ def interpretPosDc(ctx: DiscardContext): Option[HGroup] =
 			targets.foldRight((game, List.empty[Connection])):
 				case ((reacting, poss), (g, conns)) =>
 					val order = state.hands(reacting)(slot - 1)
+					val newInferred = g.common.thoughts(order).inferred.intersect(poss)
 					val newGame = g.withThought(order): t =>
 						t.copy(
 							oldInferred = t.inferred.toOpt,
-							inferred = t.inferred.intersect(poss),
+							inferred = newInferred,
 						)
 					.withMeta(order): m =>
 						m.copy(
-							status = CardStatus.CalledToPlay,
+							// If it can only be inverted, pretend this is a GD so we drag to the discard stacks.
+							status = if newInferred.forall(state.isInverted) then CardStatus.GDInverted else CardStatus.CalledToPlay,
 							focused = true
 						)
 
 					val conn = PositionalConn(
 						reacting,
 						order,
-						newGame.common.thoughts(order).inferred.toList,
+						newInferred.toList,
 						ambiguousOwn =
 							if targets.exists(_._1 == state.ourPlayerIndex) || playerIndex == state.ourPlayerIndex then None else
 								state.ourHand.lift(slot - 1).map:

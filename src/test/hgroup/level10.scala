@@ -4,7 +4,7 @@ import cats.effect.unsafe.implicits.global
 
 import scala_bot.basics._
 import scala_bot.test.{fullyKnown, hasInfs, hasStatus, Player, preClue, setup, takeTurn}, Player._
-import scala_bot.hgroup.{_evalAction, HGroup}
+import scala_bot.hgroup.{_evalAction, FStatus, HGroup}
 
 import scala_bot.utils.{pipe, tap}
 import scala_bot.logger.{Logger, LogLevel}
@@ -505,3 +505,28 @@ class CompositionFinesses extends munit.FunSuite:
 
 		hasInfs(game, None, Alice, 2, Vector("b2"))
 		hasInfs(game, None, Alice, 3, Vector("b3"))
+
+	test("doesn't discard a possibly-on certain finesse"):
+		val game = setup(HGroup.atLevel(10), Vector(
+			Vector("xx", "xx", "xx", "xx", "xx"),
+			Vector("p1", "y4", "g4", "b4", "p4"),
+			Vector("r4", "y4", "g4", "b4", "p2")
+		),
+			starting = Cathy,
+			discarded = Vector("r3"),
+			init = preClue(Cathy, 5, Seq("2"))
+		)
+		.pipe(takeTurn("Cathy clues 3 to Alice (slot 5)"))	// either r3 save, or p123 reverse+self certain finesse
+		.tap: g =>
+			assert(!g.xmeta(g.state.hands(Alice.ordinal)(0)).idUncertain)
+			assert(g.xmeta(g.state.hands(Alice.ordinal)(0)).fStatus.contains(FStatus.PossiblyOn(0)))
+		.pipe(takeTurn("Alice discards r4 (slot 4)"))
+
+		val noFGame = takeTurn("Bob clues green to Alice (slot 1)")(game)
+		hasStatus(noFGame, Alice, 2, CardStatus.None)
+		hasInfs(noFGame, None, Alice, 5, Vector("r3"))
+
+		val fGame = takeTurn("Bob plays p1", "g1")(game)
+		hasStatus(fGame, Alice, 2, CardStatus.Finessed)
+		assert(fGame.xmeta(fGame.state.hands(Alice.ordinal)(1)).fStatus.isEmpty)
+		hasInfs(fGame, None, Alice, 5, Vector("p3"))

@@ -143,17 +143,30 @@ def refreshWCs(prev: HGroup, game: HGroup, action: Action, beforeClueInterp: Boo
 				inferred = newInferred,
 				infoLock = newInferred.toOpt
 			)
-		.withXMeta(order)(_.copy(fStatus = Nil))
+		.when(_.xmeta(order).fStatus.nonEmpty):
+			_.withXMeta(order)(_.copy(fStatus = Nil))
 	}
 	.pipe: g =>
 		demos.foldLeft(g): (acc, wc) =>
-			// Demonstrating a hidden connection means they must play all the hidden cards + the actual one
-			if wc.connections(0).hidden then
+			acc.when(_ => wc.connections(0).hidden): ac =>
+				// Demonstrating a hidden connection means they must play all the hidden cards + the actual one
 				val nonHiddenIndex = wc.connections.indexWhere(!_.hidden)
-				(1 to nonHiddenIndex).foldLeft(acc): (a, i) =>
+				(1 to nonHiddenIndex).foldLeft(ac): (a, i) =>
 					a.withXMeta(wc.connections(i).order)(_.copy(fStatus = Nil))
-			else
-				acc
+			.pipe: acc =>
+				// Check if PossiblyOn status needs to be removed
+				wc.connections.foldLeft(acc): (ac, conn) =>
+					if ac.xmeta(conn.order).fStatus.isEmpty then ac else
+						val stillMaybeFinessed = retainWCs.exists: w =>
+							w.focus == wc.focus &&
+							w.turn == wc.turn &&
+							!w.connections.existsM:
+								case f: FinesseConn => f.order == conn.order
+
+						if stillMaybeFinessed then ac else
+							Log.highlight(Console.CYAN, s"removing PossiblyOn from ${conn.order} after demonstration!")
+							ac.withXMeta(conn.order)(x => x.copy(fStatus = x.fStatus.filterNot(_.isInstanceOf[FStatus.PossiblyOn])))
+
 	.pipe: g =>
 		val allRemove = toRemove ++ nonDemoedWCs.filterNot(wc => wc.symmetric || wc.ambiguousSelf).flatMap(_.connections)
 		allRemove.foldLeft(g): (acc, conn) =>

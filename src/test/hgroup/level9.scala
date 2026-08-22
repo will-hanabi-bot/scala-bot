@@ -385,9 +385,13 @@ class DoubleDiscardAvoidance extends munit.FunSuite:
 			clueTokens = 0
 		)
 		.pipe(takeTurn("Donald discards r3", "p3"))
+		.tap: g =>
+			// Since Alice can see the other copy of r3, she should discard.
+			assertEquals(g.takeAction.unsafeRunSync(), PerformAction.Discard(g.state.hands(Alice.ordinal)(3)))
+		.pipe(takeTurn("Alice clues 5 to Bob"))
 
-		// Since Alice can see the other copy of r3, she should discard.
-		assertEquals(game.takeAction.unsafeRunSync(), PerformAction.Discard(game.state.hands(Alice.ordinal)(3)))
+		// Alice can't stall when not in DDA.
+		assertEquals(game.lastMove, Some(ClueInterp.Mistake))
 
 	test("doesn't trigger dda from a sarcastic discard"):
 		val game = setup(HGroup.atLevel(9), Vector(
@@ -405,6 +409,69 @@ class DoubleDiscardAvoidance extends munit.FunSuite:
 		.pipe(takeTurn("Donald discards b1", "p3"))
 
 		assertEquals(game.dda, None)
+
+	test("doesn't try to finesse a player who assumes dda"):
+		val game = setup(HGroup.atLevel(9), Vector(
+			Vector("xx", "xx", "xx", "xx", "xx"),
+			Vector("r1", "y4", "g4", "b4", "p4"),
+			Vector("r2", "y4", "g4", "b4", "p4")
+		),
+			starting = Cathy,
+			clueTokens = 0,
+			init = preClue(Cathy, 1, Seq("2"))
+		)
+		.pipe(takeTurn("Cathy discards p4", "p3"))
+		.pipe(takeTurn("Alice clues red to Cathy"))
+
+		// Bob will think this is a fill-in stall, so it won't work.
+		assertEquals(game.lastMove, Some(ClueInterp.Mistake))
+
+	test("finesses a player who knows it's not dda"):
+		val game = setup(HGroup.atLevel(9), Vector(
+			Vector("xx", "xx", "xx", "xx", "xx"),
+			Vector("r1", "y4", "g4", "b4", "b4"),
+			Vector("r2", "y4", "g4", "p4", "p4")
+		),
+			starting = Cathy,
+			clueTokens = 0,
+			init = preClue(Cathy, 1, Seq("2"))
+		)
+		.pipe(takeTurn("Cathy discards p4 (slot 5)", "p3"))
+		.pipe(takeTurn("Alice clues red to Cathy"))
+
+		// Bob knows we aren't in DDA, so he will react.
+		hasStatus(game, Bob, 1, CardStatus.Finessed)
+		assertEquals(game.lastMove, Some(ClueInterp.Play))
+
+	test("interprets an asymmetric 5cm"):
+		val game = setup(HGroup.atLevel(9), Vector(
+			Vector("xx", "xx", "xx", "xx", "xx"),
+			Vector("r4", "y4", "g4", "b4", "b4"),
+			Vector("r4", "y4", "g4", "p4", "p4")
+		),
+			starting = Bob,
+			clueTokens = 1
+		)
+		.pipe(takeTurn("Bob discards b4 (slot 5)", "p3"))
+		.pipe(takeTurn("Cathy clues 5 to Alice (slot 4)"))
+
+		// Because Cathy is not in DDA, we should discard slot 3.
+		hasStatus(game, Alice, 5, CardStatus.ChopMoved)
+
+	test("doesn't give a bad asymmetric 5cm"):
+		val game = setup(HGroup.atLevel(9), Vector(
+			Vector("xx", "xx", "xx", "xx", "xx"),
+			Vector("r4", "p4", "g4", "b5", "b4"),
+			Vector("r4", "y4", "g4", "y4", "p4")
+		),
+			starting = Cathy,
+			clueTokens = 1
+		)
+		.pipe(takeTurn("Cathy discards p4 (slot 5)", "p3"))
+		.pipe(takeTurn("Alice clues 5 to Bob"))
+
+		// Bob doesn't know that we aren't in DDA, so this 5cm doesn't work.
+		hasStatus(game, Bob, 5, CardStatus.PermissionToDiscard)
 
 class Anxiety extends munit.FunSuite:
 	override def beforeAll() = Logger.setLevel(LogLevel.Off)

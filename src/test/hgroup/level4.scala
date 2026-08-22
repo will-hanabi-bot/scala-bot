@@ -313,3 +313,16 @@ class GeneralCM extends munit.FunSuite:
 		hasInfs(game, None, Alice, 2, Vector("r5"))
 
 		assertEquals(game.takeAction.unsafeRunSync(), PerformAction.Play(game.state.hands(Alice.ordinal)(1)))
+
+	test("writes an accidental chop move"):
+		val game = setup(HGroup.atLevel(4), Vector(
+			Vector("xx", "xx", "xx", "xx", "xx"),
+			Vector("r4", "y4", "g4", "b4", "p4"),
+			Vector("r4", "y4", "g4", "b4", "p4")
+		),
+			starting = Cathy,
+			clueTokens = 2
+		)
+		.pipe(takeTurn("Cathy discards b4", "p3"))
+
+		hasStatus(game, Cathy, 5, CardStatus.ChopMoved)

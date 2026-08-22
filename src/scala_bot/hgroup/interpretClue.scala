@@ -109,198 +109,23 @@ def checkHFix(ctx: ClueContext): Option[HGroup] =
 
 def interpClue(ctx: ClueContext): HGroup =
 	val ClueContext(prev, game, action, _) = ctx
-	val (common, state) = (game.common, game.state)
 	val ClueAction(giver, target, list, clue) = action
 
 	if game.state.options.emptyClues && list.length == 0 then
 		Log.highlight(Console.YELLOW, "empty clue!")
 		return game.withMove(ClueInterp.Useless)
 
+	interpSpecialClue(ctx) match
+		case SpecialClueResult.SpecialClue(newGame) => return newGame
+		case SpecialClueResult.NoInterp(interp, thinksStall) =>
+			interpNormalClue(ctx, interp, thinksStall)
+
+def interpNormalClue(ctx: ClueContext, symmetricInterp: SymmetricInterp, thinksStall: FastBitSet) =
+	val ClueContext(prev, game, action, _) = ctx
+	val (common, state) = (game.common, game.state)
+	val ClueAction(giver, target, list, clue) = action
+
 	val FocusResult(focus, chop, positional) = ctx.focusResult
-
-	checkHFix(ctx) match
-		case Some(newGame) => return newGame
-		case _ => ()
-
-	val stall = stallingSituation(ctx)
-	val thinksStall = stall.map(_._2).getOrElse(FastBitSet.empty)
-
-	if stall.isDefined then
-		val (interp, thinksStall) = stall.get
-
-		if thinksStall.size > 0 && thinksStall.size < state.numPlayers then
-			Log.warn(s"asymmetric! only ${thinksStall.map(state.names)} think stall")
-
-			if game.hypothetical || giver == state.ourPlayerIndex then
-				return game.withMove(ClueInterp.Mistake)
-
-		else if thinksStall.size == state.numPlayers then
-			Log.info(s"stalling situation $interp")
-
-			return game
-				.when(_.inEarlyGame && interp == StallInterp.Stall5):
-					_.copy(stalled5 = true)
-				// Pink promise on stalls
-				.when(_.state.variant.pinkish && clue.kind == ClueKind.Rank):
-					_.withThought(focus)(t => t.copy(inferred = t.inferred.filter(_.rank == clue.value)))
-				.copy(stallInterp = Some(interp))
-				.withMove(ClueInterp.Stall)
-
-	val distributionIds = distributionClue(prev, game, action, focus)
-
-	if distributionIds.isDefined then
-		Log.info(s"distribution clue!")
-
-		return game
-			.withThought(focus): t =>
-				t.copy(
-					inferred = t.possible.intersect(distributionIds.get),
-					infoLock = t.possible.intersect(distributionIds.get).toOpt,
-					reset = false
-				)
-			.withMeta(focus)(_.copy(focused = true))
-			.withMove(ClueInterp.Distribution)
-
-	if game.level >= Level.BasicCM then
-		interpretTcm(ctx) match
-			case None => ()
-			case Some(tcm) =>
-				if game.inEndgame then
-					return game.withMove(ClueInterp.Useless)
-				else
-					return handleTcm(ctx, tcm, stall.isEmpty || thinksStall.isEmpty).pipe: g =>
-						g.copy(
-							savedCtx = g.savedCtx.updated(giver, Some(ctx.copy(
-								prev = prev.copy(savedCtx = Vector.fill(state.numPlayers)(None)),
-								game = game.copy(savedCtx = Vector.fill(state.numPlayers)(None))
-							)
-						)))
-
-		interpret5cm(ctx) match
-			case None => ()
-			case Some(cm5) =>
-				if game.inEndgame then
-					return game.withMove(ClueInterp.Useless)
-				else
-					return performCM(game, cm5).withMove(evaluateCM(ctx, cm5)).pipe: g =>
-						g.copy(
-							savedCtx = g.savedCtx.updated(giver, Some(ctx.copy(
-								prev = prev.copy(savedCtx = Vector.fill(state.numPlayers)(None)),
-								game = game.copy(savedCtx = Vector.fill(state.numPlayers)(None))
-							)
-						)))
-
-	val pinkTrashFix = state.variant.pinkish &&
-		!positional.contains(Positional.Pink) && clue.kind == ClueKind.Rank &&
-		list.forall(o => prev.state.deck(o).clued && game.knownAs(o, PINKISH)) &&
-		state.variant.suits.zipWithIndex.forall: (suit, suitIndex) =>
-			!suit.suitType.pinkish ||
-			common.isTrash(game, Identity(suitIndex, clue.value), focus)
-		&&
-		game.common.thoughts(focus).possible.difference(state.criticalSet).exists:
-			common.isTrash(game, _, focus)
-
-	if pinkTrashFix then
-		Log.info(s"pink trash fix!")
-
-		if prev.meta(focus).trash then
-			Log.warn("nonsensical burn!")
-			return game.withMove(ClueInterp.Useless)
-
-		return game
-			.withThought(focus): t =>
-				val newInferred = t.possible.filter(common.isTrash(game, _, focus))
-				t.copy(
-					inferred = newInferred,
-					infoLock = newInferred.toOpt
-				)
-			.withMeta(focus): m =>
-				m.copy(trash = m.trash ||
-					state.variant.suits.zipWithIndex.forall: (suit, suitIndex) =>
-						!suit.suitType.pinkish ||
-						game.state.isBasicTrash(Identity(suitIndex, clue.value))
-				)
-			.withMove:
-				if giver == state.ourPlayerIndex && !game.me.isTrash(game, state.deck(focus).id().get, focus) then
-					ClueInterp.Mistake
-				else
-					ClueInterp.Fix
-
-	val specialOrangeSituation = state.variant.inverted &&
-		clue.kind == ClueKind.Colour &&
-		state.variant.colourableSuits(clue.value).suitType.inverted
-
-	if specialOrangeSituation then
-		val chopFix = chop && state.deck(focus).id().exists(id => state.isBasicTrash(id) || (id.rank == 3 || id.rank == 4))
-
-		if chopFix then
-			val poss = game.common.thoughts(focus).possible.filter: id =>
-				!state.isPlayable(id) &&
-				(state.isBasicTrash(id) || (id.rank != 2 && id.rank != 5))
-
-			if poss.forall(state.isBasicTrash) then
-				Log.info(s"orange fix on $focus! (trash)")
-
-				if giver == state.ourPlayerIndex && state.deck(focus).id().exists(state.isUseful) then
-					Log.error("mistake!")
-					return game.withMove(ClueInterp.Mistake)
-
-				return game.withThought(focus)(_.copy(inferred = IdentitySet.empty))
-					.withMeta(focus)(_.copy(trash = true))
-					.withMove(ClueInterp.Reveal)
-			else
-				Log.info(s"orange fix on $focus! ${poss.fmt(state)}")
-
-				if giver == state.ourPlayerIndex && state.deck(focus).id().exists(!poss.contains(_)) then
-					Log.error("mistake!")
-					return game.withMove(ClueInterp.Mistake)
-
-				return game.withThought(focus)(_.copy(inferred = poss))
-					.withMove(ClueInterp.Reveal)
-
-		val playFix = list.find: o =>
-			prev.common.orderPlayable(prev, o) &&
-			!prev.common.thinksInverted(prev.state, o) &&
-			state.isInverted(o)
-
-		if playFix.isDefined then
-			Log.info(s"orange play fix! ${playFix.get}")
-			return game.withMove(ClueInterp.Fix)
-
-	if prev.state.deck(focus).clued && positional.isEmpty then
-		if game.level >= Level.Fix then
-			val fixTarget = Option.when(clue == BaseClue(ClueKind.Rank, 1)):
-				prev.next1(list.filter(prev.unknown1))
-			.flatten.getOrElse(focus)
-
-			if prev.common.hypoPlays.contains(fixTarget) && common.thoughts(fixTarget).possible.intersect(state.trashSet).nonEmpty then
-				Log.info(s"no info fix clue on $fixTarget! not inferring anything else")
-
-				val badFix = giver == state.ourPlayerIndex && !game.me.orderTrash(game, fixTarget)
-
-				return game
-					.withThought(fixTarget)(t => t.copy(inferred = t.possible.intersect(state.trashSet)))
-					.withMeta(fixTarget)(_.copy(trash = true))
-					.withMove(if badFix then ClueInterp.Mistake else ClueInterp.Fix)
-
-		val uselessReclue =
-			prev.common.hypoPlays.contains(focus) ||
-			game.me.thoughts(focus).id().exists: id =>
-				prev.common.hypoStacks(id.suitIndex) >= id.rank
-
-		if uselessReclue then
-			Log.warn("nonsensical burn!")
-			return game.withMove(ClueInterp.Useless)
-
-	if prev.meta(focus).status == CardStatus.GentlemansDiscard then
-		Log.warn("nonsensical burn on gd!")
-		return game.withMove(ClueInterp.Useless)
-
-	val trashPush = chop && game.common.orderKt(game, focus)
-
-	if trashPush && game.level <= Level.TrashMoves then
-		Log.warn("out-of-level trash push! interpreting burn")
-		return game.withMove(ClueInterp.Useless)
 
 	def validSave(inf: Identity) =
 		state.isUseful(inf) &&
@@ -360,7 +185,7 @@ def interpClue(ctx: ClueContext): HGroup =
 					game.withMove(ClueInterp.Mistake)
 			else
 				Log.info(s"simplest focus possibilities [${simplest.map(fp => state.logId(fp.id)).mkString(",")}]")
-				resolveClue(ctx, simplest)
+				resolveClue(ctx, simplest, symmetricInterp, thinksStall)
 		else
 			Log.highlight(Console.YELLOW, s"finding own!")
 
@@ -430,16 +255,16 @@ def interpClue(ctx: ClueContext): HGroup =
 						game.withMove(ClueInterp.Mistake)
 					else
 						Log.info(s"simplest focus possibilities [${newSimplest.map(fp => state.logId(fp.id)).mkString(",")}]")
-						resolveClue(newCtx, newSimplest)
+						resolveClue(newCtx, newSimplest, symmetricInterp, thinksStall)
 				else
 					game.withMove(ClueInterp.Mistake)
 			else
-				resolveClue(ctx, simplestOwn, if savePoss.nonEmpty then Nil else ownFps.filter(fp => !simplestOwn.contains(fp) && !fp.symmetric))
+				resolveClue(ctx, simplestOwn, symmetricInterp, thinksStall, ambiguousOwn = if savePoss.nonEmpty then Nil else ownFps.filter(fp => !simplestOwn.contains(fp) && !fp.symmetric))
 	}
 	.when(g => g.lastMove != Some(ClueInterp.Mistake) && g.level >= Level.TempoClues && state.numPlayers > 2): g =>
 		val newCtx = ctx.copy(game = g)
 		interpretTccm(newCtx) match
-			case Some(tccm) if stall.isEmpty || thinksStall.isEmpty =>
+			case Some(tccm) if thinksStall.isEmpty =>
 				performCM(g, tccm).withMove(evaluateCM(newCtx, tccm), overwrite = true)
 			case Some(_) =>
 				Log.info("stalling situation, tempo clue stall!")

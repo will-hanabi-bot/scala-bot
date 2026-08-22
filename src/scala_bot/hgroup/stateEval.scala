@@ -153,7 +153,9 @@ def advance(orig: HGroup, game: HGroup, offset: Int): Double =
 	val bob = state.nextPlayerIndex(playerIndex)
 	val bobChop = Option.when(state.numPlayers > 2)(game.chop(bob)).flatten
 
-	lazy val trash = player.thinksTrash(game, playerIndex)
+	lazy val trash = player.thinksTrash(game, playerIndex).sortBy: o =>
+		// Discard leftmost clued trash (largest order), then rightmost unclued trash (smallest order)
+		if state.deck(o).clued then -o else o
 	val allPlayables = player.thinksPlayables(game, playerIndex).filter(o => !player.orderTrash(game, o))
 
 	lazy val earlyGameClue = game.earlyGameClue(playerIndex)
@@ -471,8 +473,10 @@ def evalState(state: State, inEndgame: Boolean, offset: Int): Double =
 		case 3 => -100
 		case _ => 0
 
-	Log.info(s"${indent(offset)}state eval: score: $scoreVal, clues: $clueVal, dc crit: $dcCritVal, strikes: $strikesVal")
-	scoreVal + clueVal + dcCritVal + strikesVal
+	val paceVal = if state.pace < 0 then -10 else 0
+
+	Log.info(s"${indent(offset)}state eval: score: $scoreVal, clues: $clueVal, dc crit: $dcCritVal, strikes: $strikesVal, pace: $paceVal")
+	scoreVal + clueVal + dcCritVal + strikesVal + paceVal
 
 def evalGame(orig: HGroup, game: HGroup, offset: Int): Double =
 	val state = game.state
@@ -552,7 +556,8 @@ def evalGame(orig: HGroup, game: HGroup, offset: Int): Double =
 
 		(finalScore - state.maxScore) * 5
 
-	val badCM = -1 * game.state.heldOrders.count: o =>
+	val badCM = -1 * orig.state.heldOrders.count: o =>
+		!orig.isCM(o) &&
 		game.isCM(o) &&
 		game.state.deck(o).id().exists: id =>
 			state.isBasicTrash(id) ||

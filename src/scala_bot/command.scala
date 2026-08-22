@@ -332,8 +332,7 @@ class BotClient(queue: Queue[IO, String], gameRef: Ref[IO, Option[Game]], config
 				}.flatMap: updatedTables =>
 					info.fold(IO.unit): self =>
 						val myTable = updatedTables.values
-							.filter(_.players.contains(self.username))
-							.maxByOption(_.id)
+							.find(t => t.players.contains(self.username) && t.running)
 
 						myTable.fold(IO.unit): t =>
 							Log.info(s"automatically reattending table with id ${t.id}")
