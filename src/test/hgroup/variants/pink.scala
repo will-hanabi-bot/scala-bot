@@ -1,4 +1,4 @@
-package tests.hgroup
+package tests.hgroup.pink
 
 import cats.effect.unsafe.implicits.global
 
@@ -97,6 +97,28 @@ class PinkPromise extends munit.FunSuite:
 		.pipe(takeTurn("Alice clues 5 to Bob"))
 
 		assertEquals(game.lastMove, Some(ClueInterp.Mistake))
+
+	test("uses pink promise to eliminate ids"):
+		val game = setup(HGroup.atLevel(4), Vector(
+			Vector("xx", "xx", "xx", "xx", "xx"),
+			Vector("r1", "r1", "y4", "g4", "b4")
+		),
+			starting = Bob,
+			variant = TestVariant.Pink5,
+			playStacks = Some(Vector(3, 0, 0, 0, 3)),
+			clueTokens = 4
+		)
+		.pipe(takeTurn("Bob clues 5 to Alice (slots 4,5)"))		// pink promise on slot 5
+		.pipe(takeTurn("Alice discards r2 (slot 3)"))
+
+		.pipe(takeTurn("Bob clues 4 to Alice (slots 1,4,5)"))	// r4 in slot 1, revealing slots 4 and 5 as pink
+		.pipe(takeTurn("Alice plays r4 (slot 1)"))
+
+		.pipe(takeTurn("Bob discards b4", "y3"))
+
+		// We should play slot 4 as i4.
+		assertEquals(game.common.thinksPlayables(game, Alice.ordinal), Vector(game.state.hands(Alice.ordinal)(3)))
+		assertEquals(game.takeAction.unsafeRunSync(), PerformAction.Play(game.state.hands(Alice.ordinal)(3)))
 
 class Pink1sAssumption extends munit.FunSuite:
 	override def beforeAll() = Logger.setLevel(LogLevel.Off)

@@ -114,43 +114,50 @@ def handleTcm(ctx: ClueContext, tcm: Seq[Int], notStall: Boolean) =
 
 			g.withMove(lastMove)
 
+enum Result5cm:
+	case None, Mistake
+	case Cm(order: Int)
+
 /**
   * Checks whether a 5's Chop Move was performed.
   * Returns the orders of any chop moved cards.
  */
-def interpret5cm(ctx: ClueContext, log: Boolean = true): Option[Vector[Int]] =
+def interpret5cm(ctx: ClueContext, log: Boolean = true): Result5cm =
 	val ClueContext(prev, game, action, _) = ctx
 	val state = game.state
 	val ClueAction(_, target, list, clue) = action
 	val focus = ctx.focusResult.focus
 	val chop = prev.chop(target)
 
-	val not5cm = clue != BaseClue(ClueKind.Rank, 5) ||
+	val not5cm =
+		game.inEndgame ||
+		clue != BaseClue(ClueKind.Rank, 5) ||
 		prev.state.deck(focus).clued ||
 		game.inEarlyGame ||
 		chop.forall(list.contains)
 
 	if not5cm then
-		return None
+		return Result5cm.None
 
-	list.filter(o => o > chop.get && !prev.state.deck(o).clued).minOption.flatMap: oldest5 =>
-		val distance = prev.chopDistance(target, oldest5)
+	list.filter(o => o > chop.get && !prev.state.deck(o).clued).minOption match
+		case None => Result5cm.None
+		case Some(oldest5) =>
+			val distance = prev.chopDistance(target, oldest5)
 
-		if distance != 1 then
-			if log then Log.info(s"rightmost 5 was clued $distance-away from chop, not 5cm!")
-			None
+			if distance != 1 then
+				if log then Log.info(s"rightmost 5 was clued $distance-away from chop, not 5cm!")
+				Result5cm.None
 
-		else if state.deck(oldest5).id().exists(_.rank != 5) then
-			if log then Log.info(s"not a 5, not 5cm!")
-			None
+			else if state.deck(oldest5).id().exists(_.rank != 5) then
+				if log then Log.info(s"not a 5, not 5cm!")
+				Result5cm.Mistake
 
-		else if game.common.orderKt(game, chop.get) then
-			if log then Log.info(s"saved card $chop has only trash possibilities!")
-			None
+			else if game.common.orderKt(game, chop.get) then
+				if log then Log.info(s"saved card $chop has only trash possibilities!")
+				Result5cm.None
 
-		else
-			if log then Log.info(s"5cm, saving ${state.logId(chop.get)} ${chop.get}")
-			Some(Vector(chop.get))
+			else
+				Result5cm.Cm(chop.get)
 
 def checkOcm(prev: HGroup, action: PlayAction | DiscardAction): Option[List[Int]] =
 	val state = prev.state

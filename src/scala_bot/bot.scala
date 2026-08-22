@@ -139,7 +139,7 @@ object main extends IOApp:
 					yield ()
 
 					attempt.handleErrorWith:
-						case err @ (_: IOException | _: ReadException | _: WebSocketClosedException | _: ConnectException | _: TimeoutException) if attemptNum < maxRetries =>
+						case err @ (_: IOException | _: ReadException | _: WebSocketClosedException | _: ConnectException | _: TimeoutException | _: InternalError) if attemptNum < maxRetries =>
 							connectedRef.getAndSet(false).flatMap: wasConnected =>
 								val nextAttemptNum = if wasConnected then 0 else attemptNum + 1
 								IO.println(s"Connection lost (attempt $attemptNum/$maxRetries): ${err.getMessage}") *>

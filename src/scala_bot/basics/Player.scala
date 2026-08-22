@@ -234,7 +234,22 @@ case class Player(
 			val poss = if infer then thoughts(order).possibilities else thoughts(order).possible
 			val p = if excludeTrash then poss.difference(state.trashSet) else poss
 
-			p.nonEmpty && p.intersect(state.playableSet) == p
+			p.nonEmpty && {
+				if !state.variant.pinkish then
+					p.difference(state.playableSet).isEmpty
+				else
+					val pinkPromised = state.heldOrders.foldLeft(IdentitySet.empty): (acc, o) =>
+						if order == o then acc else
+							val thought = this.thoughts(o)
+							val promise = thought.infoLock.mapA: ids =>
+								val remIds = ids.intersect(thought.possible)
+								if remIds.length == 1 then Some(remIds.head) else None
+							.flatten
+
+							promise.fold(acc)(acc.union)
+
+					p.difference(state.playableSet).forall(pinkPromised.contains)
+			}
 
 	/** Returns the known playable and conventionally promised playable orders in the given player's hand. */
 	def obviousPlayables(game: Game, playerIndex: Int) =

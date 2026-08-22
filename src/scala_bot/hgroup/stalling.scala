@@ -115,7 +115,7 @@ def isStall(ctx: ClueContext, severity: Int): Option[StallInterp] =
 	None
 
 /** Returns the set of player indices that see an alternative clue. */
-def alternativeClue(ctx: ClueContext, maxStall: Int) =
+def alternativeClue(ctx: ClueContext, severity: Int, maxStall: Int) =
 	val ClueContext(prev, game, action, _) = ctx
 	val ClueAction(giver, target, list, clue) = action
 	val state = game.state
@@ -175,30 +175,42 @@ def alternativeClue(ctx: ClueContext, maxStall: Int) =
 
 					case i => STALL_INDICES(i) < maxStall
 
-	val seenBy =
-		for
-			target <- 0 until state.numPlayers if target != giver && target != state.ourPlayerIndex
-			clue   <- state.allValidClues(target) if clue != origClue
-			list = prev.state.clueTouched(prev.state.hands(target), clue)
-			action = ClueAction(giver, target, list, clue.base)
-			focus = prev.determineFocus(prev, action).focus if focus != origFocus && !prev.isTouched(focus)
-			hypo = prev.copy(allowFindOwn = false, noRecurse = true, assumePlays = false)
-				.simulateClue(action) if satisfied(hypo, action)
-		yield
-			Log.info(s"found alt clue ${clue.fmt(state)} ${hypo.lastMove.get}")
-			val newWCs = hypo.waiting.filter: wc =>
-				wc.turn == hypo.state.turnCount &&
-				wc.connections.forall: conn =>
-					// Only count valid wcs based on the new info we have
-					conn.ids.exists(game.common.thoughts(conn.order).possible.contains)
+	val thinksStall = FastBitSet.from(0 until state.numPlayers)
+		.when(_ => severity == 2 && game.dcStatus == DcStatus.None && game.dda.isDefined): ts =>
+			// Exclude everyone who knows that it's not DDA
+			visibleFind(state, game.me, game.dda.get, infer = true).headOption match
+				case None => ts
+				case Some(dupe) => ts.difference:
+					(0 until state.numPlayers).filter: i =>
+						// Exclude if they can see the card, or the holder infers it
+						state.holderOf(dupe) != i ||
+						game.players(i).thoughts(dupe).matches(game.dda.get, infer = true)
 
-			(0 until state.numPlayers).filterNot: p =>
-				p == target ||
-				newWCs.exists:
-					_.connections.exists: conn =>
-						conn.kind != "known" && p == state.holderOf(conn.order)
+	if thinksStall.isEmpty then thinksStall else
+		val seenBy =
+			for
+				target <- 0 until state.numPlayers if target != giver && target != state.ourPlayerIndex
+				clue   <- state.allValidClues(target) if clue != origClue
+				list = prev.state.clueTouched(prev.state.hands(target), clue)
+				action = ClueAction(giver, target, list, clue.base)
+				focus = prev.determineFocus(prev, action).focus if focus != origFocus && !prev.isTouched(focus)
+				hypo = prev.copy(allowFindOwn = false, noRecurse = true, assumePlays = false)
+					.simulateClue(action) if satisfied(hypo, action)
+			yield
+				Log.info(s"found alt clue ${clue.fmt(state)} ${hypo.lastMove.get}")
+				val newWCs = hypo.waiting.filter: wc =>
+					wc.turn == hypo.state.turnCount &&
+					wc.connections.forall: conn =>
+						// Only count valid wcs based on the new info we have
+						conn.ids.exists(game.common.thoughts(conn.order).possible.contains)
 
-	seenBy.foldLeft(FastBitSet.from(0 until state.numPlayers))(_.difference(_))
+				(0 until state.numPlayers).filterNot: p =>
+					p == target ||
+					newWCs.exists:
+						_.connections.exists: conn =>
+							conn.kind != "known" && p == state.holderOf(conn.order)
+
+		seenBy.foldLeft(thinksStall)(_.difference(_))
 
 def stallingSituation(ctx: ClueContext): Option[(StallInterp, FastBitSet)] =
 	val ClueContext(prev, game, action, _) = ctx
@@ -222,10 +234,10 @@ def stallingSituation(ctx: ClueContext): Option[(StallInterp, FastBitSet)] =
 			val assumeStall =
 				game.noRecurse ||
 				game.state.numPlayers == 2 ||
-				(stall == StallInterp.Stall5 && giver != game.state.ourPlayerIndex)
+				(game.inEarlyGame && stall == StallInterp.Stall5 && giver != game.state.ourPlayerIndex)
 
 			if assumeStall then
 				(stall, FastBitSet.from(0 until game.state.numPlayers))
 			else
-				val thinksStall = alternativeClue(ctx, STALL_TO_SEVERITY(stall))
+				val thinksStall = alternativeClue(ctx, severity, STALL_TO_SEVERITY(stall))
 				(stall, thinksStall)

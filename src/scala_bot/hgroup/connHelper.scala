@@ -104,9 +104,8 @@ def assignConns(game: HGroup, action: ClueAction, fps: Seq[FocusPossibility], fo
 
 				val maybeFinessed =
 					conn.matchesP:
-						case f: FinesseConn =>
+						case _: FinesseConn =>
 							// Finesse that could be ambiguous
-							f.fKind != FinesseKind.Certain &&
 							fps.length + ambiguousOwn.length > 1 &&
 							!(fps ++ ambiguousOwn).forall: fp =>
 								fp.connections.existsM:
@@ -118,8 +117,8 @@ def assignConns(game: HGroup, action: ClueAction, fps: Seq[FocusPossibility], fo
 					&& !(
 						// All ids critical, can't be ambiguous? (TODO: Are these the same condition?)
 						(conn.ids.forall(state.isCritical) && state.deck(focus).matches(fp.id)) ||
-						// Colour finesses are guaranteed if the focus cannot be a finessed identity
-						(clue.kind == ClueKind.Colour && conn.ids.forall(!g.me.thoughts(focus).possible.contains(_)))
+						// Colour finesses are guaranteed if the focus cannot be a finessed identity, unless it's a bluff
+						(clue.kind == ClueKind.Colour && conn.ids.forall(!g.me.thoughts(focus).possible.contains(_)) && !conn.matchesP { case f: FinesseConn => f.isBluff })
 					)
 
 				val fStatus =
@@ -248,8 +247,8 @@ def urgentSave(ctx: ClueContext): Boolean =
 		interpretTcm(ctx, log = false).exists: orders =>
 			orders.forall(state.deck(_).id().exists(state.isCritical))
 		||
-		interpret5cm(ctx, log = false).exists: orders =>
-			orders.forall(state.deck(_).id().exists(state.isCritical))
+		interpret5cm(ctx, log = false).matchesP:
+			case Result5cm.Cm(order) => state.deck(order).id().exists(state.isCritical)
 
 	if !validSave then
 		return false
@@ -282,7 +281,7 @@ def urgentSave(ctx: ClueContext): Boolean =
 
 	loop(game.state, state.nextPlayerIndex(action.giver))
 
-def resolveClue(ctx: ClueContext, fps: Seq[FocusPossibility], ambiguousOwn: Seq[FocusPossibility] = Nil) =
+def resolveClue(ctx: ClueContext, fps: Seq[FocusPossibility], symmetricInterp: SymmetricInterp, thinksStall: FastBitSet, ambiguousOwn: Seq[FocusPossibility] = Nil) =
 	val ClueContext(prev, game, action, _) = ctx
 	val state = game.state
 	val ClueAction(giver, target, _, clue) = action
@@ -380,6 +379,17 @@ def resolveClue(ctx: ClueContext, fps: Seq[FocusPossibility], ambiguousOwn: Seq[
 				&&
 				fpSimplicity(fp, reacting, state.ourPlayerIndex) <= fpSimplicity(trueFp, reacting, state.ourPlayerIndex)
 
+	lazy val badAsymmetry = symmetricInterp match
+		case SymmetricInterp.NoInterp => false
+		case SymmetricInterp.Stall(interp) =>
+			simplestFps.find(fp => state.deck(focus).matches(fp.id)).exists: trueFp =>
+				// The true connection requires a finesse or prompt from someone who thinks it looks like a stall
+				trueFp.connections.collectFirst {
+					case f: FinesseConn => f
+					case p: PromptConn => p
+				}.exists: c =>
+					thinksStall.contains(c.reacting)
+
 	val interp =
 		if state.deck(focus).id().exists(id => !simplestFps.exists(_.id == id)) then
 			Log.error(s"resolving clue but focus ${state.logId(focus)} doesn't match simplest fps [${simplestFps.map(fp => state.logId(fp.id)).mkString(",")}]!")
@@ -399,6 +409,10 @@ def resolveClue(ctx: ClueContext, fps: Seq[FocusPossibility], ambiguousOwn: Seq[
 
 		else if delayedBluff.exists(_.nonEmpty) then
 			Log.error(s"invalid bluff, symmetrically needs to delay for potential ${delayedBluff.get.map(fp => state.logId(fp.id)).mkString(",")}")
+			ClueInterp.Mistake
+
+		else if badAsymmetry then
+			Log.error(s"invalid clue, true fp requires someone who thinks the clue is a stall to react!")
 			ClueInterp.Mistake
 
 		else if fps.exists(_.save) then
