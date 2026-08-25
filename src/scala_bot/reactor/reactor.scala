@@ -106,13 +106,13 @@ case class Reactor(
 
 			if common.obviousLoaded(this, bob) then
 				false
-			else if bobChopId.exists(state.isCritical) then
+			else if bobChopId.exists(i => state.isCritical(i) && !(state.isPlayable(i) && state.isInverted(i))) then
 				true
 			else if bobChopId.exists(state.isBasicTrash) then
 				unknownPlay
 			else if knownDupe then
 				false
-			else if bobChopId.exists(id => (state.isPlayable(id) && !state.isInverted(id)) || id.rank == 2) then
+			else if bobChopId.exists(i => (state.isPlayable(i) && !state.isInverted(i)) || (i.rank == 2 && !(state.isPlayable(i) && state.isInverted(i)))) then
 				true
 			else
 				false
@@ -281,10 +281,13 @@ object Reactor:
 					interpGame.withMove(interp)
 
 			val signalledPlays = interpretedGame.state.heldOrders.filter: o =>
-				prev.meta(o).status != CardStatus.CalledToPlay && interpretedGame.meta(o).status == CardStatus.CalledToPlay
+				interpretedGame.gainedStatus(prev, o, CardStatus.DragToPlay) ||
+				interpretedGame.gainedStatus(prev, o, CardStatus.CalledToPlay)
 
 			val eliminatedGame = interpretedGame.elim()
-			val playsAfterElim = eliminatedGame.state.heldOrders.filter(eliminatedGame.meta(_).status == CardStatus.CalledToPlay)
+			val playsAfterElim = eliminatedGame.state.heldOrders.filter: o =>
+				eliminatedGame.meta(o).status == CardStatus.DragToPlay ||
+				eliminatedGame.meta(o).status == CardStatus.CalledToPlay
 
 			eliminatedGame
 				.when(_ => playsAfterElim.size < signalledPlays.size): g =>
@@ -366,7 +369,16 @@ object Reactor:
 
 								case DiscardResult.Baton(_, _) =>
 									throw new Error("baton unsupported!")
-						case None => g.withMove(DiscardInterp.None)
+						case None =>
+							g.withMove(DiscardInterp.None).pipe: g2 =>
+								val resetCtd =
+									prev.state.hands(playerIndex)(0) == order &&
+									!prev.isTouched(0) &&
+									prev.chop(playerIndex).exists(o => o < order && game.meta(o).status == CardStatus.CalledToDiscard)
+
+								if !resetCtd then g2 else
+									Log.highlight(Console.CYAN, s"${state.names(playerIndex)} discarded slot 1 while having ctd, removing!")
+									g2.withMeta(prev.chop(playerIndex).get)(_.copy(status = CardStatus.None))
 				.elim()
 				.when(_ => prev.state.canClue)(resetZcs)
 
@@ -395,7 +407,7 @@ object Reactor:
 			else
 				val nextQueuedPlayable =
 					state.hands(currentPlayerIndex).filter: o =>
-						game.meta(o).status == CardStatus.CalledToPlay &&
+						(game.meta(o).status == CardStatus.CalledToPlay || game.meta(o).status == CardStatus.DragToPlay) &&
 						!game.knownInverted(o) &&
 						game.common.thoughts(o).id(infer = true).isEmpty
 					.minByOption: o =>
@@ -460,12 +472,13 @@ object Reactor:
 				val urgentBobSave =
 					state.canClue &&
 					game.waiting.exists: wc =>
-						wc.reacter == state.ourPlayerIndex &&
-						wc.receiver != nextPlayerIndex
+						wc.reacter == state.ourPlayerIndex && wc.receiver != nextPlayerIndex
 					&&
 					!game.common.obviousLoaded(game, nextPlayerIndex) &&
-					game.copy(zcsTurn = None).chop(nextPlayerIndex).flatMap(state.deck(_).id()).exists: id =>
-						state.isCritical(id)
+					game.copy(zcsTurn = None).chop(nextPlayerIndex).exists: o =>
+						state.deck(o).id().exists: id =>
+							state.isCritical(id) &&
+							!(state.isInverted(o) && state.isPlayable(id))
 
 				if urgentBobSave then
 					Log.warn("ignoring urgent play/discard to save bob!")
@@ -485,7 +498,7 @@ object Reactor:
 					Some(bestClue)
 				else
 					game.meta(urgent).status match
-						case CardStatus.CalledToPlay if me.thoughts(urgent).possible.difference(state.trashSet).nonEmpty =>
+						case CardStatus.CalledToPlay | CardStatus.DragToPlay if me.thoughts(urgent).possible.difference(state.trashSet).nonEmpty =>
 							Some(PerformAction.Play(urgent))
 						case CardStatus.CalledToDiscard if me.thoughts(urgent).possible.difference(state.criticalSet).nonEmpty =>
 							Some(PerformAction.Discard(urgent))

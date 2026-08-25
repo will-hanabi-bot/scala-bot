@@ -427,7 +427,7 @@ enum PosDcResult:
 
 private def checkPosDc(ctx: DiscardContext): PosDcResult =
 	val DiscardContext(prev, game, action) = ctx
-	val DiscardAction(playerIndex, order, _, _, failed) = action
+	val DiscardAction(playerIndex, order, suitIndex, rank, failed) = action
 	val state = game.state
 	val thought = prev.common.thoughts(order)
 	val slot = prev.state.hands(playerIndex).indexOf(order) + 1
@@ -448,7 +448,7 @@ private def checkPosDc(ctx: DiscardContext): PosDcResult =
 	if unintended then
 		return PosDcResult.NotPosDc
 
-	val numPlays = if action.failed && !expectedDc.contains(order) then 2 else 1
+	val numPlays = if (action.failed && !expectedDc.contains(order)) ^ state.isInverted(Identity(suitIndex, rank)) then 2 else 1
 
 	val targets = {
 		for
@@ -499,12 +499,8 @@ def interpretPosDc(ctx: DiscardContext): Option[HGroup] =
 							oldInferred = t.inferred.toOpt,
 							inferred = newInferred,
 						)
-					.withMeta(order): m =>
-						m.copy(
-							// If it can only be inverted, pretend this is a GD so we drag to the discard stacks.
-							status = if newInferred.forall(state.isInverted) then CardStatus.GDInverted else CardStatus.CalledToPlay,
-							focused = true
-						)
+					.withMeta(order):
+						_.copy(status = CardStatus.CalledToPlay, focused = true)
 
 					val conn = PositionalConn(
 						reacting,

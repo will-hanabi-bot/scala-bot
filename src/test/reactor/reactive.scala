@@ -20,11 +20,11 @@ class Reactive extends munit.FunSuite:
 		))
 		.pipe(takeTurn("Alice clues 5 to Cathy"))
 		.tap: g =>
-			hasStatus(g, Bob, 1, CardStatus.CalledToPlay)
+			hasStatus(g, Bob, 1, CardStatus.DragToPlay)
 			hasInfs(g, None, Bob, 1, Vector("r1", "y1", "b1", "p1"))
 		.pipe(takeTurn("Bob plays b1", "p1"))
 
-		hasStatus(game, Cathy, 1, CardStatus.CalledToPlay)
+		hasStatus(game, Cathy, 1, CardStatus.DragToPlay)
 		hasInfs(game, None, Cathy, 1, Vector("r1", "y1", "g1", "b2", "p1"))
 
 	test("it reacts to a reactive play play"):
@@ -37,7 +37,7 @@ class Reactive extends munit.FunSuite:
 		)
 		.pipe(takeTurn("Cathy clues 2 to Bob"))
 
-		hasStatus(game, Alice, 1, CardStatus.CalledToPlay)
+		hasStatus(game, Alice, 1, CardStatus.DragToPlay)
 		hasInfs(game, None, Alice, 1, Vector("r1", "y1", "g1", "p1"))
 
 		assertEquals(game.takeAction.unsafeRunSync(), PerformAction.Play(game.state.hands(Alice.ordinal)(0)))
@@ -53,7 +53,7 @@ class Reactive extends munit.FunSuite:
 		.pipe(takeTurn("Bob clues 4 to Alice (slot 3)"))
 		.pipe(takeTurn("Cathy plays g1", "y3"))
 
-		hasStatus(game, Alice, 2, CardStatus.CalledToPlay)
+		hasStatus(game, Alice, 2, CardStatus.DragToPlay)
 		hasInfs(game, None, Alice, 2, Vector("r1", "y1", "g2", "b1", "p1"))
 
 	test("it reacts to a reverse reactive play play"):
@@ -72,7 +72,7 @@ class Reactive extends munit.FunSuite:
 		.pipe(takeTurn("Alice clues 1 to Bob"))			// Reverse reactive, getting Cathy's g2 and Bob's b2 (4 + 2 = 1)
 
 		.tap: g =>
-			hasStatus(g, Cathy, 4, CardStatus.CalledToPlay)
+			hasStatus(g, Cathy, 4, CardStatus.DragToPlay)
 		.pipe(takeTurn("Bob plays b1", "y5"))
 
 		hasInfs(game, None, Cathy, 4, Vector("r1", "y1", "g2", "p1"))
@@ -89,12 +89,12 @@ class Reactive extends munit.FunSuite:
 		)
 		.pipe(takeTurn("Alice clues 4 to Cathy"))
 		.tap: g =>
-			hasStatus(g, Bob, 1, CardStatus.CalledToPlay)
+			hasStatus(g, Bob, 1, CardStatus.DragToPlay)
 		.pipe(takeTurn("Bob plays r1", "p1"))
 
 		val (common, state) = (game.common, game.state)
 
-		hasStatus(game, Cathy, 4, CardStatus.CalledToPlay)
+		hasStatus(game, Cathy, 4, CardStatus.DragToPlay)
 
 		// Since Bob cannot play a known 3, Cathy can't write !playable on slot 1.
 		assert(Seq("r1", "y1", "g1", "b1", "p1").map(state.expandShort).forall(common.thoughts(state.hands(Cathy.ordinal)(0)).inferred.contains))
@@ -121,7 +121,7 @@ class Reactive extends munit.FunSuite:
 			assert(g.common.thinksTrash(g, Bob.ordinal).contains(g.state.hands(Bob.ordinal)(0)))
 		.pipe(takeTurn("Bob discards r3 (slot 1)", "p3"))
 
-		hasStatus(game, Cathy, 1, CardStatus.CalledToPlay)
+		hasStatus(game, Cathy, 1, CardStatus.DragToPlay)
 		hasInfs(game, None, Cathy, 1, Vector("r1", "y1", "g1", "p1"))
 
 	test("it elims a reactive dc play"):
@@ -143,7 +143,7 @@ class Reactive extends munit.FunSuite:
 
 		val (common, state) = (game.common, game.state)
 
-		hasStatus(game, Cathy, 4, CardStatus.CalledToPlay)
+		hasStatus(game, Cathy, 4, CardStatus.DragToPlay)
 
 		// Since Bob cannot discard a known 5, Cathy can't write !playable on slot 1.
 		assert(Seq("r1", "r2", "y1", "b1").map(state.expandShort).forall(common.thoughts(state.hands(Cathy.ordinal)(0)).inferred.contains))
@@ -187,7 +187,7 @@ class Reactive extends munit.FunSuite:
 		.pipe(takeTurn("Cathy clues 3 to Bob"))
 
 		// We should play slot 1 to target Bob's r2.
-		hasStatus(game, Alice, 1, CardStatus.CalledToPlay)
+		hasStatus(game, Alice, 1, CardStatus.DragToPlay)
 		hasInfs(game, None, Alice, 1, Vector("r1"))
 
 		assertEquals(game.takeAction.unsafeRunSync(), PerformAction.Play(game.state.hands(Alice.ordinal)(0)))
@@ -240,7 +240,7 @@ class Reactive extends munit.FunSuite:
 		.pipe(takeTurn("Cathy clues green to Bob"))
 
 		// We should play slot 4 (so that Bob discards slot 1).
-		hasStatus(game, Alice, 4, CardStatus.CalledToPlay)
+		hasStatus(game, Alice, 4, CardStatus.DragToPlay)
 
 	test("it targets clued trash over unclued dupe for dc"):
 		val game = setup(Reactor.apply, Vector(
@@ -257,7 +257,7 @@ class Reactive extends munit.FunSuite:
 		.pipe(takeTurn("Cathy clues green to Bob"))
 
 		// We should play slot 3 (so that Bob discards slot 2).
-		hasStatus(game, Alice, 3, CardStatus.CalledToPlay)
+		hasStatus(game, Alice, 3, CardStatus.DragToPlay)
 
 	test("it targets known trash over cross-hand dupe for dc"):
 		val game = setup(Reactor.apply, Vector(
@@ -272,13 +272,13 @@ class Reactive extends munit.FunSuite:
 		.pipe(takeTurn("Cathy clues green to Bob"))
 		.tap: g =>
 			// We should play slot 3 (so that Bob discards slot 2).
-			hasStatus(g, Alice, 3, CardStatus.CalledToPlay)
+			hasStatus(g, Alice, 3, CardStatus.DragToPlay)
 		.pipe(takeTurn("Alice plays b1 (slot 3)"))
 		.pipe(takeTurn("Bob clues blue to Cathy"))
 		.pipe(takeTurn("Cathy clues green to Bob"))
 
 		// We should target y1 again instead of r4.
-		hasStatus(game, Alice, 3, CardStatus.CalledToPlay)
+		hasStatus(game, Alice, 3, CardStatus.DragToPlay)
 
 	test("it reacts to a sacrifice"):
 		val game = setup(Reactor.apply, Vector(
@@ -292,7 +292,7 @@ class Reactive extends munit.FunSuite:
 		.pipe(takeTurn("Cathy clues green to Bob"))
 
 		// We should play slot 2 (Bob discards y3 in slot 3).
-		hasStatus(game, Alice, 2, CardStatus.CalledToPlay)
+		hasStatus(game, Alice, 2, CardStatus.DragToPlay)
 
 	test("it shifts a reaction"):
 		val game = setup(Reactor.apply, Vector(
@@ -309,7 +309,7 @@ class Reactive extends munit.FunSuite:
 			hasStatus(g, Alice, 3, CardStatus.None)
 
 			// Instead, Alice should play slot 1 -> Bob slot 3 as a finesse.
-			hasStatus(g, Alice, 1, CardStatus.CalledToPlay)
+			hasStatus(g, Alice, 1, CardStatus.DragToPlay)
 			hasInfs(g, None, Alice, 1, Vector("r1"))
 
 			assertEquals(g.takeAction.unsafeRunSync(), PerformAction.Play(g.state.hands(Alice.ordinal)(0)))
@@ -373,7 +373,7 @@ class Reactive extends munit.FunSuite:
 			hasStatus(g, Alice, 4, CardStatus.CalledToDiscard)
 		.pipe(takeTurn("Alice discards g1 (slot 4)"))
 
-		hasStatus(game, Bob, 1, CardStatus.CalledToPlay)
+		hasStatus(game, Bob, 1, CardStatus.DragToPlay)
 
 	test("it doesn't assume others will react to fix when they don't know"):
 		val game = setup(Reactor.apply, Vector(

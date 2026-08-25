@@ -5,7 +5,7 @@ import scala_bot.utils._
 import scala_bot.logger.Log
 
 def getResult(game: Reactor, hypo: Reactor, action: ClueAction): Double =
-	val (common, state, meta) = (game.common, game.state, game.meta)
+	val (common, state) = (game.common, game.state)
 	val ClueAction(giver, target, list, clue) = action
 
 	val (newTouched, fill, elim) = elimResult(game, hypo, hypo.state.hands(target), list)
@@ -16,17 +16,16 @@ def getResult(game: Reactor, hypo: Reactor, action: ClueAction): Double =
 		hypo.state.deck(o).clued && !common.thinksTrash(game, target).contains(o)
 
 	val newPlayables = state.heldOrders.filter: o =>
-		(meta(o).status != CardStatus.CalledToPlay && hypo.meta(o).status == CardStatus.CalledToPlay) || {
-			state.isInverted(o) &&
-			meta(o).status != CardStatus.CalledToDiscard && hypo.meta(o).status == CardStatus.CalledToDiscard
-		}
+		hypo.gainedStatus(game, o, CardStatus.CalledToPlay) ||
+		(hypo.gainedStatus(game, o, CardStatus.DragToPlay) && !state.isInverted(o)) ||
+		(hypo.gainedStatus(game, o, CardStatus.CalledToDiscard) && state.isInverted(o))
 
 	val badPlayable = newPlayables.find(o =>
 		!(hypo.me.hypoPlays.contains(o) || (game.inEndgame && state.deck(o).id().exists(state.isPlayable))))
 
 	badPlayable match
 		case Some(badPlay) =>
-			Log.warn(s"clue ${clue.fmt(state, target)} results in ${state.logId(badPlay)} ${badPlay} looking playable! ${hypo.me.hypoPlays}")
+			Log.warn(s"clue ${clue.fmt(state, target)} results in ${state.logId(badPlay)} ${badPlay} looking playable! ${hypo.me.hypoPlays.fmt}")
 			-100
 		case None =>
 			hypo.lastMove match
@@ -126,9 +125,11 @@ def advance(orig: Reactor, game: Reactor, offset: Int): Double =
 		// At least one playable causes a strike, assume they will bomb the worst one.
 		if strike then
 			playActions.min
-		else
+		else if game.waiting.isEmpty then
 			Log.info(s"${indent(offset)}also seeing if they can clue instead!")
 			playActions.max.max(_forceClue(orig, game, offset))
+		else
+			playActions.max
 
 	else if player.obviousLocked(game, playerIndex) then
 		if !state.canClue then
@@ -212,8 +213,29 @@ def _evalAction(game: Reactor, action: Action): Double =
 		case Some(ClueInterp.Mistake) if action.isInstanceOf[ClueAction] => true
 		case Some(DiscardInterp.Mistake) if action.isInstanceOf[DiscardAction] => true
 
+	def evalDc(order: Int, suitIndex: Int, rank: Int) =
+		val trash = game.me.orderKt(game, order) || game.meta(order).status == CardStatus.CalledToDiscard
+		val chop = game.chop(state.holderOf(order))
+
+		if game.inEndgame then
+			if game.lastActions.zipWithIndex.forall((action, i) => i == state.ourPlayerIndex || action.existsM { case _: ClueAction => true }) then
+				0		// Everyone stalled previously, stop stalling
+			else
+				-1.0
+		else if trash then
+			0
+		else if chop.contains(order) then
+			if game.meta(order).status == CardStatus.PermissionToDiscard || game.zcsTurn.nonEmpty then
+				-0.25
+			else
+				-1.5
+		else if (suitIndex == -1 || rank == -1) then
+			-1.5		// discarding unknown doesn't incur bdr loss, so this should be punishing
+		else
+			-0.5
+
 	val value = action match
-		case _ if mistake => -100
+		case _ if mistake => -100.0
 
 		case clue: ClueAction =>
 			val mult = if game.me.obviousPlayables(game, state.ourPlayerIndex).nonEmpty then
@@ -221,52 +243,68 @@ def _evalAction(game: Reactor, action: Action): Double =
 			else
 				0.5
 			val result = getResult(game, hypoGame, clue)
-			result * (if result > 0 then mult else 1) - 0.5
+			val value = result * (if result > 0 then mult else 1) - 0.5
+
+			Log.info(f"initial clue value: $value%.2f")
+			val best = value + advance(game, hypoGame, 1)
+
+			Log.info(f"${action.fmt(state)}%s: $best%.2f (${hypoGame.lastMove.get}%s)")
+			best
 
 		case PlayAction(_, order, suitIndex, rank) =>
 			val unknownDupe = !game.inEndgame &&
 				visibleFind(state, game.me, Identity(suitIndex, rank), excludeOrder = order).exists: o =>
 					game.isTouched(o) && !hypoGame.common.orderTrash(hypoGame, o)
 
-			if unknownDupe then
-				-0.25
-			else if suitIndex == -1 || rank == -1 then
-				1.5
+			val value =
+				if unknownDupe then
+					-0.25
+				else if suitIndex == -1 || rank == -1 then
+					1.5
+				else
+					0.02 * (5 - rank)
+
+			val best = value + advance(game, hypoGame, 1)
+			Log.info(f"${action.fmt(state)}%s: $best%.2f (${hypoGame.lastMove.get}%s)")
+			best
+
+		case DiscardAction(playerIndex, order, suitIndex, rank, failed) if suitIndex == -1 || rank == -1 =>
+			val thought = game.me.thoughts(order)
+			val poss = thought.infoLock.getOrElse(thought.possibilities)
+
+			if !state.variant.inverted || poss.length > 4 || game.meta(order).trash then
+				val best = evalDc(order, suitIndex, rank) + advance(game, hypoGame, 1)
+				Log.info(f"${action.fmt(state)}%s: $best%.2f (${hypoGame.lastMove.get}%s)")
+				best
 			else
-				0.02 * (5 - rank)
+				Log.info(s"thought ${thought.infoLock.mapA(_.fmt(state))} ${thought.inferred.fmt(state)}")
+
+				poss.toList.foldLeftOpt(0.0): (value, i) =>
+					Log.highlight(Console.GREEN, s"discarding ${state.logId(i)}")
+					val hypoGame = game.simulate(DiscardAction(playerIndex, order, i.suitIndex, i.rank, failed))
+
+					if hypoGame.lastMove == Some(DiscardInterp.Mistake) then
+						Left(-100.0)
+					else
+						val best = advance(game, hypoGame, 1)
+						Log.info(f"${action.fmt(state)}%s: $best%.2f (${hypoGame.lastMove.get}%s)")
+						Right(best + value)
+				.when(_ != -100):
+					_ / poss.length
 
 		case DiscardAction(_, order, suitIndex, rank, _) =>
-			val trash = game.me.orderKt(game, order) || game.meta(order).status == CardStatus.CalledToDiscard
-			val chop = game.chop(state.holderOf(order))
+			val best = evalDc(order, suitIndex, rank) + advance(game, hypoGame, 1)
+			Log.info(f"${action.fmt(state)}%s: $best%.2f (${hypoGame.lastMove.get}%s)")
+			best
 
-			if game.inEndgame then
-				if game.lastActions.zipWithIndex.forall((action, i) => i == state.ourPlayerIndex || action.existsM { case _: ClueAction => true }) then
-					0		// Everyone stalled previously, stop stalling
-				else
-					-1.0
-			else if trash then
-				0
-			else if chop.contains(order) then
-				if game.meta(order).status == CardStatus.PermissionToDiscard || game.zcsTurn.nonEmpty then
-					-0.25
-				else
-					-1.5
-			else if suitIndex == -1 || rank == -1 then
-				-1.5	 // discarding unknown doesn't incur bdr loss, so this should be punishing
-			else
-				-0.5
-
-		case _ => 0
+		case action =>
+			throw new Error(s"unrecognized action $action!")
 
 	if value == -100 then
 		Log.info("mistake! -100")
 		-100
 	else
-		Log.info(f"starting value $value%.2f")
-
-		val best = value + advance(game, hypoGame, 1)
-		Log.info(f"${action.fmt(state)}%s: $best%.2f (${hypoGame.lastMove}%s)")
-		best
+		value
 
 def evalState(state: State, inEndgame: Boolean, offset: Int): Double =
 	// The first 2 * (# suits) pts are worth 1.5.
@@ -359,6 +397,8 @@ def evalGame(orig: Reactor, game: Reactor, offset: Int): Double =
 				case CardStatus.CalledToDiscard =>
 					val by = game.meta(order).by.getOrElse(throw new Exception(s"order $order doesn't have a by!"))
 					if inv then evalPlay(order) else evalDiscard(order, by)
+				case CardStatus.DragToPlay =>
+					evalPlay(order)
 				case _ => 0
 
 	val bdrVal = 2.5 * state.variant.allIds.summing: id =>

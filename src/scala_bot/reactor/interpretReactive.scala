@@ -124,7 +124,7 @@ def interpretReactiveColour(prev: Reactor, game: Reactor, action: ClueAction, fo
 			(ClueInterp.Mistake, game)
 		else
 			dcTargets.findSome: (target, index) =>
-				if state.nextPlayerIndex(giver) != reacter && game.meta(target).status == CardStatus.CalledToPlay then
+				if state.nextPlayerIndex(giver) != reacter && game.meta(target).status == CardStatus.DragToPlay then
 					Log.warn("can't target previously-playable trash with a reverse reactive clue!")
 					None
 				else

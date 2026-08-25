@@ -291,8 +291,7 @@ private def alternativeClue(prev: Reactor, giver: Int, target: Int) =
 							case ClueInterp.Reveal => recur(clues.tail, Some(clue), false)
 							case ClueInterp.Discard =>
 								val dcTarget = hypo.state.hands(target).find: o =>
-									hypo.meta(o).status == CardStatus.CalledToDiscard &&
-									prev.meta(o).status != CardStatus.CalledToDiscard
+									hypo.gainedStatus(prev, o, CardStatus.CalledToDiscard)
 
 								// TODO?: The dc target doesn't always exist. Consider a ref dc onto a card that previously had ctd.
 								if dcTarget.exists(dc => state.isBasicTrash(state.deck(dc).id().get)) then
@@ -312,13 +311,15 @@ def badStable(prev: Reactor, game: Reactor, action: ClueAction, interp: ClueInte
 		return true
 
 	lazy val badPlayable = state.heldOrders.find: o =>
-		game.meta(o).status == CardStatus.CalledToPlay &&
-		!state.hasConsistentInfs(game.common.thoughts(o)) &&
-		(prev.meta(o).status != CardStatus.CalledToPlay || prev.state.hasConsistentInfs(prev.common.thoughts(o)))
+		!state.hasConsistentInfs(game.common.thoughts(o)) && {
+			game.gainedStatus(prev, o, CardStatus.CalledToPlay) ||
+			(game.gainedStatus(prev, o, CardStatus.DragToPlay) && !state.isInverted(o)) ||
+			(game.gainedStatus(prev, o, CardStatus.CalledToDiscard) && state.isInverted(o))
+		}
 
 	lazy val dcTarget = state.hands(target).find: o =>
-		game.meta(o).status == CardStatus.CalledToDiscard &&
-		prev.meta(o).status != CardStatus.CalledToDiscard
+		game.gainedStatus(prev, o, CardStatus.CalledToDiscard) ||
+		(game.gainedStatus(prev, o, CardStatus.DragToPlay) && game.state.isInverted(o))
 
 	if target == state.ourPlayerIndex then
 		false
@@ -420,12 +421,13 @@ def refPlay(prev: Reactor, game: Reactor, action: ClueAction): StableResult =
 		Log.warn("targeting a card called to discard!")
 		StableResult.TryReactive
 	else if game.state.deck(target).clued && game.common.thinksInverted(game.state, target) then
-		Log.warn(s"orange colour clue focusing chop, treating as dc!")
+		Log.warn(s"orange colour clue focusing chop!")
 
 		val newGame =
 			game.withThought(target): t =>
-				t.copy(inferred = t.inferred.intersect(game.state.trashSet))
-			.withMeta(target)(_.copy(trash = true))
+				t.copy(inferred = t.possible.intersect(game.state.trashSet), reset = true)
+			.withMeta(target)(_.copy(status = CardStatus.DragToPlay, trash = true))
+		Log.info(s"setting $target to ${newGame.common.strInfs(game.state, target)}")
 		StableResult.Stable(ClueInterp.Reveal, newGame)
 	else
 		targetPlay(game, action, target, urgent = false, stable = true)
@@ -436,6 +438,7 @@ def targetPlay(game: Reactor, action: ClueAction, target: Int, urgent: Boolean, 
 	val possibleConns = delayedPlays(game, action.giver, holder, stable)
 
 	val newInferred = game.common.thoughts(target).inferred.filter(i => state.isPlayable(i) || possibleConns.exists(_._2 == i))
+		.when(_.isEmpty)(_ => game.common.thoughts(target).possible.filter(i => state.isPlayable(i) || possibleConns.exists(_._2 == i)))
 
 	state.deck(target).id().fold(game): id =>
 		possibleConns.find(_._2 == id).fold(game): (connOrder, _) =>
@@ -461,16 +464,7 @@ def targetPlay(game: Reactor, action: ClueAction, target: Int, urgent: Boolean, 
 	.withMeta(target):
 		_.reason(state.turnCount).signal(state.turnCount)
 	.pipe: g =>
-		if newInferred.forall(state.isInverted) then
-			Log.warn(s"target $target had only orange inferences! targeting dc")
-			val newGame = g.withMeta(target):
-				_.copy(
-					status = CardStatus.CalledToDiscard,
-					by = Some(action.giver),
-					trash = true
-				)
-			StableResult.Stable(ClueInterp.Discard, newGame)
-		else if newInferred.isEmpty || !state.hasConsistentInfs(g.common.thoughts(target)) then
+		if (newInferred.isEmpty || !state.hasConsistentInfs(g.common.thoughts(target))) && !state.deck(target).id().exists(state.isInverted) then
 			Log.warn(s"target $target was reset!")
 
 			val newGame = g.withThought(target)(_.resetInferences())
@@ -482,16 +476,20 @@ def targetPlay(game: Reactor, action: ClueAction, target: Int, urgent: Boolean, 
 			else
 				StableResult.TryReactive
 		else
+			val invertedTarget =
+				state.deck(target).id().exists(state.isInverted) ||
+				(newInferred.nonEmpty && newInferred.forall(state.isInverted))
+
 			val newGame = g.withMeta(target):
 				_.copy(
-					status = CardStatus.CalledToPlay,
+					status = CardStatus.DragToPlay,
 					by = Some(action.giver),
-					focused = true,
+					focused = !invertedTarget,
 					urgent = urgent
 				)
 
 			Log.info(s"targeting play $target (${state.names(holder)}), infs ${newGame.common.strInfs(state, target)}${if urgent then ", urgent" else ""}")
-			StableResult.Stable(ClueInterp.Play, newGame)
+			StableResult.Stable(if invertedTarget then ClueInterp.Discard else ClueInterp.Play, newGame)
 
 def targetDiscard(game: Reactor, action: ClueAction, target: Int, urgent: Boolean = false): StableResult =
 	val meta = game.meta(target)

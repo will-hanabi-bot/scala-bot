@@ -512,13 +512,13 @@ object PerformAction:
 			case ClueKind.Rank   => PerformAction.Rank(target, value)
 
 	def tryPlay(game: Game, order: Int) =
-		if game.assumeInverted(game.me, order) && game.me.thoughts(order).possibilities.difference(game.state.playableSet).isEmpty then
+		if game.meta(order).status == CardStatus.CalledToDiscard || (game.assumeInverted(game.me, order) && game.me.thoughts(order).possibilities.difference(game.state.playableSet).isEmpty) then
 			PerformAction.Discard(order)
 		else
 			PerformAction.Play(order)
 
 	def tryDiscard(game: Game, order: Int) =
-		if game.assumeInverted(game.me, order) then
+		if game.assumeInverted(game.me, order) && game.meta(order).status != CardStatus.CalledToDiscard then
 			PerformAction.Play(order)
 		else
 			PerformAction.Discard(order)

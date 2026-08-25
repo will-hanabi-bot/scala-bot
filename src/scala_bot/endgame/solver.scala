@@ -83,7 +83,7 @@ case class EndgameSolver[G <: Game](
 	var successRate: Map[Int, Map[PerformAction, (Frac, Int)]] = Map(),
 	/** If true, only picks a few random permutations of trash instead of trying all of them. May make winrate slightly off. */
 	monteCarlo: Boolean = true,
-	timeout: Duration = Duration.ofSeconds(2)
+	timeout: Duration = Duration.ofSeconds(3)
 ):
 	/** Returns the action with the highest winrate by brute-forcing permutations of the deck.
 	  * Will not solve if there are at least 4 unique ids we haven't seen yet.
@@ -417,8 +417,9 @@ case class EndgameSolver[G <: Game](
 
 			val urgentAction = state.hands(playerTurn).find(game.meta(_).urgent).flatMap: urgent =>
 				val perform = game.meta(urgent).status match
-					case CardStatus.CalledToPlay => PerformAction.tryPlay(game, urgent)
-					case _                       => PerformAction.tryDiscard(game, urgent)
+					case CardStatus.DragToPlay    => PerformAction.Play(urgent)
+					case CardStatus.CalledToPlay  => PerformAction.tryPlay(game, urgent)
+					case _                        => PerformAction.tryDiscard(game, urgent)
 				tryAction(perform)
 
 			if urgentAction.isDefined then

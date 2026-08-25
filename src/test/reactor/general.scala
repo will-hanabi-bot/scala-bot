@@ -43,7 +43,7 @@ class General extends munit.FunSuite:
 
 		// Cathy is called to play g1.
 		// hasInfs(game, None, Cathy, 1, Vector("g1"))
-		hasStatus(game, Cathy, 1, CardStatus.CalledToPlay)
+		hasStatus(game, Cathy, 1, CardStatus.DragToPlay)
 
 		// takeTurn("Bob plays b1", "p4")
 
@@ -60,7 +60,7 @@ class General extends munit.FunSuite:
 		.pipe(takeTurn("Alice clues 4 to Bob"))
 		.tap: g =>
 			// Cathy is called to play g1.
-			hasStatus(g, Cathy, 2, CardStatus.CalledToPlay)
+			hasStatus(g, Cathy, 2, CardStatus.DragToPlay)
 		.pipe(takeTurn("Bob plays b1", "y3"))
 
 		assert(game.common.obviousPlayables(game, Cathy.ordinal).contains(game.state.hands(Cathy.ordinal)(1)))
@@ -103,7 +103,7 @@ class General extends munit.FunSuite:
 		// 4 + 2 = 1
 		.pipe(takeTurn("Cathy clues blue to Bob"))
 		.tap: g =>
-			hasStatus(g, Alice, 4, CardStatus.CalledToPlay)
+			hasStatus(g, Alice, 4, CardStatus.DragToPlay)
 		.pipe(takeTurn("Alice plays r1 (slot 4)"))
 
 		hasStatus(game, Bob, 2, CardStatus.CalledToDiscard)
@@ -122,7 +122,7 @@ class General extends munit.FunSuite:
 		)
 		.pipe(takeTurn("Cathy clues yellow to Bob"))
 
-		hasStatus(game, Bob, 1, CardStatus.CalledToPlay)
+		hasStatus(game, Bob, 1, CardStatus.DragToPlay)
 
 		// We should play g2 into it.
 		assertEquals(game.takeAction.unsafeRunSync(), PerformAction.Play(game.state.hands(Alice.ordinal)(1)))
@@ -138,7 +138,7 @@ class General extends munit.FunSuite:
 		)
 		.pipe(takeTurn("Cathy clues yellow to Bob"))
 
-		hasStatus(game, Bob, 1, CardStatus.CalledToPlay)
+		hasStatus(game, Bob, 1, CardStatus.DragToPlay)
 
 		// We should play our 1 into it as g1.
 		assertEquals(game.takeAction.unsafeRunSync(), PerformAction.Play(game.state.hands(Alice.ordinal)(0)))

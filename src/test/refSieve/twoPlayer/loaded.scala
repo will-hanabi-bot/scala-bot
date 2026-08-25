@@ -22,7 +22,7 @@ class Loaded extends munit.FunSuite:
 		)
 		.pipe(takeTurn("Alice clues 4 to Bob"))
 
-		hasStatus(game, Bob, 5, CardStatus.CalledToPlay)
+		hasStatus(game, Bob, 5, CardStatus.DragToPlay)
 
 	test("receives a loaded rank clue"):
 		val game = setup(RefSieve.apply, Vector(
@@ -36,10 +36,10 @@ class Loaded extends munit.FunSuite:
 		.pipe(takeTurn("Alice plays r1 (slot 1)"))
 		.pipe(takeTurn("Bob clues 4 to Alice (slots 1,4)"))
 		.tap: g =>
-			hasStatus(g, Alice, 5, CardStatus.CalledToPlay)
+			hasStatus(g, Alice, 5, CardStatus.DragToPlay)
 		.pipe(takeTurn("Alice plays b1 (slot 2)"))
 
-		hasStatus(game, Alice, 5, CardStatus.CalledToPlay)
+		hasStatus(game, Alice, 5, CardStatus.DragToPlay)
 		hasInfs(game, None, Alice, 5, Vector("r2", "b2"))
 
 	test("interprets a loaded colour clue"):
@@ -117,7 +117,7 @@ class Loaded extends munit.FunSuite:
 		.pipe(takeTurn("Bob clues 5 to Alice (slot 4)"))
 
 		// This is a LPC on slot 5.
-		hasStatus(game, Alice, 5, CardStatus.CalledToPlay)
+		hasStatus(game, Alice, 5, CardStatus.DragToPlay)
 
 	test("revokes ptd after a clue"):
 		val game = setup(RefSieve.apply, Vector(

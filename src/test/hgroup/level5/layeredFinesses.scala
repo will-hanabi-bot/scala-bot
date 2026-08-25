@@ -419,3 +419,23 @@ class LayeredFinesses extends munit.FunSuite:
 		// r1 is known to be in slot 4, with r2 prompted in slot 3.
 		hasInfs(game, None, Alice, 4, Vector("r1"))
 		hasInfs(game, None, Alice, 3, Vector("r2"))
+
+	test("interprets a prompt after a fake finesse"):
+		val game = setup(HGroup.atLevel(5), Vector(
+			Vector("xx", "xx", "xx", "xx", "xx"),
+			Vector("r2", "y4", "g2", "b4", "p4"),
+			Vector("r4", "y4", "g4", "b4", "p5")
+		),
+			starting = Cathy
+		)
+		.pipe(takeTurn("Cathy clues red to Bob"))		// reverse finesse on r2
+		.pipe(takeTurn("Alice plays y1 (slot 1)"))
+		.pipe(takeTurn("Bob clues 5 to Cathy"))
+
+		.pipe(takeTurn("Cathy clues green to Bob"))		// Alice attempts to insert g1 behind r1
+		.pipe(takeTurn("Alice plays b1 (slot 2)"))		// ... but she still doesn't play r1 or g1
+		.pipe(takeTurn("Bob clues 5 to Alice (slots 4,5)"))
+
+		// It is now impossible to fit both r1 and g1 in the initial finesse. r1 must be in slot 3 and g1 must be in slot 2 (previously slot 1).
+		hasInfs(game, None, Alice, 3, Vector("r1"))
+		hasInfs(game, None, Alice, 2, Vector("g1"))

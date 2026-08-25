@@ -20,7 +20,7 @@ class Stable extends munit.FunSuite:
 		))
 		.pipe(takeTurn("Alice clues green to Bob"))
 
-		hasStatus(game, Bob, 1, CardStatus.CalledToPlay)
+		hasStatus(game, Bob, 1, CardStatus.DragToPlay)
 		hasInfs(game, None, Bob, 1, Vector("r1", "y1", "b1", "p1"))
 
 	test("it understands a gapped ref play"):
@@ -31,7 +31,7 @@ class Stable extends munit.FunSuite:
 		))
 		.pipe(takeTurn("Alice clues purple to Bob"))
 
-		hasStatus(game, Bob, 2, CardStatus.CalledToPlay)
+		hasStatus(game, Bob, 2, CardStatus.DragToPlay)
 		hasInfs(game, None, Bob, 2, Vector("r1", "y1", "g1", "b1"))
 
 	test("it understands a chop ref play"):
@@ -67,7 +67,7 @@ class Stable extends munit.FunSuite:
 		)
 		.pipe(takeTurn("Bob clues red to Alice (slot 2)"))
 
-		hasStatus(game, Alice, 1, CardStatus.CalledToPlay)
+		hasStatus(game, Alice, 1, CardStatus.DragToPlay)
 
 	test("it understands a ref discard"):
 		val game = setup(RefSieve.apply, Vector(
@@ -129,7 +129,7 @@ class Stable extends munit.FunSuite:
 		val slot2 = game.meta(game.state.hands(Alice.ordinal)(1))
 		val playables = game.common.thinksPlayables(game, Alice.ordinal)
 
-		assertEquals(slot2.status, CardStatus.CalledToPlay)
+		assertEquals(slot2.status, CardStatus.DragToPlay)
 		assert(playables.contains(slot2.order))
 
 	test("understands a trash push touching old cards"):
@@ -147,7 +147,7 @@ class Stable extends munit.FunSuite:
 		val slot5 = game.meta(game.state.hands(Alice.ordinal)(4))
 		val playables = game.common.thinksPlayables(game, Alice.ordinal)
 
-		assertEquals(slot5.status, CardStatus.CalledToPlay)
+		assertEquals(slot5.status, CardStatus.DragToPlay)
 		assert(playables.contains(slot5.order))
 
 	test("wraps around a loaded trash push"):
@@ -165,5 +165,5 @@ class Stable extends munit.FunSuite:
 		val slot5 = game.meta(game.state.hands(Alice.ordinal)(4))
 		val playables = game.common.thinksPlayables(game, Alice.ordinal)
 
-		assertEquals(slot5.status, CardStatus.CalledToPlay)
+		assertEquals(slot5.status, CardStatus.DragToPlay)
 		assert(playables.contains(slot5.order))

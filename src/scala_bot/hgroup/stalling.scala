@@ -64,8 +64,7 @@ def isStall(ctx: ClueContext, severity: Int): Option[StallInterp] =
 
 	val notStall = severity == 0 ||
 		(chop && game.players(target).thoughts(focus).possible.forall(isSave)) ||
-		(focusNew && (game.common.orderKp(game, focus) || trash)) ||
-		(!state.variant.pinkish && clue.isEq(ClueKind.Rank, 1))		// cluing 1 is never a stall
+		(focusNew && (game.common.orderKp(game, focus) || trash))
 
 	if notStall then
 		return None
@@ -92,7 +91,7 @@ def isStall(ctx: ClueContext, severity: Int): Option[StallInterp] =
 			Log.info(s"fill-in stall!")
 			return Some(StallInterp.FillIn)
 
-	if severity >= 3 && chop && !game.common.thinksLocked(game, target) then
+	if severity >= 3 && chop && !game.common.thinksLocked(game, target) && !clue.isEq(ClueKind.Rank, 1) then
 		if state.deck(focus).id().exists(isSave) then
 			Log.info("save that could look like lhs!")
 			return Some(StallInterp.SaveLHS)
@@ -104,7 +103,7 @@ def isStall(ctx: ClueContext, severity: Int): Option[StallInterp] =
 		Log.info(s"locked hand stall!")
 		return Some(StallInterp.Locked)
 
-	if severity == 4 && prev.state.clueTokens == 8 && focusNew && !list.contains(state.hands(target).head) then
+	if severity == 4 && prev.state.clueTokens == 8 && focusNew && !list.contains(state.hands(target).head) && !clue.isEq(ClueKind.Rank, 1) then
 		Log.info(s"8 clue stall!")
 		return Some(StallInterp.Clues8)
 
@@ -169,11 +168,11 @@ def alternativeClue(ctx: ClueContext, severity: Int, maxStall: Int) =
 
 			case ClueInterp.Stall =>
 				val interp = hypo.stallInterp.get
-				interp match
-					case StallInterp.Stall5 =>
-						hypo.level >= 2 && !hypo.stalled5 && STALL_INDICES(interp) < maxStall
 
-					case i => STALL_INDICES(i) < maxStall
+				STALL_INDICES(interp) < maxStall || {
+					interp matchesP:
+						case StallInterp.Stall5 => hypo.level >= 2 && (!hypo.inEarlyGame || !hypo.stalled5)
+				}
 
 	val thinksStall = FastBitSet.from(0 until state.numPlayers)
 		.when(_ => severity == 2 && game.dcStatus == DcStatus.None && game.dda.isDefined): ts =>

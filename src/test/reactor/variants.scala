@@ -63,7 +63,7 @@ class Variants extends munit.FunSuite:
 
 		// Since Alice had a safe action, this is a trash push.
 		assertEquals(game.common.obviousPlayables(game, Alice.ordinal), Vector(game.state.hands(Alice.ordinal)(0)))
-		hasStatus(game, Alice, 1, CardStatus.CalledToPlay)
+		hasStatus(game, Alice, 1, CardStatus.DragToPlay)
 
 	test("understands a brown tempo clue"):
 		val game = setup(Reactor.apply, Vector(
@@ -96,7 +96,7 @@ class Variants extends munit.FunSuite:
 		.pipe(takeTurn("Cathy clues 4 to Bob"))
 
 		// 3 + 1 = 4, not 2 + 1 = 3
-		hasStatus(game, Alice, 3, CardStatus.CalledToPlay)
+		hasStatus(game, Alice, 3, CardStatus.DragToPlay)
 
 	test("understands a pink tempo clue"):
 		val game = setup(Reactor.apply, Vector(

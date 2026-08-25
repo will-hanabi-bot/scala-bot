@@ -14,13 +14,14 @@ def getResult(game: HGroup, hypo: HGroup, action: ClueAction): Double =
 		return -100
 
 	val newPlayables = state.heldOrders.filter: o =>
-		meta(o).status != CardStatus.Finessed && hypo.meta(o).status == CardStatus.Finessed
+		hypo.gainedStatus(game, o, CardStatus.Finessed) ||
+		hypo.gainedStatus(game, o, CardStatus.CalledToPlay)
 
 	val badPlay = newPlayables.find: o =>
 		!(hypo.me.hypoPlays.contains(o) || (game.inEndgame && state.deck(o).id().exists(state.isPlayable)))
 
 	if badPlay.isDefined then
-		Log.warn(s"clue ${clue.fmt(state, target)} results in ${state.logId(badPlay.get)} ${badPlay.get} looking playable! ${hypo.me.hypoPlays}")
+		Log.warn(s"clue ${clue.fmt(state, target)} results in ${state.logId(badPlay.get)} ${badPlay.get} looking playable! ${hypo.me.hypoPlays.fmt}")
 		return -100
 
 	val badTrash = state.heldOrders.find: o =>
@@ -427,7 +428,9 @@ def _evalAction(game: HGroup, action: Action): Double =
 
 		case DiscardAction(playerIndex, order, _, _, failed) =>
 			val thought = game.me.thoughts(order)
-			thought.infoLock.getOrElse(thought.possibilities).toList.foldLeftOpt(0.0): (value, i) =>
+			val poss = thought.infoLock.getOrElse(thought.possibilities)
+
+			poss.toList.foldLeftOpt(0.0): (value, i) =>
 				Log.highlight(Console.GREEN, s"discarding ${state.logId(i)}")
 				val hypoGame = game.copy(allowFindOwn = false).simulate(DiscardAction(playerIndex, order, i.suitIndex, i.rank, failed))
 
@@ -438,7 +441,7 @@ def _evalAction(game: HGroup, action: Action): Double =
 					Log.info(f"${action.fmt(state)}%s: $best%.2f (${hypoGame.lastMove.get}%s)")
 					Right(best + value)
 			.when(_ != -100):
-				_ / game.me.thoughts(order).possibilities.length
+				_ / poss.length
 
 		case _ => throw new Error("impossible")
 

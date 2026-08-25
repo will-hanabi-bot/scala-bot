@@ -5,7 +5,7 @@ import scala_bot.utils._
 import scala_bot.logger.Log
 
 def getResult(game: RefSieve, hypo: RefSieve, action: ClueAction): Double =
-	val (common, state, meta) = (game.common, game.state, game.meta)
+	val (common, state) = (game.common, game.state)
 	val ClueAction(giver, target, list, clue) = action
 
 	val (newTouched, fill, elim) = elimResult(game, hypo, hypo.state.hands(target), list)
@@ -16,7 +16,10 @@ def getResult(game: RefSieve, hypo: RefSieve, action: ClueAction): Double =
 		hypo.state.deck(o).clued && !common.thinksTrash(game, target).contains(o)
 
 	val newPlayables = state.heldOrders.filter: o =>
-		meta(o).status != CardStatus.CalledToPlay && hypo.meta(o).status == CardStatus.CalledToPlay
+		hypo.gainedStatus(game, o, CardStatus.CalledToPlay) ||
+		hypo.gainedStatus(game, o, CardStatus.Finessed) ||
+		(hypo.gainedStatus(game, o, CardStatus.DragToPlay) && !state.isInverted(o)) ||
+		(hypo.gainedStatus(game, o, CardStatus.CalledToDiscard) && state.isInverted(o))
 
 	val badPlayable = newPlayables.find: o =>
 		!state.isInverted(o) &&
@@ -24,7 +27,7 @@ def getResult(game: RefSieve, hypo: RefSieve, action: ClueAction): Double =
 
 	badPlayable match
 		case Some(badPlay) =>
-			Log.warn(s"clue ${clue.fmt(state, target)} results in ${state.logId(badPlay)} ${badPlay} looking playable! ${hypo.me.hypoPlays}")
+			Log.warn(s"clue ${clue.fmt(state, target)} results in ${state.logId(badPlay)} ${badPlay} looking playable! ${hypo.me.hypoPlays.fmt}")
 			return -100
 		case None => ()
 
@@ -334,7 +337,7 @@ def evalGame(orig: RefSieve, game: RefSieve): Double =
 				case Some(id) => if id.rank == 5 then 0.8 else 0.4
 		else
 			game.meta(order).status match
-				case CardStatus.CalledToPlay =>
+				case CardStatus.CalledToPlay | CardStatus.DragToPlay =>
 					game.me.thoughts(order).id(infer = true) match
 						case None => 0.4
 						case Some(id) =>
@@ -416,8 +419,7 @@ def evalGame(orig: RefSieve, game: RefSieve): Double =
 
 	val badPtdVal =
 		val badPtd = orig.state.heldOrders.find: o =>
-			orig.meta(o).status != CardStatus.PermissionToDiscard &&
-			game.meta(o).status == CardStatus.PermissionToDiscard &&
+			game.gainedStatus(orig, o, CardStatus.PermissionToDiscard) &&
 			orig.state.deck(o).id().exists(orig.state.isCritical)
 
 		if badPtd.isDefined then -5 else 0

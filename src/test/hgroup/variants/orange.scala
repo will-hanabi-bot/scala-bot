@@ -247,3 +247,95 @@ class Orange extends munit.FunSuite:
 		.pipe(takeTurn("Bob bombs o3", "r5"))
 
 		assertEquals(game.inEarlyGame, false)
+
+	test("doesn't try to insert an orange card into a layered finesse"):
+		val game = setup(HGroup.atLevel(5), Vector(
+			Vector("xx", "xx", "xx", "xx"),
+			Vector("r2", "o2", "g4", "b4"),
+			Vector("r4", "y4", "g4", "b4"),
+			Vector("r3", "y3", "g3", "b3"),
+		),
+			variant = TestVariant.Orange5,
+			starting = Cathy,
+			clueTokens = 4
+		)
+		.pipe(takeTurn("Cathy clues red to Bob"))
+		.tap: g =>
+			hasInfs(g, None, Alice, 1, Vector("r1"))
+		.pipe(takeTurn("Donald clues orange to Bob"))
+
+		hasInfs(game, None, Alice, 1, Vector("r1"))
+		hasInfs(game, None, Alice, 2, Vector("o1"))
+
+		// Still, only slot 1 is playable, because it might be layered.
+		assertEquals(game.common.thinksPlayables(game, Alice.ordinal), Vector(game.state.hands(Alice.ordinal)(0)))
+
+	test("doesn't try to insert a layer into an orange finesse"):
+		val game = setup(HGroup.atLevel(5), Vector(
+			Vector("xx", "xx", "xx", "xx"),
+			Vector("r2", "o2", "g4", "b4"),
+			Vector("r4", "y4", "g4", "b4"),
+			Vector("r3", "y3", "g3", "b3"),
+		),
+			variant = TestVariant.Orange5,
+			starting = Cathy,
+			clueTokens = 4
+		)
+		.pipe(takeTurn("Cathy clues orange to Bob"))
+		.tap: g =>
+			hasInfs(g, None, Alice, 1, Vector("o1"))
+		.pipe(takeTurn("Donald clues red to Bob"))
+
+		hasInfs(game, None, Alice, 1, Vector("o1"))
+		hasInfs(game, None, Alice, 2, Vector("r1"))
+
+		// Still, only slot 1 is playable, because it might be layered.
+		assertEquals(game.common.thinksPlayables(game, Alice.ordinal), Vector(game.state.hands(Alice.ordinal)(0)))
+
+	test("discards an orange card from a pos misplay"):
+		val game = setup(HGroup.atLevel(8), Vector(
+			Vector("xx", "xx", "xx", "xx", "xx"),
+			Vector("r5", "y1", "g1", "b1", "o1"),
+			Vector("r1", "y1", "g1", "b1", "o1")
+		),
+			variant = TestVariant.Orange5,
+			starting = Cathy,
+			playStacks = Some(Vector(4, 5, 5, 5, 4)),
+			clueTokens = 0,
+			discarded = Vector(
+				"r2", "r3", "r4",
+				"y2", "y3", "y4",
+				"g2", "g3", "g4",
+				"b2", "b3"
+			)	// Missing: r1, b4, o2, o3, o4, o5
+		)
+		.tap: g =>
+			assertEquals(g.state.cardsLeft, 1)
+		.pipe(takeTurn("Cathy bombs r1", "b4"))
+
+		// Alice should discard slot 1 as o5.
+		assertEquals(game.takeAction.unsafeRunSync(), PerformAction.Discard(game.state.hands(Alice.ordinal)(0)))
+
+	test("recognizes an orange misplay as a pos dc"):
+		val game = setup(HGroup.atLevel(8), Vector(
+			Vector("xx", "xx", "xx", "xx", "xx"),
+			Vector("r5", "y1", "g1", "b1", "o1"),
+			Vector("o1", "y1", "g1", "b1", "r1")
+		),
+			variant = TestVariant.Orange5,
+			starting = Cathy,
+			playStacks = Some(Vector(4, 5, 5, 5, 4)),
+			clueTokens = 0,
+			discarded = Vector(
+				"r2", "r3", "r4",
+				"y2", "y3", "y4",
+				"g2", "g3", "g4",
+				"b2", "b3"
+			)	// Missing: r1, b4, o2, o3, o4, o5
+		)
+		.tap: g =>
+			assertEquals(g.state.cardsLeft, 1)
+		.pipe(takeTurn("Cathy bombs o1", "b4"))
+
+		// Alice doesn't have o5 in slot 1.
+		assertEquals(game.takeAction.unsafeRunSync(), PerformAction.Discard(game.state.hands(Alice.ordinal)(4)))

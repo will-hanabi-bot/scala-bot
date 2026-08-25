@@ -99,7 +99,7 @@ def assignConns(game: HGroup, action: ClueAction, fps: Seq[FocusPossibility], fo
 						// Allow connecting on self blind plays (allow hidden ones since they can actually allow more plays)
 						state.hands(conn.reacting).foldLeft(state.playableSet): (acc, order) =>
 							if !g.isBlindPlaying(order) then acc else
-								acc.union(acc.flatMap(_.next))
+								acc.union(g.future(order).intersect(acc).flatMap(_.next))
 						.difference(state.trashSet)
 
 				val maybeFinessed =
@@ -176,12 +176,12 @@ def assignConns(game: HGroup, action: ClueAction, fps: Seq[FocusPossibility], fo
 			.pipe: g =>
 				conn match
 					case f: PlayableConn if f.insertingInto.isDefined && !retroactive =>
-						val insertOrders = f.insertingInto.get
-						if target == state.ourPlayerIndex then
+						if f.reacting == state.ourPlayerIndex then
 							// Write the shifted connections when we insert into our own layered finesse
-							insertOrders.foldLeft(g): (acc, order) =>
+							f.insertingInto.get.foldLeft(g): (acc, order) =>
 								if shifted.contains(order) then acc else
-									val finesse = g.findFinesse(f.reacting).getOrElse(throw new Error(s"tried to insert into $order but they had no finesse position!"))
+									val ignore = FastBitSet.from(state.ourHand.filter(_ > f.order))
+									val finesse = g.findFinesse(f.reacting, connected = ignore).getOrElse(throw new Error(s"tried to insert into $order but they had no finesse position!"))
 									Log.info(s"shifting finesse to $finesse for old ids [${game.common.strInfs(state, order)}]")
 
 									shifted += order
@@ -466,7 +466,7 @@ def resolveClue(ctx: ClueContext, fps: Seq[FocusPossibility], symmetricInterp: S
 								}
 
 						conn match
-							case conn @ PlayableConn(reacting, order, id, linked, hidden, insertingInto) if writePlayLink(conn) =>
+							case conn @ PlayableConn(_, order, id, linked, hidden, _) if writePlayLink(conn) =>
 								val allLinked = allFps.foldLeft(linked): (acc, fp2) =>
 									if fp2.symmetric || fp2.ambiguous || fp2 == fp then acc else
 										fp2.connections.find(c => !acc.contains(c.order) && c.ids.forall(_.rank == id.rank)) match

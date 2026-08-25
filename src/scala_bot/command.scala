@@ -517,13 +517,20 @@ class BotClient(queue: Queue[IO, String], gameRef: Ref[IO, Option[Game]], config
 							case _: DrawAction => state.turnCount == 1
 							case _ => false)
 
-					val actIO = IO.whenA(perform):
+					val x = newGame match
+						case r: Reactor  => r.copy(queuedCmds = Nil)
+						case r: RefSieve => r.copy(queuedCmds = Nil)
+						case h: HGroup   => h.copy(queuedCmds = Nil)
+
+					gameRef.set(Some(x)) *>
+					queuedCmds.traverse_(sendCmd(_, _)) *>
+					IO.whenA(perform):
 						val suggestedActionIO = newGame match
 							case r: Reactor  => r.takeAction
 							case r: RefSieve => r.takeAction
 							case h: HGroup   => h.takeAction
 
-						IO.sleep(2.seconds).whenA(!fastMode).start.flatMap: sleepFiber =>
+						val computeAndSend = IO.sleep(2.seconds).whenA(!fastMode).start.flatMap: sleepFiber =>
 							suggestedActionIO.flatMap: action =>
 								Log.highlight(Console.BLUE, s"Suggested action: ${action.fmt(newGame, accordingTo = Some(newGame.me))}")
 								val arg = action.json(tableID.get)
@@ -534,14 +541,7 @@ class BotClient(queue: Queue[IO, String], gameRef: Ref[IO, Option[Game]], config
 								else
 									sleepFiber.cancel
 
-					val x = newGame match
-						case r: Reactor  => r.copy(queuedCmds = Nil)
-						case r: RefSieve => r.copy(queuedCmds = Nil)
-						case h: HGroup   => h.copy(queuedCmds = Nil)
-
-					gameRef.set(Some(x)) *>
-					queuedCmds.traverse_(sendCmd(_, _)) *>
-					actIO
+						computeAndSend.start.void
 
 	def assignSettings(data: ChatMessage, pm: Boolean) =
 		val reply =

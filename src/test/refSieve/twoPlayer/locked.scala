@@ -59,7 +59,7 @@ class Locked extends munit.FunSuite:
 		.pipe(takeTurn("Bob clues 5 to Alice (slot 5)"))
 		.pipe(takeTurn("Alice clues 5 to Bob"))
 
-		hasStatus(game, Bob, 1, CardStatus.CalledToPlay)
+		hasStatus(game, Bob, 1, CardStatus.DragToPlay)
 
 class UnlockPromise extends munit.FunSuite:
 	override def beforeAll() = Logger.setLevel(LogLevel.Off)

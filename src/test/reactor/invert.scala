@@ -29,7 +29,7 @@ class Invert extends munit.FunSuite:
 			assertEquals(g.takeAction.unsafeRunSync(), PerformAction.Discard(g.state.hands(Alice.ordinal)(1)))
 		.pipe(takeTurn("Alice discards r4 (slot 2)"))
 
-		hasStatus(game, Bob, 1, CardStatus.CalledToPlay)
+		hasStatus(game, Bob, 1, CardStatus.DragToPlay)
 
 	test("it receives a response inversion"):
 		val game = setup(Reactor.apply, Vector(
@@ -42,7 +42,7 @@ class Invert extends munit.FunSuite:
 		)
 		.pipe(takeTurn("Bob clues green to Alice (slot 4)"))
 		.tap: g =>
-			hasStatus(g, Alice, 3, CardStatus.CalledToPlay)
+			hasStatus(g, Alice, 3, CardStatus.DragToPlay)
 		.pipe(takeTurn("Cathy plays r1", "r4"))
 
 		hasStatus(game, Alice, 2, CardStatus.CalledToDiscard)
@@ -59,11 +59,11 @@ class Invert extends munit.FunSuite:
 		)
 		.pipe(takeTurn("Bob clues green to Alice (slot 4)"))
 		.tap: g =>
-			hasStatus(g, Alice, 3, CardStatus.CalledToPlay)
+			hasStatus(g, Alice, 3, CardStatus.DragToPlay)
 		.pipe(takeTurn("Cathy plays y1", "r4"))
 
 		hasStatus(game, Alice, 4, CardStatus.None)
-		hasStatus(game, Alice, 3, CardStatus.CalledToPlay)
+		hasStatus(game, Alice, 3, CardStatus.DragToPlay)
 
 	test("it doesn't receive a declined inversion discard from chop"):
 		val game = setup(Reactor.apply, Vector(
@@ -115,10 +115,10 @@ class Invert extends munit.FunSuite:
 		.pipe(takeTurn("Alice clues 3 to Bob"))
 		.pipe(takeTurn("Bob clues red to Alice (slot 3)"))		// Since Cathy is loaded, this is stable
 		.tap: g =>
-			hasStatus(g, Alice, 2, CardStatus.CalledToPlay)
+			hasStatus(g, Alice, 2, CardStatus.DragToPlay)
 		.pipe(takeTurn("Cathy discards r1 (slot 2)", "r4"))		// Even though this is kt, Cathy is expected to play
 
-		hasStatus(game, Alice, 1, CardStatus.CalledToPlay)
+		hasStatus(game, Alice, 1, CardStatus.DragToPlay)
 		hasStatus(game, Alice, 2, CardStatus.None)
 
 	test("it doesn't give a response inversion to dc kt when reactor is unloaded"):
@@ -157,7 +157,7 @@ class Invert extends munit.FunSuite:
 		.pipe(takeTurn("Bob discards r1", "r3"))
 
 		// Since Bob was expected to play b1, discarding r1 is a reaction.
-		hasStatus(game, Cathy, 2, CardStatus.CalledToPlay)
+		hasStatus(game, Cathy, 2, CardStatus.DragToPlay)
 
 	test("it understands a bad lock"):
 		val game = setup(Reactor.apply, Vector(
@@ -170,8 +170,8 @@ class Invert extends munit.FunSuite:
 		// Blue is available to push Cathy's r1.
 		.pipe(takeTurn("Alice clues 3 to Cathy"))
 		.tap: g =>
-			hasStatus(g, Bob, 3, CardStatus.CalledToPlay)
+			hasStatus(g, Bob, 3, CardStatus.DragToPlay)
 		.pipe(takeTurn("Bob plays g1", "r4"))
 
-		hasStatus(game, Cathy, 2, CardStatus.CalledToPlay)
+		hasStatus(game, Cathy, 2, CardStatus.DragToPlay)
 		assert(!game.common.obviousLocked(game, Cathy.ordinal))

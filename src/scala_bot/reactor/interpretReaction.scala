@@ -34,6 +34,7 @@ def elimDcDc(state: State, common: Player, meta: Vector[ConvData], reacter: Int,
 
 		val skip = status == CardStatus.CalledToPlay ||
 			status == CardStatus.CalledToDiscard ||
+			status == CardStatus.DragToPlay ||
 			(state.deck(receiverHand(targetSlot - 1)).clued && !state.deck(receiveOrder).clued)
 
 		if skip then
@@ -61,6 +62,7 @@ def elimPlayDc(state: State, common: Player, meta: Vector[ConvData], reacter: In
 
 		val skip = status == CardStatus.CalledToPlay ||
 			status == CardStatus.CalledToDiscard ||
+			status == CardStatus.DragToPlay ||
 			(state.deck(receiverHand(targetSlot - 1)).clued && !state.deck(receiveOrder).clued)
 
 		if skip then
@@ -87,7 +89,7 @@ def elimDcPlay(state: State, common: Player, meta: Vector[ConvData], reacter: In
 		val status = m(receiveOrder).status
 		lazy val reactSlot = calcSlot(focusSlot, i + 1)
 
-		if status == CardStatus.CalledToPlay || status == CardStatus.CalledToDiscard then
+		if status == CardStatus.CalledToPlay || status == CardStatus.CalledToDiscard || status == CardStatus.DragToPlay then
 			(c, m)
 		else
 			state.hands(reacter).lift(reactSlot - 1) match
@@ -105,7 +107,7 @@ def elimPlayPlay(state: State, common: Player, meta: Vector[ConvData], reacter: 
 		val status = m(receiveOrder).status
 		lazy val reactSlot = calcSlot(focusSlot, i + 1)
 
-		if status == CardStatus.CalledToPlay || status == CardStatus.CalledToDiscard then
+		if status == CardStatus.CalledToPlay || status == CardStatus.CalledToDiscard || status == CardStatus.DragToPlay then
 			(c, m)
 		else
 			state.hands(reacter).lift(reactSlot - 1).fold((c, m)): reactOrder =>
@@ -127,7 +129,7 @@ def elimPlayPlay(state: State, common: Player, meta: Vector[ConvData], reacter: 
 						(newCommon, updateMeta(meta, newCommon, receiveOrder))
 	}
 
-def targetIDiscard(prev: Reactor, game: Reactor, wc: ReactorWC, targetSlot: Int) =
+def targetIDiscard(prev: Reactor, game: Reactor, wc: ReactorWC, targetSlot: Int, trueDirection: Boolean) =
 	val common = game.common
 	val order = wc.receiverHand(targetSlot - 1)
 	val meta = game.meta(order)
@@ -143,7 +145,7 @@ def targetIDiscard(prev: Reactor, game: Reactor, wc: ReactorWC, targetSlot: Int)
 	Log.info(s"targeting discard on $order ${newCommon.strInfs(game.state, order)}")
 
 	val newMeta = game.meta.updated(order, meta.copy(
-		status = CardStatus.CalledToDiscard,
+		status = if trueDirection then CardStatus.CalledToDiscard else CardStatus.DragToPlay,
 		by = Some(wc.giver),
 		trash = newInferred.isEmpty
 	).reason(game.state.turnCount)
@@ -151,7 +153,7 @@ def targetIDiscard(prev: Reactor, game: Reactor, wc: ReactorWC, targetSlot: Int)
 
 	(newCommon, newMeta)
 
-def targetIPlay(@annotation.unused _prev: Reactor, game: Reactor, wc: ReactorWC, targetSlot: Int) =
+def targetIPlay(@annotation.unused _prev: Reactor, game: Reactor, wc: ReactorWC, targetSlot: Int, trueDirection: Boolean) =
 	val state = game.state
 	val order = wc.receiverHand(targetSlot - 1)
 
@@ -163,16 +165,19 @@ def targetIPlay(@annotation.unused _prev: Reactor, game: Reactor, wc: ReactorWC,
 			IdentitySet.from:
 				obviousPlays.flatMap(game.common.thoughts(_).id(infer = true))
 
+	val newInferred = game.common.thoughts(order).inferred.intersect(selfPlayables)
+		.when(_.isEmpty)(_ => game.common.thoughts(order).possible.intersect(selfPlayables))
+
 	val newCommon = game.common.withThought(order)(t => t.copy(
 		oldInferred = t.inferred.toOpt,
-		inferred = t.inferred.intersect(selfPlayables),
-		infoLock = t.inferred.intersect(selfPlayables).toOpt
+		inferred = newInferred,
+		infoLock = newInferred.toOpt
 	))
 
-	Log.info(s"targeting play on $order ${newCommon.strInfs(state, order)}")
+	Log.info(s"targeting play on $order (${newInferred.fmt(state)})")
 
 	val newMeta = game.meta.updated(order, game.meta(order).copy(
-		status = CardStatus.CalledToPlay,
+		status = if trueDirection then CardStatus.DragToPlay else CardStatus.CalledToDiscard,
 		by = Some(wc.giver),
 		focused = true
 	).reason(state.turnCount)
@@ -210,9 +215,9 @@ def reactDiscard(prev: Reactor, game: Reactor, playerIndex: Int, order: Int, wc:
 
 			val (newCommon, newMeta) = {
 				if targetPlay then
-					targetIPlay(prev, game, wc, targetSlot)
+					targetIPlay(prev, game, wc, targetSlot, trueDirection = clue.kind == ClueKind.Colour)
 				else
-					targetIDiscard(prev, game, wc, targetSlot)
+					targetIDiscard(prev, game, wc, targetSlot, trueDirection = clue.kind == ClueKind.Rank)
 			}
 			.pipe: (c, m) =>
 				if clue.kind == ClueKind.Colour then
@@ -251,9 +256,9 @@ def reactPlay(prev: Reactor, game: Reactor, playerIndex: Int, order: Int, wc: Re
 
 			val (newCommon, newMeta) = {
 				if targetPlay then
-					targetIPlay(prev, game, wc, targetSlot)
+					targetIPlay(prev, game, wc, targetSlot, trueDirection = clue.kind == ClueKind.Rank)
 				else
-					targetIDiscard(prev, game, wc, targetSlot)
+					targetIDiscard(prev, game, wc, targetSlot, trueDirection = clue.kind == ClueKind.Colour)
 			}
 			.pipe: (c, m) =>
 				if clue.kind == ClueKind.Rank then

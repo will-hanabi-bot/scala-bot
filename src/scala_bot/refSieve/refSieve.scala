@@ -65,8 +65,10 @@ case class RefSieve(
 			true
 
 	def chop(playerIndex: Int) =
-		state.hands(playerIndex).find:
-			meta(_).status == CardStatus.CalledToDiscard
+		state.hands(playerIndex).find: o =>
+			val status = meta(o).status
+			status == CardStatus.CalledToDiscard ||
+			status == CardStatus.PermissionToDiscard
 		.orElse:
 			state.hands(playerIndex).find: order =>
 				zcsTurn.forall(_ >= state.deck(order).turnDrawn) &&
@@ -321,12 +323,12 @@ object RefSieve:
 							case Some(f2) =>
 								Log.info(s"no-info double bluff on $f1 and $f2!")
 
-								game.withMeta(f1)(_.copy(status = CardStatus.CalledToPlay).reason(state.turnCount).signal(state.turnCount))
-									.withMeta(f2)(_.copy(status = CardStatus.CalledToPlay).reason(state.turnCount).signal(state.turnCount))
+								game.withMeta(f1)(_.copy(status = CardStatus.DragToPlay).reason(state.turnCount).signal(state.turnCount))
+									.withMeta(f2)(_.copy(status = CardStatus.DragToPlay).reason(state.turnCount).signal(state.turnCount))
 									.withMove(if validNI(f1, f2) then ClueInterp.Play else ClueInterp.Mistake)
 							case None =>
-								game.withMeta(f1)(_.copy(status = CardStatus.CalledToPlay).reason(state.turnCount).signal(state.turnCount))
-									.withMeta(list.max)(_.copy(status = CardStatus.CalledToPlay).reason(state.turnCount).signal(state.turnCount))
+								game.withMeta(f1)(_.copy(status = CardStatus.DragToPlay).reason(state.turnCount).signal(state.turnCount))
+									.withMeta(list.max)(_.copy(status = CardStatus.DragToPlay).reason(state.turnCount).signal(state.turnCount))
 									.withMove(if validNI(f1, list.max) then ClueInterp.Play else ClueInterp.Mistake)
 					case None =>
 						game.withMove(ClueInterp.Mistake)
@@ -421,51 +423,59 @@ object RefSieve:
 			val DiscardAction(playerIndex, order, suitIndex, rank, failed) = action
 			val id = Identity(suitIndex, rank)
 
-			if !failed && prev.state.deck(order).clued then
-				val sacrifice = prev.common.thinksLocked(prev, playerIndex) ||
-					(prev.common.thinksLocked(prev, state.nextPlayerIndex(playerIndex)) && prev.state.hands(playerIndex).forall(game.isSaved))
+			val newGame =
+				if !failed && prev.state.deck(order).clued then
+					val sacrifice = prev.common.thinksLocked(prev, playerIndex) ||
+						(prev.common.thinksLocked(prev, state.nextPlayerIndex(playerIndex)) && prev.state.hands(playerIndex).forall(game.isSaved))
 
-				if sacrifice then
-					Log.info(s"sacrifice dc!")
-					game.withMove(DiscardInterp.Sacrifice)
-				else if suitIndex != -1 && rank != -1 && state.isUseful(id) then
-					interpretUsefulDc(game, action) match
-						case DiscardResult.None =>
-							game.withMove(DiscardInterp.None)
+					if sacrifice then
+						Log.info(s"sacrifice dc!")
+						game.withMove(DiscardInterp.Sacrifice)
+					else if suitIndex != -1 && rank != -1 && state.isUseful(id) then
+						interpretUsefulDc(game, action) match
+							case DiscardResult.None =>
+								game.withMove(DiscardInterp.None)
 
-						case DiscardResult.Mistake =>
-							game.withMove(DiscardInterp.Mistake)
+							case DiscardResult.Mistake =>
+								game.withMove(DiscardInterp.Mistake)
 
-						case DiscardResult.GentlemansDiscard(targets, _) =>
-							targets.foldLeft((game, game.state)):
-								case ((acc, hypoState), o) =>
-									val hidden = o != targets.last
-									val inferred = if hidden then hypoState.playableSet else IdentitySet.single(id)
-									val newState = game.me.thoughts(o).id().fold(hypoState): i =>
-										hypoState.withPlay(i)
+							case DiscardResult.GentlemansDiscard(targets, _) =>
+								targets.foldLeft((game, game.state)):
+									case ((acc, hypoState), o) =>
+										val hidden = o != targets.last
+										val inferred = if hidden then hypoState.playableSet else IdentitySet.single(id)
+										val newState = game.me.thoughts(o).id().fold(hypoState): i =>
+											hypoState.withPlay(i)
 
-									acc.copy(
-										common = acc.common.withThought(o)(_.copy(inferred = inferred)),
-										meta = acc.meta.updated(o, game.meta(o).copy(
-											status = CardStatus.GentlemansDiscard,
-											hidden = hidden
-										))
-									) -> newState
-							._1
-							.withMove(DiscardInterp.GentlemansDiscard)
+										acc.copy(
+											common = acc.common.withThought(o)(_.copy(inferred = inferred)),
+											meta = acc.meta.updated(o, game.meta(o).copy(
+												status = CardStatus.GentlemansDiscard,
+												hidden = hidden
+											))
+										) -> newState
+								._1
+								.withMove(DiscardInterp.GentlemansDiscard)
 
-						case DiscardResult.Sarcastic(orders) =>
-							game.copy(
-								common = game.common.copy(links = Link.Sarcastic(FastBitSet.from(orders), id) +: game.common.links)
-							)
-							.withMove(DiscardInterp.Sarcastic)
+							case DiscardResult.Sarcastic(orders) =>
+								game.copy(
+									common = game.common.copy(links = Link.Sarcastic(FastBitSet.from(orders), id) +: game.common.links)
+								)
+								.withMove(DiscardInterp.Sarcastic)
 
-						case DiscardResult.Baton(_, _) =>
-							throw new Error("baton unsupported!")
+							case DiscardResult.Baton(_, _) =>
+								throw new Error("baton unsupported!")
+					else
+						game.withMove(DiscardInterp.None)
 				else
 					game.withMove(DiscardInterp.None)
-			else
-				game.withMove(DiscardInterp.None)
+
+			newGame.when(g => g.state.numPlayers == 2 && prev.state.hands(playerIndex)(0) == order && !prev.isTouched(0) && !prev.chop(playerIndex).contains(order)): g =>
+				Log.highlight(Console.CYAN, s"${state.names(playerIndex)} discarded slot 1 with ptd to the right (${prev.chop(playerIndex).get}), removing ptd!")
+
+				g.state.hands(playerIndex).foldLeft(g): (acc, o) =>
+					if acc.meta(o).status != CardStatus.PermissionToDiscard then acc else
+						acc.withMeta(o)(_.copy(status = CardStatus.None))
 			.when(g => g.state.numPlayers == 2 && g.common.thinksLocked(g, state.nextPlayerIndex(playerIndex))): g =>
 				val playables = g.common.thinksPlayables(g, playerIndex).filter(g.common.thoughts(_).id(infer = true).isDefined)
 
@@ -588,7 +598,7 @@ object RefSieve:
 			val state = game.state
 
 			val nextBlindPlay =
-				(game.common.thinksPlayables(game, currentPlayerIndex) ++ state.hands(currentPlayerIndex).filter(game.meta(_).status == CardStatus.CalledToPlay))
+				(game.common.thinksPlayables(game, currentPlayerIndex) ++ state.hands(currentPlayerIndex).filter(o => game.meta(o).status == CardStatus.CalledToPlay || game.meta(o).status == CardStatus.DragToPlay))
 					.filter(game.meta(_).signalTurn.isDefined)
 					.minByOption(game.meta(_).signalTurn.getOrElse(99))
 

@@ -47,12 +47,12 @@ def refPlay(ctx: ClueContext, right: Boolean = false): (Option[ClueInterp], RefS
 		Log.info(s"targeting a card called to discard!")
 		(None, game)
 	else if game.state.deck(target).clued && game.common.thinksInverted(game.state, target) then
-		Log.warn(s"orange colour clue focusing chop, treating as dc!")
+		Log.warn(s"orange colour clue focusing chop!")
 
 		val newGame =
 			game.withThought(target): t =>
-				t.copy(inferred = t.inferred.intersect(game.state.trashSet))
-			.withMeta(target)(_.copy(trash = true))
+				t.copy(inferred = t.inferred.intersect(game.state.trashSet), reset = true)
+			.withMeta(target)(_.copy(status = CardStatus.DragToPlay, trash = true))
 		(Some(ClueInterp.Reveal), newGame)
 	else
 		targetPlay(ctx, target) match
@@ -137,7 +137,7 @@ def targetPlay(ctx: ClueContext, targetOrder: Int): (Option[ClueInterp], RefSiev
 			(Some(ClueInterp.Play), resolvePlay(ctx, targetOrder, focusPoss, targetId))
 
 def resolvePlay(ctx: ClueContext, targetOrder: Int, focusPoss: Seq[FocusPossibility], targetId: Option[Identity]): RefSieve =
-	val ClueContext(_, game, action) = ctx
+	val ClueContext(prev, game, action) = ctx
 	val state = game.state
 	val ClueAction(giver = giver, list = list, target = clueTarget, clue = _) = action
 	val matchedFps = focusPoss.filter(fp => targetId.exists(_.matches(fp.id)))
@@ -188,7 +188,7 @@ def resolvePlay(ctx: ClueContext, targetOrder: Int, focusPoss: Seq[FocusPossibil
 		_.withMeta(targetOrder): m =>
 			m.copy(
 				focused = m.focused || list.contains(targetOrder),
-				status = CardStatus.CalledToPlay,
+				status = if prev.state.deck(targetOrder).clued then CardStatus.CalledToPlay else CardStatus.DragToPlay,
 				by = Some(action.giver))
 			.reason(game.state.turnCount)
 			.signal(game.state.turnCount)

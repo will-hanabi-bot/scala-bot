@@ -68,6 +68,7 @@ enum CardStatus:
 	case ChopMoved
 	case CalledToPlay
 	case CalledToDiscard
+	case DragToPlay
 	case PermissionToDiscard
 	case Finessed
 	case Sarcastic
@@ -83,6 +84,7 @@ enum CardStatus:
 			case CardStatus.None => "none"
 			case CardStatus.ChopMoved => "chop moved"
 			case CardStatus.CalledToPlay => "called to play"
+			case CardStatus.DragToPlay => "drag to play"
 			case CardStatus.CalledToDiscard => "called to discard"
 			case CardStatus.PermissionToDiscard => "permission to discard"
 			case CardStatus.Finessed => "finessed"

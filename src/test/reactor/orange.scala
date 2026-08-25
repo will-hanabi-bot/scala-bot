@@ -66,7 +66,7 @@ class Orange extends munit.FunSuite:
 		.pipe(takeTurn("Bob clues red to Alice (slot 4)"))
 		.pipe(takeTurn("Cathy plays o1", "y4"))
 
-		hasStatus(game, Alice, 2, CardStatus.CalledToPlay)
+		hasStatus(game, Alice, 2, CardStatus.DragToPlay)
 
 	test("drags a known orange to the play stacks after being called to play"):
 		val game = setup(Reactor.apply, Vector(
@@ -82,14 +82,14 @@ class Orange extends munit.FunSuite:
 		.pipe(takeTurn("Bob clues red to Alice (slot 4)"))
 		.pipe(takeTurn("Cathy discards y4", "y4"))
 
-		// hasStatus(game, Alice, 2, CardStatus.CalledToPlay)
+		hasStatus(game, Alice, 2, CardStatus.DragToPlay)
 		assertEquals(game.takeAction.unsafeRunSync(), PerformAction.Play(game.state.hands(Alice.ordinal)(1)))
 
 	test("drags an orange target of a ref play to the play stacks"):
 		val game = setup(Reactor.apply, Vector(
 			Vector("xx", "xx", "xx", "xx", "xx"),
 			Vector("r4", "y4", "g4", "b4", "o4"),
-			Vector("r4", "y4", "g4", "b4", "o4")
+			Vector("r3", "y3", "g3", "b3", "o3")
 		),
 			starting = Cathy,
 			variant = TestVariant.Orange5,
@@ -104,7 +104,7 @@ class Orange extends munit.FunSuite:
 		val game = setup(Reactor.apply, Vector(
 			Vector("xx", "xx", "xx", "xx", "xx"),
 			Vector("r1", "y1", "g1", "b1", "o1"),
-			Vector("r1", "y1", "g1", "b1", "o1")
+			Vector("r2", "y2", "g2", "b2", "o2")
 		),
 			starting = Cathy,
 			variant = TestVariant.Orange5,
@@ -155,3 +155,17 @@ class Orange extends munit.FunSuite:
 		// Alice should discard the o1.
 		hasInfs(game, None, Alice, 3, Vector("o1"))
 		assertEquals(game.takeAction.unsafeRunSync(), PerformAction.Discard(game.state.hands(Alice.ordinal)(2)))
+
+	test("reacts to a bad stable clue calling o1 to be dragged to the play stacks"):
+		val game = setup(Reactor.apply, Vector(
+			Vector("xx", "xx", "xx", "xx", "xx"),
+			Vector("o1", "y4", "g4", "b1", "r4"),
+			Vector("r4", "y4", "g4", "b4", "o4")
+		),
+			starting = Cathy,
+			variant = TestVariant.Orange5
+		)
+		.pipe(takeTurn("Cathy clues yellow to Bob"))
+
+		// We should play slot 1 so that Bob drags o1 to the discard stacks.
+		assertEquals(game.takeAction.unsafeRunSync(), PerformAction.Play(game.state.hands(Alice.ordinal)(0)))

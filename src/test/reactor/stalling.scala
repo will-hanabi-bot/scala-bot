@@ -41,7 +41,7 @@ class Stalling extends munit.FunSuite:
 		.pipe(takeTurn("Alice clues 1 to Cathy"))
 
 		// Bob's slot 5 is called to play, since colour can be given to Cathy.
-		hasStatus(game, Bob, 5, CardStatus.CalledToPlay)
+		hasStatus(game, Bob, 5, CardStatus.DragToPlay)
 
 	test("it doesn't react to untargetable cathy 1s"):
 		val game = setup(Reactor.apply, Vector(
@@ -65,7 +65,7 @@ class Stalling extends munit.FunSuite:
 		.pipe(takeTurn("Cathy clues 5 to Bob"))
 
 		// Even though green to Bob is unavailable, 1 to Bob is, so Alice should react.
-		hasStatus(game, Alice, 3, CardStatus.CalledToPlay)
+		hasStatus(game, Alice, 3, CardStatus.DragToPlay)
 
 	test("it reacts at 8 clues when giver is loaded"):
 		val game = setup(Reactor.apply, Vector(
@@ -78,4 +78,4 @@ class Stalling extends munit.FunSuite:
 		.pipe(takeTurn("Cathy clues 5 to Bob"))
 
 		// Even though Cathy is at 8 clues, she is loaded, so Alice should react.
-		hasStatus(game, Alice, 2, CardStatus.CalledToPlay)
+		hasStatus(game, Alice, 2, CardStatus.DragToPlay)

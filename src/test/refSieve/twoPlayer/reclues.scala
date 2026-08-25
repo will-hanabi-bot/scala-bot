@@ -264,8 +264,8 @@ class Reclues extends munit.FunSuite:
 		)
 		.pipe(takeTurn("Bob clues green to Alice (slot 5)"))
 
-		hasStatus(game, Alice, 1, CardStatus.CalledToPlay)
-		hasStatus(game, Alice, 2, CardStatus.CalledToPlay)
+		hasStatus(game, Alice, 1, CardStatus.DragToPlay)
+		hasStatus(game, Alice, 2, CardStatus.DragToPlay)
 
 		// Only slot 1 is playable.
 		assertEquals(game.common.thinksPlayables(game, Alice.ordinal), Vector(game.state.hands(Alice.ordinal)(0)))

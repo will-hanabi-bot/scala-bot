@@ -223,7 +223,12 @@ def findUnknownConnecting(ctx: ClueContext, reacting: Int, id: Identity, connect
 		return None
 
 	// Try to insert into an earlier finesse
-	val insertingInto = if game.level < Level.IntermediateFinesses || !opts.findOwn.contains(reacting) then None else
+	val cantInsert = game.level < Level.IntermediateFinesses ||
+		!opts.findOwn.contains(reacting) ||
+		state.isInverted(id) ||
+		potentialFinesse.exists(game.common.thinksInverted(state, _))
+
+	val insertingInto = if cantInsert then None else
 		val prevHand = state.hands(reacting).dropWhile: f =>
 			game.meta(f).status != CardStatus.Finessed ||
 			game.future(f).length == 1
@@ -238,7 +243,7 @@ def findUnknownConnecting(ctx: ClueContext, reacting: Int, id: Identity, connect
 					// Log.info(s"checking that $o (${finesseIds.fmt(state)}) can be shifted to $nextFinesse (${nextFinesse.map(hypo.common.strPoss(hypo.state, _))})")
 
 					// At least one id is possible on the next card on finesse position
-					val possible = nextFinesse.exists(hypo.common.thoughts(_).possible.intersect(finesseIds).nonEmpty)
+					val possible = nextFinesse.exists(o => hypo.future(o).intersect(hypo.common.thoughts(o).possible).intersect(finesseIds).nonEmpty)
 
 					Either.cond(possible, newConnected.incl(nextFinesse.get), FastBitSet.empty)
 				.nonEmpty
@@ -300,7 +305,7 @@ def findUnknownConnecting(ctx: ClueContext, reacting: Int, id: Identity, connect
 			else
 				val fKind = if futureIds.isExactly(id) then
 					FinesseKind.True
-				else if opts.assumeTruth || !futureIds.exists(validBluff(game, action, _, id, reacting, connected)) then
+				else if opts.assumeTruth || !futureIds.exists(validBluff(game, action, _, reacting, connected)) then
 					FinesseKind.Hidden
 				else
 					FinesseKind.Bluff
@@ -318,7 +323,7 @@ def findUnknownConnecting(ctx: ClueContext, reacting: Int, id: Identity, connect
 			val thought = game.players(opts.findOwn.get).thoughts(finesse.get)
 			val bluffableIds = thought.inferred.filter: i =>
 				state.isPlayable(i) &&
-				validBluff(game, action, i, id, reacting, connected)
+				validBluff(game, action, i, reacting, connected)
 
 			val trueFinesse = thought.infoLock.getOrElse(thought.possible).contains(id) &&
 				thought.matches(id, assume = true)
@@ -344,7 +349,7 @@ def findUnknownConnecting(ctx: ClueContext, reacting: Int, id: Identity, connect
 				else
 					game.common.thoughts(finesse.get).inferred.filter: i =>
 						state.isPlayable(i) &&
-						validBluff(game, action, i, id, reacting, connected)
+						validBluff(game, action, i, reacting, connected)
 					.union(id)
 					.toList
 
@@ -358,13 +363,13 @@ def findUnknownConnecting(ctx: ClueContext, reacting: Int, id: Identity, connect
 				None
 			else
 				val possiblyBluff = !opts.assumeTruth &&
-					validBluff(game, action, finesseId, id, reacting, connected)
+					validBluff(game, action, finesseId, reacting, connected)
 
 				Some(FinesseConn(reacting, finesse.get, List(id), fKind = if possiblyBluff then FinesseKind.Bluff else FinesseKind.True))
 
 		case Some(finesseId) =>
 			val possiblyBluff = !opts.assumeTruth &&
-				validBluff(game, action, finesseId, id, reacting, connected)
+				validBluff(game, action, finesseId, reacting, connected)
 
 			if opts.findOwn.exists(i => i != state.ourPlayerIndex && game.players(i).thoughts(finesse.get).possible.contains(id)) then
 				Some(FinesseConn(reacting, finesse.get, List(id), fKind = if possiblyBluff then FinesseKind.Bluff else FinesseKind.True))

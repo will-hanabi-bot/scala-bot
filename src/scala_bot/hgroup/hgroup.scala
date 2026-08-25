@@ -126,7 +126,7 @@ case class HGroup(
 						wc.connections.tail.exists(c => c.order == o && c.hidden)
 					}
 
-				val unordered1 = (state.variant.pinkish || this.level < Level.BasicCM) && unknown1s.contains(o) && !next1.contains(o)
+				val unordered1 = (state.variant.pinkish || this.level < Level.BasicCM || state.playStacks.count(_ == 0) == 1) && unknown1s.contains(o) && !next1.contains(o)
 
 				val ambiguous1 = unknown1s.nonEmpty && {
 					val possibleGDtargets = unknown1s.dropWhile(this.meta(_).status != CardStatus.GentlemansDiscard)
@@ -808,7 +808,7 @@ object HGroup:
 					}
 
 				// Write staleness if ending early game
-				g.when(_ => endEarlyGame && g.level >= Level.Context): g =>
+				g.when(_ => endEarlyGame && g.level >= Level.Context && g.state.canClue): g =>
 					g.state.heldOrders.foldLeft(g): (acc, order) =>
 						acc.withMeta(order): m =>
 							m.copy(staleIds = m.staleIds.union(g.state.playableSet))
@@ -858,7 +858,7 @@ object HGroup:
 					}
 
 				// Write staleness if ending early game
-				g.when(_ => endEarlyGame && g.level >= Level.Context): g =>
+				g.when(_ => endEarlyGame && g.level >= Level.Context && g.state.canClue): g =>
 					g.state.heldOrders.foldLeft(g): (acc, order) =>
 						acc.withMeta(order): m =>
 							m.copy(staleIds = m.staleIds.union(g.state.playableSet))

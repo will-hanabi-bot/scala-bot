@@ -8,7 +8,7 @@ import scala_bot.logger.Log
 
 import SpecialClueResult._
 
-def validBluff(game: HGroup, action: ClueAction, blind: Identity, truth: Identity, reacting: Int, connected: FastBitSet, symmetric: Boolean = false) =
+def validBluff(game: HGroup, action: ClueAction, blind: Identity, reacting: Int, connected: FastBitSet, symmetric: Boolean = false) =
 	val state = game.state
 	val ClueAction(giver, target, _, clue) = action
 	val focus = connected.head
@@ -17,8 +17,8 @@ def validBluff(game: HGroup, action: ClueAction, blind: Identity, truth: Identit
 		(clue.kind == ClueKind.Rank && clue.value != blind.rank + 1) ||
 		blind.next.forall(!game.common.thoughts(focus).possible.contains(_))
 
-	lazy val interferes = state.hands(reacting).find: o =>
-		game.players(reacting).thoughts(o).possible.contains(truth) &&
+	val interferes = state.hands(reacting).find: o =>
+		// game.players(reacting).thoughts(o).possible.contains(truth) &&	// any f/gd should block a bluff
 		(game.isBlindPlaying(o) || game.meta(o).status == CardStatus.GentlemansDiscard)
 
 	game.level >= Level.Bluffs &&
@@ -250,17 +250,18 @@ def interpSpecialClue(ctx: ClueContext): SpecialClueResult =
 		if chopFix then
 			val poss = game.common.thoughts(focus).possible.filter: id =>
 				!state.isPlayable(id) &&
+				state.isInverted(id) &&
 				(state.isBasicTrash(id) || (id.rank != 2 && id.rank != 5))
 
 			if poss.forall(state.isBasicTrash) then
-				Log.info(s"orange fix on $focus! (trash)")
+				Log.info(s"orange fix on $focus! (trash, ${poss.fmt(state)})")
 
 				if giver == state.ourPlayerIndex && state.deck(focus).id().exists(state.isUseful) then
 					Log.error("mistake!")
 					return MISTAKE
 
 				return SpecialClue:
-					game.withThought(focus)(_.copy(inferred = IdentitySet.empty))
+					game.withThought(focus)(_.copy(inferred = poss, reset = true))
 						.withMeta(focus)(_.copy(trash = true))
 						.withMove(ClueInterp.Reveal)
 			else

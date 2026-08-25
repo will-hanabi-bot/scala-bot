@@ -221,6 +221,47 @@ class OrderCM extends munit.FunSuite:
 		// Only slot 4 is playable.
 		assertEquals(game.common.thinksPlayables(game, Alice.ordinal), Vector(game.state.hands(Alice.ordinal)(3)))
 
+	test("interprets a double ocm"):
+		val game = setup(HGroup.atLevel(4), Vector(
+			Vector("xx", "xx", "xx", "xx", "xx"),
+			Vector("r4", "p4", "y4", "b4", "g4"),
+			Vector("r4", "p4", "y4", "b4", "g4")
+		),
+			starting = Cathy
+		)
+		.pipe(takeTurn("Cathy clues 1 to Alice (slots 1,2,3,4)"))
+		.pipe(takeTurn("Alice plays r1 (slot 1)"))
+
+		hasStatus(game, Bob, 5, CardStatus.ChopMoved)
+		hasStatus(game, Bob, 4, CardStatus.ChopMoved)
+
+	test("interprets a double ocm in 2p"):
+		val game = setup(HGroup.atLevel(4), Vector(
+			Vector("xx", "xx", "xx", "xx", "xx"),
+			Vector("r4", "p4", "y4", "b4", "g4")
+		),
+			starting = Bob
+		)
+		.pipe(takeTurn("Bob clues 1 to Alice (slots 1,2,3,4)"))
+		.pipe(takeTurn("Alice plays r1 (slot 2)"))
+
+		hasStatus(game, Bob, 5, CardStatus.ChopMoved)
+		hasStatus(game, Bob, 4, CardStatus.ChopMoved)
+
+	test("interprets a triple ocm in 2p"):
+		val game = setup(HGroup.atLevel(4), Vector(
+			Vector("xx", "xx", "xx", "xx", "xx"),
+			Vector("r4", "p4", "y4", "b4", "g4")
+		),
+			starting = Bob
+		)
+		.pipe(takeTurn("Bob clues 1 to Alice (slots 1,2,3,4)"))
+		.pipe(takeTurn("Alice plays r1 (slot 1)"))
+
+		hasStatus(game, Bob, 5, CardStatus.ChopMoved)
+		hasStatus(game, Bob, 4, CardStatus.ChopMoved)
+		hasStatus(game, Bob, 3, CardStatus.ChopMoved)
+
 class GeneralCM extends munit.FunSuite:
 	override def beforeAll() = Logger.setLevel(LogLevel.Off)
 

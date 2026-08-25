@@ -183,7 +183,13 @@ def checkOcm(prev: HGroup, action: PlayAction | DiscardAction): Option[List[Int]
 		return None
 
 	val offset = ordered1s.indexOf(order)
-	val target = (playerIndex + offset) % state.numPlayers
+	val target =
+		val playerOffset = offset % (state.numPlayers - 1)
+		if playerOffset == 0 then
+			state.lastPlayerIndex(playerIndex)
+		else
+			(playerIndex + playerOffset) % state.numPlayers
+	val cms = Math.ceil(offset.toDouble / (state.numPlayers - 1)).toInt
 
 	if offset == -1 then
 		None
@@ -192,18 +198,26 @@ def checkOcm(prev: HGroup, action: PlayAction | DiscardAction): Option[List[Int]
 		Log.info("played unknown 1 in correct order, no ocm")
 		None
 
-	else if target == playerIndex then
-		Log.error("double order chop move???")
-		None
-
 	else
 		prev.chop(target) match
 			case None =>
 				Log.warn(s"attempted to interpret ocm on ${state.names(target)}, but they had no chop!")
 				None
 			case Some(chop) =>
-				Log.highlight(Console.CYAN, s"ocm on ${state.names(target)}, distance $offset")
-				Some(List(chop))
+				val initial = (prev.withMeta(chop)(_.copy(status = CardStatus.ChopMoved)), List(chop))
+				val (_, cmOrders) = (0 until cms - 1).foldLeft(initial):
+					case ((g, orders), _) =>
+						g.chop(target) match
+							case None => (g, orders)
+							case Some(order) =>
+								(g.withMeta(order)(_.copy(status = CardStatus.ChopMoved)), order +: orders)
+
+				if cmOrders.length < cms then
+					Log.warn(s"attempted to interpret $cms ocms on ${state.names(target)} but only found $cmOrders!")
+					None
+				else
+					Log.highlight(Console.CYAN, s"ocm on ${state.names(target)}, distance $offset orders $cmOrders")
+					Some(cmOrders)
 
 def interpretBombOcm(ctx: DiscardContext): Option[HGroup] =
 	val DiscardContext(prev, game, action) = ctx

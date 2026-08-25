@@ -195,7 +195,7 @@ case class Player(
 				p.nonEmpty && p.intersect(state.playableSet) == p
 
 			game.meta(order).status match
-				case CardStatus.CalledToPlay =>
+				case CardStatus.CalledToPlay | CardStatus.DragToPlay =>
 					thought.possible.intersect(state.playableSet).nonEmpty &&
 					thought.infoLock.forallO(_.intersect(state.playableSet).nonEmpty)
 

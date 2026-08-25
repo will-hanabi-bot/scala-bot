@@ -20,7 +20,7 @@ class Stable extends munit.FunSuite:
 		))
 		.pipe(takeTurn("Alice clues green to Bob"))
 
-		hasStatus(game, Bob, 1, CardStatus.CalledToPlay)
+		hasStatus(game, Bob, 1, CardStatus.DragToPlay)
 		hasInfs(game, None, Bob, 1, Vector("r1", "y1", "b1", "p1"))
 
 	test("it understands a gapped ref play"):
@@ -31,7 +31,7 @@ class Stable extends munit.FunSuite:
 		))
 		.pipe(takeTurn("Alice clues purple to Bob"))
 
-		hasStatus(game, Bob, 2, CardStatus.CalledToPlay)
+		hasStatus(game, Bob, 2, CardStatus.DragToPlay)
 		hasInfs(game, None, Bob, 2, Vector("r1", "y1", "g1", "b1"))
 
 	test("it understands a chop ref play"):

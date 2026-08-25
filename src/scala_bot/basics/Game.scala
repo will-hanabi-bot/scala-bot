@@ -285,6 +285,7 @@ extension[G <: Game](game: G)
 
 		game.state.deck(order).clued ||
 		status == CardStatus.CalledToPlay ||
+		status == CardStatus.DragToPlay ||
 		status == CardStatus.GentlemansDiscard ||
 		status == CardStatus.Finessed
 
@@ -292,6 +293,7 @@ extension[G <: Game](game: G)
 	def isBlindPlaying(order: Int) =
 		!game.state.deck(order).clued && (
 			game.meta(order).status == CardStatus.CalledToPlay ||
+			game.meta(order).status == CardStatus.DragToPlay ||
 			game.meta(order).status == CardStatus.Finessed ||
 			game.meta(order).bluffed
 		)
@@ -299,6 +301,9 @@ extension[G <: Game](game: G)
 	/** Returns whether a card is "gotten" or chop moved. */
 	def isSaved(order: Int) =
 		isTouched(order) || game.meta(order).cm
+
+	def gainedStatus(prev: G, order: Int, status: CardStatus) =
+		prev.meta(order).status != status && game.meta(order).status == status
 
 	/** Tries all ways to see if the order matches the given identity. */
 	def orderMatches(order: Int, id: Identity, infer: Boolean = false) =
@@ -587,7 +592,7 @@ extension[G <: Game](game: G)
 			"..."
 
 		game.meta(order).status match
-			case CardStatus.CalledToPlay => s"[f]${if note.isEmpty then "" else s"[$note]"}"
+			case CardStatus.CalledToPlay | CardStatus.DragToPlay => s"[f]${if note.isEmpty then "" else s"[$note]"}"
 			case CardStatus.Finessed => s"[f]${if note.isEmpty then "" else s"[$note]"}"
 			case CardStatus.ChopMoved => s"[cm]${if note.isEmpty then "" else s"[$note]"}"
 			case CardStatus.CalledToDiscard => "dc"
@@ -655,7 +660,8 @@ extension[G <: Game](game: G)
 			state.deck(order).clued ||
 			status == CardStatus.Finessed ||
 			status == CardStatus.Bluffed ||
-			status == CardStatus.GDInverted
+			status == CardStatus.GDInverted ||
+			status == CardStatus.CalledToPlay
 
 		state.variant.inverted &&
 		knownTouched &&
