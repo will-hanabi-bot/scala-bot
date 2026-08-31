@@ -296,7 +296,7 @@ def findUnknownConnecting(ctx: ClueContext, reacting: Int, id: Identity, connect
 	finesse.flatMap(state.deck(_).id()) match
 		case _ if finesse.exists(o => game.future(o).length < game.common.thoughts(o).possible.length) =>
 			val inverted = state.isInverted(id)
-			val possibleIds = if inverted then state.trashSet else state.playableSet
+			val possibleIds = if inverted then state.trashSet.union(state.playableSet.filter(state.isInverted)) else state.playableSet
 			val futureIds = game.future(finesse.get).intersect(possibleIds)
 
 			if futureIds.isEmpty then
@@ -374,7 +374,7 @@ def findUnknownConnecting(ctx: ClueContext, reacting: Int, id: Identity, connect
 			if opts.findOwn.exists(i => i != state.ourPlayerIndex && game.players(i).thoughts(finesse.get).possible.contains(id)) then
 				Some(FinesseConn(reacting, finesse.get, List(id), fKind = if possiblyBluff then FinesseKind.Bluff else FinesseKind.True))
 
-			else if !opts.noLayer && level >= Level.IntermediateFinesses && state.isPlayable(finesseId) then
+			else if !opts.noLayer && level >= Level.IntermediateFinesses && state.isPlayable(finesseId) && !state.isInverted(finesseId) && !state.isInverted(id) then
 				if game.meta(finesse.get).status == CardStatus.Finessed && game.isDefinite(finesse.get) then
 					Some(PlayableConn(reacting, finesse.get, finesseId, hidden = true))
 				else

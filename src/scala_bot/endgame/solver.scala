@@ -409,8 +409,10 @@ case class EndgameSolver[G <: Game](
 		boundary:
 			val state = game.state
 
-			def tryAction(perform: PerformAction) =
-				this.winnableIf(state, playerTurn, perform, remaining, deadline, depth) match
+			def tryAction(perform: PerformAction, intended: Option[PerformAction] = None) =
+				val intendedPerform = intended.getOrElse(perform)
+
+				this.winnableIf(state, playerTurn, intendedPerform, remaining, deadline, depth) match
 					case SimpleResult.Unwinnable               => None
 					case SimpleResult.WinnableWithDraws(draws) => Some((perform, draws))
 					case SimpleResult.AlwaysWinnable           => Some((perform, Nil))
@@ -449,7 +451,7 @@ case class EndgameSolver[G <: Game](
 					case None =>
 						// Log.info(s"can't identify $order ${game.players(playerTurn).thoughts(order)}")
 						None
-					case _ => tryAction(PerformAction.tryPlay(game, order))
+					case _ => tryAction(PerformAction.tryPlay(game, order), intended = Some(PerformAction.Play(order)))
 			.flatten
 
 			val defaultClue = PerformAction.Rank(0, 0)
@@ -500,7 +502,7 @@ case class EndgameSolver[G <: Game](
 				}
 
 			val dcActions = if ignoreDc then Nil else
-				ops.findAllDiscards(game, playerTurn).map(tryAction).flatten
+				ops.findAllDiscards(game, playerTurn).map(tryAction(_)).flatten
 
 			// If we have less known crits than everyone else, prefer dc
 			// val preferDc =

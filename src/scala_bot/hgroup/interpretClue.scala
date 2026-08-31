@@ -64,42 +64,35 @@ def checkHFix(ctx: ClueContext): Option[HGroup] =
 					(clue.kind == ClueKind.Colour && game.knownAs(o, PINKISH) && !prev.knownAs(o, PINKISH))
 				)
 
-			val fixed1s = fixed.filter(prev.unknown1)
-
 			if fixed.isEmpty then None else
-				if clue.kind == ClueKind.Colour || (chop && (clue.value == 2 || clue.value == 5)) then
-					Log.info(s"pink fix! $fixed")
-					Some(fixed.foldLeft(game)((acc, o) =>
-							acc.withThought(o)(t => t.copy(
-								inferred = t.possible.difference(state.playableSet)
-							))
-						).withMove(ClueInterp.Fix))
+				val promise = clue.kind == ClueKind.Rank && !(chop && (clue.value == 2 || clue.value == 5))
+				val fixedOrder = prev.next1(fixed).get
 
-				else if fixed1s.nonEmpty then
-					val fixedOrder = prev.next1(fixed1s).get
+				val mistake =
+					if promise then
+						state.deck(fixedOrder).id().exists(_.rank != clue.value)
+					else
+						state.deck(fixedOrder).id().exists(_.rank == 1)
 
-					Log.info(s"pink fix promise! $fixedOrder")
-
-					val mistake = !state.deck(fixedOrder).id().forall(_.rank == clue.value)
-					if mistake then
-						Log.error("looked like pink fix but didn't match possible interpretations?")
-
-					Some:
-						game.withThought(fixedOrder): t =>
-							val newInferred = t.possible.filter(i => i.rank == clue.value && !state.isPlayable(i))
-							t.copy(
-								inferred = newInferred,
-								infoLock = newInferred.toOpt
-							)
-						.pipe: g =>
-							list.foldLeft(g): (acc, o) =>
-								if o == fixedOrder then
-									acc
-								else
-									acc.withThought(o)(t => t.copy(inferred = t.possible))
-						.withMove(if !mistake then ClueInterp.Fix else ClueInterp.Mistake)
+				if mistake then
+					Log.error("looked like pink fix but didn't match possible interpretations?")
 				else
-					None
+					Log.info(s"pink fix${if promise then " promise" else ""}! $fixedOrder")
+
+				Some:
+					game.withThought(fixedOrder): t =>
+						val newInferred = if promise then t.possible.filter(i => i.rank == clue.value && !state.isPlayable(i)) else t.possible.difference(state.playableSet)
+						t.copy(
+							inferred = newInferred,
+							infoLock = newInferred.toOpt
+						)
+					.pipe: g =>
+						list.foldLeft(g): (acc, o) =>
+							if o == fixedOrder then
+								acc
+							else
+								acc.withThought(o)(t => t.copy(inferred = t.possible))
+					.withMove(if !mistake then ClueInterp.Fix else ClueInterp.Mistake)
 
 		case FixResult.Normal(cluedResets, duplicateReveals) =>
 			Log.info(s"fix clue! not inferring anything else $cluedResets $duplicateReveals")

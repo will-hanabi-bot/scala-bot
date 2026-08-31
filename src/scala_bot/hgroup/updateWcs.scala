@@ -20,13 +20,15 @@ def checkRevealLayer(prev: HGroup, game: HGroup, action: ClueAction) =
 	val ClueAction(giver, target, list, clue) = action
 
 	val revealed = state.hands(target).find: o =>
-		prev.isBlindPlaying(o) &&
+		val status = prev.meta(o).status
+
+		(!prev.state.deck(o).clued && (status == CardStatus.Finessed || status == CardStatus.GentlemansDiscard)) &&
 		!prev.common.thoughts(o).reset &&
 		game.common.thoughts(o).reset
 
 	// If revealed a layered finesse, replay with this future knowledge
 	revealed.flatMap: o =>
-		Log.highlight(Console.CYAN, s"revealed layered finesse on $o! (expected ${prev.common.strInfs(state, o)})")
+		Log.highlight(Console.CYAN, s"revealed additional information about $o! (expected ${prev.common.strInfs(state, o)})")
 		game.copy(
 			future = game.future.updated(o, game.common.thoughts(o).possible)
 		)

@@ -93,7 +93,11 @@ def advanceGame(game: RefSieve, action: Action) =
 def _forceClue(orig: RefSieve, game: RefSieve, offset: Int, only: Option[Int] = None): Double =
 	val state = game.state
 	val giver = (state.ourPlayerIndex + offset) % state.numPlayers
-	-0.5 + forceClue(game, giver, advance(orig, _, offset + 1), offset, only)
+
+	forceClue(game, giver, advance(orig, _, offset + 1), offset, only) match
+		case ForceClueResult.BestClue(value, _, _) => value - 0.5
+		case ForceClueResult.AssumeClueAvailable(value) => value - 0.5
+		case _ => -100
 
 def advance(orig: RefSieve, game: RefSieve, offset: Int): Double =
 	val (state, common, meta) = (game.state, game.common, game.meta)

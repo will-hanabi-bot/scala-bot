@@ -83,7 +83,10 @@ def _forceClue(orig: Reactor, game: Reactor, offset: Int): Double =
 		val nextGame = game.withState(s => s.copy(clueTokens = s.clueTokens - 1))
 		advance(orig, nextGame, offset + 1) + (if game.inEndgame then 0.5 else 1.5)
 	else
-		forceClue(game, giver, advance(orig, _, offset + 1), offset, only = Some(bob)) + 0.5
+		forceClue(game, giver, advance(orig, _, offset + 1), offset, only = Some(bob)) match
+			case ForceClueResult.BestClue(value, action, hypo) => value + 0.5
+			case ForceClueResult.AssumeClueAvailable(value) => value + 0.5
+			case _ => -100
 
 def advance(orig: Reactor, game: Reactor, offset: Int): Double =
 	val (state, common, meta) = (game.state, game.common, game.meta)

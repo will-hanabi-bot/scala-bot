@@ -118,7 +118,7 @@ private def clueFilter(game: HGroup, giver: Int) =
 		state.deck(focus).id().forall: id =>
 			visibleFind(state, game.common, id, infer = true, excludeOrder = focus).isEmpty
 
-def _forceClue(orig: HGroup, game: HGroup, offset: Int, only: Option[Int] = None): Double =
+def _forceClue(orig: HGroup, game: HGroup, offset: Int, only: Option[Int] = None): (Double, Boolean) =
 	val state = game.state
 	val giver = (state.ourPlayerIndex + offset) % state.numPlayers
 
@@ -131,7 +131,14 @@ def _forceClue(orig: HGroup, game: HGroup, offset: Int, only: Option[Int] = None
 	if finessable then
 		Log.highlight(Console.CYAN, s"${indent(offset)}possible finesse on ${state.names(bob)}!")
 
-	forceClue(game.copy(allowFindOwn = false), giver, adv, offset, only, clueFilter = clueFilter(game, giver)) + (if finessable then 0.5 else 0)
+	forceClue(game.copy(allowFindOwn = false), giver, adv, offset, only, clueFilter = clueFilter(game, giver)) match
+		case ForceClueResult.BestClue(value, action, hypo) =>
+			(value = value + (if finessable then 0.5 else 0), goodClue = getResult(game, hypo, action) >= 1)
+		case ForceClueResult.AssumeClueAvailable(value) =>
+			(value = value + (if finessable then 0.5 else 0), goodClue = false)
+		case _ =>
+			(value = -100.0, goodClue = false)
+
 
 private def forceSdcm(orig: HGroup, game: HGroup, playerIndex: Int, order: Int, offset: Int, knownTrash: Boolean): Double =
 	val state = game.state
@@ -232,7 +239,7 @@ def advance(orig: HGroup, game: HGroup, offset: Int): Double =
 										forceSdcm(orig, game, playerIndex, chop, offset, knownTrash = false)
 									case _ => -999
 
-					maxPlay.max(_forceClue(orig, game, offset)).max(sdcmValue)
+					maxPlay.max(_forceClue(orig, game, offset)._1).max(sdcmValue)
 
 	else if player.thinksLocked(game, playerIndex) then
 		Log.info(s"${indent(offset)}${state.names(playerIndex)} locked!")
@@ -255,23 +262,27 @@ def advance(orig: HGroup, game: HGroup, offset: Int): Double =
 
 			advance(orig, game.simulate(action), offset + 1)
 		else
-			_forceClue(orig, game, offset)
+			_forceClue(orig, game, offset)._1
 
 	else if state.clueTokens == 8 then
 		Log.info(s"${indent(offset)}forced clue at 8 clues! (${state.names(playerIndex)})")
-		_forceClue(orig, game, offset)
+		_forceClue(orig, game, offset)._1
 
 	else if game.dcStatus != DcStatus.None then
 		Log.info(s"${indent(offset)}forced clue due to scream/shout! (${state.names(playerIndex)})")
-		_forceClue(orig, game, offset)
+		_forceClue(orig, game, offset)._1
+
+	else if state.pace == 0 && state.canClue then
+		Log.info(s"${indent(offset)}forced clue due to low pace! (${state.names(playerIndex)})")
+		_forceClue(orig, game, offset)._1
 
 	else if trash.isEmpty && earlyGameClue.isDefined then
 		Log.info(s"${indent(offset)}forced clue in early game! (${state.names(playerIndex)}) ${earlyGameClue.get.fmt(state)}")
-		_forceClue(orig, game, offset)
+		_forceClue(orig, game, offset)._1
 
 	else if game.mustClue(playerIndex) then
 		Log.info(s"${indent(offset)}forcing ${state.names(playerIndex)} to clue ${state.names(state.nextPlayerIndex(playerIndex))}!")
-		_forceClue(orig, game, offset, only = Some(bob))
+		_forceClue(orig, game, offset, only = Some(bob))._1
 
 	else
 		val dcOrder = trash.headOption.orElse(game.chop(playerIndex)).getOrElse:
@@ -286,7 +297,7 @@ def advance(orig: HGroup, game: HGroup, offset: Int): Double =
 
 		if state.canClue && (state.numPlayers > 2 || playerIndex == state.ourPlayerIndex) then
 			Log.info(s"${indent(offset)}${state.names(playerIndex)} might clue")
-			val clueVal = _forceClue(orig, game, offset)
+			val (clueVal, goodClue) = _forceClue(orig, game, offset)
 			Log.info(s"${indent(offset)}${state.names(playerIndex)} ${Action.gerund(action)} ${state.logId(id)}:")
 			val dcVal = advance(orig, dcGame, offset + 1)
 
@@ -302,10 +313,13 @@ def advance(orig: HGroup, game: HGroup, offset: Int): Double =
 					dcVal
 			else
 				val clueProb =
+					val gameVal = evalGame(orig, game, offset)
+
 					if playerIndex == state.ourPlayerIndex then
 						1
 					// Good clue available
-					else if clueVal - evalGame(orig, game, offset) > 1 then
+					else if goodClue then
+						Log.info(s"good clue available $clueVal $gameVal")
 						0.95
 					else if offset == 1 then
 						if game.lastActions(state.ourPlayerIndex).exists(_.isInstanceOf[DiscardAction]) then
@@ -321,7 +335,7 @@ def advance(orig: HGroup, game: HGroup, offset: Int): Double =
 
 				val value = clueProb * clueVal + (1.0 - clueProb) * dcVal
 
-				val sdcmValue = if !trash.contains(dcOrder) || state.canClue then -999 else
+				val sdcmValue = if !trash.contains(dcOrder) || state.canClue || game.inEndgame then -999 else
 					game.chop(playerIndex).fold(-999.0): chop =>
 						forceSdcm(orig, game, playerIndex, chop, offset, knownTrash = false)
 
@@ -451,7 +465,7 @@ def _evalAction(game: HGroup, action: Action): Double =
 	else
 		value
 
-def evalState(state: State, inEndgame: Boolean, offset: Int): Double =
+def evalState(prev: State, state: State, inEndgame: Boolean, offset: Int): Double =
 	// The first 2 * (# suits) pts are worth 1.25.
 	val scoreVal: Double =
 		if inEndgame then
@@ -467,7 +481,7 @@ def evalState(state: State, inEndgame: Boolean, offset: Int): Double =
 			case c if c > 6 		 => 3 + (c - 6) * 0.25
 			case c 					 => c / 2.0
 
-	val scoreLoss = state.variant.suits.length * 5 - state.maxScore
+	val scoreLoss = prev.maxScore - state.maxScore
 	val dcCritVal = if scoreLoss == 0 then 0 else -15 - scoreLoss
 
 	val strikesVal = state.strikes match
@@ -491,7 +505,7 @@ def evalGame(orig: HGroup, game: HGroup, offset: Int): Double =
 		Log.warn(s"back to us with zero clues and locked!")
 		return -10
 
-	val stateVal = evalState(state, inEndgame = orig.inEndgame || orig.state.remScore < 5, offset)
+	val stateVal = evalState(orig.state, state, inEndgame = orig.inEndgame || orig.state.remScore < 5, offset)
 
 	val futureVal = (if orig.inEarlyGame then 1.75 else 1) * game.common.hypoPlays.summing: order =>
 		game.me.thoughts(order).id(infer = true) match

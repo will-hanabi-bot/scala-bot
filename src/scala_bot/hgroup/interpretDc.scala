@@ -60,8 +60,10 @@ def interpretTransfer(ctx: DiscardContext, holder: Int, dupe: Option[Int]): (Dis
 					case None => None
 					case Some(f) =>
 						val finesseId =
-							if game.future(f).length == 1 then
-								Some(game.future(f).head)
+							val futureIds = if inverted then game.future(f) else game.future(f).intersect(hypoGame.state.playableSet)
+
+							if futureIds.length == 1 then
+								Some(futureIds.head)
 							else
 								game.me.thoughts(f).id()
 
@@ -269,7 +271,7 @@ def interpretUsefulDcH(ctx: DiscardContext): Option[HGroup] =
 
 			case (DiscardResult.Baton(order, inverted), _) =>
 				game.withThought(order)(_.copy(inferred = IdentitySet.single(id)))
-					.withMeta(order)(_.copy(status = if inverted then CardStatus.ChopMoved else CardStatus.Sarcastic))
+					.withMeta(order)(_.copy(status = if inverted then CardStatus.GDInverted else CardStatus.Sarcastic))
 					.withMove(DiscardInterp.Sarcastic)
 					.copy(dda = None)
 

@@ -82,6 +82,24 @@ class GentlemansDiscards extends munit.FunSuite:
 		// The layer is revealed.
 		hasStatus(game, Alice, 2, CardStatus.GentlemansDiscard)
 
+	test("understands a revealed layered gd on us"):
+		val game = setup(HGroup.atLevel(10), Vector(
+			Vector("xx", "xx", "xx", "xx", "xx"),
+			Vector("r1", "y4", "g4", "b4", "p4")
+		),
+			starting = Bob,
+			playStacks = Some(Vector(0, 1, 0, 0, 0)),
+			clueTokens = 4,
+			init = fullyKnown(Bob, 1, "r1")
+		)
+		.pipe(takeTurn("Bob discards r1", "r4"))
+		.pipe(takeTurn("Alice plays b1 (slot 1)"))
+		.pipe(takeTurn("Bob clues yellow to Alice (slots 2,5)"))	// focusing y3 on chop
+
+		hasInfs(game, None, Alice, 2, Vector("y2"))
+		hasInfs(game, None, Alice, 3, Vector("r1"))
+		hasInfs(game, None, Alice, 5, Vector("y3"))
+
 	test("performs a gentleman's discard"):
 		val game = setup(HGroup.atLevel(10), Vector(
 			Vector("xx", "xx", "xx", "xx"),

@@ -14,24 +14,26 @@ def nextUnknown(fp: FocusPossibility, skipPast: Option[Connection] = None): Opti
 		case _: PlayableConn => false
 		case _ => true
 
-def fpSimplicity(fp: FocusPossibility, playerIndex: Int, ourPlayerIndex: Int): Int =
-	val nextUnknownConn = nextUnknown(fp)
-	// Note that us prompting/finessing on a clue to someone else is as "complicated"
-	// as them self-finessing, since we always wait for them to demonstrate first.
-	if nextUnknownConn.forall(c => c.reacting != playerIndex && c.reacting != ourPlayerIndex) then
-		0
-	else if nextUnknownConn.exists(_.reacting == playerIndex) then
-		val consecutiveConns = nextUnknownConn.fold(Nil)(conn => fp.connections.dropWhile(_ != conn).takeWhile(_.reacting == playerIndex))
-		val blindPlays = consecutiveConns.count(_.isInstanceOf[FinesseConn])
-		val prompts = consecutiveConns.count(_.isInstanceOf[PromptConn])
+def fpSimplicity(state: State, fp: FocusPossibility, playerIndex: Int, ourPlayerIndex: Int): Int =
+	(if state.isInverted(fp.id) then 1 else 0) + 10 * {
+		val nextUnknownConn = nextUnknown(fp)
+		// Note that us prompting/finessing on a clue to someone else is as "complicated"
+		// as them self-finessing, since we always wait for them to demonstrate first.
+		if nextUnknownConn.forall(c => c.reacting != playerIndex && c.reacting != ourPlayerIndex) then
+			0
+		else if nextUnknownConn.exists(_.reacting == playerIndex) then
+			val consecutiveConns = nextUnknownConn.fold(Nil)(conn => fp.connections.dropWhile(_ != conn).takeWhile(_.reacting == playerIndex))
+			val blindPlays = consecutiveConns.count(_.isInstanceOf[FinesseConn])
+			val prompts = consecutiveConns.count(_.isInstanceOf[PromptConn])
 
-		10 * blindPlays + prompts
-	else
-		val consecutiveConns = nextUnknownConn.fold(Nil)(conn => fp.connections.dropWhile(_ != conn).takeWhile(_.reacting == ourPlayerIndex))
-		val blindPlays = consecutiveConns.count(_.isInstanceOf[FinesseConn])
-		val prompts = consecutiveConns.count(_.isInstanceOf[PromptConn])
+			10 * blindPlays + prompts
+		else
+			val consecutiveConns = nextUnknownConn.fold(Nil)(conn => fp.connections.dropWhile(_ != conn).takeWhile(_.reacting == ourPlayerIndex))
+			val blindPlays = consecutiveConns.count(_.isInstanceOf[FinesseConn])
+			val prompts = consecutiveConns.count(_.isInstanceOf[PromptConn])
 
-		1000 * blindPlays + 100 * prompts
+			1000 * blindPlays + 100 * prompts
+	}
 
 def filterFps(ctx: ClueContext, fps: Seq[FocusPossibility], target: Int) =
 	val ClueContext(_, game, action, _) = ctx
@@ -71,14 +73,14 @@ def occamsRazor(ctx: ClueContext, fps: Seq[FocusPossibility], playerIndex: Int, 
 	val ClueContext(_, game, action, _) = ctx
 	val state = game.state
 
-	val initial = (99, Seq.empty[FocusPossibility], Seq.empty[FocusPossibility])
+	val initial = (9999, Seq.empty[FocusPossibility], Seq.empty[FocusPossibility])
 	val sorted = fps.sortBy(fp => if actualId.forall(_ == fp.id) then -1 else 0)
 
 	sorted.foldLeft(initial) { case ((min, acc, impossible), fp) =>
 		if !game.players(playerIndex).thoughts(ctx.focusResult.focus).possible.contains(fp.id) then
 			(min, acc, fp +: impossible)
 		else
-			val simplicity = fpSimplicity(fp, playerIndex, state.ourPlayerIndex)
+			val simplicity = fpSimplicity(state, fp, playerIndex, state.ourPlayerIndex)
 			// Log.info(s"${state.logId(fp.id)} $playerIndex simplicity: $simplicity")
 
 			if simplicity < min && actualId.forall(_ == fp.id) then
@@ -89,7 +91,7 @@ def occamsRazor(ctx: ClueContext, fps: Seq[FocusPossibility], playerIndex: Int, 
 				(min, acc, impossible)
 	}
 	.pipe: (min, acc, impossible) =>
-		acc.reverse ++ impossible.filter(fpSimplicity(_, playerIndex, state.ourPlayerIndex) == min)
+		acc.reverse ++ impossible.filter(fpSimplicity(state, _, playerIndex, state.ourPlayerIndex) == min)
 
 	.when(_ => playerIndex == state.ourPlayerIndex): simplest =>
 		// If a simplest possibility involves X finessing, followed by a self-finesse,

@@ -27,7 +27,7 @@ def interpretTcm(ctx: ClueContext, log: Boolean = true): Option[Seq[Int]] =
 			state.isBasicTrash(id) ||
 			visibleFind(state, common, id, excludeOrder = focus).nonEmpty ||
 			// If we allow inferring, the card must have been clued before this clue
-			visibleFind(state, common, id, infer = true, excludeOrder = focus, cond = (_, o) => prev.isTouched(o)).nonEmpty ||
+			visibleFind(state, common, id, infer = true, excludeOrder = focus, cond = (_, o) => prev.isTouched(o) && game.me.thoughts(o).matches(id, assume = true)).nonEmpty ||
 			// Only touching 1 new card and stale
 			(game.level >= Level.Context && list.count(!prev.state.deck(_).clued) == 1 && game.meta(focus).staleIds.contains(id))
 		&&

@@ -39,6 +39,21 @@ class Orange extends munit.FunSuite:
 		hasInfs(game, None, Alice, 1, Vector("o1"))
 		assertEquals(game.takeAction.unsafeRunSync(), PerformAction.Discard(game.state.hands(Alice.ordinal)(0)))
 
+	test("discards an orange double finesse"):
+		val game = setup(HGroup.atLevel(2), Vector(
+			Vector("xx", "xx", "xx", "xx", "xx"),
+			Vector("o3", "y4", "y4", "o4", "r4"),
+			Vector("g4", "g4", "b4", "b4", "r4")
+		),
+			starting = Cathy,
+			variant = TestVariant.Orange5
+		)
+		.pipe(takeTurn("Cathy clues orange to Bob"))
+		.pipe(takeTurn("Alice plays o1 (slot 1)"))
+
+		hasInfs(game, None, Alice, 2, Vector("o2"))
+		hasStatus(game, Alice, 2, CardStatus.Finessed)
+
 	test("discards an orange bluff"):
 		val game = setup(HGroup.atLevel(11), Vector(
 			Vector("xx", "xx", "xx", "xx", "xx"),
@@ -82,6 +97,19 @@ class Orange extends munit.FunSuite:
 
 		hasInfs(game, None, Alice, 1, Vector("o1"))
 		assertEquals(game.takeAction.unsafeRunSync(), PerformAction.Discard(game.state.hands(Alice.ordinal)(0)))
+
+	test("assumes a play target is not-orange when possible"):
+		val game = setup(HGroup.atLevel(1), Vector(
+			Vector("xx", "xx", "xx", "xx", "xx"),
+			Vector("g4", "g4", "b4", "o1", "r1")
+		),
+			playStacks = Some(Vector(1, 0, 0, 0, 0)),
+			variant = TestVariant.Orange5
+		)
+		.pipe(takeTurn("Alice clues orange to Bob"))
+		.pipe(takeTurn("Bob clues 2 to Alice (slot 1)"))
+
+		hasInfs(game, None, Alice, 1, Vector("r2"))
 
 	test("understands an orange fix clue on chop"):
 		val game = setup(HGroup.atLevel(1), Vector(
@@ -183,22 +211,23 @@ class Orange extends munit.FunSuite:
 	test("understands an orange baton discard"):
 		val game = setup(HGroup.atLevel(10), Vector(
 			Vector("xx", "xx", "xx", "xx", "xx"),
-			Vector("o3", "g4", "g4", "b4", "b4")
+			Vector("o2", "g4", "g4", "b4", "b4")
 		),
 			starting = Bob,
 			variant = TestVariant.Orange5,
 			clueTokens = 4,
-			init = fullyKnown(Bob, 1, "o3")
+			init = fullyKnown(Bob, 1, "o2")
 		)
-		.pipe(takeTurn("Bob discards o3", "r4"))
+		.pipe(takeTurn("Bob discards o2", "o1"))
+		.tap: g =>
+			// o2 is promised on Alice's chop.
+			hasInfs(g, None, Alice, 5, Vector("o2"))
+			assertEquals(g.chop(Alice.ordinal), Some(1))
+		.pipe(takeTurn("Alice clues orange to Bob"))
+		.pipe(takeTurn("Bob plays o1", "r4"))
 
-		// o3 is promised on Alice's chop.
-		hasInfs(game, None, Alice, 5, Vector("o3"))
-
-		// o3 is chop moved.
-		// hasStatus(game, Alice, 5, CardStatus.ChopMoved)
-
-		assertEquals(game.chop(Alice.ordinal), Some(1))
+		// Alice should drag the o2 to the discard stacks.
+		assertEquals(game.takeAction.unsafeRunSync(), PerformAction.Discard(game.state.hands(Alice.ordinal)(4)))
 
 	test("screams for an unplayable orange on chop"):
 		val game = setup(HGroup.atLevel(10), Vector(
@@ -253,7 +282,7 @@ class Orange extends munit.FunSuite:
 			Vector("xx", "xx", "xx", "xx"),
 			Vector("r2", "o2", "g4", "b4"),
 			Vector("r4", "y4", "g4", "b4"),
-			Vector("r3", "y3", "g3", "b3"),
+			Vector("r3", "y3", "g3", "b3")
 		),
 			variant = TestVariant.Orange5,
 			starting = Cathy,
@@ -270,12 +299,27 @@ class Orange extends munit.FunSuite:
 		// Still, only slot 1 is playable, because it might be layered.
 		assertEquals(game.common.thinksPlayables(game, Alice.ordinal), Vector(game.state.hands(Alice.ordinal)(0)))
 
+	test("doesn't allow an orange card to be a layer"):
+		val game = setup(HGroup.atLevel(5), Vector(
+			Vector("xx", "xx", "xx", "xx", "xx"),
+			Vector("o1", "r1", "g4", "b4", "o4"),
+			Vector("r4", "y4", "g4", "b4", "o4")
+		),
+			variant = TestVariant.Orange5,
+			starting = Cathy
+		)
+		.pipe(takeTurn("Cathy clues red to Alice (slot 1)"))
+
+		// Slot 1 must be r1.
+		hasInfs(game, None, Alice, 1, Vector("r1"))
+		assertEquals(game.common.thinksPlayables(game, Alice.ordinal), Vector(game.state.hands(Alice.ordinal)(0)))
+
 	test("doesn't try to insert a layer into an orange finesse"):
 		val game = setup(HGroup.atLevel(5), Vector(
 			Vector("xx", "xx", "xx", "xx"),
 			Vector("r2", "o2", "g4", "b4"),
 			Vector("r4", "y4", "g4", "b4"),
-			Vector("r3", "y3", "g3", "b3"),
+			Vector("r3", "y3", "g3", "b3")
 		),
 			variant = TestVariant.Orange5,
 			starting = Cathy,

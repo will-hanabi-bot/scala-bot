@@ -159,6 +159,8 @@ case class HGroup(
 			good.isEmpty || good.contains(id)
 		else if !state.canClue && state.isCritical(id) && chop(state.ourPlayerIndex).contains(order) then
 			false
+		else if this.meta(order).status == CardStatus.PermissionToDiscard && state.isCritical(id) then
+			false
 		else
 			true
 
@@ -808,7 +810,7 @@ object HGroup:
 					}
 
 				// Write staleness if ending early game
-				g.when(_ => endEarlyGame && g.level >= Level.Context && g.state.canClue): g =>
+				g.when(_ => endEarlyGame && g.level >= Level.Context && prev.state.canClue): g =>
 					g.state.heldOrders.foldLeft(g): (acc, order) =>
 						acc.withMeta(order): m =>
 							m.copy(staleIds = m.staleIds.union(g.state.playableSet))
@@ -858,7 +860,7 @@ object HGroup:
 					}
 
 				// Write staleness if ending early game
-				g.when(_ => endEarlyGame && g.level >= Level.Context && g.state.canClue): g =>
+				g.when(_ => endEarlyGame && g.level >= Level.Context && prev.state.canClue): g =>
 					g.state.heldOrders.foldLeft(g): (acc, order) =>
 						acc.withMeta(order): m =>
 							m.copy(staleIds = m.staleIds.union(g.state.playableSet))
@@ -1127,8 +1129,8 @@ object HGroup:
 					val usefulOrder = hand.find(state.deck(_).id().exists(state.isUseful))
 					usefulOrder.map((holder, _))
 
-			// Prefer discarding when no clue can focus the remaining card.
-			remaining.exists: (holder, order) =>
+			// Prefer discarding when no clue can focus the remaining card, or there is no remaining card visible.
+			remaining.forall: (holder, order) =>
 				!state.allValidClues(holder).exists: clue =>
 					game.determineFocus(game, Action.fromClue(game.state, clue, playerIndex)).focus == order
 

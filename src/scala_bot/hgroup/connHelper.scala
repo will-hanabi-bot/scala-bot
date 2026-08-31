@@ -377,7 +377,7 @@ def resolveClue(ctx: ClueContext, fps: Seq[FocusPossibility], symmetricInterp: S
 					conn.isInstanceOf[KnownConn] ||
 					conn.isInstanceOf[PlayableConn]
 				&&
-				fpSimplicity(fp, reacting, state.ourPlayerIndex) <= fpSimplicity(trueFp, reacting, state.ourPlayerIndex)
+				fpSimplicity(state, fp, reacting, state.ourPlayerIndex) <= fpSimplicity(state, trueFp, reacting, state.ourPlayerIndex)
 
 	lazy val badAsymmetry = symmetricInterp match
 		case SymmetricInterp.NoInterp => false
