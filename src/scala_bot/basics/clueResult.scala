@@ -1,5 +1,6 @@
 package scala_bot.basics
 
+import scala_bot.lib.FastBitSet
 import scala_bot.utils._
 
 /** Computes empathy-related statistics of the clue.
@@ -79,7 +80,8 @@ def badTouchResult(prev: Game, game: Game, action: ClueAction) =
 
 	val avoidableDupe = dupeScores(giver) - dupeScores.min
 
-	def areDupes(o1: Int, o2: Int, badTouch: List[Int], trash: List[Int]) =
+	/** Checks if o1 is a dupe of o2 (assuming o2 is the "good" one). */
+	def areDupes(o1: Int, o2: Int, badTouch: FastBitSet, trash: FastBitSet) =
 		o1 != o2 &&
 		state.deck(o1).clued && state.deck(o2).clued &&
 		game.me.thoughts(o1).matches(state.deck(o2)) &&
@@ -87,17 +89,42 @@ def badTouchResult(prev: Game, game: Game, action: ClueAction) =
 		!trash.contains(o2) &&
 		(game.common.thoughts(o1).id().isEmpty || game.common.thoughts(o2).id().isEmpty)
 
-	val inter = state.hands(target).foldRight((List[Int](), List[Int]())) { case (order, (badTouch, trash)) =>
-		if prev.state.deck(order).clued || !state.deck(order).clued then
-			(badTouch, trash)
+	val inter = state.hands(target).foldLeft((FastBitSet.empty, FastBitSet.empty, FastBitSet.empty)): (acc, order) =>
+		val (badTouch, trash, potentialDupes) = acc
+
+		if badTouch.contains(order) || trash.contains(order) || prev.state.deck(order).clued || !state.deck(order).clued then
+			acc
 		else if game.common.orderTrash(game, order) then
-			(badTouch, order +: trash)
+			(badTouch, trash.incl(order), potentialDupes)
 		else
 			state.deck(order).id() match
-				case Some(id) if state.isBasicTrash(id) || state.hands(target).exists(areDupes(order, _, badTouch, trash)) =>
-					(order +: badTouch, trash)
-				case _ => (badTouch, trash)
-	}
+				case Some(id) if state.isBasicTrash(id) =>
+					(badTouch.incl(order), trash, potentialDupes)
+				case Some(_) =>
+					(badTouch, trash, potentialDupes.incl(order))
+				case _ => acc
+	.pipe: (bt, t, dupes) =>
+		dupes.foldLeft((bt, t)):
+			case ((badTouch, trash), order) =>
+				state.hands(target).find(areDupes(order, _, badTouch, trash)) match
+					case None => (badTouch, trash)
+					case Some(dupe) =>
+						if prev.state.deck(dupe).clued then
+							// Dupe was previously-clued, this new card is bad touch
+							(badTouch.incl(order), trash)
+						else
+							// Dupe is newly clued
+							val badCopy =
+								if game.meta(order).focused then
+									dupe
+								else if game.meta(dupe).focused then
+									order
+								else if order > dupe then
+									dupe
+								else
+									order
+
+							(badTouch.incl(badCopy), trash)
 
 	// Previously-finessed cards can be reset (and no longer touched) after the clue, so double-check for "duplicates".
 	val (badTouch, trash) = state.hands(target).foldRight(inter) { case (order, (badTouch, trash)) =>
@@ -108,7 +135,7 @@ def badTouchResult(prev: Game, game: Game, action: ClueAction) =
 				areDupes(order, o, badTouch, trash)
 
 		if duplicated then
-			(order +: badTouch, trash)
+			(badTouch.incl(order), trash)
 		else
 			(badTouch, trash)
 	}

@@ -49,10 +49,10 @@ def getResult(game: RefSieve, hypo: RefSieve, action: ClueAction): Double =
 					game.isTouched(o) && state.deck(o).matches(state.deck(p))
 
 			val goodTouch: Double =
-				if badTouch.length > newTouched.length then
-					-badTouch.length
+				if badTouch.size > newTouched.length then
+					-badTouch.size
 				else
-					List(0.0, 0.125, 0.25, 0.35, 0.45, 0.55)(newTouched.length - badTouch.length)
+					List(0.0, 0.125, 0.25, 0.35, 0.45, 0.55)(newTouched.length - badTouch.size)
 
 			val untouchedPlays = playables.count(!hypo.state.deck(_).clued)
 
@@ -77,7 +77,7 @@ def getResult(game: RefSieve, hypo: RefSieve, action: ClueAction): Double =
 				(if game.inEndgame then 0.01 else 0.1) * revealedTrash +
 				(if game.inEndgame then 0.2 else 0.1) * fill.length +
 				(if game.inEndgame then 0.1 else 0.05) * elim.length +
-				-0.1 * badTouch.length +
+				-0.1 * badTouch.size +
 				lockedTouch
 
 			hypo.lastMove match

@@ -227,3 +227,18 @@ class General extends munit.FunSuite:
 		.pipe(takeTurn("Cathy discards b3", "g1"))
 
 		assertEquals(game.takeAction.unsafeRunSync(), PerformAction.Discard(game.state.hands(Alice.ordinal)(3)))
+
+	test("doesn't give an invalid ambiguous prompt"):
+		val game = setup(HGroup.atLevel(1), Vector(
+			Vector("xx", "xx", "xx", "xx", "xx"),
+			Vector("y4", "r1", "r3", "y3", "y1")
+		),
+			playStacks = Some(Vector(2, 2, 0, 0, 0)),
+			init =
+				preClue[HGroup](Bob, 3, Seq("red")) andThen
+				preClue[HGroup](Bob, 4, Seq("yellow"))
+		)
+		.pipe(takeTurn("Alice clues 4 to Bob"))
+
+		// Bob will prompt r3 -> r4.
+		assertEquals(game.lastMove, Some(ClueInterp.Mistake))

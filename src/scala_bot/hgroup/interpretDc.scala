@@ -344,7 +344,7 @@ def interpretSdcm(ctx: DiscardContext): Option[HGroup] =
 	val DiscardContext(prev, game, action) = ctx
 	val state = game.state
 
-	if game.inEndgame || action.failed || prev.meta(action.order).status == CardStatus.GDInverted then
+	if game.inEndgame || (state.remScore < state.variant.suits.length && prev.state.canClue) || action.failed || prev.meta(action.order).status == CardStatus.GDInverted then
 		return None
 
 	val bob = state.nextPlayerIndex(action.playerIndex)
@@ -436,7 +436,7 @@ private def checkPosDc(ctx: DiscardContext): PosDcResult =
 
 	val expectedDc = prev.common.thinksTrash(prev, playerIndex)
 		.filter(state.deck(_).clued)
-		.headOption
+		.maxOption
 		.orElse(prev.chop(playerIndex))
 
 	// Locked hand, blind played a chop moved card that could be good, discarded expected card

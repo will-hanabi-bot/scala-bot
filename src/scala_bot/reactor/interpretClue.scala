@@ -87,6 +87,10 @@ private def tryStable(prev: Reactor, game: Reactor, action: ClueAction, stall: B
 				g
 			else
 				val newInferred = g.common.thoughts(playableRankFocus).inferred.filter(i => state.isPlayable(i) && i.rank == clue.value)
+					.when(_.isEmpty)(_ => g.common.thoughts(playableRankFocus).possible.filter(i => state.isPlayable(i) && i.rank == clue.value))
+
+				Log.info(s"playable rank clue on $playableRankFocus! (${newInferred.fmt(state)})")
+
 				g.withThought(playableRankFocus)(t => t.copy(
 					inferred = newInferred,
 					infoLock = newInferred.toOpt
@@ -128,7 +132,7 @@ private def tryStable(prev: Reactor, game: Reactor, action: ClueAction, stall: B
 
 		Log.info(s"playables $playables, prev_playables $prevPlayables")
 
-		lazy val reveal = playables.find: o =>
+		lazy val revealed = playables.filter: o =>
 			list.contains(o) &&
 			!prevPlayables.contains(o) &&
 			(clue.kind == ClueKind.Rank || prev.state.deck(o).clued)
@@ -218,8 +222,8 @@ private def tryStable(prev: Reactor, game: Reactor, action: ClueAction, stall: B
 							Log.info(s"tempo clue on ${focus.get}!")
 							StableResult.Stable(ClueInterp.Play, newGame)
 
-		else if reveal.isDefined then
-			Log.info(s"revealed a safe action! ${reveal.get} $prevPlayables")
+		else if revealed.nonEmpty then
+			Log.info(s"revealed a safe action! $revealed $prevPlayables")
 			StableResult.Stable(ClueInterp.Reveal, g)
 
 		else if revealConnectable.isDefined then

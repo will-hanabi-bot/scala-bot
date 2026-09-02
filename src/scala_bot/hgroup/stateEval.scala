@@ -5,7 +5,7 @@ import scala_bot.utils._
 import scala_bot.logger.Log
 import scala_bot.utils.visibleFind
 
-def getResult(game: HGroup, hypo: HGroup, action: ClueAction): Double =
+def getResult(game: HGroup, hypo: HGroup, action: ClueAction, log: Boolean = true): Double =
 	val (common, state, meta) = (game.common, game.state, game.meta)
 	val FocusResult(focus, chop, _) = game.determineFocus(game, action)
 	val ClueAction(giver, target, list, clue) = action
@@ -21,7 +21,7 @@ def getResult(game: HGroup, hypo: HGroup, action: ClueAction): Double =
 		!(hypo.me.hypoPlays.contains(o) || (game.inEndgame && state.deck(o).id().exists(state.isPlayable)))
 
 	if badPlay.isDefined then
-		Log.warn(s"clue ${clue.fmt(state, target)} results in ${state.logId(badPlay.get)} ${badPlay.get} looking playable! ${hypo.me.hypoPlays.fmt}")
+		if log then Log.warn(s"clue ${clue.fmt(state, target)} results in ${state.logId(badPlay.get)} ${badPlay.get} looking playable! ${hypo.me.hypoPlays.fmt}")
 		return -100
 
 	val badTrash = state.heldOrders.find: o =>
@@ -30,7 +30,7 @@ def getResult(game: HGroup, hypo: HGroup, action: ClueAction): Double =
 			state.isUseful(id) && visibleFind(game.state, game.players(giver), id, excludeOrder = o).isEmpty
 
 	if badTrash.isDefined then
-		Log.warn(s"clue ${clue.fmt(state, target)} results in ${state.logId(badTrash.get)} ${badTrash.get} looking trash!")
+		if log then Log.warn(s"clue ${clue.fmt(state, target)} results in ${state.logId(badTrash.get)} ${badTrash.get} looking trash!")
 		return -100
 
 	def distance5(g: HGroup, playerIndex: Int) =
@@ -52,7 +52,7 @@ def getResult(game: HGroup, hypo: HGroup, action: ClueAction): Double =
 			distance5(game, i).exists(_ < dist5)
 
 		if bad5Stall then
-			Log.warn(s"gave 5 stall to 5 not closest to chop!")
+			if log then Log.warn(s"gave 5 stall to 5 not closest to chop!")
 			return -100
 
 	val (newTouched, fill, elim) = elimResult(game, hypo, hypo.state.hands(target), list)
@@ -60,7 +60,7 @@ def getResult(game: HGroup, hypo: HGroup, action: ClueAction): Double =
 	val (_, playables) = playablesResult(game, hypo)
 
 	if playables.isEmpty && hypo.lastMove == Some(ClueInterp.Play) then
-		Log.warn("play clue with no new playables! (duped existing playable?)")
+		if log then Log.warn("play clue with no new playables! (duped existing playable?)")
 		return -100
 
 	val revealedTrash = hypo.common.thinksTrash(hypo, target).count: o =>
@@ -76,8 +76,8 @@ def getResult(game: HGroup, hypo: HGroup, action: ClueAction): Double =
 		// if playables.nonEmpty then
 		// 	playables.length
 		// else
-		if badTouch.length > 0 then
-			-badTouch.length * 4
+		if badTouch.nonEmpty then
+			-badTouch.size * 4
 		else
 			2 * List(0.0, 0.125, 0.25, 0.35, 0.45, 0.55)(newTouched.length)
 
@@ -88,7 +88,7 @@ def getResult(game: HGroup, hypo: HGroup, action: ClueAction): Double =
 	val pangOfGuilt = if state.clueTokens > 1 && target != state.nextPlayerIndex(state.ourPlayerIndex) && game.findFinesse(target).contains(focus) then -0.25 else 0
 
 	val playablesS = playables.map(state.logId(_)).mkString(",")
-	Log.info(s"good touch: $goodTouch, playables: [$playablesS], duped: $dupedPlayables, trash: $revealedTrash, fill: ${fill.length}, elim: ${elim.length}, bad touch: $badTouch, avoidDupe: $avoidableDupe, guilt? $pangOfGuilt, precision: $precision ${hypo.lastMove}")
+	if log then Log.info(s"good touch: $goodTouch, playables: [$playablesS], duped: $dupedPlayables, trash: $revealedTrash, fill: ${fill.length}, elim: ${elim.length}, bad touch: ${badTouch.fmt}, avoidDupe: $avoidableDupe, guilt? $pangOfGuilt, precision: $precision ${hypo.lastMove}")
 
 	val value = goodTouch +
 		(if playables.nonEmpty then 0.5 else 0) +
@@ -97,7 +97,7 @@ def getResult(game: HGroup, hypo: HGroup, action: ClueAction): Double =
 		(if game.inEndgame then 0.01 else 0.1) * revealedTrash +
 		(if game.inEndgame then 0.2 else 0.1) * fill.length +
 		(if game.inEndgame then 0.1 else 0.05) * elim.length +
-		-0.1 * badTouch.length +
+		-0.1 * badTouch.size +
 		-2 * avoidableDupe +
 		pangOfGuilt +
 		precision
@@ -133,7 +133,7 @@ def _forceClue(orig: HGroup, game: HGroup, offset: Int, only: Option[Int] = None
 
 	forceClue(game.copy(allowFindOwn = false), giver, adv, offset, only, clueFilter = clueFilter(game, giver)) match
 		case ForceClueResult.BestClue(value, action, hypo) =>
-			(value = value + (if finessable then 0.5 else 0), goodClue = getResult(game, hypo, action) >= 1)
+			(value = value + (if finessable then 0.5 else 0), goodClue = getResult(game, hypo, action, log = false) >= 1)
 		case ForceClueResult.AssumeClueAvailable(value) =>
 			(value = value + (if finessable then 0.5 else 0), goodClue = false)
 		case _ =>
@@ -194,7 +194,7 @@ def advance(orig: HGroup, game: HGroup, offset: Int): Double =
 				case None =>     (None,     PlayAction(playerIndex, order, -1, -1))
 				case Some(id) => (Some(id), game.players(playerIndex).tryPlay(game, order))
 
-		playables.find(o => meta(o).status == CardStatus.Finessed || game.isBlindPlaying(o)) match
+		playables.filter(o => meta(o).status == CardStatus.Finessed || game.isBlindPlaying(o)).minByOption(game.xmeta(_).turnFinessed.getOrElse(99)) match
 			case Some(order) =>
 				val (id, action) = orderToAction(order)
 
@@ -356,7 +356,7 @@ def _evalAction(game: HGroup, action: Action): Double =
 	val value = action match
 		case clueAction: ClueAction =>
 			val hypoGame = game.copy(allowFindOwn = false).simulate(action)
-			val clueValue = getResult(game, hypoGame, clueAction)
+			val clueValue = getResult(game, hypoGame, clueAction, log = false)
 
 			if hypoGame.lastMove == Some(ClueInterp.Mistake) || clueValue == -100 then
 				-100.0
@@ -444,16 +444,16 @@ def _evalAction(game: HGroup, action: Action): Double =
 			val thought = game.me.thoughts(order)
 			val poss = thought.infoLock.getOrElse(thought.possibilities)
 
-			poss.toList.foldLeftOpt(0.0): (value, i) =>
+			poss.toList.foldLeftOpt(0.0): (accValue, i) =>
 				Log.highlight(Console.GREEN, s"discarding ${state.logId(i)}")
 				val hypoGame = game.copy(allowFindOwn = false).simulate(DiscardAction(playerIndex, order, i.suitIndex, i.rank, failed))
 
 				if hypoGame.lastMove == Some(DiscardInterp.Mistake) then
 					Left(-100.0)
 				else
-					val best = advance(game, hypoGame, 1)
+					val best = advance(game, hypoGame, 1) + (if hypoGame.lastMove == Some(DiscardInterp.Sarcastic) then 0.5 else 0)
 					Log.info(f"${action.fmt(state)}%s: $best%.2f (${hypoGame.lastMove.get}%s)")
-					Right(best + value)
+					Right(best + accValue)
 			.when(_ != -100):
 				_ / poss.length
 

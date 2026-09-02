@@ -120,14 +120,14 @@ def distributionClue(prev: Game, game: Game, action: ClueAction, focus: Int): Op
   * @param id      The identity that this card would be prompted as.
   * @param prompt  The order of the prompted card.
   */
-def rainbowMismatch(game: Game, action: ClueAction, id: Identity, prompt: Int): Boolean =
+def rainbowMismatch(prev: Game, game: Game, action: ClueAction, id: Identity, prompt: Int): Boolean =
 	val state = game.state
 	val ClueAction(_, target, list, clue) = action
 
 	val skip =
 		clue.kind != ClueKind.Colour ||
 		!state.variant.suits(id.suitIndex).suitType.rainbowish ||
-		game.knownAs(prompt, RAINBOWISH) ||
+		prev.knownAs(prompt, RAINBOWISH) ||
 		state.deck(prompt).clues.exists(_.isEq(clue))
 
 	if skip then
@@ -145,5 +145,6 @@ def rainbowMismatch(game: Game, action: ClueAction, id: Identity, prompt: Int): 
 		return false
 
 	// A matching colour would have touched the same cards.
+	target == state.ourPlayerIndex ||
 	state.deck(prompt).clues.exists: c =>
 		state.clueTouched(state.hands(target), c).sorted == list.sorted

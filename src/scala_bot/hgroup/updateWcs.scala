@@ -68,7 +68,8 @@ private def revert(g: HGroup, order: Int, ids: List[Identity], forceReset: Boole
 		g.withThought(order): t =>
 			t.copy(
 				inferred = t.oldInferred.mapO(_.intersect(t.possible)).getOrElse(t.possible),
-				oldInferred = IdentitySetOpt.empty
+				oldInferred = IdentitySetOpt.empty,
+				infoLock = IdentitySetOpt.empty
 			)
 		.withMeta(order)(_.copy(status = CardStatus.None))
 	else
@@ -404,6 +405,10 @@ def resolveRetained(prev: HGroup, game: HGroup, action: Action, wc: WaitingConne
 					Log.info(s"allowing $name to defer a finesse for an important clue")
 					return UpdateResult.Keep
 
+			if wc.currConn.isInstanceOf[PositionalConn] then
+				Log.info(s"allowing $name to defer a positional by cluing!")
+				return UpdateResult.Keep
+
 		case PlayAction(_, order, _, _) =>
 			if game.isBlindPlaying(order) then
 				if game.xmeta(order).turnFinessed.exists(_ < wc.turn) then
@@ -416,6 +421,11 @@ def resolveRetained(prev: HGroup, game: HGroup, action: Action, wc: WaitingConne
 			// else
 			// 	Log.info(s"$name played into something else, continuing")
 			// 	return UpdateResult.Keep
+		case DiscardAction(playerIndex, order, _, _, _) =>
+			if wc.currConn.isInstanceOf[PositionalConn] && !prev.chop(playerIndex).contains(order) then
+				Log.info(s"allowing $name to defer a positional by performing a positional!")
+				return UpdateResult.Keep
+
 		case _ => ()
 
 	val passback = wc.currConn.matchesP:

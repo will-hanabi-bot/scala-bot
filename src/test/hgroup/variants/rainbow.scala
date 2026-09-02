@@ -110,6 +110,24 @@ class Rainbow extends munit.FunSuite:
 		hasStatus(game, Alice, 1, CardStatus.Finessed)
 		hasInfs(game, None, Alice, 1, Vector("m1"))
 
+	test("assumes a free choice finesse over direct play"):
+		val game = setup(HGroup.atLevel(5), Vector(
+			Vector("xx", "xx", "xx", "xx", "xx"),
+			Vector("m1", "r3", "y3", "g3", "m5"),
+			Vector("r4", "y4", "g4", "b4", "m4")
+		),
+			starting = Cathy,
+			variant = TestVariant.Rainbow5,
+			clueTokens = 7,
+			init =
+				preClue[HGroup](Alice, 2, Seq("green")) andThen
+				preClue[HGroup](Bob, 5, Seq("red"))
+		)
+		.pipe(takeTurn("Cathy clues yellow to Alice (slot 2)"))		// filling in slot 2 as a rainbow card
+
+		// Alice should allow for a possible free choice finesse.
+		hasInfs(game, None, Alice, 2, Vector("m1", "m2"))
+
 	test("prompts when giver doesn't have free choice 1"):
 		val game = setup(HGroup.atLevel(1), Vector(
 			Vector("xx", "xx", "xx", "xx", "xx"),

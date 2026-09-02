@@ -531,6 +531,7 @@ object Reactor:
 						// Don't play if there is a focused card that looks exactly like this one (no OCM in reactor)
 						knownP.filter: order =>
 							game.meta(order).status == CardStatus.CalledToPlay ||
+							game.meta(order).status == CardStatus.DragToPlay ||
 							game.meta(order).status == CardStatus.GentlemansDiscard ||
 							!state.hands(state.ourPlayerIndex).exists: o =>
 								o != order && me.thoughts(o).possible == me.thoughts(order).possible && game.meta(o).focused

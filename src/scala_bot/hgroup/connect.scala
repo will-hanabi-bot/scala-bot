@@ -196,7 +196,7 @@ def findUnknownConnecting(ctx: ClueContext, reacting: Int, id: Identity, connect
 		overrideLayer = opts.insertingInto.exists(_.exists(prev.state.hands(reacting).contains))
 	)
 
-	if prompt.exists(!rainbowMismatch(prev, action, id, _)) then
+	if prompt.exists(!rainbowMismatch(prev, game, action, id, _)) then
 		return tryPrompt(prompt.get)
 
 	// Try prompting a wrongly-ranked pink card

@@ -21,7 +21,7 @@ class Endgame extends munit.FunSuite:
 			Vector("b4", "p1", "p1", "r1"),
 		),
 			playStacks = Some(Vector(4, 4, 5, 3, 5)),
-			discarded =  Vector(
+			discarded = Vector(
 				"r2", "r3",
 				"y2", "y3",
 				"g2", "g3", "g4",
@@ -52,7 +52,7 @@ class Endgame extends munit.FunSuite:
 			Vector("y4", "p1", "p1", "y5"),
 		),
 			playStacks = Some(Vector(5, 3, 4, 5, 5)),
-			discarded =  Vector(
+			discarded = Vector(
 				"r2", "r3",
 				"y2", "y3",
 				"g2", "g3",
@@ -82,7 +82,7 @@ class Endgame extends munit.FunSuite:
 			Vector("b1", "b1", "p1", "r5"),
 		),
 			playStacks = Some(Vector(3, 5, 5, 4, 5)),
-			discarded =  Vector(
+			discarded = Vector(
 					  "r3",
 					  "y3", "y4",
 					  "g3", "g4",
@@ -112,7 +112,7 @@ class Endgame extends munit.FunSuite:
 			Vector("r1", "y1", "g1", "p5"),
 		),
 			playStacks = Some(Vector(5, 5, 5, 5, 2)),
-			discarded =  Vector(
+			discarded = Vector(
 				"r2", "r3",
 				"y2", "y3",
 				"g2", "g3",
@@ -142,7 +142,7 @@ class Endgame extends munit.FunSuite:
 			Vector("g1", "b1", "r4", "r1", "g5"),
 		),
 			playStacks = Some(Vector(3, 5, 4, 5, 1)),
-			discarded =  Vector(
+			discarded = Vector(
 				"r2", "r3",
 				"y2", "y3", "y4",
 				"g2", "g3", "g4",
@@ -180,7 +180,7 @@ class Endgame extends munit.FunSuite:
 			Vector("b1", "r1", "g1", "y1", "r5"),
 		),
 			playStacks = Some(Vector(2, 4, 5, 5, 5)),
-			discarded =  Vector(
+			discarded = Vector(
 				"r2", "r3",
 				"y2", "y3",
 				"g2", "g3",
@@ -213,7 +213,7 @@ class Endgame extends munit.FunSuite:
 			playStacks = Some(Vector(5, 4, 5, 5, 3)),
 			clueTokens = 1,
 			variant = TestVariant.Rainbow5,
-			discarded =  Vector(
+			discarded = Vector(
 				"r2", "r3",
 				"y2", "y3",
 				"g2", "g3",
@@ -245,7 +245,7 @@ class Endgame extends munit.FunSuite:
 			playStacks = Some(Vector(5, 4, 5, 5, 3)),
 			clueTokens = 1,
 			variant = TestVariant.Rainbow5,
-			discarded =  Vector(
+			discarded = Vector(
 				"r2", "r3",
 				"y2", "y3",
 				"g2", "g3",
@@ -275,7 +275,7 @@ class Endgame extends munit.FunSuite:
 			Vector("p1", "g1", "g2", "b1", "g3"),
 		),
 			playStacks = Some(Vector(5, 5, 5, 3, 4)),
-			discarded =  Vector(
+			discarded = Vector(
 				"r1", "r1",
 				"y1",
 				"b1", "b4",
@@ -307,7 +307,7 @@ class Endgame extends munit.FunSuite:
 			Vector("g2", "g3", "b4", "b2", "b5"),
 		),
 			playStacks = Some(Vector(5, 5, 5, 4, 4)),
-			discarded =  Vector(
+			discarded = Vector(
 				"y1", "y2",
 				"g1", "g1",
 				"o1", "o2", "o3", "o4"
@@ -336,7 +336,7 @@ class Endgame extends munit.FunSuite:
 		),
 			starting = Cathy,
 			playStacks = Some(Vector(4, 4, 5, 5, 5)),
-			discarded =  Vector(
+			discarded = Vector(
 				"r2", "r3",
 				"y2", "y3",
 				"g2", "g3",

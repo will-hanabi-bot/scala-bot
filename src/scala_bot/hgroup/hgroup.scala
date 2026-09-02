@@ -511,6 +511,7 @@ case class HGroup(
 				hypo.lastMove.matchesP:
 					case Some(ClueInterp.Save) =>
 						state.isCritical(focusId) || {
+							giver == state.ourPlayerIndex &&	// we can only expect ourselves to give a 2 save
 							focusId.rank == 2 &&
 							visibleFind(state, this.players(giver), focusId, infer = true, excludeOrder = focus).isEmpty &&
 							dupeResponsibility(this, focusId, action.target).contains(giver)
@@ -521,9 +522,12 @@ case class HGroup(
 						!stalled5
 
 					case Some(ClueInterp.Play) =>
-						val (badTouch, _, _) = badTouchResult(this, hypo, action)
-						badTouch.isEmpty ||
-						(chop && visibleFind(state, this.players(giver), focusId, infer = true, excludeOrder = focus).isEmpty)	// save principle
+						!(chop && state.isInverted(focusId)) && {
+							val (badTouch, _, _) = badTouchResult(this, hypo, action)
+
+							badTouch.isEmpty ||
+							(chop && visibleFind(state, this.players(giver), focusId, infer = true, excludeOrder = focus).isEmpty)	// save principle
+						}
 			}
 
 	def availableClue(giver: Int): Option[Clue] =
@@ -550,6 +554,7 @@ case class HGroup(
 				hypo.lastMove.matchesP:
 					case Some(ClueInterp.Save) =>
 						state.isCritical(focusId) || {
+							giver == state.ourPlayerIndex &&	// we can only expect ourselves to give a 2 save
 							focusId.rank == 2 &&
 							visibleFind(state, this.players(giver), focusId, infer = true, excludeOrder = focus).isEmpty &&
 							dupeResponsibility(this, focusId, action.target).contains(giver)
@@ -859,12 +864,8 @@ object HGroup:
 						game.meta(order).status == CardStatus.PermissionToDiscard
 					}
 
-				// Write staleness if ending early game
-				g.when(_ => endEarlyGame && g.level >= Level.Context && prev.state.canClue): g =>
-					g.state.heldOrders.foldLeft(g): (acc, order) =>
-						acc.withMeta(order): m =>
-							m.copy(staleIds = m.staleIds.union(g.state.playableSet))
-				.copy(inEarlyGame = !endEarlyGame)
+				// This doesn't cause stale notes to be written, because the o1 would have blocked a 1 clue.
+				g.copy(inEarlyGame = !endEarlyGame)
 			.elim()
 
 		def takeAction(game: HGroup): IO[PerformAction] =
@@ -873,7 +874,7 @@ object HGroup:
 			Log.info(s"ptd? ${game.chop(state.ourPlayerIndex).map(game.meta(_).status)}")
 
 			val solveEndgame =
-				if state.remScore <= state.variant.suits.length + 1 && state.pace + state.cardsLeft <= 7 then
+				if state.cardsLeft <= 2 || (state.remScore <= state.variant.suits.length + 1 && state.pace + state.cardsLeft <= 7) then
 					IO.blocking:
 						Log.highlight(Console.MAGENTA, "trying to solve endgame...")
 
@@ -894,7 +895,18 @@ object HGroup:
 			solveEndgame.flatMap: solved =>
 				solved.map(IO.pure).getOrElse:
 					IO.blocking:
-						val discardOrders = game.findDiscardable(state.ourPlayerIndex)
+						val discardOrders =
+							val discardable = game.findDiscardable(state.ourPlayerIndex)
+
+							if game.level < Level.Endgame || (!game.inEndgame && state.remScore > 5) then
+								val (clued, unclued) = discardable.partition(state.deck(_).clued)
+								if clued.nonEmpty then
+									unclued.minOption.fold(clued)(clued :+ _)
+								else
+									unclued.minOption.fold(Vector.empty)(Vector(_))
+							else
+								discardable
+
 						val playableOrders = me.thinksPlayables(game, state.ourPlayerIndex)
 
 						Log.info(s"playables $playableOrders")
@@ -1025,7 +1037,16 @@ object HGroup:
 				if hypoGame.lastMove == Some(ClueInterp.Mistake) then
 					return -100
 
-				getResult(game, hypoGame, action)
+				val result = getResult(game, hypoGame, action)
+
+				if result > -11 then
+					val (blindPlays, playables) = playablesResult(game, hypoGame)
+					if blindPlays.nonEmpty || playables.nonEmpty then
+						result.max(-1)
+					else
+						result
+				else
+					result
 
 			val allClues = (0 until state.numPlayers)
 				.filter(_ != giver)

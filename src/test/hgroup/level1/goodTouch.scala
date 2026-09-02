@@ -1,6 +1,7 @@
 package tests.hgroup.level1
 
 import scala_bot.basics._
+import scala_bot.lib.FastBitSet
 import scala_bot.test.{hasInfs, Player, setup, takeTurn}, Player._
 import scala_bot.hgroup.HGroup
 
@@ -53,9 +54,23 @@ class GoodTouch extends munit.FunSuite:
 		val (badTouch, trash, _) = badTouchResult(game, hypo, ClueAction(Alice.ordinal, Bob.ordinal, Seq(5, 6), BaseClue(ClueKind.Rank, 1)))
 
 		assert(badTouch.isEmpty)
-		assertEquals(trash, List(6))
+		assertEquals(trash, FastBitSet(6))
 
-	test("doesn't count bad touch when focusing a dupe of the last card"):
+	test("doesn't count bad touch when focusing a dupe of the last card 1"):
+		val game = setup(HGroup.atLevel(1), Vector(
+			Vector("xx", "xx", "xx", "xx", "xx"),
+			Vector("r5", "r4", "r2", "p1", "p1")
+		),
+			playStacks = Some(Vector(1, 1, 1, 1, 0))
+		)
+
+		val hypo = takeTurn("Alice clues 1 to Bob")(game)
+		val (badTouch, trash, _) = badTouchResult(game, hypo, ClueAction(Alice.ordinal, Bob.ordinal, Seq(5, 6), BaseClue(ClueKind.Rank, 1)))
+
+		assert(badTouch.isEmpty)
+		assertEquals(trash, FastBitSet(6))
+
+	test("doesn't count bad touch when focusing a dupe of the last card 2"):
 		val game = setup(HGroup.atLevel(1), Vector(
 			Vector("xx", "xx", "xx", "xx", "xx"),
 			Vector("p2", "y4", "y1", "b1", "r1"),
@@ -68,4 +83,4 @@ class GoodTouch extends munit.FunSuite:
 		val (badTouch, trash, _) = badTouchResult(game, hypo, ClueAction(Alice.ordinal, Cathy.ordinal, Seq(13, 14), BaseClue(ClueKind.Rank, 3)))
 
 		assert(badTouch.isEmpty)
-		assertEquals(trash, List(13))
+		assertEquals(trash, FastBitSet(13))

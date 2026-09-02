@@ -49,15 +49,15 @@ def getResult(game: Reactor, hypo: Reactor, action: ClueAction): Double =
 					val dupeCount = dupedPlayables.size
 
 					val goodTouch: Double =
-						if badTouch.length > newTouched.length then
-							-badTouch.length
+						if badTouch.size > newTouched.length then
+							-badTouch.size
 						else
-							List(0.0, 0.125, 0.25, 0.35, 0.45, 0.55)(newTouched.length - badTouch.length)
+							List(0.0, 0.125, 0.25, 0.35, 0.45, 0.55)(newTouched.length - badTouch.size)
 
 					val untouchedPlays = playables.count(!hypo.state.deck(_).clued)
 
 					val playablesS = playables.map(state.logId(_)).mkString(", ")
-					Log.info(s"good touch: $goodTouch, playables: $playablesS, duped: $dupeCount, trash: ${trash.length}, fill: ${fill.length}, elim: ${elim.length}, bad touch: $badTouch, ${hypo.lastMove}")
+					Log.info(s"good touch: $goodTouch, playables: $playablesS, duped: $dupeCount, trash: ${trash.size}, fill: ${fill.length}, elim: ${elim.length}, bad touch: $badTouch, ${hypo.lastMove}")
 
 					val value = goodTouch +
 						(playables.length - 2.0 * dupeCount) +
@@ -65,7 +65,7 @@ def getResult(game: Reactor, hypo: Reactor, action: ClueAction): Double =
 						(if game.inEndgame then 0.01 else 0.05) * revealedTrash +
 						(if game.inEndgame then 0.1 else 0.05) * fill.length +
 						(if game.inEndgame then 0.05 else 0.02) * elim.length +
-						-0.1 * badTouch.length
+						-0.1 * badTouch.size
 
 					hypo.lastMove match
 						case Some(ClueInterp.Mistake) => value - 10

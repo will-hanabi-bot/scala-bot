@@ -29,6 +29,11 @@ enum Link:
 		case Sarcastic(_, id) => Some(id)
 		case _ => None
 
+	def fmt(state: State) = this match
+		case Promised(orders, id, target) => s"Promised(${orders.fmt}, ${state.logId(id)}, target = $target)"
+		case Sarcastic(orders, id) => s"Sarcastic(${orders.fmt}, ${state.logId(id)})"
+		case Unpromised(orders, ids) => s"Unpromised(${orders.fmt}, ${ids.fmt(state)})"
+
 /** A link where we only know playing a set of cards lets another card play.
   * @example With multiple clued 1s and receiving a play clue on a 2 in our hand.
   */

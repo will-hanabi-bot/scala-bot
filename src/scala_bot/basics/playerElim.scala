@@ -20,7 +20,8 @@ class CardElimResult(
 
 case class ElimOutcome(resets: FastBitSet, player: Player)
 
-case class InfEntry(inferred: IdentitySet, orders: FastBitSet)
+case class InfEntry(inferred: IdentitySet, orders: FastBitSet):
+	def fmt(state: State) = s"InfEntry(${inferred.fmt(state)}, ${orders.fmt})"
 
 extension (p: Player)
 	/**
@@ -117,6 +118,41 @@ extension (p: Player)
 
 		res.player = res.player.copy(allPossible = res.player.allPossible.difference(eliminated))
 		res
+
+	/** When all cards have been drawn, everyone knows what cards everyone has (but not their arrangement). */
+	private def performEndgameElim(state: State): CardElimResult =
+		var dirty = p.dirty
+		var newPlayer = p
+		var changed = false
+		var resets = FastBitSet.empty
+
+		loop(0, _ < state.hands.length, _ + 1): i =>
+			val hand = state.hands(i)
+			val heldIds = hand.flatMap(p.thoughts(_).id())
+
+			// All ids in the hand must be known, otherwise this elim can't be done
+			// basicElim will take care of our own hand
+			if heldIds.length == hand.length then
+				val idSet = IdentitySet.from(heldIds)
+
+				loop(0, _ < hand.length, _ + 1): j =>
+					val order = hand(j)
+					val prevPoss = newPlayer.thoughts(order).possible
+					val nextPoss = prevPoss.intersect(idSet)
+
+					if prevPoss != nextPoss then
+						var reset = false
+						val nextInfs = newPlayer.thoughts(order).inferred.intersect(nextPoss)
+							.when(_.isEmpty): _ =>
+								reset = true
+								resets = resets.incl(order)
+								nextPoss
+
+						newPlayer = newPlayer.withThought(order)(_.copy(inferred = nextInfs, possible = nextPoss, reset = reset))
+						dirty = dirty.incl(order)
+						changed = true
+
+		if changed then CardElimResult(newPlayer, changed, resets) else CardElimResult(p)
 
 	/**
 	 * The "sudoku" emathy operation, involving 2 parts:
@@ -265,11 +301,19 @@ extension (p: Player)
 		if p.dirty.isEmpty then
 			return ElimOutcome(FastBitSet.empty, p)
 
-		val (possibleMap, certainMap) = generateMaps(state)
-		var newPlayer = p.copy(certainMap = certainMap, possibleMap = possibleMap)
+		var resets = FastBitSet.empty
+		var newPlayer = p
+
+		if state.cardsLeft == 0 then
+			val res = p.performEndgameElim(state)
+
+			resets = resets.union(res.resets)
+			newPlayer = res.player
+
+		val (possibleMap, certainMap) = newPlayer.generateMaps(state)
+		newPlayer = newPlayer.copy(certainMap = certainMap, possibleMap = possibleMap)
 
 		var crossElimCandidates = FastBitSet.empty
-		var resets = FastBitSet.empty
 
 		val res = newPlayer.basicElim(state, state.allIds)
 		newPlayer = res.player

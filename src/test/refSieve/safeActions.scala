@@ -4,6 +4,7 @@ import cats.effect.unsafe.implicits.global
 
 import scala_bot.refSieve.RefSieve
 import scala_bot.basics._
+import scala_bot.lib.FastBitSet
 import scala_bot.test.{fullyKnown, hasInfs, hasStatus, Player, preClue, setup, takeTurn}, Player._
 
 import scala_bot.utils.pipe
@@ -125,5 +126,5 @@ class SafeActions extends munit.FunSuite:
 		val hypo = takeTurn("Alice clues red to Bob")(game)
 		val (badTouch, trash, _) = badTouchResult(game, hypo, hypo.state.actionList.last(0).asInstanceOf[ClueAction])
 
-		assertEquals(badTouch, List(8, 6))
+		assertEquals(badTouch, FastBitSet(8, 6))
 		assert(trash.isEmpty)

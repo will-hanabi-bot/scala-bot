@@ -78,10 +78,10 @@ extension[G <: Game] (solver: EndgameSolver[G])
 
 		else if state.cardsLeft == 0 || perform.isClue then
 			val newState = advanceState(state, perform, playerTurn, draw = None)
-			// println(s"${indent(depth)}no draw, stacks ${newState.playStacks}")
+			// Log.info(s"${indent(depth)}no draw, stacks ${newState.playStacks} ($perform)")
 			val winnable = winnableSimpler(newState, state.nextPlayerIndex(playerTurn), remaining, deadline, depth + 1)
 
-			// println(s"${indent(depth)}winnable? $winnable")
+			// Log.info(s"${indent(depth)}winnable? $winnable")
 
 			if winnable then SimpleResult.AlwaysWinnable else SimpleResult.Unwinnable
 
@@ -92,12 +92,12 @@ extension[G <: Game] (solver: EndgameSolver[G])
 			def isWinnable(drawId: Identity) =
 				val draw = Card(drawId.suitIndex, drawId.rank, state.nextCardOrder + 1, state.turnCount)
 				val newState = advanceState(state, perform, playerTurn, Some(draw))
-				// println(s"${indent(depth)}drew, stacks ${newState.playStacks}")
+				// Log.info(s"${indent(depth)}drew, stacks ${newState.playStacks} ($perform)")
 				val newRemaining = remaining.rem(drawId)
 
 				winnableSimpler(newState, state.nextPlayerIndex(playerTurn), newRemaining, deadline, depth + 1)
 
-			val trashWinnable = trashIds.isEmpty || isWinnable(trashIds.head)
+			val trashWinnable = trashIds.headOption.exists(isWinnable)
 			val otherWinnable = otherIds.filter(isWinnable)
 			// println(s"${indent(depth)}remaining: $remaining, winnable draws: $winnableDraws")
 
