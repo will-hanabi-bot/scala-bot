@@ -159,6 +159,12 @@ def alternativeClue(ctx: ClueContext, severity: Int, maxStall: Int) =
 								foundFPE = Some(finesseId)
 								true
 
+			case ClueInterp.PlayLooksSave =>
+				badTouch.isEmpty &&
+				// Can't expect them to clue a possible clued dupe in their hand or our hand
+				!(state.hands(giver) ++ state.ourHand).exists: o =>
+					game.isTouched(o) && game.players(giver).thoughts(o).inferred.contains(focusId)
+
 			case ClueInterp.Save =>
 				state.isCritical(focusId) || {
 					focusId.rank == 2 &&

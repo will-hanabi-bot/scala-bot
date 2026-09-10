@@ -3,7 +3,7 @@ package tests.hgroup.level9
 import cats.effect.unsafe.implicits.global
 
 import scala_bot.basics._
-import scala_bot.test.{Colour, hasInfs, hasStatus, Player, preClue, setup, takeTurn}, Player._
+import scala_bot.test.{Colour, hasInfs, hasStatus, Player, preClue, setup, takeTurn, TestVariant}, Player._
 import scala_bot.hgroup.{HGroup, StallInterp}
 
 import scala_bot.utils.{pipe, tap}
@@ -353,6 +353,34 @@ class Stalling extends munit.FunSuite:
 	// 	val yellowFinesse = takeTurn("Cathy discards b4", "r1")(game)
 	// 	hasInfs(yellowFinesse, None, Alice, 2, Vector("y5"))
 	// 	hasStatus(yellowFinesse, Alice, 1, CardStatus.Finessed)
+
+	test("gives a play clue in a stalling situation, even when it looks like a save"):
+		val game = setup(HGroup.atLevel(9), Vector(
+			Vector("xx", "xx", "xx", "xx", "xx"),
+			Vector("r3", "y3", "g3", "b3", "m4"),
+			Vector("r4", "y4", "g4", "m4", "b3")
+		),
+			starting = Cathy,
+			playStacks = Some(Vector(0, 0, 0, 2, 0)),
+			discarded = Vector("m3"),
+			variant = TestVariant.Rainbow5,
+			init = preClue(Bob, 5, Vector("red"))
+		)
+		.pipe(takeTurn("Cathy clues 5 to Alice (slots 1,2,3,4,5)"))
+
+		// Alice must clue Cathy's b3, even though it gets 0 playables.
+		assert(game.takeAction.unsafeRunSync() match
+			case PerformAction.Rank(target, value) => target == Cathy.ordinal && value == 3
+			case PerformAction.Colour(target, value) => target == Cathy.ordinal && value == 3
+			case _ => false
+		)
+
+		// Alice is not allowed to give a Fill-In Stall.
+		val mistakeGame = takeTurn("Alice clues 4 to Bob")(game)
+		assertEquals(mistakeGame.lastMove, Some(ClueInterp.Mistake))
+
+		val stallGame = takeTurn("Alice clues 3 to Cathy")(game)
+		assertEquals(stallGame.lastMove, Some(ClueInterp.PlayLooksSave))
 
 class DoubleDiscardAvoidance extends munit.FunSuite:
 	override def beforeAll() = Logger.setLevel(LogLevel.Off)

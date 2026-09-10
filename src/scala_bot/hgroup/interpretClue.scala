@@ -201,7 +201,7 @@ def interpNormalClue(ctx: ClueContext, symmetricInterp: SymmetricInterp, thinksS
 				.flatMap:
 					connect(ctx, _, looksDirect, thinksStall, findOwn = Some(state.ourPlayerIndex))
 
-			val simplestOwn = occamsRazor(ctx, filterFps(ctx, simplest ++ ownFps, target), state.ourPlayerIndex, actualId = game.me.thoughts(focus).id())
+			val simplestOwn = occamsRazor(ctx, filterFps(ctx, simplest ++ ownFps), state.ourPlayerIndex, actualId = game.me.thoughts(focus).id())
 
 			if simplestOwn.isEmpty then
 				Log.warn("no inferences!")

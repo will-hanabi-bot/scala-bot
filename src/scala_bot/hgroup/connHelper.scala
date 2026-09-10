@@ -336,7 +336,7 @@ def resolveClue(ctx: ClueContext, fps: Seq[FocusPossibility], symmetricInterp: S
 		// occamsRazor(ctx, ambiguousFps, target)
 		ambiguousFps
 
-	val allFps = filterFps(ctx, fps ++ symmetricFps ++ ambiguousFps, target)
+	val allFps = filterFps(ctx, fps ++ symmetricFps ++ ambiguousFps)
 	val simplestFps =
 		val simplest = occamsRazor(ctx, allFps, target)
 
@@ -352,6 +352,8 @@ def resolveClue(ctx: ClueContext, fps: Seq[FocusPossibility], symmetricInterp: S
 		else
 			simplestFps.filter(!_.ambiguous)
 
+	val trueFp = simplestFps.find(fp => state.deck(focus).matches(fp.id))
+
 	lazy val stompedWc = !game.inEndgame && game.waiting.exists: wc =>
 		!wc.symmetric && !wc.ambiguousSelf &&
 		wc.connections.exists: conn =>
@@ -365,13 +367,12 @@ def resolveClue(ctx: ClueContext, fps: Seq[FocusPossibility], symmetricInterp: S
 				val holder = state.holderOf(d)
 				holder != giver && !game.chop(holder).contains(d)
 
-	lazy val delayedBluff =
-		for
-			trueFp <- simplestFps.find(fp => state.deck(focus).matches(fp.id)) if trueFp.isBluff
-			reacting = trueFp.connections.head.reacting
-		yield
+	lazy val delayedBluff = trueFp.flatMap: trueFp =>
+		Option.when(trueFp.isBluff && trueFp.connections.head.reacting == target):
+			val reacting = trueFp.connections.head.reacting
+
 			(fps ++ symmetricFps).filter: fp =>
-				!simplestFps.contains(fp) &&
+				// !simplestFps.contains(fp) &&
 				fp.connections.headOption.exists: conn =>
 					conn.reacting != reacting ||
 					conn.isInstanceOf[KnownConn] ||
@@ -382,16 +383,16 @@ def resolveClue(ctx: ClueContext, fps: Seq[FocusPossibility], symmetricInterp: S
 	lazy val badAsymmetry = symmetricInterp match
 		case SymmetricInterp.NoInterp => false
 		case SymmetricInterp.Stall(interp) =>
-			simplestFps.find(fp => state.deck(focus).matches(fp.id)).exists: trueFp =>
+			trueFp.exists:
 				// The true connection requires a finesse or prompt from someone who thinks it looks like a stall
-				trueFp.connections.collectFirst {
+				_.connections.collectFirst {
 					case f: FinesseConn => f
 					case p: PromptConn => p
 				}.exists: c =>
 					thinksStall.contains(c.reacting)
 
 	val interp =
-		if state.deck(focus).id().exists(id => !simplestFps.exists(_.id == id)) then
+		if state.deck(focus).id().isDefined && trueFp.isEmpty then
 			Log.error(s"resolving clue but focus ${state.logId(focus)} doesn't match simplest fps [${simplestFps.map(fp => state.logId(fp.id)).mkString(",")}]!")
 			ClueInterp.Mistake
 
@@ -408,15 +409,18 @@ def resolveClue(ctx: ClueContext, fps: Seq[FocusPossibility], symmetricInterp: S
 			ClueInterp.Mistake
 
 		else if delayedBluff.exists(_.nonEmpty) then
-			Log.error(s"invalid bluff, symmetrically needs to delay for potential ${delayedBluff.get.map(fp => state.logId(fp.id)).mkString(",")}")
+			Log.error(s"invalid bluff, symmetrically needs to delay for potential ${delayedBluff.get.map(fp => state.logConns(fp.connections, fp.id)).mkString(",")}")
 			ClueInterp.Mistake
 
 		else if badAsymmetry then
 			Log.error(s"invalid clue, true fp requires someone who thinks the clue is a stall to react!")
 			ClueInterp.Mistake
 
-		else if fps.exists(_.save) then
+		else if trueFp.map(_.save).getOrElse(fps.exists(_.save)) then
 			ClueInterp.Save
+
+		else if fps.exists(_.save) then
+			ClueInterp.PlayLooksSave
 
 		else
 			ClueInterp.Play
@@ -445,7 +449,7 @@ def resolveClue(ctx: ClueContext, fps: Seq[FocusPossibility], symmetricInterp: S
 		def nextReacting(fp: FocusPossibility, i: Int) =
 			fp.connections.lift(i + 1).map(_.reacting).getOrElse(action.target)
 
-		allFps.foldLeft(_): (a, fp) =>
+		simplestFps.foldLeft(_): (a, fp) =>
 			if fp.symmetric then a else
 				fp.connections.zipWithIndex.foldLeft(a):
 					case (acc, (conn, i)) =>
@@ -453,7 +457,7 @@ def resolveClue(ctx: ClueContext, fps: Seq[FocusPossibility], symmetricInterp: S
 							val nextReact = nextReacting(fp, i)
 
 							conn.linked.length >= 1 &&
-							!allFps.exists: fp2 =>
+							!simplestFps.exists: fp2 =>
 								val matchingIndex = fp2.connections.indexWhere:
 									case p: PlayableConn => p.order == conn.order
 									case _ => false
@@ -467,7 +471,7 @@ def resolveClue(ctx: ClueContext, fps: Seq[FocusPossibility], symmetricInterp: S
 
 						conn match
 							case conn @ PlayableConn(_, order, id, linked, hidden, _) if writePlayLink(conn) =>
-								val allLinked = allFps.foldLeft(linked): (acc, fp2) =>
+								val allLinked = simplestFps.foldLeft(linked): (acc, fp2) =>
 									if fp2.symmetric || fp2.ambiguous || fp2 == fp then acc else
 										fp2.connections.find(c => !acc.contains(c.order) && c.ids.forall(_.rank == id.rank)) match
 											case None => acc

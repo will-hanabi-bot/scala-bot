@@ -33,7 +33,7 @@ case class Note(
 sealed trait Interp
 
 enum ClueInterp extends Interp:
-	case Mistake, Reactive, Play, Save, Discard, Lock, Reveal, Fix, Stall, Distribution, Useless
+	case Mistake, Reactive, Play, Save, PlayLooksSave, Discard, Lock, Reveal, Fix, Stall, Distribution, Useless
 
 enum PlayInterp extends Interp:
 	case None, Mistake, OrderCM
@@ -655,14 +655,17 @@ extension[G <: Game](game: G)
 	def assumeInverted(player: Player, order: Int) =
 		val state = game.state
 
-		val status = game.meta(order).status
-		val knownTouched =
-			state.deck(order).clued ||
-			status == CardStatus.Finessed ||
-			status == CardStatus.Bluffed ||
-			status == CardStatus.GDInverted ||
-			status == CardStatus.CalledToPlay
+		if player.thoughts(order).possible.forall(state.isInverted) then
+			true
+		else
+			val status = game.meta(order).status
+			val knownTouched =
+				state.deck(order).clued ||
+				status == CardStatus.Finessed ||
+				status == CardStatus.Bluffed ||
+				status == CardStatus.GDInverted ||
+				status == CardStatus.CalledToPlay
 
-		state.variant.inverted &&
-		knownTouched &&
-		player.thoughts(order).possibilities.forall(game.state.isInverted)
+			state.variant.inverted &&
+			knownTouched &&
+			player.thoughts(order).possibilities.forall(game.state.isInverted)

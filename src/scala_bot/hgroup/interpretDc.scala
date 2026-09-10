@@ -383,13 +383,17 @@ def interpretSdcm(ctx: DiscardContext): Option[HGroup] =
 		else
 			val bobChopId = bobChop.flatMap(state.deck(_).id())
 			val mistake = bobChopId.exists: i =>
-				!(state.isInverted(i) && !state.isPlayable(i)) &&
-				status.matchesP:
-					case DcStatus.Scream =>
-						prev.common.hypoStacks(i.suitIndex) + 1 != i.rank &&
-						!state.isCritical(i)
-					case DcStatus.Shout =>
-						state.isBasicTrash(i)
+				(!state.isInverted(i) && state.hands(bob).exists(o => bobChop.get != o && state.deck(o).matches(i))) ||		// duped in same hand
+				(state.isInverted(i) && state.isPlayable(i)) || {				// playable orange
+					!(state.isInverted(i) && !state.isPlayable(i)) &&			// allow screaming for unplayable orage
+					status.matchesP:
+						case DcStatus.Scream =>
+							prev.common.hypoStacks(i.suitIndex) + 1 != i.rank &&
+							!state.isCritical(i)
+
+						case DcStatus.Shout =>
+							state.isBasicTrash(i)
+				}
 
 			if mistake then
 				Log.warn(s"interpreted ${status.toString().toLowerCase()} but ${state.names(bob)}'s chop isn't worth saving!")

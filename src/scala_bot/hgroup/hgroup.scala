@@ -521,7 +521,7 @@ case class HGroup(
 						hypo.stallInterp == Some(StallInterp.Stall5) &&
 						!stalled5
 
-					case Some(ClueInterp.Play) =>
+					case Some(ClueInterp.Play) | Some(ClueInterp.PlayLooksSave) =>
 						!(chop && state.isInverted(focusId)) && {
 							val (badTouch, _, _) = badTouchResult(this, hypo, action)
 
@@ -565,7 +565,7 @@ case class HGroup(
 						hypo.stallInterp == Some(StallInterp.Stall5) &&
 						!stalled5
 
-					case Some(ClueInterp.Play) =>
+					case Some(ClueInterp.Play) | Some(ClueInterp.PlayLooksSave) =>
 						val (badTouch, _, _) = badTouchResult(this, hypo, action)
 						badTouch.isEmpty ||
 						(chop && visibleFind(state, this.players(giver), focusId, infer = true, excludeOrder = focus).isEmpty)	// save principle
@@ -982,10 +982,13 @@ object HGroup:
 
 								if game.level >= Level.Stalling && anxietyPlay.isDefined then
 									Log.info("anxiety play!")
-									PerformAction.tryPlay(game, anxietyPlay.get)
+									if me.thoughts(anxietyPlay.get).inferred.intersect(state.playableSet).forall(state.isInverted) then
+										PerformAction.Discard(anxietyPlay.get)
+									else
+										PerformAction.Play(anxietyPlay.get)
 								else if state.clueTokens == 8 then
 									Log.error("No actions available at 8 clues! Playing slot 1")
-									PerformAction.tryPlay(game, state.ourHand.head)
+									PerformAction.Play(state.ourHand.head)
 								else
 									PerformAction.Discard(me.lockedDiscard(state, state.ourPlayerIndex))
 							else

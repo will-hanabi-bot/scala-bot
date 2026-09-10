@@ -15,7 +15,7 @@ def nextUnknown(fp: FocusPossibility, skipPast: Option[Connection] = None): Opti
 		case _ => true
 
 def fpSimplicity(state: State, fp: FocusPossibility, playerIndex: Int, ourPlayerIndex: Int): Double =
-	(if state.isInverted(fp.id) then 0.1 else 0) +
+	(if state.isInverted(fp.id) && !fp.save then 0.1 else 0) +
 	{
 		val nextUnknownConn = nextUnknown(fp)
 		// Note that us prompting/finessing on a clue to someone else is as "complicated"
@@ -42,7 +42,7 @@ def fpSimplicity(state: State, fp: FocusPossibility, playerIndex: Int, ourPlayer
 			1000 * blindPlays + 100 * prompts
 	}
 
-def filterFps(ctx: ClueContext, fps: Seq[FocusPossibility], target: Int) =
+def filterFps(ctx: ClueContext, fps: Seq[FocusPossibility]) =
 	val ClueContext(_, game, action, _) = ctx
 	val state = game.state
 	val trueFp = state.deck(ctx.focusResult.focus).id().flatMap(id => fps.find(_.id == id))
@@ -61,20 +61,6 @@ def filterFps(ctx: ClueContext, fps: Seq[FocusPossibility], target: Int) =
 			||
 			// There is an extra self-finesse required from us (we may not have that card)
 			!fp.ambiguous && selfFinesses(trueFp) > 0 && selfFinesses(fp) > selfFinesses(trueFp)
-	.pipe: fps =>
-		fps.filter: fp =>
-			val selfBluff = fp.connections.existsM { case f: FinesseConn => f.isBluff && f.reacting == target }
-
-			val startsKnown = fps.exists: fp2 =>
-				fp2 != fp &&
-				fp2.connections.headOption.existsM:
-					case _: KnownConn => true
-					case _: PlayableConn => true
-
-			// if selfBluff then
-			// 	println(s"${state.logConns(fp.connections, fp.id)} self bluff! $startsKnown $fps")
-
-			!(selfBluff && startsKnown)
 
 def occamsRazor(ctx: ClueContext, fps: Seq[FocusPossibility], playerIndex: Int, actualId: Option[Identity] = None) =
 	val ClueContext(_, game, action, _) = ctx
@@ -115,18 +101,24 @@ def occamsRazor(ctx: ClueContext, fps: Seq[FocusPossibility], playerIndex: Int, 
 	.pipe: simplest =>
 		simplest.filterNot: fp =>
 			// Log.info(s"checking ${state.logConns(fp.connections, fp.id)}")
-			val finesseWhenBluffExists = nextUnknown(fp).exists: conn =>
-				fps.exists: fp2 =>
-					fp != fp2 &&
-					!fp2.symmetric &&
-					nextUnknown(fp2).exists: conn2 =>
-						conn2.reacting == conn.reacting &&
-						conn2.matchesP { case f: FinesseConn => f.bluff } &&
-						conn.matchesP { case f: FinesseConn => f.fKind == FinesseKind.True || f.fKind == FinesseKind.Hidden } &&
-						// No one else can prove the finesse
-						nextUnknown(fp, Some(conn)).forall(_.reacting == playerIndex)
 
-			if finesseWhenBluffExists then
-				Log.highlight(Console.CYAN, s"excluding ${state.logConns(fp.connections, fp.id)} due to bluff possibility on same player!")
+			val nextSelfConn = fp.connections.zipWithIndex.find: (c, _) =>
+				c.reacting == action.target && !(c.isInstanceOf[KnownConn] || c.isInstanceOf[PlayableConn])
 
-			finesseWhenBluffExists
+			val dominated = nextSelfConn match
+				case Some(f: FinesseConn, index) if f.reacting == action.target =>
+					fps.find: fp2 =>
+						fp != fp2 &&
+						!fp2.symmetric &&
+						fp2.connections.length == index &&
+						// All of the other connections exist in this focus possibility before the self-connection
+						fp2.connections.zipWithIndex.forall: (c, i) =>
+							val c2 = fp.connections(i)
+							c2.order == c.order && c.ids.forall(c2.ids.contains)
+				case _ => None
+
+			dominated match
+				case Some(d) => Log.highlight(Console.CYAN, s"excluding ${state.logConns(fp.connections, fp.id)} due to strictly simpler possibility ${state.logConns(d.connections, d.id)}!")
+				case None => ()
+
+			dominated.isDefined

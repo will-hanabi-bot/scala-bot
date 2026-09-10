@@ -4,7 +4,7 @@ import scala_bot.basics._
 import scala_bot.test.{hasInfs, hasStatus, Player, preClue, setup, takeTurn, TestVariant}, Player._
 import scala_bot.hgroup.HGroup
 
-import scala_bot.utils.pipe
+import scala_bot.utils.{pipe, tap}
 import scala_bot.logger.{Logger, LogLevel}
 
 class ComplexBluffs extends munit.FunSuite:
@@ -69,7 +69,7 @@ class ComplexBluffs extends munit.FunSuite:
 		hasStatus(game, Bob, 2, CardStatus.None)
 		hasInfs(game, None, Cathy, 3, Vector("b2"))
 
-	test("disambiguates a bluff/finesse when demonstrated"):
+	test("disambiguates a bluff/finesse when demonstrated 1"):
 		val game = setup(HGroup.atLevel(11), Vector(
 			Vector("xx", "xx", "xx", "xx", "xx"),
 			Vector("p2", "b4", "y1", "p4", "g4"),
@@ -90,6 +90,32 @@ class ComplexBluffs extends munit.FunSuite:
 
 		// Slot 2 (was slot 1) is known to be [r3,y3] as a bluff.
 		hasInfs(bluffGame, None, Alice, 2, Vector("r3", "y3"))
+
+	test("disambiguates a bluff/finesse when demonstrated 2"):
+		val game = setup(HGroup.atLevel(11), Vector(
+			Vector("xx", "xx", "xx", "xx", "xx"),
+			Vector("y4", "g4", "b4", "p4", "r4"),
+			Vector("b1", "r4", "y3", "g3", "b3")
+		),
+			starting = Cathy,
+			playStacks = Some(Vector(2, 2, 0, 0, 0)),
+			init =
+				preClue[HGroup](Alice, 1, Vector("1")) andThen
+				preClue[HGroup](Cathy, 2, Vector("red"))
+		)
+		.pipe(takeTurn("Cathy clues 3 to Alice (slot 2)"))	// r3, y3
+		.pipe(takeTurn("Alice plays p1 (slot 1)"))			// slot 1 now has no neg info (p1 isn't important)
+		.pipe(takeTurn("Bob clues 4 to Cathy"))				// could be r3 (Alice, playable) or b1 (Cathy, self-bluff)
+
+		.pipe(takeTurn("Cathy plays b1", "p3"))
+		.tap: g =>
+			// Alice is not finessed.
+			hasStatus(g, Alice, 1, CardStatus.None)
+		.pipe(takeTurn("Alice plays y3 (slot 2)"))
+
+		// Alice is still not finessed.
+		hasStatus(game, Alice, 2, CardStatus.None)
+		assert(game.common.thinksPlayables(game, Alice.ordinal).isEmpty)
 
 	test("prompts when considering whether a bluff is valid"):
 		val game = setup(HGroup.atLevel(11), Vector(

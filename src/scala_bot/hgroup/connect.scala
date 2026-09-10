@@ -72,7 +72,7 @@ def findKnownConn(ctx: ClueContext, id: Identity, ignore: FastBitSet, findOwn: B
 		return globallyKnown
 
 	val promised = state.heldOrders.findSome: o =>
-		if common.thoughts(o).inferred.difference(state.playableSet).nonEmpty then
+		if ignore.contains(o) || common.thoughts(o).inferred.difference(state.playableSet).nonEmpty then
 			None
 		else
 			val link = common.links.find: link =>
@@ -86,7 +86,7 @@ def findKnownConn(ctx: ClueContext, id: Identity, ignore: FastBitSet, findOwn: B
 	if promised.isDefined then
 		return promised
 
-	// Log.info(s"finding known ${state.logId(id)} $ignore ${common.linkedOrders(state)} $findOwn")
+	// Log.info(s"finding known ${state.logId(id)} ${ignore.fmt} ${common.linkedOrders(state)} $findOwn")
 
 	def validPlayable(playerIndex: Int, order: Int) =
 		!ignore.contains(order) &&
@@ -133,6 +133,7 @@ def findKnownConn(ctx: ClueContext, id: Identity, ignore: FastBitSet, findOwn: B
 	val playLinked = state.heldOrders.findSome: o =>
 		val playerIndex = state.holderOf(o)
 		val play =
+			!ignore.contains(o) &&
 			playerIndex != giver &&
 			state.deck(o).clued &&
 			common.playLinks.find(_.target == o).isDefined &&
@@ -510,7 +511,7 @@ def connect(ctx: ClueContext, id: Identity, looksDirect: Boolean, thinksStall: F
 						val playableIds = game.future(order).intersect(state.playableSet)
 
 						if playableIds.isEmpty then None else
-							Log.highlight(Console.CYAN, "playable conn is known to not match in the future, finding again")
+							Log.highlight(Console.CYAN, s"playable conn ($order) is known to not match in the future, finding again")
 							val unknown = findSingleConn(newCtx, playerIndex, nextId, connCtx.copy(connected = connCtx.connected.incl(order)), opts.copy(findOwn = Some(playerIndex)))
 							unknown.map(c.copy(id = playableIds.head) +: _)
 					else

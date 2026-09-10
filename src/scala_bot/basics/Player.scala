@@ -457,7 +457,15 @@ case class Player(
 		Option.when(playableExists):
 			hand.zipWithIndex.maxBy: (o, i) =>
 				val poss = thoughts(o).possibilities
-				val percent = poss.intersect(state.playableSet).length.toDouble / poss.length
+				val percent =
+					val playIds = poss.intersect(state.playableSet)
+
+					if state.variant.inverted then
+						val invertedChance = playIds.filter(state.isInverted).length.toDouble / poss.length
+						val nonInvertedChance = playIds.filter(!state.isInverted(_)).length.toDouble / poss.length
+						invertedChance.max(nonInvertedChance)
+					else
+						playIds.length.toDouble / poss.length
 				percent * 1000 - i
 			._1
 
