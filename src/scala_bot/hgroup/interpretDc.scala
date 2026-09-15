@@ -222,6 +222,7 @@ def interpretUsefulDcH(ctx: DiscardContext): Option[HGroup] =
 	val valid = !failed &&
 		suitIndex != -1 && rank != -1 &&
 		!state.isBasicTrash(id) &&
+		!prev.meta(order).trash &&
 		prev.isTouched(order) && {
 			val dupe = (0 until state.numPlayers).find: i =>
 				state.hands(i).exists: o =>
@@ -454,7 +455,7 @@ private def checkPosDc(ctx: DiscardContext): PosDcResult =
 	if unintended then
 		return PosDcResult.NotPosDc
 
-	val numPlays = if (action.failed && !expectedDc.contains(order)) ^ state.isInverted(Identity(suitIndex, rank)) then 2 else 1
+	val numPlays = if (action.failed && !expectedDc.contains(order) && prev.state.clueTokens < 8) ^ state.isInverted(Identity(suitIndex, rank)) then 2 else 1
 
 	val targets = {
 		for

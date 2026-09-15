@@ -96,7 +96,6 @@ object GameActionListMessage:
 case class NoteListPlayerMessage(tableID: Int, notes: Vector[String]) derives ReadWriter
 
 case class BotConfig(
-	leavePregameIfOnlyBots: Boolean = false,
 	leaveReplayIfOnlyBots: Boolean = true,
 	botNamePrefixes: List[String] = Nil
 ):
@@ -105,7 +104,6 @@ case class BotConfig(
 
 object BotConfig:
 	def fromEnv(env: Map[String, String]): BotConfig = BotConfig(
-		leavePregameIfOnlyBots = env.getOrElse("HANABI_LEAVE_PREGAME_IF_ONLY_BOTS", "0") == "1",
 		leaveReplayIfOnlyBots = env.getOrElse("HANABI_LEAVE_REPLAY_IF_ONLY_BOTS", "1") == "1",
 		botNamePrefixes = env.getOrElse("HANABI_BOT_NAME_PREFIXES", "")
 			.split(",").map(_.trim).filter(_.nonEmpty).toList
@@ -119,6 +117,7 @@ class BotClient(queue: Queue[IO, String], gameRef: Ref[IO, Option[Game]], config
 	private var tables: Map[Int, Table] = Map()
 	private var convention: Convention = Convention.Reactor
 	private var fastMode: Boolean = false
+	private var leavePregameIfOnlyBots: Boolean = true
 	private var lastRequester: Option[String] = None
 
 	private def newGameFromSettings(tID: Int, state: State, convention: Convention): Game =
@@ -289,6 +288,7 @@ class BotClient(queue: Queue[IO, String], gameRef: Ref[IO, Option[Game]], config
 					tableID = Some(id)
 					gameStarted = false
 					lastRequester = None
+					leavePregameIfOnlyBots = true		// reset to true on each table join
 				.flatMap: _ =>
 					tables.get(id).fold(IO.unit): table =>
 						checkSupportedSettings(table)
@@ -310,7 +310,7 @@ class BotClient(queue: Queue[IO, String], gameRef: Ref[IO, Option[Game]], config
 						table.spectators.forall(s => config.isBotName(s.name)) then
 						Log.info("Leaving game. Only bots left spectating.")
 						leaveRoom()
-					else if config.leavePregameIfOnlyBots &&
+					else if leavePregameIfOnlyBots &&
 						!table.running &&
 						table.players.forall(config.isBotName) then
 						Log.info("Leaving game. Only bots left in lobby.")
@@ -492,6 +492,14 @@ class BotClient(queue: Queue[IO, String], gameRef: Ref[IO, Option[Game]], config
 
 		else if msg.startsWith("/bugreport") then
 			sendPM(data.who, s"The bots aren't perfect! Please report bugs on the issue tracker: https://github.com/will-hanabi-bot/scala-bot/issues")
+
+		else if msg.startsWith("/stay") then
+			tableID match
+				case Some(_) =>
+					sendPM(data.who, s"This bot will now remain in the lobby even if there are only bots left.") *>
+					IO { leavePregameIfOnlyBots = false }
+				case None =>
+					sendPM(who, "Cannot set /stay, as the bot is not in a table.")
 
 		else
 			IO.unit

@@ -115,7 +115,7 @@ def advance(orig: Reactor, game: Reactor, offset: Int): Double =
 		val playActions = playables.map: order =>
 			val (id, action) = game.me.thoughts(order).id(infer = true) match
 				case None =>     (None,     PlayAction(playerIndex, order, -1, -1))
-				case Some(id) => (Some(id), game.players(playerIndex).tryPlay(game, order))
+				case Some(id) => (Some(id), game.players(playerIndex).tryPlay(game, order, id))
 
 			Log.info(s"${indent(offset)}${state.names(playerIndex)} ${Action.gerund(action)} ${state.logId(id)}")
 

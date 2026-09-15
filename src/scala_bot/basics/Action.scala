@@ -278,8 +278,8 @@ object Action:
 	 * Returns the result of dragging this card to the discard pile.
 	 * For inverted suits, this will return a PlayAction.
 	 */
-	def dragDiscard(state: State, playerIndex: Int, order: Int) =
-		state.deck(order).id() match
+	def dragDiscard(state: State, playerIndex: Int, order: Int, id: Option[Identity] = None) =
+		id.orElse(state.deck(order).id()) match
 			case Some(id) =>
 				if state.isInverted(id) then
 					if state.isPlayable(id) then
@@ -295,8 +295,8 @@ object Action:
 	 * Returns the result of dragging this card to the discard pile.
 	 * For inverted suits, this will return a PlayAction.
 	 */
-	def dragPlay(state: State, playerIndex: Int, order: Int) =
-		state.deck(order).id() match
+	def dragPlay(state: State, playerIndex: Int, order: Int, id: Option[Identity] = None) =
+		id.orElse(state.deck(order).id()) match
 			case Some(id) =>
 				if state.isInverted(id) then
 					DiscardAction(playerIndex, order, id.suitIndex, id.rank)

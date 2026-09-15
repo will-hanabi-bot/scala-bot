@@ -505,11 +505,11 @@ case class Player(
 	def thinksInverted(state: State, order: Int) =
 		thoughts(order).possibilities.forall(state.isInverted)
 
-	def tryPlay(game: Game, order: Int) =
+	def tryPlay(game: Game, order: Int, id: Identity) =
 		if game.assumeInverted(this, order) && this.thoughts(order).possibilities.difference(game.state.playableSet).isEmpty then
-			Action.dragDiscard(game.state, playerIndex, order)
+			Action.dragDiscard(game.state, playerIndex, order, Some(id))
 		else
-			Action.dragPlay(game.state, playerIndex, order)
+			Action.dragPlay(game.state, playerIndex, order, Some(id))
 
 	def tryDiscard(game: Game, order: Int) =
 		if game.assumeInverted(this, order) then

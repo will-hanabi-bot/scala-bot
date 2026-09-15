@@ -137,7 +137,7 @@ case class HGroup(
 				}
 
 				val potentialClandestine =
-					val dependentConns = waiting.filter(_.connections.exists(_.order == o))
+					val dependentConns = waiting.filter(w => !w.symmetric && w.connections.exists(_.order == o))
 					dependentConns.nonEmpty && dependentConns.forall(this.potentialClandestineWc(playerIndex, o, _).isDefined)
 
 				// ((assume && !xmeta(o).fStatus.contains(FStatus.PossiblyOn(state.ourPlayerIndex))) || isDefinite(o)) &&
@@ -582,6 +582,7 @@ case class HGroup(
 					this.me.thoughts(o).inferred.forall: id =>
 						visibleFind(state, this.me, id, excludeOrder = o).nonEmpty
 					&&
+					!(state.variant.pinkish && this.me.thoughts(o).id().isEmpty && this.me.thoughts(o).inferred.forall(_.rank == 1)) &&		// disallow GDs on unknown 1s in pinkish due to pink play lie
 					!waiting.find(_.connections.exists(_.order == o)).exists(this.potentialClandestineWc(playerIndex, o, _).isDefined)
 				}
 			}
@@ -814,8 +815,8 @@ object HGroup:
 						game.meta(order).status == CardStatus.PermissionToDiscard
 					}
 
-				// Write staleness if ending early game
-				g.when(_ => endEarlyGame && g.level >= Level.Context && prev.state.canClue): g =>
+				// Write staleness if ending early game (unless a 1 was discarded, since that would be blocking)
+				g.when(_ => endEarlyGame && g.level >= Level.Context && prev.state.canClue && rank != 1): g =>
 					g.state.heldOrders.foldLeft(g): (acc, order) =>
 						acc.withMeta(order): m =>
 							m.copy(staleIds = m.staleIds.union(g.state.playableSet))
@@ -1099,8 +1100,10 @@ object HGroup:
 					state.hands.zipWithIndex.exists: (hand, i) =>
 						i != playerIndex &&
 						hand.lift(index).exists: o2 =>
-							state.deck(o2).id().exists(state.isUseful) &&
-							!game.common.hypoPlays.contains(o2)
+							!game.common.hypoPlays.contains(o2) &&
+							state.deck(o2).id().exists: id =>
+								state.isUseful(id) &&
+								connectableSimple(game, game.players(playerIndex), state.nextPlayerIndex(playerIndex), i, Some(id)).nonEmpty
 				.flatMap(o => Seq(PerformAction.tryDiscard(game, o), PerformAction.tryPlay(game, o)))
 
 				if positionals.contains(expected) then positionals else positionals :+ expected

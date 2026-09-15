@@ -21,11 +21,13 @@ Send a PM to the bot on hanab.live (`/pm <HANABI_USERNAME> <message>`) to intera
 - `/rejoin` to rejoin a game that has already started, if it had disconnected.
 - `/leave` to kick the bot from your table.
 - `/settings [convention]` to modify the convention set. For example, `/settings HGroup11` sets the bot to H-Group level 11.
-  - Supported conventions: `RefSieve`, `Reactor1`, `HGroup[1-12]`
+	- Supported conventions: `RefSieve`, `Reactor1`, `HGroup[1-12]`
 - `/analyze <replayId> <convention>` to provide a list of potential mistakes and suggested actions in the given replay.
 - `/fastmode` toggles whether the bot plays with a human-like delay (default) or no delay at all.
 - `/start` starts a table. The bot must be the leader of the table.
 - `/terminate` immediately terminates the current game. To prevent abuse, the sender of this command must be a player in the game.
+- `/stay` to make the bot remain in the pregame even if there are only bots in the lobby. Used for playing bot-only games.
+	- This command needs to be re-applied every time the bot joins a new table.
 
 Other helpful commands:
 - `/doc` to get a link to the conventions used for the current settings.
@@ -96,6 +98,5 @@ The final score for each seed as well as how each game terminated are logged to 
 
 | Variable | Default | Description |
 |---|---|---|
-| `HANABI_LEAVE_PREGAME_IF_ONLY_BOTS` | `0` | Auto-leave the pregame lobby when only bots remain. |
 | `HANABI_LEAVE_REPLAY_IF_ONLY_BOTS` | `1` | Auto-leave a shared replay when only bots are spectating. |
-| `HANABI_BOT_NAME_PREFIXES` | *(empty)* | Comma-separated prefixes identifying bot accounts (e.g. `will-bot,mybot`). Required for the two flags above to take effect. |
+| `HANABI_BOT_NAME_PREFIXES` | *(empty)* | Comma-separated prefixes identifying bot accounts (e.g. `will-bot,mybot`). Required for the flag above and `/stay` to take effect. |

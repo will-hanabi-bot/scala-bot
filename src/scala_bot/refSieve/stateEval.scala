@@ -124,7 +124,7 @@ def advance(orig: RefSieve, game: RefSieve, offset: Int): Double =
 		val (knownPlays, unknownPlays) = playables.partitionMap: order =>
 			val (id, action) = state.deck(order).id() match
 				case None =>     (None,     PlayAction(playerIndex, order, -1, -1))
-				case Some(id) => (Some(id), game.players(playerIndex).tryPlay(game, order))
+				case Some(id) => (Some(id), game.players(playerIndex).tryPlay(game, order, id))
 
 			Log.info(s"${state.names(playerIndex)} ${Action.gerund(action)} ${state.logId(id)}")
 			val value = advance(orig, game.simulate(action), offset + 1)

@@ -104,6 +104,10 @@ def isStall(ctx: ClueContext, severity: Int): Option[StallInterp] =
 		return Some(StallInterp.Locked)
 
 	if severity == 4 && prev.state.clueTokens == 8 && focusNew && !list.contains(state.hands(target).head) && !clue.isEq(ClueKind.Rank, 1) then
+		if state.variant.pinkish && clue.kind == ClueKind.Rank && state.deck(focus).id().exists(_.rank != clue.value) then
+			Log.info(s"8cs that breaks pink promise!")
+			return None
+
 		Log.info(s"8 clue stall!")
 		return Some(StallInterp.Clues8)
 

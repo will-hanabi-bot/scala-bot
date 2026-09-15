@@ -54,7 +54,10 @@ def forceClue[G <: Game](game: G, giver: Int, advance: G => Double, offset: Int,
 			val value = advance(hypoGame)
 			Logger.setLevel(level)
 			Log.highlight(Console.YELLOW, f"${indent(offset)}${action.fmt(state)}: $value%.2f")
-			BestClue(value, action, hypoGame)
+
+			acc match
+				case BestClue(v, _, _) if v > value => acc
+				case _ => BestClue(value, action, hypoGame)
 
 	result match
 		case x @ BestClue(_, _, _) => x

@@ -126,7 +126,7 @@ def _forceClue(orig: HGroup, game: HGroup, offset: Int, only: Option[Int] = None
 		advance(orig, game.copy(dcStatus = DcStatus.None), offset + 1)
 
 	val bob = state.nextPlayerIndex(giver)
-	val finessable = !game.common.thinksLoaded(game, bob) && game.findFinesse(bob).exists(state.deck(_).id().exists(state.isPlayable))
+	val finessable = state.numPlayers > 2 && !game.common.thinksLoaded(game, bob) && game.findFinesse(bob).exists(state.deck(_).id().exists(state.isPlayable))
 
 	if finessable then
 		Log.highlight(Console.CYAN, s"${indent(offset)}possible finesse on ${state.names(bob)}!")
@@ -192,7 +192,7 @@ def advance(orig: HGroup, game: HGroup, offset: Int): Double =
 		def orderToAction(order: Int) =
 			game.me.thoughts(order).id(infer = true) match
 				case None =>     (None,     PlayAction(playerIndex, order, -1, -1))
-				case Some(id) => (Some(id), game.players(playerIndex).tryPlay(game, order))
+				case Some(id) => (Some(id), game.players(playerIndex).tryPlay(game, order, id))
 
 		playables.filter(o => meta(o).status == CardStatus.Finessed || game.isBlindPlaying(o)).minByOption(game.xmeta(_).turnFinessed.getOrElse(99)) match
 			case Some(order) =>
@@ -238,6 +238,8 @@ def advance(orig: HGroup, game: HGroup, offset: Int): Double =
 									case Some(chop) if !state.canClue =>
 										forceSdcm(orig, game, playerIndex, chop, offset, knownTrash = false)
 									case _ => -999
+
+					Log.info(s"${indent(offset)}${state.names(playerIndex)} also trying clue")
 
 					maxPlay.max(_forceClue(orig, game, offset)._1).max(sdcmValue)
 
@@ -474,7 +476,7 @@ def evalState(prev: State, state: State, inEndgame: Boolean, offset: Int): Doubl
 			state.score.min(2 * state.variant.suits.length) * 0.25 + state.score
 
 	val clueVal: Double =
-		if inEndgame then 0 else
+		if inEndgame then 0.1 * state.clueTokens else
 			state.clueTokens match
 			case 0 					 => 0
 			case _ if !state.canClue => 0
@@ -492,7 +494,7 @@ def evalState(prev: State, state: State, inEndgame: Boolean, offset: Int): Doubl
 
 	val paceVal = if state.pace < 0 then -10 else 0
 
-	Log.info(s"${indent(offset)}state eval: score: $scoreVal, clues: $clueVal, dc crit: $dcCritVal, strikes: $strikesVal, pace: $paceVal")
+	Log.info(s"${indent(offset)}state eval: score: $scoreVal (${state.score}), clues: $clueVal (${state.clueTokens}), dc crit: $dcCritVal, strikes: $strikesVal, pace: $paceVal")
 	scoreVal + clueVal + dcCritVal + strikesVal + paceVal
 
 def evalGame(orig: HGroup, game: HGroup, offset: Int): Double =
