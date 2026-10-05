@@ -23,7 +23,7 @@ def fpSimplicity(state: State, fp: FocusPossibility, playerIndex: Int, ourPlayer
 		if nextUnknownConn.forall(c => c.reacting != playerIndex && c.reacting != ourPlayerIndex) then
 			0
 		else if nextUnknownConn.exists(_.reacting == playerIndex) then
-			val consecutiveConns = nextUnknownConn.fold(Nil)(conn => fp.connections.dropWhile(_ != conn).takeWhile(_.reacting == playerIndex))
+			val consecutiveConns = nextUnknownConn.fold(Nil)(conn => fp.connections.dropWhile(_ != conn).takeWhile(c => c.reacting == playerIndex || c.reacting == ourPlayerIndex))
 			val blindPlays = consecutiveConns.count(_.isInstanceOf[FinesseConn])
 			val prompts = consecutiveConns.foldLeft(0.0): (acc, conn) =>
 				conn match

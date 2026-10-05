@@ -369,34 +369,37 @@ def findUnknownConnecting(ctx: ClueContext, reacting: Int, id: Identity, connect
 				Some(FinesseConn(reacting, finesse.get, List(id), fKind = if possiblyBluff then FinesseKind.Bluff else FinesseKind.True))
 
 		case Some(finesseId) =>
-			val possiblyBluff = !opts.assumeTruth &&
-				validBluff(game, action, finesseId, reacting, connected)
-
-			if opts.findOwn.exists(i => i != state.ourPlayerIndex && game.players(i).thoughts(finesse.get).possible.contains(id)) then
-				Some(FinesseConn(reacting, finesse.get, List(id), fKind = if possiblyBluff then FinesseKind.Bluff else FinesseKind.True))
-
-			else if !opts.noLayer && level >= Level.IntermediateFinesses && state.isPlayable(finesseId) && !state.isInverted(finesseId) && !state.isInverted(id) then
-				if game.meta(finesse.get).status == CardStatus.Finessed && game.isDefinite(finesse.get) then
-					Some(PlayableConn(reacting, finesse.get, finesseId, hidden = true))
-				else
-					// TODO: Check in resolver that we don't give uncertain finesses or likely dupes
-					// Giver cannot give a layered finesse when they have a card matching the desired id
-					val uncertainFinesse = !possiblyBluff &&
-						state.hands(giver).exists(o => state.deck(o).clued && game.players(giver).thoughts(o).inferred.contains(id))
-
-					val orangeFib = state.isInverted(id) && !state.isInverted(finesseId)
-
-					if uncertainFinesse then
-						Log.warn(s"disallowed hidden finesse on ${state.names(reacting)}, ${state.logId(id)} could be duplicated in giver's hand")
-						None
-					else if orangeFib then
-						Log.warn("disallowed bluff when the focus is an orange card!")
-						None
-					else
-						Some(FinesseConn(reacting, finesse.get, List(finesseId), fKind = if possiblyBluff then FinesseKind.Bluff else FinesseKind.Hidden))
-
+			if Vector(CardStatus.GentlemansDiscard, CardStatus.Sarcastic).contains(game.meta(finesse.get).status) && state.isPlayable(finesseId) && !state.isInverted(finesseId) && !state.isInverted(id) then
+				Some(PlayableConn(reacting, finesse.get, finesseId, hidden = true))
 			else
-				None
+				val possiblyBluff = !opts.assumeTruth &&
+					validBluff(game, action, finesseId, reacting, connected)
+
+				if opts.findOwn.exists(i => i != state.ourPlayerIndex && game.players(i).thoughts(finesse.get).possible.contains(id)) then
+					Some(FinesseConn(reacting, finesse.get, List(id), fKind = if possiblyBluff then FinesseKind.Bluff else FinesseKind.True))
+
+				else if !opts.noLayer && level >= Level.IntermediateFinesses && state.isPlayable(finesseId) && !state.isInverted(finesseId) && !state.isInverted(id) then
+					if game.meta(finesse.get).status == CardStatus.Finessed && game.isDefinite(finesse.get) then
+						Some(PlayableConn(reacting, finesse.get, finesseId, hidden = true))
+					else
+						// TODO: Check in resolver that we don't give uncertain finesses or likely dupes
+						// Giver cannot give a layered finesse when they have a card matching the desired id
+						val uncertainFinesse = !possiblyBluff &&
+							state.hands(giver).exists(o => state.deck(o).clued && game.players(giver).thoughts(o).inferred.contains(id))
+
+						val orangeFib = state.isInverted(id) && !state.isInverted(finesseId)
+
+						if uncertainFinesse then
+							Log.warn(s"disallowed hidden finesse on ${state.names(reacting)}, ${state.logId(id)} could be duplicated in giver's hand")
+							None
+						else if orangeFib then
+							Log.warn("disallowed bluff when the focus is an orange card!")
+							None
+						else
+							Some(FinesseConn(reacting, finesse.get, List(finesseId), fKind = if possiblyBluff then FinesseKind.Bluff else FinesseKind.Hidden))
+
+				else
+					None
 
 def findSingleConn(ctx: ClueContext, reacting: Int, id: Identity, connCtx: ConnectContext, opts: ConnectOpts, connections: List[Connection] = Nil): Option[List[Connection]] =
 	val ClueContext(prev, game, action, _) = ctx

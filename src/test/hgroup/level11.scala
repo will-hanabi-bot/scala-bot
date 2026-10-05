@@ -3,7 +3,7 @@ package tests.hgroup.level11
 import cats.effect.unsafe.implicits.global
 
 import scala_bot.basics._
-import scala_bot.test.{hasInfs, hasStatus, Player, preClue, setup, takeTurn, TestVariant}, Player._
+import scala_bot.test.{fullyKnown, hasInfs, hasStatus, Player, preClue, setup, takeTurn, TestVariant}, Player._
 import scala_bot.hgroup.HGroup
 
 import scala_bot.utils.{pipe, tap}
@@ -129,6 +129,34 @@ class General extends munit.FunSuite:
 		// hasStatus(game, Alice, 1, CardStatus.FMaybeBluffed)
 		hasStatus(game, Alice, 1, CardStatus.Bluffed)
 		assert(!game.findDiscardable(Alice.ordinal).contains(game.state.hands(Alice.ordinal)(0)))
+
+	test("doesn't allow a baton target to be a bluff"):
+		val game = setup(HGroup.atLevel(11), Vector(
+			Vector("xx", "xx", "xx", "xx"),
+			Vector("y3", "y4", "p4", "p4"),
+			Vector("r2", "y4", "g4", "b4"),
+			Vector("r4", "r1", "b4", "g4")
+		),
+			starting = Alice,
+			clueTokens = 5,
+			init = fullyKnown(Alice, 3, "r2")
+		)
+		.pipe(takeTurn("Alice discards r2 (slot 3)"))		// baton to Cathy
+		.pipe(takeTurn("Bob clues 1 to Donald"))
+		.pipe(takeTurn("Cathy clues blue to Alice (slot 4)"))
+		.pipe(takeTurn("Donald plays r1", "b3"))
+
+		.pipe(takeTurn("Alice plays b1 (slot 4)"))
+		.pipe(takeTurn("Bob clues blue to Donald"))			// finessing Alice for b2
+		.tap: g =>
+			hasStatus(g, Alice, 1, CardStatus.Finessed)
+			hasInfs(g, None, Alice, 1, Vector("b2"))
+		.pipe(takeTurn("Cathy plays r2", "p3"))
+		.pipe(takeTurn("Donald clues 5 to Alice (slot 4)"))
+
+		hasStatus(game, Alice, 1, CardStatus.Finessed)
+		hasInfs(game, None, Alice, 1, Vector("b2"))
+		assertEquals(game.me.thinksPlayables(game, Alice.ordinal), Vector(game.state.hands(Alice.ordinal)(0)))
 
 class IndirectBluffs extends munit.FunSuite:
 	override def beforeAll() = Logger.setLevel(LogLevel.Off)

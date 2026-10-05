@@ -1,7 +1,7 @@
-LATEST_VER=1.2.6
+LATEST_VER=1.2.7
 JVM_OPTS=-Xms128m -Xmx192m -Xss256k -XX:MaxMetaspaceSize=96m -XX:ReservedCodeCacheSize=64m -XX:+UseSerialGC
-NATIVE_IMAGE=/home/will/Programs/graalvm-jdk-25.0.2+10.1/bin/native-image
-ASYNC_PROFILER=/home/will/Downloads/async-profiler-4.5-linux-x64/lib/libasyncProfiler.so
+NATIVE_IMAGE=
+ASYNC_PROFILER=
 
 build:
 	scala-cli --power package . --main-class scala_bot.main -o scala-bot-$(LATEST_VER).jar --assembly --preamble=false --force

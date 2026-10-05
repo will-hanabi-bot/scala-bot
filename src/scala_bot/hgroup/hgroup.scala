@@ -827,16 +827,29 @@ object HGroup:
 						game.meta(order).status == CardStatus.PermissionToDiscard
 					}
 
-				// Write staleness if ending early game (unless a 1 was discarded, since that would be blocking)
-				g.when(_ => endEarlyGame && g.level >= Level.Context && prev.state.canClue && rank != 1): g =>
-					g.state.heldOrders.foldLeft(g): (acc, order) =>
-						acc.withMeta(order): m =>
-							m.copy(staleIds = m.staleIds.union(g.state.playableSet))
+				// Write staleness if ending early game
+				val writeStaleness = endEarlyGame &&
+					g.level >= Level.Context &&
+					prev.state.canClue
+
+				// Whether cluing 1 to the discarder was blocked by this card
+				val blocked = rank == 1 || game.state.variant.suits.lift(suitIndex).exists(_.suitType.pinkish)
+
+				g.when(_ => writeStaleness): g =>
+					g.state.hands.zipWithIndex.foldLeft(g) { case (acc, (hand, index)) =>
+						if index == playerIndex && blocked then
+							acc
+						else
+							hand.foldLeft(acc): (a, order) =>
+								a.withMeta(order): m =>
+									m.copy(staleIds = m.staleIds.union(g.state.playableSet))
+				}
 				.copy(inEarlyGame = !endEarlyGame)
 			.elim()
 
 		def interpretPlay(prev: HGroup, game: HGroup, action: PlayAction): HGroup =
 			val PlayAction(playerIndex, order, suitIndex, rank) = action
+			val isInverted = game.state.variant.suits.lift(suitIndex).exists(_.suitType.inverted)
 
 			val updatedGame = game.refreshUncertain
 
@@ -865,20 +878,29 @@ object HGroup:
 						dcStatus = DcStatus.None,
 						dda = None
 					)
-			.when(_.state.isInverted(Identity(suitIndex, rank))):
+			.when(_ => isInverted):
 				_.writeExtraCMs(prev, playerIndex, order)
 			.when(_.inEarlyGame): g =>
 				// Dragging an inverted card to the discard stacks ends early game even if it plays
 				val endEarlyGame =
 					prev.chop(playerIndex).contains(order) &&
-					g.state.isInverted(Identity(suitIndex, rank)) &&
+					isInverted &&
 					!game.state.deck(order).clued && {
 						game.meta(order).status == CardStatus.None ||
 						game.meta(order).status == CardStatus.PermissionToDiscard
 					}
 
-				// This doesn't cause stale notes to be written, because the o1 would have blocked a 1 clue.
-				g.copy(inEarlyGame = !endEarlyGame)
+				g.when(_.level >= Level.Context && prev.state.canClue && isInverted): _ =>
+					// o1 would've blocked a 1 clue to the discarder, but everyone else is stale
+					g.state.hands.zipWithIndex.foldLeft(g) { case (acc, (hand, index)) =>
+						if index == playerIndex then
+							acc
+						else
+							hand.foldLeft(acc): (a, order) =>
+								a.withMeta(order): m =>
+									m.copy(staleIds = m.staleIds.union(g.state.playableSet))
+					}
+				.copy(inEarlyGame = !endEarlyGame)
 			.elim()
 
 		def takeAction(game: HGroup): IO[PerformAction] =

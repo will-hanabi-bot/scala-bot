@@ -277,16 +277,22 @@ def interpretUsefulDcH(ctx: DiscardContext): Option[HGroup] =
 					.copy(dda = None)
 
 			case (DiscardResult.Sarcastic(orders), _) =>
-				game.copy(
-					common = if !orders.forall(state.deck(_).clued) then game.common else game.common.copy(
-						links = Link.Sarcastic(FastBitSet.from(orders), id) +: game.common.links
-					),
-					dda = None
-				)
-				.withMove(DiscardInterp.Sarcastic)
-				.pipe: g =>
-					val newCtx = ctx.copy(game = g)
-					transferWCs(newCtx, DiscardResult.Sarcastic(orders))
+				lazy val newGame = interpretSdcm(ctx)
+
+				// Prefer to interpret shout over sarcastic if dupe is fully known to match
+				if orders.length == 1 && game.common.thoughts(orders(0)).matches(id) && newGame.isDefined then
+					newGame.get
+				else
+					game.copy(
+						common = if !orders.forall(state.deck(_).clued) then game.common else game.common.copy(
+							links = Link.Sarcastic(FastBitSet.from(orders), id) +: game.common.links
+						),
+						dda = None
+					)
+					.withMove(DiscardInterp.Sarcastic)
+					.pipe: g =>
+						val newCtx = ctx.copy(game = g)
+						transferWCs(newCtx, DiscardResult.Sarcastic(orders))
 		).copy(dcStatus = DcStatus.None)
 
 def valid1ClueScream(game: HGroup, bob: Int) =

@@ -74,8 +74,8 @@ class Rainbow extends munit.FunSuite:
 			wc.target == game.state.hands(Alice.ordinal)(3) &&
 			wc.inference == game.state.expandShort("g4")
 
-		// Not a prompt.
-		assert(wc.exists(w => !w.connections.exists(_.isInstanceOf[PromptConn])))
+		// Not a prompt. Note that a waiting connection may not be generated for playable connections only.
+		assert(wc.forall(w => !w.connections.exists(_.isInstanceOf[PromptConn])))
 
 	test("plays into a free choice prompt"):
 		val game = setup(HGroup.atLevel(1), Vector(

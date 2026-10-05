@@ -72,7 +72,7 @@ def getResult(game: RefSieve, hypo: RefSieve, action: ClueAction): Double =
 			Log.info(s"good touch: $goodTouch, playables: $playablesS, duped: $dupedPlayables, trash: $revealedTrash, fill: ${fill.length}, elim: ${elim.length}, bad touch: $badTouch, locked: $lockedTouch, ${hypo.lastMove}")
 
 			val value = goodTouch +
-				- 2.0 * dupedPlayables +
+				-2.0 * dupedPlayables +
 				0.2 * untouchedPlays +
 				(if game.inEndgame then 0.01 else 0.1) * revealedTrash +
 				(if game.inEndgame then 0.2 else 0.1) * fill.length +

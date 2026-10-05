@@ -164,7 +164,7 @@ def advance(orig: HGroup, game: HGroup, offset: Int): Double =
 	lazy val trash = player.thinksTrash(game, playerIndex).sortBy: o =>
 		// Discard leftmost clued trash (largest order), then rightmost unclued trash (smallest order)
 		if state.deck(o).clued then -o else o
-	val allPlayables = player.thinksPlayables(game, playerIndex).filter(o => !player.orderTrash(game, o))
+	val allPlayables = player.thinksPlayables(game, playerIndex).filter(o => !player.orderKt(game, o))
 
 	lazy val earlyGameClue = game.earlyGameClue(playerIndex)
 
@@ -226,7 +226,8 @@ def advance(orig: HGroup, game: HGroup, offset: Int): Double =
 							game.dcStatus == DcStatus.None &&
 							!game.inEndgame &&
 							earlyGameClue.isEmpty &&
-							!game.mustClue(playerIndex)
+							!game.mustClue(playerIndex) &&
+							!game.common.thinksLoaded(game, bob)
 
 						if !canSdcm then None else
 							trash.headOption match

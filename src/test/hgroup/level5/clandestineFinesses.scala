@@ -1,7 +1,7 @@
 package tests.hgroup.level5
 
 import scala_bot.basics._
-import scala_bot.test.{hasInfs, hasStatus, Player, setup, takeTurn}, Player._
+import scala_bot.test.{hasInfs, hasStatus, Player, preClue, setup, takeTurn}, Player._
 import scala_bot.hgroup.HGroup
 
 import scala_bot.utils.{pipe, tap}
@@ -173,3 +173,29 @@ class ClandestineFinesses extends munit.FunSuite:
 
 		// Our 2 is definitely playable, even if Bob is finessing y2.
 		assertEquals(game.me.thinksPlayables(game, game.state.ourPlayerIndex), Vector(game.state.hands(Alice.ordinal)(3)))
+
+	test("understands a surreptitious finesse"):
+		val game = setup(HGroup.atLevel(5), Vector(
+			Vector("xx", "xx", "xx", "xx", "xx"),
+			Vector("r4", "y4", "g4", "b4", "p5"),
+			Vector("r1", "b1", "b2", "b4", "p4")
+		),
+			starting = Bob,
+			init = preClue(Alice, 2, Vector("1"))
+		)
+		.pipe(takeTurn("Bob clues 3 to Alice (slot 1)"))
+		.tap: g =>
+			hasInfs(g, None, Alice, 1, Vector("r3", "y3", "g3", "b3", "p3"))
+		.pipe(takeTurn("Cathy plays r1", "r4"))
+		.pipe(takeTurn("Alice clues 5 to Bob"))
+
+		.pipe(takeTurn("Bob discards b4", "p4"))
+		.pipe(takeTurn("Cathy plays b1", "g4"))
+		.pipe(takeTurn("Alice plays p1 (slot 2)"))
+
+		// Alice's 3 is definitely blue.
+		hasInfs(game, None, Alice, 2, Vector("b3"))
+
+		// Alice's slot 3 is definitely not finessed, and Alice has no playables
+		hasStatus(game, Alice, 3, CardStatus.None)
+		assertEquals(game.me.thinksPlayables(game, Alice.ordinal), Vector.empty)

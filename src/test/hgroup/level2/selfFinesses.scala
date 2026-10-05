@@ -329,3 +329,18 @@ class SelfFinesses extends munit.FunSuite:
 
 		// Even though Alice could have [r1, r2, r3, ?4, r4], she can't think she's locked.
 		assert(!game.common.thinksLocked(game, Alice.ordinal))
+
+	test("prefers to interpret a prompt + self-finesse over a prompt + reverse finesse"):
+		val game = setup(HGroup.atLevel(2), Vector(
+			Vector("xx", "xx", "xx", "xx", "xx"),
+			Vector("r4", "y4", "g4", "b4", "p4"),
+			Vector("r3", "r4", "y3", "r2", "b3")
+		),
+			starting = Bob,
+			playStacks = Some(Vector(1, 0, 0, 0, 0)),
+			init = preClue(Cathy, 4, Seq("2"))
+		)
+		.pipe(takeTurn("Bob clues 4 to Cathy"))
+
+		hasStatus(game, Cathy, 1, CardStatus.Finessed)
+		hasStatus(game, Alice, 1, CardStatus.None)

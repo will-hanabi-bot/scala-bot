@@ -130,3 +130,24 @@ class Stale1s extends munit.FunSuite:
 		hasStatus(game, Bob, 5, CardStatus.PermissionToDiscard)
 		assertEquals(game.common.thinksPlayables(game, Alice.ordinal), Vector(game.state.hands(Alice.ordinal)(2)))
 		assertEquals(game.common.thinksTrash(game, Alice.ordinal), Vector.empty)
+
+	test("understands blockers in stale 1's"):
+		val game = setup(HGroup.atLevel(12), Vector(
+			Vector("xx", "xx", "xx", "xx", "xx"),
+			Vector("r3", "y3", "g3", "r1", "p3"),
+			Vector("r4", "y4", "g4", "g1", "p4")
+		),
+			starting = Alice,
+			playStacks = Some(Vector(1, 1, 1, 0, 0)),
+			clueTokens = 4
+		)
+		.pipe(takeTurn("Alice discards y1 (slot 5)"))
+		.pipe(takeTurn("Bob clues 1 to Cathy"))
+		.tap: g =>
+			// This is a TCM, because Cathy's 1 was not blocked.
+			hasStatus(g, Cathy, 5, CardStatus.ChopMoved)
+		.pipe(takeTurn("Cathy clues 1 to Alice (slot 4)"))
+
+		// Alice's y1 was blocking, so this is a play clue.
+		hasStatus(game, Alice, 5, CardStatus.None)
+		assertEquals(game.common.thinksPlayables(game, Alice.ordinal), Vector(game.state.hands(Alice.ordinal)(3)))
