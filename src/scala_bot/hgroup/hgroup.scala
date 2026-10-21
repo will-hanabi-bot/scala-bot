@@ -459,12 +459,12 @@ case class HGroup(
 					val suitType = variant.suits(i.suitIndex).suitType
 
 					(suitType.pinkish && suitType.rainbowish) ||
-					(variant.specialRank.contains(i.rank) && variant.pinkS && variant.rainbowS)
+					(variant.specialRank.contains(i.rank) && variant.rainbowS)
 			}
 		.sortBy(o => -o)
 
 		val mudClue = clue.kind == ClueKind.Colour &&
-			(state.variant.muddy || (state.variant.suits.exists(s => s.suitType.pinkish && s.suitType.rainbowish)) || state.variant.rainbowS) &&
+			(state.variant.muddy || state.variant.suits.exists(s => s.suitType.pinkish && s.suitType.rainbowish) || state.variant.rainbowS) &&
 			reclue &&
 			// Mud clues should only work if the leftmost (non-kt) card is muddy.
 			muddyCards.contains(list.maxIf(o => !prev.common.orderKt(prev, o), -1))
@@ -792,6 +792,8 @@ object HGroup:
 								stallInterp = if g.lastMove == Some(ClueInterp.Stall) then g.stallInterp else None
 							)
 			.elim()
+			.when(g => unacceptableClue(prev, g, action)): g =>
+				g.withMove(ClueInterp.Mistake, overwrite = true)
 
 		def interpretDiscard(prev: HGroup, game: HGroup, action: DiscardAction): HGroup =
 			val DiscardAction(playerIndex, order, suitIndex, rank, failed) = action
@@ -1027,7 +1029,17 @@ object HGroup:
 								else
 									PerformAction.Discard(me.lockedDiscard(state, state.ourPlayerIndex))
 							else
-								allActions.maxBy(_._3)._1
+								val (bestPerform, _, bestValue) = allActions.maxBy(_._3)
+
+								if bestValue <= -100 then
+									// Everything is a mistake, perfer cluing 5 if possible
+									val clue5 = allClues.find:
+										case (_, c: ClueAction, _) if c.clue.isEq(ClueKind.Rank, 5) => true
+										case _ => false
+
+									clue5.fold(bestPerform)(_._1)
+								else
+									bestPerform
 
 		def updateTurn(game: HGroup, action: TurnAction) =
 			val currentPlayerIndex = action.currentPlayerIndex

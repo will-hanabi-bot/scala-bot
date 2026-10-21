@@ -71,7 +71,7 @@ private def revert(g: HGroup, order: Int, ids: List[Identity], forceReset: Boole
 				oldInferred = IdentitySetOpt.empty,
 				infoLock = IdentitySetOpt.empty
 			)
-		.withMeta(order)(_.copy(status = CardStatus.None))
+		.withMeta(order)(_.copy(status = CardStatus.None, hidden = false))
 	else
 		g.withThought(order)(_.copy(inferred = newInferred))
 
@@ -201,23 +201,31 @@ def refreshWCs(prev: HGroup, game: HGroup, action: Action, beforeClueInterp: Boo
 					else
 						revert(acc, conn.order, conn.ids, forceReset = conn.matchesP { case f: FinesseConn => f.bluff })
 	.pipe: g =>
-		remFocuses.foldLeft(g): (acc, focus) =>
+		val (accGame, disambiguatedWcs) = remFocuses.foldLeft((g, List.empty[WaitingConnection])): (acc, focus) =>
+			val (currGame, disambiguatedWcs) = acc
 			val sameFocusWcs = retainWCs.filter(_.focus == focus)
 
 			if sameFocusWcs.nonEmpty && sameFocusWcs.forall(wc => wc.symmetric || wc.ambiguousSelf) then
 				val turn = sameFocusWcs.head.turn
-				val action = acc.state.actionList(turn).collectFirst { case a: ClueAction => a }.get
+				val action = currGame.state.actionList(turn).collectFirst { case a: ClueAction => a }.get
 
 				// TODO: Only write the next-simplest connections, not all of them?
 				val ambiguousWcs = sameFocusWcs.filter(_.ambiguousSelf)
 
 				Log.error(s"assigning previously-ambiguous connections on $focus to ${ambiguousWcs.map(w => g.state.logId(w.inference))}")
-				assignConns(acc, action, ambiguousWcs.map(wc => FocusPossibility(wc.inference, wc.connections, ClueInterp.Play, symmetric = wc.symmetric)), focus, retroactive = true)
+				assignConns(currGame, action, ambiguousWcs.map(wc => FocusPossibility(wc.inference, wc.connections, ClueInterp.Play, symmetric = wc.symmetric)), focus, retroactive = true)
 					.withThought(focus): t =>
 						t.copy(inferred = t.possible.intersect(ambiguousWcs.map(_.inference)))
+				.pipe: g2 =>
+					(g2, disambiguatedWcs ++ ambiguousWcs)
 			else
 				acc
-	.copy(waiting = retainWCs.toList)
+
+		val newWcs = retainWCs.map: w =>
+			if disambiguatedWcs.contains(w) then w.copy(ambiguousSelf = false) else w
+		.toList
+
+		accGame.copy(waiting = newWcs)
 	.when(_ => elim):
 		_.elim(except = hypo, skipHypoStacks = hypo.isDefined)
 
@@ -318,7 +326,7 @@ def otherPlay(game: HGroup, action: Action, wc: WaitingConnection) =
 	!wc.currConn.isBluff	// Someone else can't play into a bluff
 
 def resolveOtherPlay(game: HGroup, wc: WaitingConnection) =
-	val nextIndex = wc.getNextIndex(game.state)
+	val nextIndex = wc.copy(connections = wc.connections.drop(1)).getNextIndex(game.state)
 
 	if wc.currConn.isInstanceOf[FinesseConn] || game.level < Level.IntermediateFinesses then
 		UpdateResult.Demonstrated(nextIndex, skipped = true)

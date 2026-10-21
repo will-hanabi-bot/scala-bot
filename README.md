@@ -66,6 +66,11 @@ Below, commands are quoted in `code blocks`. These should be executed in a termi
 
 You might see a warning about `sun.misc.Unsafe`: this is normal for Scala 3 programs and is nothing to worry about.
 
+## Targeting a local server
+- Export the server hostname `localhost` as `HANABI_HOSTNAME`.
+- In most cases you will probably run the local server on a port other than 443 (default on hanab.live). To get the bot to connect using a different port, export `HANABI_PORT`.
+- Unless you have configured local SSL, you should export `SSL_DISABLED` to `1`.
+
 ## Watching replays
 
 > This requires having [Scala installed and a local copy of the repository](./CONTRIBUTING.md#local-development).

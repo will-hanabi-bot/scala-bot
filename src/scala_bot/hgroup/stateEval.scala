@@ -6,62 +6,16 @@ import scala_bot.logger.Log
 import scala_bot.utils.visibleFind
 
 def getResult(game: HGroup, hypo: HGroup, action: ClueAction, log: Boolean = true): Double =
-	val (common, state, meta) = (game.common, game.state, game.meta)
+	val (common, state) = (game.common, game.state)
 	val FocusResult(focus, chop, _) = game.determineFocus(game, action)
 	val ClueAction(giver, target, list, clue) = action
 
 	if hypo.lastMove == Some(ClueInterp.Mistake) then
 		return -100
 
-	val newPlayables = state.heldOrders.filter: o =>
-		hypo.gainedStatus(game, o, CardStatus.Finessed) ||
-		hypo.gainedStatus(game, o, CardStatus.CalledToPlay)
-
-	val badPlay = newPlayables.find: o =>
-		!(hypo.me.hypoPlays.contains(o) || (game.inEndgame && state.deck(o).id().exists(state.isPlayable)))
-
-	if badPlay.isDefined then
-		if log then Log.warn(s"clue ${clue.fmt(state, target)} results in ${state.logId(badPlay.get)} ${badPlay.get} looking playable! ${hypo.me.hypoPlays.fmt}")
-		return -100
-
-	val badTrash = state.heldOrders.find: o =>
-		!meta(o).trash && hypo.meta(o).trash &&
-		state.deck(o).id().exists: id =>
-			state.isUseful(id) && visibleFind(game.state, game.players(giver), id, excludeOrder = o).isEmpty
-
-	if badTrash.isDefined then
-		if log then Log.warn(s"clue ${clue.fmt(state, target)} results in ${state.logId(badTrash.get)} ${badTrash.get} looking trash!")
-		return -100
-
-	def distance5(g: HGroup, playerIndex: Int) =
-		g.chop(playerIndex).flatMap: chop =>
-			val oldest5 = state.hands(playerIndex).findLast: o =>
-				val card = g.state.deck(o)
-
-				o > chop &&
-				card.rank == 5 &&
-				!g.state.variant.suits(card.suitIndex).suitType.brownish &&
-				!card.clued
-
-			oldest5.map(g.chopDistance(playerIndex, _))
-
-	if giver == state.ourPlayerIndex && hypo.lastMove == Some(ClueInterp.Stall) && hypo.stallInterp == Some(StallInterp.Stall5) then
-		val dist5 = game.chopDistance(target, list.filter(o => !state.deck(o).clued && game.meta(o).status != CardStatus.ChopMoved).min)
-		val bad5Stall = (0 until state.numPlayers).exists: i =>
-			i != giver &&
-			distance5(game, i).exists(_ < dist5)
-
-		if bad5Stall then
-			if log then Log.warn(s"gave 5 stall to 5 not closest to chop!")
-			return -100
-
 	val (newTouched, fill, elim) = elimResult(game, hypo, hypo.state.hands(target), list)
 	val (badTouch, _, avoidableDupe) = badTouchResult(game, hypo, action)
 	val (_, playables) = playablesResult(game, hypo)
-
-	if playables.isEmpty && hypo.lastMove == Some(ClueInterp.Play) then
-		if log then Log.warn("play clue with no new playables! (duped existing playable?)")
-		return -100
 
 	val revealedTrash = hypo.common.thinksTrash(hypo, target).count: o =>
 		hypo.state.deck(o).clued && !common.thinksTrash(game, target).contains(o)
@@ -311,6 +265,7 @@ def advance(orig: HGroup, game: HGroup, offset: Int): Double =
 		if state.canClue && (state.numPlayers > 2 || playerIndex == state.ourPlayerIndex) then
 			Log.info(s"${indent(offset)}${state.names(playerIndex)} might clue")
 			val (clueVal, goodClue) = _forceClue(orig, game, offset)
+			Log.info(s"clue val: $clueVal, good clue? $goodClue")
 			Log.info(s"${indent(offset)}${state.names(playerIndex)} ${Action.gerund(action)} ${state.logId(id)}:")
 			val dcVal = advance(orig, dcGame, offset + 1)
 

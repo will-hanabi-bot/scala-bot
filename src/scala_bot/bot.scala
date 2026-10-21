@@ -1,9 +1,9 @@
-//> using scala 3.9.0
+//> using scala 3.10.0
 //> using jvm 25
 //> using options -opt -Wall -Wconf:msg=toString:s -Yexplicit-nulls -feature
 //> using javaOpt -Xms128m -Xmx192m -Xss256k -XX:MaxMetaspaceSize=96m -XX:ReservedCodeCacheSize=64m -XX:+UseSerialGC
-//> using dep com.softwaremill.sttp.client4::core:4.0.27
-//> using dep com.softwaremill.sttp.client4::cats:4.0.27
+//> using dep com.softwaremill.sttp.client4::core:4.1.0
+//> using dep com.softwaremill.sttp.client4::cats:4.1.0
 //> using dep org.typelevel::cats-effect:3.7.1
 //> using dep com.lihaoyi::upickle:4.4.3
 //> using dep com.lihaoyi::requests:0.9.3
@@ -119,6 +119,13 @@ object main extends IOApp:
 
 		val maxRetries = 5
 
+		val useSSL = env.getOrElse("SSL_DISABLED", "1") == "1"
+		val HOSTNAME = env.getOrElse("HANABI_HOSTNAME", "hanab.live")
+		val PORT = env.lift("HANABI_PORT") match
+			case Some(port) => port.toInt
+			case None => if useSSL then 443 else 80
+		val CUSTOM_PORT = PORT != 443 && PORT != 80
+
 		HttpClientCatsBackend.resource[IO]().use: backend =>
 			Ref.of[IO, Boolean](false).flatMap: connectedRef =>
 				def connect(attemptNum: Int = 0): IO[Unit] =
@@ -126,13 +133,13 @@ object main extends IOApp:
 						connectedRef.set(true) *> useWebSocket(ws)
 
 					val attempt = for
-						response <- basicRequest.post(uri"https://hanab.live:443/login")
+						response <- basicRequest.post(uri"${if useSSL then "https" else "http"}://${HOSTNAME}:${PORT}/login")
 							.header("Content-Type", "application/x-www-form-urlencoded")
 							.body(Map("username" -> username, "password" -> password, "version" -> "bot"))
 							.send(backend)
 						cookie = response.headers.find(_.name == "set-cookie").map(_.value).getOrElse(throw new Exception(s"No cookie found ${response.headers}"))
 						_ <- basicRequest
-							.get(uri"wss://hanab.live/ws")
+							.get(uri"${if useSSL then "wss" else "ws"}://${HOSTNAME}${if CUSTOM_PORT then s":${PORT}" else ""}/ws")
 							.response(asWebSocket(useWebSocketWithReset))
 							.header("Cookie", cookie)
 							.send(backend)

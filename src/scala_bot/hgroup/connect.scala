@@ -24,7 +24,7 @@ case class ConnectOpts(
 	insertingInto: Option[Seq[Int]] = None
 )
 
-def findKnownConn(ctx: ClueContext, id: Identity, ignore: FastBitSet, findOwn: Boolean, preferOwn: Boolean = false): Option[Connection] =
+def findKnownConn(ctx: ClueContext, id: Identity, finalId: Identity, ignore: FastBitSet, findOwn: Boolean, preferOwn: Boolean = false): Option[Connection] =
 	val ClueContext(prev, game, action, _) = ctx
 	val (common, state) = (game.common, game.state)
 	val giver = action.giver
@@ -57,10 +57,17 @@ def findKnownConn(ctx: ClueContext, id: Identity, ignore: FastBitSet, findOwn: B
 		return ownPlay
 
 	val globallyKnown = state.heldOrders.findSome: o =>
+		// Check whether the giver knows their card isn't a crit that they are currently cluing
+		lazy val asymmetricKnown =
+			state.holderOf(o) == giver &&
+			state.isCritical(finalId) &&
+			common.thoughts(o).inferred.forall: i =>
+				i == id || i == finalId
+
 		val validKnown =
 			!ignore.contains(o) &&
 			game.state.deck(o).matches(id, assume = true) &&
-			common.thoughts(o).matches(id, infer = true) &&
+			(common.thoughts(o).matches(id, infer = true) || asymmetricKnown) &&
 			!game.meta(o).hidden &&
 			!game.xmeta(o).fStatus.contains(FStatus.PossiblyOn(giver)) &&
 			(game.assumePlays || !game.xmeta(o).fStatus.contains(FStatus.PossiblyOn(state.ourPlayerIndex))) &&
@@ -453,7 +460,7 @@ def findSingleConn(ctx: ClueContext, reacting: Int, id: Identity, connCtx: Conne
 			case Some(conn) =>
 				Some((conn +: connections).reverse)
 
-def findConnecting(ctx: ClueContext, id: Identity, connCtx: ConnectContext, opts: ConnectOpts): Option[List[Connection]] =
+def findConnecting(ctx: ClueContext, id: Identity, finalId: Identity, connCtx: ConnectContext, opts: ConnectOpts): Option[List[Connection]] =
 	val ClueContext(prev, game, action, _) = ctx
 	val state = game.state
 	val ClueAction(giver, target, _, _) = action
@@ -464,7 +471,7 @@ def findConnecting(ctx: ClueContext, id: Identity, connCtx: ConnectContext, opts
 		Log.info(s"all ${state.logId(id)} in trash!")
 		return None
 
-	val known = findKnownConn(ctx, id, connCtx.ignore.union(connCtx.connected), opts.findOwn.isDefined)
+	val known = findKnownConn(ctx, id, finalId, connCtx.ignore.union(connCtx.connected), opts.findOwn.isDefined)
 
 	if known.isDefined then
 		return Some(known.toList)
@@ -505,7 +512,7 @@ def connect(ctx: ClueContext, id: Identity, looksDirect: Boolean, thinksStall: F
 		val newCtx = ctx.copy(game = hypo)
 
 		def seekOwn(playerIndex: Int) =
-			val known = findKnownConn(newCtx, nextId, connCtx.ignore.union(connCtx.connected), findOwn = true, preferOwn = preferOwn)
+			val known = findKnownConn(newCtx, nextId, id, connCtx.ignore.union(connCtx.connected), findOwn = true, preferOwn = preferOwn)
 
 			// See if we need to correct based on future information
 			val actualKnown = known match
@@ -527,9 +534,9 @@ def connect(ctx: ClueContext, id: Identity, looksDirect: Boolean, thinksStall: F
 		val conn =
 			if preferOwn then
 				seekOwn(state.ourPlayerIndex)
-				.orElse(findConnecting(newCtx, nextId, connCtx, opts))
+				.orElse(findConnecting(newCtx, nextId, id, connCtx, opts))
 			else
-				findConnecting(newCtx, nextId, connCtx, opts)
+				findConnecting(newCtx, nextId, id, connCtx, opts)
 				.orElse(findOwn.flatMap(seekOwn))
 
 		conn match

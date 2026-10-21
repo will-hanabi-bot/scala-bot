@@ -240,9 +240,12 @@ case class Player(
 			val p = if excludeTrash then poss.difference(state.trashSet) else poss
 
 			p.nonEmpty && {
-				if !state.variant.pinkish then
+				if p.length == 1 then
+					state.playableSet.contains(p.head)
+				else if !state.variant.pinkish then
 					p.difference(state.playableSet).isEmpty
 				else
+					// Gather all pink-promised ids that only have a single possible inference
 					val pinkPromised = state.heldOrders.foldLeft(IdentitySet.empty): (acc, o) =>
 						if order == o then acc else
 							val thought = this.thoughts(o)
@@ -253,7 +256,9 @@ case class Player(
 
 							promise.fold(acc)(acc.union)
 
-					p.difference(state.playableSet).forall(pinkPromised.contains)
+					// There must be at least one playable id, and all unplayable ids must be duped
+					p.intersect(state.playableSet).nonEmpty &&
+					p.difference(state.playableSet).difference(pinkPromised).isEmpty
 			}
 
 	/** Returns the known playable and conventionally promised playable orders in the given player's hand. */

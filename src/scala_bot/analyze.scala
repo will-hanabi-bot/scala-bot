@@ -12,6 +12,8 @@ import cats.effect.{ExitCode, IO, IOApp, unsafe}, unsafe.IORuntime
 
 def fetchAnalyzeGame(args: Seq[String])(using runtime: IORuntime) =
 	val parsedArgs = parseArgs(args)
+	val env = sys.env ++ readEnv(parsedArgs)
+	val hostname = env.getOrElse("HANABI_HOSTNAME", "hanab.live")
 
 	val List(id, file, conventionR) = List("id", "file", "convention").map(parsedArgs.lift(_))
 
@@ -21,7 +23,7 @@ def fetchAnalyzeGame(args: Seq[String])(using runtime: IORuntime) =
 	val convention = conventionR.flatMap(Convention.from(_).toOption).getOrElse(Convention.Reactor)
 
 	val data @ GameData(players, deck, actions, options) = id match
-		case Some(id) => GameData.fetchId(id)
+		case Some(id) => GameData.fetchId(hostname, id)
 		case None     => GameData.fetchFile(file.get)
 
 	Variant.init()

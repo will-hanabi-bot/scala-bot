@@ -32,7 +32,10 @@ def evaluateCM(ctx: ClueContext, chopMoved: Seq[Int]): ClueInterp =
 		ClueInterp.Discard
 
 def unacceptableClue(prev: HGroup, game: HGroup, @annotation.unused action: ClueAction): Boolean =
-	val fSymmetric = game.state.heldOrders.find: o =>
+	val state = game.state
+	val ClueAction(giver, target, list, clue) = action
+
+	val fSymmetric = state.heldOrders.find: o =>
 		game.isBlindPlaying(o) &&
 		!prev.isBlindPlaying(o) &&
 		prev.waiting.exists: wc =>
@@ -41,9 +44,57 @@ def unacceptableClue(prev: HGroup, game: HGroup, @annotation.unused action: Clue
 
 	if fSymmetric.isDefined then
 		Log.warn(s"clue finesses ${fSymmetric.get}, preventing a symmetric finesse from being dispoven!")
-		true
-	else
-		false
+		return true
+
+	if game.lastMove == Some(ClueInterp.Play) && playablesResult(prev, game)._2.isEmpty then
+		// Log.info(s"${prev.me.hypoPlays.fmt} ${game.me.hypoPlays.fmt}")
+		Log.warn("play clue with no new playables! (duped existing playable?)")
+		return true
+
+	val newPlayables = state.heldOrders.filter: o =>
+		game.gainedStatus(game, o, CardStatus.Finessed) ||
+		game.gainedStatus(game, o, CardStatus.CalledToPlay)
+
+	val badPlay = newPlayables.find: o =>
+		!(game.me.hypoPlays.contains(o) || (prev.inEndgame && state.deck(o).id().exists(state.isPlayable)))
+
+	if badPlay.isDefined then
+		Log.warn(s"clue ${action.fmt(state)} results in ${state.logId(badPlay.get)} ${badPlay.get} looking playable! ${game.me.hypoPlays.fmt}")
+		return true
+
+	val badTrash = state.heldOrders.find: o =>
+		!prev.meta(o).trash && game.meta(o).trash &&
+		state.deck(o).id().exists: id =>
+			state.isUseful(id) && visibleFind(prev.state, prev.players(giver), id, excludeOrder = o).isEmpty
+
+	if badTrash.isDefined then
+		Log.warn(s"clue ${action.fmt(state)} results in ${state.logId(badTrash.get)} ${badTrash.get} looking trash!")
+		return true
+
+	def distance5(g: HGroup, playerIndex: Int) =
+		g.chop(playerIndex).flatMap: chop =>
+			val oldest5 = state.hands(playerIndex).findLast: o =>
+				val card = state.deck(o)
+
+				o > chop &&
+				card.rank == 5 &&
+				!state.variant.suits(card.suitIndex).suitType.brownish &&
+				!card.clued
+
+			oldest5.map(g.chopDistance(playerIndex, _))
+
+	if giver == state.ourPlayerIndex && game.lastMove == Some(ClueInterp.Stall) && game.stallInterp == Some(StallInterp.Stall5) then
+		val dist5 = prev.chopDistance(target, list.filter(o => !prev.state.deck(o).clued && prev.meta(o).status != CardStatus.ChopMoved).min)
+
+		val bad5Stall = (0 until state.numPlayers).exists: i =>
+			i != giver &&
+			distance5(prev, i).exists(_ < dist5)
+
+		if bad5Stall then
+			Log.warn(s"gave 5 stall to 5 not closest to chop!")
+			return true
+
+	false
 
 def checkHFix(ctx: ClueContext): Option[HGroup] =
 	val ClueContext(prev, game, action, _) = ctx
@@ -269,6 +320,3 @@ def interpNormalClue(ctx: ClueContext, symmetricInterp: SymmetricInterp, thinksS
 		// Pink 1's Assumption
 		list.filter(g.unknown1).foldLeft(g): (acc, o) =>
 			acc.withThought(o)(t => t.copy(inferred = t.inferred.filter(_.rank == 1)))
-
-	.when(g => unacceptableClue(prev, g, action)): g =>
-		g.withMove(ClueInterp.Mistake, overwrite = true)

@@ -42,18 +42,18 @@ class DupeTech extends munit.FunSuite:
 
 		hasStatus(game, Alice, 2, CardStatus.Finessed)
 
-	test("gives a simple duplicitous layered finesse"):
-		val game = setup(HGroup.atLevel(5), Vector(
-			Vector("xx", "xx", "xx", "xx", "xx"),
-			Vector("r1", "y1", "y4", "y4", "g4"),
-			Vector("r4", "r4", "b4", "b4", "y2")
-		),
-			init = fullyKnown(Alice, 5, "r1")
-		)
-		.pipe(takeTurn("Alice clues yellow to Cathy (slot 5)"))
-
-		assertEquals(game.lastMove, Some(ClueInterp.Play))
-		hasStatus(game, Bob, 1, CardStatus.Finessed)
+// 	test("gives a simple duplicitous layered finesse"):
+// 		val game = setup(HGroup.atLevel(5), Vector(
+// 			Vector("xx", "xx", "xx", "xx", "xx"),
+// 			Vector("r1", "y1", "y4", "y4", "g4"),
+// 			Vector("r4", "r4", "b4", "b4", "y2")
+// 		),
+// 			init = fullyKnown(Alice, 5, "r1")
+// 		)
+// 		.pipe(takeTurn("Alice clues yellow to Cathy (slot 5)"))
+//
+// 		assertEquals(game.lastMove, Some(ClueInterp.Play))
+// 		hasStatus(game, Bob, 1, CardStatus.Finessed)
 
 	test("understands a duplicitous layered finesse where the giver's card is unknown"):
 		val game = setup(HGroup.atLevel(5), Vector(

@@ -451,12 +451,14 @@ private def checkPosDc(ctx: DiscardContext): PosDcResult =
 		.orElse(prev.chop(playerIndex))
 
 	// Locked hand, blind played a chop moved card that could be good, discarded expected card
-	val unintended = prev.common.thinksPlayables(prev, playerIndex).isEmpty && expectedDc.forall: o =>
-		if !failed then
-			order == o
-		else
-			prev.meta(order).status == CardStatus.ChopMoved &&
-			thought.possible.intersect(state.playableSet).nonEmpty
+	val unintended =
+		(failed && prev.common.thinksPlayables(prev, playerIndex).contains(order)) ||
+		prev.common.thinksPlayables(prev, playerIndex).isEmpty && expectedDc.forall: o =>
+			if !failed then
+				order == o
+			else
+				prev.meta(order).status == CardStatus.ChopMoved &&
+				thought.possible.intersect(state.playableSet).nonEmpty
 
 	if unintended then
 		return PosDcResult.NotPosDc
@@ -525,7 +527,7 @@ def interpretPosDc(ctx: DiscardContext): Option[HGroup] =
 									_ -> playablePoss(g, state.ourPlayerIndex, playerIndex).toList
 					)
 
-					Log.info(s"interpreting pos on ${state.names(reacting)} slot $slot!")
+					Log.info(s"interpreting pos on ${state.names(reacting)} slot $slot! ($order)")
 					(newGame, conn +: conns)
 			.pipe: (g, conns) =>
 				val focus = conns.last.order

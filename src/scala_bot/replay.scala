@@ -20,8 +20,8 @@ case class GameData(
 )
 
 object GameData:
-	def fetchId(id: String) =
-		parse(ujson.read(requests.get(s"https://hanab.live/export/${id}").text()))
+	def fetchId(hostname: String, id: String) =
+		parse(ujson.read(requests.get(s"https://${hostname}/export/${id}").text()))
 
 	def fetchFile(file: String) =
 		parse(ujson.read(fromFile(file).mkString))
@@ -50,6 +50,8 @@ object GameData:
 
 def fetchGame(args: Seq[String]) =
 	val parsedArgs = parseArgs(args)
+	val env = sys.env ++ readEnv(parsedArgs)
+	val hostname = env.getOrElse("HANABI_HOSTNAME", "hanab.live")
 
 	val List(id, indexR, file, conventionR) = List("id", "index", "file", "convention").map(parsedArgs.lift(_))
 
@@ -63,7 +65,7 @@ def fetchGame(args: Seq[String]) =
 	val convention = conventionR.flatMap(Convention.from(_).toOption).getOrElse(Convention.Reactor)
 
 	val data @ GameData(players, deck, actions, options) = id match
-		case Some(id) => GameData.fetchId(id)
+		case Some(id) => GameData.fetchId(hostname, id)
 		case None     => GameData.fetchFile(file.get)
 
 	if index > players.length then
