@@ -148,6 +148,24 @@ class General extends munit.FunSuite:
 
 		assertEquals(game.takeAction.unsafeRunSync(), PerformAction.Rank(Bob.ordinal, 5))
 
+	test("saves a 5 instead of assuming the next player will give a critical save"):
+		// Replay 2012027, turn 40: Bob's p5 and Cathy's last b4 are both on chop.
+		val game = setup(HGroup.atLevel(2), Vector(
+			Vector("xx", "xx", "xx", "xx", "xx"),
+			Vector("g3", "y1", "r1", "g1", "p5"),
+			Vector("r4", "r1", "y5", "r3", "b4")
+		),
+			playStacks = Some(Vector(5, 3, 5, 1, 2)),
+			discarded = Vector("y3", "p3", "g4", "b2", "b3", "p1", "g1", "y4", "b4", "b1"),
+			strikes = 1,
+			clueTokens = 6,
+			init = g => g.copy(inEarlyGame = false)
+				.withMeta(g.state.ourHand.last)(_.copy(status = CardStatus.PermissionToDiscard))
+		)
+
+		assert(game.mustClue(Bob.ordinal))
+		assertEquals(game.takeAction.unsafeRunSync(), PerformAction.Rank(Bob.ordinal, 5))
+
 	test("entertains all possible connections"):
 		val game = setup(HGroup.atLevel(5), Vector(
 			Vector("xx", "xx", "xx", "xx"),

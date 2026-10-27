@@ -247,11 +247,8 @@ def advance(orig: HGroup, game: HGroup, offset: Int): Double =
 		Log.info(s"${indent(offset)}forced clue in early game! (${state.names(playerIndex)}) ${earlyGameClue.get.fmt(state)}")
 		_forceClue(orig, game, offset)._1
 
-	else if game.mustClue(playerIndex) then
-		Log.info(s"${indent(offset)}forcing ${state.names(playerIndex)} to clue ${state.names(state.nextPlayerIndex(playerIndex))}!")
-		_forceClue(orig, game, offset, only = Some(bob))._1
-
 	else
+		// A critical save does not guarantee a clue: takeAction may still choose to discard.
 		val dcOrder = trash.headOption.orElse(game.chop(playerIndex)).getOrElse:
 			throw new Exception(s"Player ${state.names(playerIndex)} not locked but no chop! ${state.hands(playerIndex).map(o => s"${state.deck(o).clued} ${game.meta(o).status}").mkString(", ")}")
 		val id = game.me.thoughts(dcOrder).id(infer = true)
