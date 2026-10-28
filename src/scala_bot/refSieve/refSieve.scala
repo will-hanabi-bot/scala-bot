@@ -470,7 +470,7 @@ object RefSieve:
 				else
 					game.withMove(DiscardInterp.None)
 
-			newGame.when(g => g.state.numPlayers == 2 && prev.state.hands(playerIndex)(0) == order && !prev.isTouched(0) && !prev.chop(playerIndex).contains(order)): g =>
+			newGame.when(g => g.state.numPlayers == 2 && prev.state.hands(playerIndex)(0) == order && !prev.isTouched(order) && !prev.chop(playerIndex).contains(order)): g =>
 				Log.highlight(Console.CYAN, s"${state.names(playerIndex)} discarded slot 1 with ptd to the right (${prev.chop(playerIndex).get}), removing ptd!")
 
 				g.state.hands(playerIndex).foldLeft(g): (acc, o) =>

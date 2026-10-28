@@ -129,6 +129,9 @@ trait Game:
 	/** Whether the convention considers a player with a card that has PTD to be loaded. */
 	def loadedOnPtd: Boolean = false
 
+	/** Whether the convention considers rank-clued cards to be !inverted when determining playability. */
+	def assumeNotInverted: Boolean = false
+
 trait GameOps[G <: Game]:
 	/** Returns a copy of the game state, but restarted from the beginning.
 	  * @param game     The current game state.
@@ -550,7 +553,7 @@ extension[G <: Game](game: G)
 										Comment(g.state.turnCount, s"suggest (${suggestedAction.fmt(g.state)}) over (${action.fmt(g.state)})") +: comments
 								else
 									def winrate(perform: PerformAction) =
-										EndgameSolver(monteCarlo = true, timeout = Duration.ofMillis(500)).solve(game, onlyAction = Some(perform)) match
+										EndgameSolver(monteCarlo = true, timeout = Duration.ofMillis(500)).solve(g, onlyAction = Some(perform)) match
 											case Left(_) => Frac.zero
 											case Right((_, winrate)) => if winrate < Frac(1, 100) then Frac.zero else winrate
 

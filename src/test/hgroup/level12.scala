@@ -137,7 +137,6 @@ class Stale1s extends munit.FunSuite:
 			Vector("r3", "y3", "g3", "r1", "p3"),
 			Vector("r4", "y4", "g4", "g1", "p4")
 		),
-			starting = Alice,
 			playStacks = Some(Vector(1, 1, 1, 0, 0)),
 			clueTokens = 4
 		)

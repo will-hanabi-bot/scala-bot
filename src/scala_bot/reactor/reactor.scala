@@ -54,7 +54,16 @@ case class Reactor(
 			val linked = meta(o).signalTurn.isEmpty &&
 				player.links.exists(l => l.getOrders.contains(o) && l.getOrders.max != o)
 
+			// Drag direction not known
+			val invertedNotKnown = state.variant.inverted &&
+				meta(o).status != CardStatus.CalledToDiscard &&
+				meta(o).status != CardStatus.CalledToPlay &&
+				meta(o).status != CardStatus.DragToPlay &&
+				player.thoughts(o).possibilities.exists(state.isInverted) &&
+				player.thoughts(o).possibilities.exists(!state.isInverted(_))
+
 			linked ||
+			invertedNotKnown ||
 			orders.exists: o2 =>
 				o2 != o &&
 				// o2 was queued earlier
@@ -332,7 +341,7 @@ object Reactor:
 
 					g.waiting match
 						case Some(wc) =>
-							if suitIndex != -1 && game.state.variant.suits(suitIndex).suitType.inverted then
+							if suitIndex != -1 && state.variant.suits(suitIndex).suitType.inverted then
 								reactPlay(prev, g, playerIndex, order, wc)
 							else
 								reactDiscard(prev, g, playerIndex, order, wc)
@@ -346,16 +355,16 @@ object Reactor:
 									g.withMove(DiscardInterp.Mistake)
 
 								case DiscardResult.GentlemansDiscard(targets, _) =>
-									targets.foldLeft((game, game.state)):
+									targets.foldLeft((g, state)):
 										case ((acc, hypoState), o) =>
 											val hidden = o != targets.last
 											val inferred = if hidden then hypoState.playableSet else IdentitySet.single(id)
-											val newState = game.me.thoughts(o).id().fold(hypoState): i =>
+											val newState = g.me.thoughts(o).id().fold(hypoState): i =>
 												hypoState.withPlay(i)
 
 											acc.copy(
 												common = acc.common.withThought(o)(_.copy(inferred = inferred)),
-												meta = acc.meta.updated(o, game.meta(o).copy(
+												meta = acc.meta.updated(o, g.meta(o).copy(
 													status = CardStatus.GentlemansDiscard,
 													hidden = hidden
 												))
@@ -373,8 +382,8 @@ object Reactor:
 							g.withMove(DiscardInterp.None).pipe: g2 =>
 								val resetCtd =
 									prev.state.hands(playerIndex)(0) == order &&
-									!prev.isTouched(0) &&
-									prev.chop(playerIndex).exists(o => o < order && game.meta(o).status == CardStatus.CalledToDiscard)
+									!prev.isTouched(order) &&
+									prev.chop(playerIndex).exists(o => o < order && g2.meta(o).status == CardStatus.CalledToDiscard)
 
 								if !resetCtd then g2 else
 									Log.highlight(Console.CYAN, s"${state.names(playerIndex)} discarded slot 1 while having ctd, removing!")

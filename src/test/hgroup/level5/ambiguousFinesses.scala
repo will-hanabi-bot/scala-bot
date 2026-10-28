@@ -163,3 +163,21 @@ class AmbiguousFinesses extends munit.FunSuite:
 		// Alice should play now.
 		hasStatus(game, Alice, 1, CardStatus.Finessed)
 		hasStatus(game, Bob, 1, CardStatus.None)
+
+	test("allows ambiguity on the 2nd finessed card"):
+		val game = setup(HGroup.atLevel(5), Vector(
+			Vector("xx", "xx", "xx", "xx"),
+			Vector("r1", "g4", "b4", "r5"),
+			Vector("r2", "g4", "r3", "y4"),
+			Vector("g3", "y4", "r4", "y3"),
+		),
+			starting = Donald
+		)
+		.pipe(takeTurn("Donald clues 3 to Cathy"))
+		.pipe(takeTurn("Alice clues red to Donald"))	// We could be ambiguous for r1 or r2
+		.pipe(takeTurn("Bob plays r1", "p3"))
+		.pipe(takeTurn("Cathy discards y4", "r1"))		// Cathy demonstrates not on her
+
+		// Alice knows she is ambiguous for r2.
+		hasStatus(game, Alice, 1, CardStatus.Finessed)
+		hasInfs(game, None, Alice, 1, Vector("r2"))

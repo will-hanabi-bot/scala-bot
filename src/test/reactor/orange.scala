@@ -39,6 +39,37 @@ class Orange extends munit.FunSuite:
 		// Alice should play slot 3.
 		assertEquals(game.takeAction.unsafeRunSync(), PerformAction.Play(game.state.hands(Alice.ordinal)(2)))
 
+	test("drags a playable rank clue to the play stacks"):
+		val game = setup(Reactor.apply, Vector(
+			Vector("xx", "xx", "xx", "xx", "xx"),
+			Vector("r1", "y3", "g3", "o3", "b3"),
+			Vector("r4", "y4", "g4", "o4", "b4")
+		),
+			starting = Cathy,
+			variant = TestVariant.Orange5,
+			playStacks = Some(Vector(1, 2, 1, 1, 1)),
+			clueTokens = 7
+		)
+		.pipe(takeTurn("Cathy clues 2 to Alice (slots 2,3,4)"))
+
+		// Alice should play slot 2.
+		assertEquals(game.takeAction.unsafeRunSync(), PerformAction.Play(game.state.hands(Alice.ordinal)(1)))
+
+	test("isn't loaded when drag direction is unknown"):
+		val game = setup(Reactor.apply, Vector(
+			Vector("xx", "xx", "xx", "xx", "xx"),
+			Vector("r1", "y3", "g3", "o3", "b3"),
+			Vector("r4", "y4", "g4", "o4", "b4")
+		),
+			variant = TestVariant.Orange5,
+			playStacks = Some(Vector(1, 1, 1, 1, 1)),
+			clueTokens = 7,
+			init = preClue(Alice, 2, Seq("2"))
+		)
+
+		assert(!game.common.obviousLoaded(game, Alice.ordinal))
+		assertEquals(game.common.obviousPlayables(game, Alice.ordinal), Vector.empty)
+
 	test("gives the correct clue to a receiver with known orange"):
 		val game = setup(Reactor.apply, Vector(
 			Vector("xx", "xx", "xx", "xx", "xx"),

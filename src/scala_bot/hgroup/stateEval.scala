@@ -155,7 +155,7 @@ def advance(orig: HGroup, game: HGroup, offset: Int): Double =
 				Log.info(s"${indent(offset)}${state.names(playerIndex)} ${Action.gerund(action)} ${state.logId(id)} (f)")
 				advance(orig, game.simulate(action), offset + 1)
 			case None =>
-				var strikes = 0
+				var unknownBadPlay = false
 
 				val (knownPlays, unknownPlays) = playables.partitionMap: order =>
 					val (id, action) = orderToAction(order)
@@ -163,15 +163,15 @@ def advance(orig: HGroup, game: HGroup, offset: Int): Double =
 					Log.info(s"${indent(offset)}${state.names(playerIndex)} ${Action.gerund(action)} ${state.logId(id)}")
 					val advancedGame = game.simulate(action)
 
-					if advancedGame.state.strikes > game.state.strikes then
-						strikes += 1
+					if advancedGame.state.strikes > game.state.strikes || advancedGame.state.maxScore < game.state.maxScore then
+						unknownBadPlay = true
 
 					val value = advance(orig, advancedGame, offset + 1)
 					if player.thoughts(order).id(infer = true).isDefined then Left(value) else Right(value)
 
 				val maxPlay = math.min(knownPlays.maxOption.getOrElse(99.9), unknownPlays.minOption.getOrElse(99.9))
 
-				if strikes > 0 then
+				if unknownBadPlay then
 					(knownPlays ++ unknownPlays).min
 				else
 					val sdcmValue =

@@ -168,9 +168,9 @@ class Orange extends munit.FunSuite:
 			Vector("xx", "xx", "xx", "xx", "xx"),
 			Vector("g4", "g4", "b4", "b4", "o1")
 		),
-			playStacks = Some(Vector(0, 0, 0, 0, 4)),
+			playStacks = Some(Vector(0, 0, 0, 0, 2)),
 			variant = TestVariant.Orange5,
-			clueTokens = 7
+			clueTokens = 6
 		)
 
 		assertEquals(game.takeAction.unsafeRunSync(), PerformAction.Colour(Bob.ordinal, 4))
@@ -207,6 +207,21 @@ class Orange extends munit.FunSuite:
 
 		// Bob is not shouted for.
 		hasStatus(game, Bob, 5, CardStatus.PermissionToDiscard)
+
+	test("doesn't do an orange layered gd behind orange trash"):
+		val game = setup(HGroup.atLevel(10), Vector(
+			Vector("xx", "xx", "xx", "xx", "xx"),
+			Vector("r4", "g4", "g4", "o3", "o2")
+		),
+			starting = Bob,
+			variant = TestVariant.Orange5,
+			playStacks = Some(Vector(0, 0, 0, 0, 2)),
+			clueTokens = 4
+		)
+		.pipe(takeTurn("Bob clues orange to Alice (slot 1)"))
+		.pipe(takeTurn("Alice discards o3 (slot 1)"))
+
+		assertEquals(game.lastMove, Some(DiscardInterp.Mistake))
 
 	test("understands an orange baton discard"):
 		val game = setup(HGroup.atLevel(10), Vector(
@@ -383,3 +398,19 @@ class Orange extends munit.FunSuite:
 
 		// Alice doesn't have o5 in slot 1.
 		assertEquals(game.takeAction.unsafeRunSync(), PerformAction.Discard(game.state.hands(Alice.ordinal)(4)))
+
+	test("recognizes an orange play as a scream"):
+		val game = setup(HGroup.atLevel(8), Vector(
+			Vector("xx", "xx", "xx", "xx", "xx"),
+			Vector("r3", "y3", "g3", "b3", "o3"),
+			Vector("r1", "y4", "g4", "b4", "o1")
+		),
+			variant = TestVariant.Orange5,
+			starting = Bob,
+			clueTokens = 1
+		)
+		.pipe(takeTurn("Bob clues red to Cathy"))
+		.pipe(takeTurn("Cathy plays o1", "r4"))		// This is actually a SDCM.
+
+		// Alice doesn't have o5 in slot 1.
+		hasStatus(game, Alice, 5, CardStatus.ChopMoved)

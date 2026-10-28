@@ -56,30 +56,28 @@ def interpretTransfer(ctx: DiscardContext, holder: Int, dupe: Option[Int]): (Dis
 		else if state.isPlayable(id) || (prev.common.hypoPlays.contains(order) && !game.common.thoughts(order).reset) || prev.common.orderPlayable(prev, order) then
 			def findGD(hypoGame: HGroup, connected: FastBitSet): Option[List[Int]] =
 				val hypoState = hypoGame.state
-				(if inverted then hypoGame.chop(holder) else hypoGame.findGD(holder, connected)) match
-					case None => None
-					case Some(f) =>
-						val finesseId =
-							val futureIds = if inverted then game.future(f) else game.future(f).intersect(hypoGame.state.playableSet)
+				(if inverted then hypoGame.chop(holder) else hypoGame.findGD(holder, connected)).flatMap: f =>
+					val finesseId =
+						val futureIds = if inverted then game.future(f) else game.future(f).intersect(hypoGame.state.playableSet)
 
-							if futureIds.length == 1 then
-								Some(futureIds.head)
-							else
-								game.me.thoughts(f).id()
+						if futureIds.length == 1 then
+							Some(futureIds.head)
+						else
+							game.me.thoughts(f).id()
 
-						finesseId match
-							case None => Some(List(f))
-							case Some(i) if i.matches(id) => Some(List(f))
-							case Some(i) if (if inverted then hypoState.isBasicTrash(i) else hypoState.isPlayable(i)) =>
-								val nextState =
-									if inverted then
-										hypoState.withDiscard(i, f).copy(hands = hypoState.hands.updated(holder, hypoState.hands(holder).filter(_ != f)))
-									else
-										hypoState.withPlay(i)
+					finesseId match
+						case None => Some(List(f))
+						case Some(i) if i.matches(id) => Some(List(f))
+						case Some(i) if (if inverted ^ state.isInverted(i) then hypoState.isBasicTrash(i) else hypoState.isPlayable(i)) =>
+							val nextState =
+								if inverted then
+									hypoState.withDiscard(i, f).copy(hands = hypoState.hands.updated(holder, hypoState.hands(holder).filter(_ != f)))
+								else
+									hypoState.withPlay(i)
 
-								findGD(hypoGame.copy(state = nextState), connected.incl(f)).map: rest =>
-									f +: rest
-							case _ => None
+							findGD(hypoGame.copy(state = nextState), connected.incl(f)).map: rest =>
+								f +: rest
+						case _ => None
 
 			findGD(game, FastBitSet.empty) match
 				case None =>

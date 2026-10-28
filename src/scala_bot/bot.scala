@@ -7,7 +7,7 @@
 //> using dep org.typelevel::cats-effect:3.7.1
 //> using dep com.lihaoyi::upickle:4.4.3
 //> using dep com.lihaoyi::requests:0.9.3
-//> using dep org.scala-lang.modules::scala-parallel-collections:1.2.0
+//> using dep org.scala-lang.modules::scala-parallel-collections:1.3.0
 //> using test.dep org.scalameta::munit:1.3.6
 
 package scala_bot

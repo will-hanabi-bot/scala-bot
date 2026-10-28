@@ -293,7 +293,7 @@ case class EndgameSolver[G <: Game](
 
 						inner(remHypos.tail, winrate + hypoWinrate, remProb - prob)
 
-				val totalWinrate = inner(hypos.tail, winrate, Frac.one - winrate)
+				val totalWinrate = inner(hypos.tail, winrate, Frac.one - firstProb)
 
 				// println(s"total winrate for ${action.fmt(game)}: $totalWinrate")
 

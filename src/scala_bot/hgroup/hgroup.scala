@@ -658,7 +658,9 @@ case class HGroup(
 		prev.waiting.find: wc =>
 			!wc.symmetric && !wc.ambiguousSelf &&
 			!action.matchesP:
-				case p: PlayAction => p.order == wc.currConn.order
+				case PlayAction(playerIndex, order, suitIndex, rank) =>
+					order == wc.currConn.order ||
+					(suitIndex != -1 && rank != -1 && wc.currConn.ids.length == 1 && wc.currConn.ids.head.matches(Identity(suitIndex, rank)))
 			&&
 			!this.waiting.exists(w => w.connections.forall(wc.connections.contains) && w.inference == wc.inference && w.turn == wc.turn)
 
@@ -762,35 +764,38 @@ object HGroup:
 				val pre = refreshWCs(prev, updatedGame, action, beforeClueInterp = true)
 					.resetImportant(action.playerIndex)
 
-				if !game.allowFindOwn && pre.wcLost(prev, action).nonEmpty then
-					Log.warn(s"removed wc ${game.state.logConns(pre.wcLost(prev, action).get.connections)}! mistake")
-					pre.withMove(ClueInterp.Mistake)
-				else
-					val interpreted = interpClue(ClueContext(prev, pre, action))
-					val updatedPre = pre.copy(importantFinesse = interpreted.importantFinesse, savedCtx = interpreted.savedCtx)
-						.withMove(interpreted.lastMove.get)
+				val lostWc = if game.allowFindOwn then None else pre.wcLost(prev, action)
 
-					refreshWCs(prev, updatedPre, action)
-						.cond(_.waiting.count(wc => !wc.symmetric && !wc.ambiguousSelf) < pre.waiting.count(wc => !wc.symmetric && !wc.ambiguousSelf) && !game.noRecurse) { g =>
-							if g.hypothetical && action.giver == game.state.ourPlayerIndex then
-								Log.warn("lost wc! mistake")
-								g.withMove(ClueInterp.Mistake, overwrite = true)
-							else
-								Log.highlight(Console.GREEN, "----- REINTERPRETING CLUE -----")
-								val res = interpClue(ClueContext(prev, g.copy(moveHistory = g.moveHistory.dropRight(1)), action))
-								Log.highlight(Console.GREEN, "----- DONE REINTERPRETING -----")
-								res
-						} {
-							_ =>
-								Log.highlight(Console.GREEN, s"refreshing interpreted!")
-								refreshWCs(prev, interpreted, action)
-						}
-						.pipe: g =>
-							g.copy(
-								dcStatus = DcStatus.None,
-								dda = None,
-								stallInterp = if g.lastMove == Some(ClueInterp.Stall) then g.stallInterp else None
-							)
+				lostWc match
+					case Some(wc) =>
+						Log.warn(s"removed wc ${game.state.logConns(wc.connections, wc.inference)}! mistake")
+						pre.withMove(ClueInterp.Mistake)
+					case None =>
+						val interpreted = interpClue(ClueContext(prev, pre, action))
+						val updatedPre = pre.copy(importantFinesse = interpreted.importantFinesse, savedCtx = interpreted.savedCtx)
+							.withMove(interpreted.lastMove.get)
+
+						refreshWCs(prev, updatedPre, action)
+							.cond(_.waiting.count(wc => !wc.symmetric && !wc.ambiguousSelf) < pre.waiting.count(wc => !wc.symmetric && !wc.ambiguousSelf) && !game.noRecurse) { g =>
+								if g.hypothetical && action.giver == game.state.ourPlayerIndex then
+									Log.warn("lost wc! mistake")
+									g.withMove(ClueInterp.Mistake, overwrite = true)
+								else
+									Log.highlight(Console.GREEN, "----- REINTERPRETING CLUE -----")
+									val res = interpClue(ClueContext(prev, g.copy(moveHistory = g.moveHistory.dropRight(1)), action))
+									Log.highlight(Console.GREEN, "----- DONE REINTERPRETING -----")
+									res
+							} {
+								_ =>
+									Log.highlight(Console.GREEN, s"refreshing interpreted!")
+									refreshWCs(prev, interpreted, action)
+							}
+							.pipe: g =>
+								g.copy(
+									dcStatus = DcStatus.None,
+									dda = None,
+									stallInterp = if g.lastMove == Some(ClueInterp.Stall) then g.stallInterp else None
+								)
 			.elim()
 			.when(g => unacceptableClue(prev, g, action)): g =>
 				g.withMove(ClueInterp.Mistake, overwrite = true)
@@ -858,28 +863,38 @@ object HGroup:
 			updatedGame.reinterpPlay(prev, action).getOrElse:
 				val pre = refreshWCs(prev, updatedGame, action)
 
-				if !game.allowFindOwn && pre.wcLost(prev, action).nonEmpty then
-					Log.warn(s"removed wc ${game.state.logConns(pre.wcLost(prev, action).get.connections)}! mistake")
-					pre.withMove(PlayInterp.Mistake)
-				else
-					pre.resetImportant(action.playerIndex).pipe: g =>
-						checkOcm(prev, action) match
-							case None =>
-								g.withMove(PlayInterp.None)
-							case Some(orders) =>
-								val chop = orders.min
-								val mistake = game.state.deck(chop).id().exists: id =>
-									game.state.isBasicTrash(id) || id.rank == 1
+				val lostWc = if game.allowFindOwn then None else pre.wcLost(prev, action)
 
-								if mistake then
-									Log.warn("bad ocm!")
+				lostWc match
+					case Some(wc) =>
+						Log.warn(s"removed wc ${game.state.logConns(wc.connections, wc.inference)}! mistake")
+						pre.withMove(PlayInterp.Mistake)
+					case None =>
+						pre.resetImportant(playerIndex).pipe: g =>
+							if isInverted && prev.chop(playerIndex).contains(order) then
+								val ctx = DiscardContext(prev, g, DiscardAction(playerIndex, order, suitIndex, rank, failed = false))
 
-								performCM(g, orders).withMove:
-									if mistake then PlayInterp.Mistake else PlayInterp.OrderCM
-					.copy(
-						dcStatus = DcStatus.None,
-						dda = None
-					)
+								interpretSdcm(ctx)
+								.orElse(interpretPosDc(ctx))
+								.getOrElse(g.withMove(PlayInterp.None))
+							else
+								checkOcm(prev, action) match
+									case None =>
+										g.withMove(PlayInterp.None)
+									case Some(orders) =>
+										val chop = orders.min
+										val mistake = game.state.deck(chop).id().exists: id =>
+											game.state.isBasicTrash(id) || id.rank == 1
+
+										if mistake then
+											Log.warn("bad ocm!")
+
+										performCM(g, orders).withMove:
+											if mistake then PlayInterp.Mistake else PlayInterp.OrderCM
+						.copy(
+							dcStatus = DcStatus.None,
+							dda = None
+						)
 			.when(_ => isInverted):
 				_.writeExtraCMs(prev, playerIndex, order)
 			.when(_.inEarlyGame): g =>

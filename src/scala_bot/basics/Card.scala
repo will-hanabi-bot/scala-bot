@@ -199,7 +199,7 @@ case class ConvData(
 	status: CardStatus = CardStatus.None,
 	/** Whether this card is unknown to the person playing (like in a *Hidden Finesse*). */
 	hidden: Boolean = false,
-	/** The list of turns where something new was discovered about the card. */
+	/** The list of turns (largest to smallest) where something new was discovered about the card. */
 	reasoning: List[Int] = Nil,
 	/** The turn when this card was signalled, if it exists. */
 	signalTurn: Option[Int] = None,
@@ -228,7 +228,7 @@ case class ConvData(
 
 	/** Adds an entry to the reasoning list.  */
 	def reason(turnCount: Int) =
-		if reasoning.lastOption.forall(_ != turnCount) then
+		if reasoning.headOption.forall(_ != turnCount) then
 			copy(reasoning = turnCount +: reasoning)
 		else
 			this

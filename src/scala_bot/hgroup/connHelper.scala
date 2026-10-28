@@ -484,7 +484,7 @@ def resolveClue(ctx: ClueContext, fps: Seq[FocusPossibility], symmetricInterp: S
 
 								if existingIndex == -1 then
 									val link = PlayLink(allLinked, IdentitySet.single(id), target)
-									Log.info(s"adding play link $linked $allLinked -> $target for fp ${state.logConns(fp.connections, fp.id)}")
+									Log.info(s"adding play link ($linked) $allLinked -> $target for fp ${state.logConns(fp.connections, fp.id)}")
 									acc.copy(common = acc.common.copy(playLinks = link +: playLinks))
 								else
 									val existing = playLinks(existingIndex)

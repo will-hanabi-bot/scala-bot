@@ -98,7 +98,7 @@ def elimDcPlay(state: State, common: Player, meta: Vector[ConvData], reacter: In
 						inferred = t.inferred.difference(state.playableSet)
 					))
 					Log.info(s"eliminated playables from slot ${i + 1} $receiveOrder - ${newCommon.strInfs(state, receiveOrder)}")
-					(newCommon, updateMeta(meta, newCommon, receiveOrder))
+					(newCommon, updateMeta(m, newCommon, receiveOrder))
 				case _ => (c, m)
 		}
 
@@ -119,7 +119,7 @@ def elimPlayPlay(state: State, common: Player, meta: Vector[ConvData], reacter: 
 							inferred = t.inferred.filter(i => !state.isPlayable(i) || i == id)
 						))
 						Log.info(s"eliminated playables except ${state.logId(id)} from slot ${i + 1} $receiveOrder - ${newCommon.strInfs(state, receiveOrder)}")
-						(newCommon, updateMeta(meta, newCommon, receiveOrder))
+						(newCommon, updateMeta(m, newCommon, receiveOrder))
 
 					case IdentitySet(_ @ _*) =>
 						val newCommon = c.withThought(receiveOrder)(t => t.copy(

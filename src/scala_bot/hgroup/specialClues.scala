@@ -37,7 +37,7 @@ def colourSave(prev: HGroup, action: ClueAction, id: Identity, focus: Int): Bool
 	val thought = prev.common.thoughts(focus)
 	val suit = state.variant.suits(suitIndex)
 
-	if !state.variant.cardTouched(id, clue) || !thought.possible.contains(id) || state.isBasicTrash(id) then
+	if !state.variant.cardTouched(id, clue) || !thought.possible.contains(id) || state.isBasicTrash(id) || state.isPlayable(id) then
 		return false
 
 	if rank == 5 && suit.name != "Black" && !suit.suitType.brownish then
@@ -101,7 +101,7 @@ def rankSave(prev: HGroup, action: ClueAction, id: Identity, focus: Int): Boolea
 	val Identity(suitIndex, rank) = id
 	val thought = prev.common.thoughts(focus)
 
-	if !thought.possible.contains(id) || state.isBasicTrash(id) || state.deck(focus).id().exists(_.rank != rank) then
+	if !thought.possible.contains(id) || state.isBasicTrash(id) || state.deck(focus).id().exists(_.rank != rank) || state.isPlayable(id) then
 		return false
 
 	// Don't consider save on k3,k4 (or dark i3,i4) with rank
@@ -120,7 +120,7 @@ def rankSave(prev: HGroup, action: ClueAction, id: Identity, focus: Int): Boolea
 	if state.variant.pinkish && clue.kind == ClueKind.Rank && rank != clue.value then
 		return false
 
-	state.isCritical(id) || rank == 2
+	(state.isCritical(id) && rank != 1) || rank == 2
 
 enum SymmetricInterp:
 	case NoInterp
@@ -166,8 +166,7 @@ def interpSpecialClue(ctx: ClueContext): SpecialClueResult =
 				.withMove(if interp == StallInterp.SaveLHS then ClueInterp.Save else ClueInterp.Stall)
 
 	distributionClue(prev, game, action, focus) match
-		case None => ()
-		case Some(ids) =>
+		case Some(ids) if ids.exists(i => game.me.thoughts(focus).matches(i, infer = true, assume = true)) =>
 			Log.info(s"distribution clue for [${ids.fmt(state)}]!")
 
 			return SpecialClue:
@@ -179,6 +178,7 @@ def interpSpecialClue(ctx: ClueContext): SpecialClueResult =
 					)
 				.withMeta(focus)(_.copy(focused = true))
 				.withMove(ClueInterp.Distribution)
+		case _ => ()
 
 	if game.level >= Level.BasicCM then
 		def saveCtx(g: HGroup) =
@@ -245,13 +245,23 @@ def interpSpecialClue(ctx: ClueContext): SpecialClueResult =
 		state.variant.colourableSuits(clue.value).suitType.inverted
 
 	if specialOrangeSituation then
-		val chopFix = chop && state.deck(focus).id().exists(id => state.isBasicTrash(id) || (id.rank == 3 || id.rank == 4))
+		val chopFix = chop && state.deck(focus).id().exists: id =>
+			state.isBasicTrash(id) ||
+			(id.rank == 3 || id.rank == 4) ||
+			visibleFind(state, common, id, infer = true, excludeOrder = focus).exists: o =>
+				game.me.thoughts(o).matches(id) ||
+				(game.me.thoughts(o).matches(id, assume = true) && game.me.thoughts(o).possible.contains(id))
 
 		if chopFix then
 			val poss = game.common.thoughts(focus).possible.filter: id =>
 				!state.isPlayable(id) &&
 				state.isInverted(id) &&
-				(state.isBasicTrash(id) || (id.rank != 2 && id.rank != 5))
+				(state.isBasicTrash(id) ||
+					(id.rank != 2 && id.rank != 5) ||
+					visibleFind(state, common, id, infer = true, excludeOrder = focus).exists: o =>
+						game.me.thoughts(o).matches(id) ||
+						(game.me.thoughts(o).matches(id, assume = true) && game.me.thoughts(o).possible.contains(id))
+				)
 
 			if poss.forall(state.isBasicTrash) then
 				Log.info(s"orange fix on $focus! (trash, ${poss.fmt(state)})")

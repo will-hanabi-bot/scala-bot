@@ -602,12 +602,15 @@ case class Player(
 							else
 								player.obviousPlayables(hypo, i)
 
-						val invertedPlays =
-							player.thinksTrash(hypo, i).filter: o =>
-								// This player knows that the card is inverted
-								player.thoughts(o).id().exists(state.isInverted)
+						if !state.variant.inverted then
+							normalPlays
+						else
+							val invertedPlays =
+								player.thinksTrash(hypo, i).filter: o =>
+									// This player knows that the card is inverted
+									player.thoughts(o).id().exists(state.isInverted)
 
-						normalPlays ++ invertedPlays
+							normalPlays ++ invertedPlays
 
 					val it = playables.iterator
 

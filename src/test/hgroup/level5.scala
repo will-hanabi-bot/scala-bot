@@ -409,3 +409,17 @@ class General extends munit.FunSuite:
 		.pipe(takeTurn("Alice clues red to Cathy"))		// a weird bug with occam's razor suggests this clue
 
 		assertEquals(game.lastMove, Some(ClueInterp.Mistake))
+
+	test("assumes the giver knows about a card when it would simplify interpretation"):
+		val game = setup(HGroup.atLevel(5), Vector(
+			Vector("xx", "xx", "xx", "xx", "xx"),
+			Vector("y3", "b4", "b4", "p4", "y4"),
+			Vector("r1", "y1", "g4", "g4", "y4")
+		))
+		.pipe(takeTurn("Alice clues 1 to Cathy"))
+		.pipe(takeTurn("Bob clues 2 to Alice (slots 1,4)"))
+		.pipe(takeTurn("Cathy clues 3 to Bob"))
+
+		// Alice should not assume she is finessed for y1.
+		hasStatus(game, Alice, 2, CardStatus.None)
+		assertEquals(game.common.thinksPlayables(game, Alice.ordinal), Vector.empty)

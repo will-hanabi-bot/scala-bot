@@ -137,7 +137,6 @@ class General extends munit.FunSuite:
 			Vector("r2", "y4", "g4", "b4"),
 			Vector("r4", "r1", "b4", "g4")
 		),
-			starting = Alice,
 			clueTokens = 5,
 			init = fullyKnown(Alice, 3, "r2")
 		)
