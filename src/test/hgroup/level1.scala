@@ -4,7 +4,7 @@ import cats.effect.unsafe.implicits.global
 
 import scala_bot.basics._
 import scala_bot.lib.FastBitSet
-import scala_bot.test.{hasInfs, hasStatus, Player, preClue, setup, takeTurn}, Player._
+import scala_bot.test.{fullyKnown, hasInfs, hasStatus, Player, preClue, setup, takeTurn}, Player._
 import scala_bot.hgroup.{getResult, HGroup}
 
 import scala_bot.utils.{pipe, tap}
@@ -268,3 +268,20 @@ class General extends munit.FunSuite:
 
 		// Bob will prompt r3 -> r4.
 		assertEquals(game.lastMove, Some(ClueInterp.Mistake))
+
+	test("allows a prompt to resolve before assuming direct".only):
+		val game = setup(HGroup.atLevel(1), Vector(
+			Vector("xx", "xx", "xx", "xx", "xx"),
+			Vector("g4", "g4", "b4", "b4", "p4"),
+			Vector("y4", "r1", "b1", "y3", "r2")
+		),
+			playStacks = Some(Vector(0, 2, 0, 0, 0)),
+			starting = Bob,
+			init =
+				fullyKnown[HGroup](Cathy, 2, "r1") andThen
+				fullyKnown[HGroup](Cathy, 3, "b1") andThen
+				preClue[HGroup](Cathy, 5, Seq("red"))
+		)
+		.pipe(takeTurn("Bob clues 3 to Alice (slot 5)"))
+
+		hasInfs(game, None, Alice, 5, Vector("r3", "y3"))

@@ -600,7 +600,9 @@ def connect(ctx: ClueContext, id: Identity, looksDirect: Boolean, thinksStall: F
 					looksDirect = connCtx.looksDirect && {
 						(clue.kind == ClueKind.Colour && nextId.next.exists(game.common.thoughts(focus).possible.contains)) ||
 						positional.isDefined ||
-						!conns.existsM { case f: FinesseConn => f.reacting != target && !f.hidden }
+						!conns.existsM:
+							case f: FinesseConn => f.reacting != target && !f.hidden
+							case f: PromptConn  => f.reacting != target && !f.hidden
 					},
 					connected = connCtx.connected.union(conns.map(_.order))
 				)
