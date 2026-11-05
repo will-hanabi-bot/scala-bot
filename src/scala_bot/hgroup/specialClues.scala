@@ -145,7 +145,10 @@ def interpSpecialClue(ctx: ClueContext): SpecialClueResult =
 
 	val stall = stallingSituation(ctx)
 	val thinksStall = stall.map(_._2).getOrElse(FastBitSet.empty)
-	val asymmetricStall = thinksStall.nonEmpty && thinksStall.size < state.numPlayers
+	val asymmetricStall =
+		thinksStall.nonEmpty &&
+		thinksStall.size < state.numPlayers &&
+		!thinksStall.contains(giver)		// it's always a valid stall if the giver thinks it's a stall
 
 	if stall.isDefined then
 		val (interp, thinksStall) = stall.get
@@ -153,7 +156,7 @@ def interpSpecialClue(ctx: ClueContext): SpecialClueResult =
 		if asymmetricStall then
 			Log.warn(s"asymmetric! only ${thinksStall.map(state.names)} think stall")
 
-		else if thinksStall.size == state.numPlayers then
+		else if thinksStall.nonEmpty then
 			Log.info(s"stalling situation $interp")
 
 			return SpecialClue:
@@ -165,9 +168,14 @@ def interpSpecialClue(ctx: ClueContext): SpecialClueResult =
 				.copy(stallInterp = Some(interp))
 				.withMove(if interp == StallInterp.SaveLHS then ClueInterp.Save else ClueInterp.Stall)
 
+	def validDistribution(ids: IdentitySet) =
+		game.me.thoughts(focus).id(infer = true) match
+			case Some(id) => ids.contains(id)
+			case None     => game.me.thoughts(focus).inferred.forall(ids.contains)
+
 	distributionClue(prev, game, action, focus) match
-		case Some(ids) if ids.exists(i => game.me.thoughts(focus).matches(i, infer = true, assume = true)) =>
-			Log.info(s"distribution clue for [${ids.fmt(state)}]!")
+		case Some(ids) if validDistribution(ids) =>
+			Log.info(s"distribution clue for [${ids.fmt(state)}]! ${game.me.strInfs(state, focus)}")
 
 			return SpecialClue:
 				game.withThought(focus): t =>

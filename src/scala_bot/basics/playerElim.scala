@@ -449,7 +449,7 @@ extension (p: Player)
 					if focused.size == 1 && inferred.length == 1 then
 						newPlayer = newPlayer.elimLink(game, orders, focused.head, inferred.head)
 
-					else if orders.size > inferred.length then
+					else if orders.size >= inferred.length then
 						// We have enough inferred cards to elim elsewhere
 						Log.info(s"adding link ${orders.fmt} infs ${inferred.fmt(state)} (${p.name})")
 						newPlayer = newPlayer.copy(links = Link.Unpromised(orders, inferred) +: newPlayer.links)

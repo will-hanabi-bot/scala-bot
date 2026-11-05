@@ -235,15 +235,16 @@ def interpNormalClue(ctx: ClueContext, symmetricInterp: SymmetricInterp, thinksS
 
 			val ownFps =
 				val looksDirect = game.players(target).thoughts(focus).id().isEmpty && {
-					// clue.kind == ClueKind.Colour ||
+					// (clue.kind == ClueKind.Colour && !state.variant.whiteS) ||  && state.variant.colourableSuits(clue.value).suitType.brownish) ||
 					positional.isDefined ||
 					savePoss.nonEmpty ||
 					// Looks like an existing possibility
-					focusPoss.exists: fp =>
+					(clue.kind == ClueKind.Colour && focusPoss.exists: fp =>
 						game.players(target).thoughts(focus).possible.contains(fp.id) &&
 						fp.connections.forall: c =>
 							(c.isInstanceOf[KnownConn] || (c.isInstanceOf[PlayableConn] && c.reacting != state.ourPlayerIndex)) &&
 							!game.isBlindPlaying(c.order)		// A blind-playing card is still unknown
+					)
 				}
 
 				common.thoughts(focus).inferred.filter: inf =>
@@ -252,7 +253,8 @@ def interpNormalClue(ctx: ClueContext, symmetricInterp: SymmetricInterp, thinksS
 				.flatMap:
 					connect(ctx, _, looksDirect, thinksStall, findOwn = Some(state.ourPlayerIndex))
 
-			val simplestOwn = occamsRazor(ctx, filterFps(ctx, simplest ++ ownFps), state.ourPlayerIndex, actualId = game.me.thoughts(focus).id())
+			val filtered = filterFps(ctx, simplest ++ ownFps)
+			val simplestOwn = occamsRazor(ctx, filtered, state.ourPlayerIndex, actualId = game.me.thoughts(focus).id())
 
 			if simplestOwn.isEmpty then
 				Log.warn("no inferences!")
@@ -303,7 +305,7 @@ def interpNormalClue(ctx: ClueContext, symmetricInterp: SymmetricInterp, thinksS
 				else
 					game.withMove(ClueInterp.Mistake)
 			else
-				resolveClue(ctx, simplestOwn, symmetricInterp, thinksStall, ambiguousOwn = if savePoss.nonEmpty then Nil else ownFps.filter(fp => !simplestOwn.contains(fp) && !fp.symmetric))
+				resolveClue(ctx, simplestOwn, symmetricInterp, thinksStall, ambiguousOwn = if savePoss.nonEmpty then Nil else ownFps.filter(fp => filtered.contains(fp) && !simplestOwn.contains(fp) && !fp.symmetric))
 	}
 	.when(g => g.lastMove != Some(ClueInterp.Mistake) && g.level >= Level.TempoClues && state.numPlayers > 2): g =>
 		val newCtx = ctx.copy(game = g)

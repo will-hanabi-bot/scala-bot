@@ -156,9 +156,12 @@ case class State(
 		rankClues.concat(colourClues).filter: clue =>
 			clueTouched(hands(target), clue.base).nonEmpty
 
-	def hasConsistentInfs(thought: Thought) =
-		thought.possible.length == 1 ||
-		deck(thought.order).id().forall(thought.inferred.contains)
+	def hasConsistentInfs(thought: Thought, me: Player) =
+		thought.possible.length == 1 || {
+			deck(thought.order).id() match
+				case Some(id) => thought.inferred.contains(id)
+				case None => thought.inferred.intersect(me.thoughts(thought.order).possible).nonEmpty
+		}
 
 	def canClue = clueTokens > 0
 

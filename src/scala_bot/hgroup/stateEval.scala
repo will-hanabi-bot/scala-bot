@@ -113,7 +113,6 @@ def advance(orig: HGroup, game: HGroup, offset: Int): Double =
 	val player = game.players(playerIndex)
 
 	val bob = state.nextPlayerIndex(playerIndex)
-	val bobChop = Option.when(state.numPlayers > 2)(game.chop(bob)).flatten
 
 	lazy val trash = player.thinksTrash(game, playerIndex).sortBy: o =>
 		// Discard leftmost clued trash (largest order), then rightmost unclued trash (smallest order)
@@ -265,7 +264,7 @@ def advance(orig: HGroup, game: HGroup, offset: Int): Double =
 		if state.canClue && (state.numPlayers > 2 || playerIndex == state.ourPlayerIndex) then
 			Log.info(s"${indent(offset)}${state.names(playerIndex)} might clue")
 			val (clueVal, goodClue) = _forceClue(orig, game, offset)
-			Log.info(s"clue val: $clueVal, good clue? $goodClue")
+			Log.info(s"${indent(offset)}clue val: $clueVal, good clue? $goodClue")
 			Log.info(s"${indent(offset)}${state.names(playerIndex)} ${Action.gerund(action)} ${state.logId(id)}:")
 			val dcVal = advance(orig, dcGame, offset + 1)
 
@@ -294,8 +293,6 @@ def advance(orig: HGroup, game: HGroup, offset: Int): Double =
 							0.8
 						else if common.thinksLoaded(game, bob) then
 							0.2
-						else if bobChop.isDefined then
-							if state.isBasicTrash(state.deck(bobChop.get).id().get) then 0.2 else 0.7
 						else
 							0.5
 					else
@@ -324,7 +321,7 @@ def _evalAction(game: HGroup, action: Action): Double =
 	val value = action match
 		case clueAction: ClueAction =>
 			val hypoGame = game.copy(allowFindOwn = false).simulate(action)
-			val clueValue = getResult(game, hypoGame, clueAction, log = false)
+			val clueValue = 0.2 * getResult(game, hypoGame, clueAction, log = false)
 
 			if hypoGame.lastMove == Some(ClueInterp.Mistake) || clueValue == -100 then
 				-100.0
@@ -339,12 +336,15 @@ def _evalAction(game: HGroup, action: Action): Double =
 
 				val value =
 					if game.me.thinksPlayables(game, state.ourPlayerIndex).nonEmpty && game.inEndgame then
-						-1 + 0.5 * clueValue
+						-1 + clueValue
 					else if game.me.thinksPlayables(game, state.ourPlayerIndex).exists(p => game.me.thoughts(p).id(infer = true).exists(id => game.me.hypoStacks(id.suitIndex) > id.rank)) then
 						Log.highlight(Console.CYAN, "holding up a play sequence to clue!")
-						-1 + 0.5 * clueValue
+						-1 + clueValue
+					else if game.me.thinksPlayables(game, state.ourPlayerIndex).nonEmpty then
+						Log.highlight(Console.CYAN, "cluing while holding a playable!")
+						-0.5 + clueValue
 					else
-						0.5 * clueValue
+						clueValue
 				Log.info(f"initial clue value: $value%.2f")
 				val best = value + advance(game, hypoGame, 1)
 
@@ -475,7 +475,7 @@ def evalGame(orig: HGroup, game: HGroup, offset: Int): Double =
 
 	val stateVal = evalState(orig.state, state, inEndgame = orig.inEndgame || orig.state.remScore < 5, offset)
 
-	val futureVal = (if orig.inEarlyGame then 1.75 else 1) * game.common.hypoPlays.summing: order =>
+	val futureVal = (if orig.inEarlyGame then 1.5 else 1) * game.common.hypoPlays.summing: order =>
 		game.me.thoughts(order).id(infer = true) match
 			case None => 0.4
 			case Some(id) =>
@@ -556,7 +556,11 @@ def evalGame(orig: HGroup, game: HGroup, offset: Int): Double =
 
 	val playablesDiscarded = -1 * game.state.playableSet.count: id =>
 		game.state.discardStacks(id.suitIndex)(id.rank - 1).length > orig.state.discardStacks(id.suitIndex)(id.rank - 1).length &&
-		visibleFind(game.state, game.me, id, infer = true).forall(!game.isTouched(_))
+		visibleFind(game.state, game.me, id, infer = true).forall(!game.isTouched(_)) &&
+		!orig.common.links.exists:
+			case Link.Unpromised(orders, ids) =>
+				ids.contains(id) && orders.exists(game.me.thoughts(_).matches(id, assume = true))
+			case l => l.promise.contains(id)
 
 	val log = List(
 		Option.when(badCM != 0)(s"badCM: $badCM"),

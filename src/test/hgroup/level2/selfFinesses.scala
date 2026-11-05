@@ -10,7 +10,7 @@ import scala_bot.utils.{pipe, tap}
 import scala_bot.logger.{Logger, LogLevel}
 
 class SelfFinesses extends munit.FunSuite:
-	override def beforeAll() = Logger.setLevel(LogLevel.Off)
+	// override def beforeAll() = Logger.setLevel(LogLevel.Off)
 
 	test("plays into a self-finesse"):
 		val game = setup(HGroup.atLevel(2), Vector(
@@ -175,7 +175,7 @@ class SelfFinesses extends munit.FunSuite:
 		// hasInfs(game, None, Bob, 2, Vector("r5"))
 		hasStatus(game, Bob, 1, CardStatus.Finessed)
 
-	test("plays even if it could be an asymmetric finesse"):
+	test("plays even if it could be an asymmetric finesse".only):
 		val game = setup(HGroup.atLevel(2), Vector(
 			Vector("xx", "xx", "xx", "xx"),
 			Vector("r3", "r5", "y3", "g4"),

@@ -551,9 +551,13 @@ case class Player(
 
 			def play(order: Int) =
 				val holder = hypo.state.holderOf(order)
+				val thought =
+					val t = player.thoughts(order)
+					// Elim isn't run after playing each card, so we have to manually remove the trash ids
+					t.copy(inferred = t.inferred.difference(hypo.state.trashSet))
 
 				// NOTE: symmetric = true?
-				player.thoughts(order).id(infer = true) match
+				thought.id(infer = true) match
 					case None if state.deck(order).id().exists(state.isInverted) =>
 						// println(s"not known orange! $order")
 					case None =>
@@ -616,7 +620,7 @@ case class Player(
 
 					while (it.hasNext && !changed) do
 						val o = it.next()
-						if !played.contains(o) && !attempted.contains(o) && hypo.state.hasConsistentInfs(thoughts(o)) then
+						if !played.contains(o) && !attempted.contains(o) && hypo.state.hasConsistentInfs(thoughts(o), hypo.me) then
 							play(o)
 							changed = true
 

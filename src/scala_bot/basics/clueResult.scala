@@ -23,10 +23,10 @@ def elimResult(prev: Game, game: Game, hand: IndexedSeq[Int], list: Seq[Int]) =
 			else if !prev.state.deck(order).clued && !prev.isBlindPlaying(order) then
 				(order +: newTouched, fill, elim)
 
-			else if list.contains(order) && state.hasConsistentInfs(thought) && status != CardStatus.CalledToPlay && status != CardStatus.DragToPlay then
+			else if list.contains(order) && state.hasConsistentInfs(thought, game.me) && status != CardStatus.CalledToPlay && status != CardStatus.DragToPlay then
 				(newTouched, order +: fill, elim)
 
-			else if state.hasConsistentInfs(thought) then
+			else if state.hasConsistentInfs(thought, game.me) then
 				(newTouched, fill, order +: elim)
 
 			else

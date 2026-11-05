@@ -66,7 +66,7 @@ def findKnownConn(ctx: ClueContext, id: Identity, finalId: Identity, ignore: Fas
 
 		val validKnown =
 			!ignore.contains(o) &&
-			game.state.deck(o).matches(id, assume = true) &&
+			game.state.deck(o).matches(id, assume = !game.common.thoughts(o).reset) &&
 			(common.thoughts(o).matches(id, infer = true) || asymmetricKnown) &&
 			!game.meta(o).hidden &&
 			!game.xmeta(o).fStatus.contains(FStatus.PossiblyOn(giver)) &&
@@ -154,16 +154,26 @@ def findKnownConn(ctx: ClueContext, id: Identity, finalId: Identity, ignore: Fas
 		return playLinked
 
 	val assumeKnown = state.hands(giver).findSome: o =>
+		// Maybe someone clued 2 to us and the giver knows their 1s must connect
 		val playLink = common.playLinks.find(pl => pl.orders.contains(o) && state.ourHand.contains(pl.target))
+
+		// Maybe someone clued a colour to us (in an omni variant) and the giver knows their 1 must connect
+		val waitingConn = game.waiting.find: wc =>
+			val giverConn = wc.connections.indexWhere(c => c.order == o && c.ids.length == 1 && c.ids.contains(id))
+
+			giverConn != -1 &&
+			wc.giver != giver &&
+			(wc.connections.drop(giverConn + 1).exists(_.reacting == state.ourPlayerIndex) || wc.target == state.ourPlayerIndex)
+
 		val play =
 			!ignore.contains(o) &&
 			state.deck(o).clued &&
-			playLink.isDefined &&
+			(playLink.isDefined || waitingConn.isDefined) &&
 			common.thoughts(o).inferred.contains(id) &&
 			state.deck(o).matches(id)
 
 		Option.when(play):
-			PlayableConn(giver, o, id, linked = playLink.get.orders)
+			PlayableConn(giver, o, id, linked = playLink.map(_.orders).getOrElse(Nil))
 
 	assumeKnown
 
@@ -614,14 +624,21 @@ def connect(ctx: ClueContext, id: Identity, looksDirect: Boolean, thinksStall: F
 	val initialOpts = ConnectOpts(assumeTruth = assumeTruth)
 
 	loop(game, state.playStacks(id.suitIndex) + 1, Nil, initialConnCtx, initialOpts).flatMap:
-		case (Left(conns), _) if conns.existsM { case _: KnownConn => true } =>
-			val newIgnore = ignore.incl(conns.collectFirst { case c: KnownConn => c.order }.get)
-			connect(ctx, id, looksDirect, thinksStall, ignoreKnown = newIgnore, findOwn = findOwn, assumeTruth = assumeTruth, preferOwn = preferOwn)
+		case (Left(conns), bluffed) =>
+			val truthConns =
+				if game.level >= Level.Bluffs && !assumeTruth && bluffed then
+					Log.highlight(Console.MAGENTA, "bluff connection failed, retrying true finesse")
+					connect(ctx, id, looksDirect, thinksStall, assumeTruth = true, findOwn = findOwn, ignoreKnown = ignore, preferOwn = preferOwn)
+				else
+					List.empty
 
-		case (Left(_), bluffed) if game.level >= Level.Bluffs && !assumeTruth && bluffed =>
-			// Log.highlight(Console.MAGENTA, "bluff connection failed, retrying true finesse")
-
-			connect(ctx, id, looksDirect, thinksStall, assumeTruth = true, findOwn = findOwn, ignoreKnown = ignore, preferOwn = preferOwn)
+			if truthConns.nonEmpty then
+				truthConns
+			else if conns.existsM { case _: KnownConn => true } then
+				val newIgnore = ignore.incl(conns.collectFirst { case c: KnownConn => c.order }.get)
+				connect(ctx, id, looksDirect, thinksStall, ignoreKnown = newIgnore, findOwn = findOwn, assumeTruth = assumeTruth, preferOwn = preferOwn)
+			else
+				List.empty
 
 		case (Right(conns), _) =>
 			val symmetric = !state.deck(focus).matches(id, assume = true) ||
@@ -644,8 +661,6 @@ def connect(ctx: ClueContext, id: Identity, looksDirect: Boolean, thinksStall: F
 
 			Log.info(s"found connections: ${state.logConns(finalizedConns, id)}${if symmetric then " (symmetric)" else ""}${if preferOwn then " (ambiguous)" else ""}")
 			Some(FocusPossibility(id, finalizedConns, ClueInterp.Play, symmetric, ambiguous = preferOwn))
-
-		case _ => List.empty
 
 /** Corrects 'possibly bluff' connections to true finesses if necessary. */
 def finalizeConns(conns: List[Connection], givenByUs: Boolean = false) =

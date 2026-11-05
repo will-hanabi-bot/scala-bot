@@ -426,3 +426,32 @@ class DistributionClues extends munit.FunSuite:
 
 		hasInfs(game, None, Cathy, 1, Vector("b4"))
 		assertEquals(game.lastMove, Some(ClueInterp.Distribution))
+
+	test("receives a distribution clue"):
+		val game = setup(HGroup.atLevel(8), Vector(
+			Vector("xx", "xx", "xx", "xx", "xx"),	// xx xx r5 b4 b5
+			Vector("p2", "b3", "r5", "b4", "b5"),
+			Vector("g2", "y4", "r4", "y1", "b1")
+		),
+			starting = Cathy,
+			playStacks = Some(Vector(4, 5, 5, 3, 5)),
+			discarded = Vector(
+				"r1", "r2", "r3",
+				"y1", "y2", "y3",
+				"g1",       "g3",
+				"b1", "b2",
+				"p1"
+			),	// Missing: r4, y1, g1, g4, b4, p1, p4
+			clueTokens = 1,
+			init = (game) =>
+				(fullyKnown[HGroup](Bob, 3, "r5") andThen
+				fullyKnown[HGroup](Bob, 4, "b4") andThen
+				fullyKnown[HGroup](Bob, 5, "b5"))(game)
+				.copy(inEarlyGame = false)
+		)
+		.tap: g =>
+			assertEquals(g.state.cardsLeft, 2)
+		.pipe(takeTurn("Cathy clues 4 to Alice (slot 1)"))
+
+		hasInfs(game, None, Alice, 1, Vector("b4"))
+		assertEquals(game.lastMove, Some(ClueInterp.Distribution))

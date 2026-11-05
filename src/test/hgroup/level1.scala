@@ -57,6 +57,32 @@ class General extends munit.FunSuite:
 		val (_, playables) = playablesResult(game, hypo)
 		assertEquals(playables.length, 1)
 
+	test("counts playables through a prompt correctly"):
+		val game = setup(HGroup.atLevel(11), Vector(
+			Vector("xx", "xx", "xx", "xx", "xx"),
+			Vector("b1", "y2", "y1", "y1", "r4"),
+			Vector("p3", "g1", "b3", "b4", "b5")
+		),
+			starting = Cathy,
+			playStacks = Some(Vector(4, 5, 5, 1, 5)),
+			discarded = Vector(
+				"r1", "r2",
+				            "y3", "y4",
+				"g1", "g2", "g3", "g4",
+				"b4",
+				"p1"
+			),
+			init =
+				preClue[HGroup](Cathy, 3, Seq("blue")) andThen
+				preClue[HGroup](Cathy, 4, Seq("blue")) andThen
+				preClue[HGroup](Cathy, 5, Seq("blue"))
+		)
+		.pipe(takeTurn("Cathy clues 2 to Alice (slots 1,3,4)"))
+		.pipe(takeTurn("Alice clues 4 to Cathy"))
+
+		// Somehow, having enough 2s visible causes playables to be counted incorrectly in some weird cases.
+		assertEquals(game.common.hypoPlays, FastBitSet(4, 10, 11, 12))
+
 	test("doesn't clue a duplicate of a commonly unknown play"):
 		val game = setup(HGroup.atLevel(1), Vector(
 			Vector("xx", "xx", "xx", "xx"),

@@ -15,9 +15,9 @@ import scala_bot.hgroup.{HGroup, Level}
 
 case class ChatMessage(
 	msg: String,
-	who: String,
+	who: String = "",
 	room: String,
-	recipient: String
+	recipient: Option[String] = None
 ) derives ReadWriter
 
 case class ChatList(list: Vector[ChatMessage]) derives ReadWriter
@@ -45,13 +45,37 @@ case class Table(
 	joined: Boolean,
 	running: Boolean,
 	variant: String,
-	options: TableOptions,
+	options: Option[TableOptions] = None,
 	sharedReplay: Boolean,
 	progress: Int,
 	players: Vector[String],
 	spectators: List[Spectator],
 	maxPlayers: Int
-) derives ReadWriter
+)
+
+object Table:
+	/** Manual reader implementation to handle differences in Table format between servers. */
+	given Reader[Table] = reader[ujson.Value].map: json =>
+		val obj = json.obj
+
+		Table(
+			obj("id").num.toInt,
+			obj("name").str,
+			obj("passwordProtected").bool,
+			obj("joined").bool,
+			obj("running").bool,
+			obj("variant").str,
+			obj.get("options").map(upickle.read[TableOptions](_)),
+			obj("sharedReplay").bool,
+			obj("progress").num.toInt,
+			obj("players").arr.toVector.map(_.str),
+			obj("spectators").arr.toList.map: spec =>
+				spec.objOpt match
+					case None => Spectator(spec.str, -1, "")
+					case _ => upickle.read[Spectator](spec)
+			,
+			obj("maxPlayers").numOpt.map(_.toInt).getOrElse(6)
+		)
 
 case class TableOptions(
 	numPlayers: Int,
@@ -394,7 +418,7 @@ class BotClient(queue: Queue[IO, String], gameRef: Ref[IO, Option[Game]], config
 			else
 				IO.unit
 
-		else if recipient != info.get.username then
+		else if recipient.exists(_ != info.get.username) then
 			return IO.unit
 
 		else if msg.startsWith("/join") then
@@ -579,21 +603,22 @@ class BotClient(queue: Queue[IO, String], gameRef: Ref[IO, Option[Game]], config
 		sendPM(who, "Commands: /analyze, /bugreport, /doc, /fastmode, /help, /join, /leave, /settings, /start, /stay, /terminate, /version. See https://github.com/will-hanabi-bot/scala-bot#supported-commands for more info.")
 
 	def checkSupportedSettings(table: Table): IO[Unit] =
-		val unsupportedOptions = List(
-			Option.when(table.options.emptyClues)("emptyClues"),
-			Option.when(table.options.detrimentalCharacters)("detrimentalChars"),
-			Option.when(table.options.oneExtraCard)("oneExtraCard"),
-			Option.when(table.options.oneLessCard)("oneLessCard"),
-		).flatten
+		table.options.fold(IO.unit): options =>
+			val unsupportedOptions = List(
+				Option.when(options.emptyClues)("emptyClues"),
+				Option.when(options.detrimentalCharacters)("detrimentalChars"),
+				Option.when(options.oneExtraCard)("oneExtraCard"),
+				Option.when(options.oneLessCard)("oneLessCard"),
+			).flatten
 
-		val unsupportedVarPattern = """Blind|Mute|Ambiguous|Dual-Color|Synesthesia|Mix|Funnels|Chimneys|Matryoshka|Alternating|Odds|Cow|Duck|Reversed|Throw|Up or Down|Sudoku""".r.unanchored
-		val unsupportedVariants = unsupportedVarPattern.matches(table.options.variantName)
+			val unsupportedVarPattern = """Blind|Mute|Ambiguous|Dual-Color|Synesthesia|Mix|Funnels|Chimneys|Matryoshka|Alternating|Odds|Cow|Duck|Reversed|Throw|Up or Down|Sudoku""".r.unanchored
+			val unsupportedVariants = unsupportedVarPattern.matches(options.variantName)
 
-		IO.whenA(unsupportedOptions.nonEmpty):
-			sendChat(s"This bot doesn't support the table ${if unsupportedOptions.length == 1 then "option" else "options"} ${unsupportedOptions.mkString(", ")} and may crash or behave nonsensically.")
-		*>
-		IO.whenA(unsupportedVariants):
-			sendChat(s"This bot doesn't support the variant ${table.options.variantName} and may crash or behave nonsensically.")
+			IO.whenA(unsupportedOptions.nonEmpty):
+				sendChat(s"This bot doesn't support the table ${if unsupportedOptions.length == 1 then "option" else "options"} ${unsupportedOptions.mkString(", ")} and may crash or behave nonsensically.")
+			*>
+			IO.whenA(unsupportedVariants):
+				sendChat(s"This bot doesn't support the variant ${options.variantName} and may crash or behave nonsensically.")
 
 	def sendPM(recipient: String, msg: String) =
 		queue.offer(s"chatPM ${ujson.Obj(
