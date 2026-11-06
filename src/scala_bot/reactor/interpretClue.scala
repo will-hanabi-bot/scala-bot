@@ -143,7 +143,7 @@ private def tryStable(prev: Reactor, game: Reactor, action: ClueAction, stall: B
 			val possibleConnections =
 				for
 					o      <- list if prev.state.deck(o).clued
-					thought = game.common.thoughts(o) if game.state.hasConsistentInfs(thought)
+					thought = game.common.thoughts(o) if game.state.hasConsistentInfs(thought, game.me)
 					id     <- thought.id() if state.playableAway(id) == 1
 				yield
 					id.prev.get
@@ -315,7 +315,7 @@ def badStable(prev: Reactor, game: Reactor, action: ClueAction, interp: ClueInte
 		return true
 
 	lazy val badPlayable = state.heldOrders.find: o =>
-		!state.hasConsistentInfs(game.common.thoughts(o)) && {
+		!state.hasConsistentInfs(game.common.thoughts(o), game.me) && {
 			game.gainedStatus(prev, o, CardStatus.CalledToPlay) ||
 			(game.gainedStatus(prev, o, CardStatus.DragToPlay) && !state.isInverted(o)) ||
 			(game.gainedStatus(prev, o, CardStatus.CalledToDiscard) && state.isInverted(o))
@@ -468,7 +468,7 @@ def targetPlay(game: Reactor, action: ClueAction, target: Int, urgent: Boolean, 
 	.withMeta(target):
 		_.reason(state.turnCount).signal(state.turnCount)
 	.pipe: g =>
-		if (newInferred.isEmpty || !state.hasConsistentInfs(g.common.thoughts(target))) && !state.deck(target).id().exists(state.isInverted) then
+		if (newInferred.isEmpty || !state.hasConsistentInfs(g.common.thoughts(target), g.me)) && !state.deck(target).id().exists(state.isInverted) then
 			Log.warn(s"target $target was reset!")
 
 			val newGame = g.withThought(target)(_.resetInferences())

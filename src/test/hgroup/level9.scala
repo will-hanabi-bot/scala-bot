@@ -134,6 +134,36 @@ class Stalling extends munit.FunSuite:
 		// Can't be LHS, since Donald can play r5.
 		hasInfs(game, None, Alice, 4, Vector("g1"))
 
+	test("interprets a stall when the giver thinks it's a stall"):
+		val game = setup(HGroup.atLevel(9), Vector(
+			Vector("xx", "xx", "xx", "xx", "xx"),
+			Vector("r3", "y3", "g3", "b3", "p4"),
+			Vector("r4", "y4", "g4", "b4", "p4")
+		),
+			starting = Bob,
+			clueTokens = 5
+		)
+		.pipe(takeTurn("Bob discards p4", "r5"))
+		.pipe(takeTurn("Cathy clues 5 to Bob"))
+
+		assertEquals(game.lastMove, Some(ClueInterp.Stall))
+
+	test("doesn't give a LHS when a 5 Stall is available, even in early game after a 5 Stall"):
+		val game = setup(HGroup.atLevel(9), Vector(
+			Vector("xx", "xx", "xx", "xx"),
+			Vector("r4", "y5", "g4", "b4"),
+			Vector("r5", "r1", "g3", "b3")
+		),
+			playStacks = Some(Vector(2, 0, 0, 0, 0)),
+			discarded = Vector("y4", "p4")
+		)
+		.pipe(takeTurn("Alice clues 5 to Bob"))		// 5 Stall
+		.pipe(takeTurn("Bob clues 4 to Alice (slots 3,4)"))
+		.pipe(takeTurn("Cathy clues 5 to Alice (slots 1,2)"))
+
+		// Alice must clue 5 to Cathy (as opposed to something like LHS with 3 to Cathy).
+		assertEquals(game.takeAction.unsafeRunSync(), PerformAction.Rank(Cathy.ordinal, 5))
+
 	test("interprets a finesse when a play clue is available"):
 		val game = setup(HGroup.atLevel(9), Vector(
 			Vector("xx", "xx", "xx", "xx"),

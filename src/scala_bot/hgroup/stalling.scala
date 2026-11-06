@@ -181,7 +181,9 @@ def alternativeClue(ctx: ClueContext, severity: Int, maxStall: Int) =
 
 				STALL_INDICES(interp) < maxStall && {
 					interp match
-						case StallInterp.Stall5 => hypo.level >= 2 && (!hypo.inEarlyGame || !hypo.stalled5)
+						case StallInterp.Stall5 =>
+							hypo.level >= 2 &&
+							!(hypo.inEarlyGame && hypo.stalled5 && severity <= 1)
 						case _ => true
 				}
 

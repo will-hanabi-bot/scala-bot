@@ -281,20 +281,11 @@ def urgentSave(ctx: ClueContext): Boolean =
 
 	loop(game.state, state.nextPlayerIndex(action.giver))
 
-def resolveClue(ctx: ClueContext, fps: Seq[FocusPossibility], symmetricInterp: SymmetricInterp, thinksStall: FastBitSet, ambiguousOwn: Seq[FocusPossibility] = Nil) =
+def resolveClue(ctx: ClueContext, fps: Seq[FocusPossibility], symmetricInterp: SymmetricInterp, looksDirect: Boolean, thinksStall: FastBitSet, ambiguousOwn: Seq[FocusPossibility] = Nil) =
 	val ClueContext(prev, game, action, _) = ctx
 	val state = game.state
 	val ClueAction(giver, target, _, clue) = action
 	val FocusResult(focus, chop, positional) = ctx.focusResult
-
-	val looksDirect = game.common.thoughts(focus).id(symmetric = true).isEmpty && {
-		positional.isDefined ||
-		fps.exists: fp =>
-			game.players(target).thoughts(focus).possible.contains(fp.id) &&
-			fp.connections.forall: c =>
-				(c.isInstanceOf[KnownConn] || (c.isInstanceOf[PlayableConn] && c.reacting != state.ourPlayerIndex)) &&
-				!game.isBlindPlaying(c.order)		// A blind-playing card is still unknown
-	}
 
 	val symmetricFps =
 		if target == state.ourPlayerIndex || fps.exists(_.save) then
@@ -342,7 +333,7 @@ def resolveClue(ctx: ClueContext, fps: Seq[FocusPossibility], symmetricInterp: S
 
 		// Simplest connections are all symmetric, but we could play into something more complicated
 		if giver != state.ourPlayerIndex && simplest.forall(_.symmetric) && fps.nonEmpty then
-			fps
+			(fps ++ simplest).distinct
 		else
 			simplest
 

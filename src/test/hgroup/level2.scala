@@ -1,7 +1,7 @@
 package tests.hgroup.level2
 
 import scala_bot.basics._
-import scala_bot.test.{Colour, hasInfs, hasStatus, Player, setup, takeTurn, TestVariant}, Player._
+import scala_bot.test.{Colour, hasInfs, hasStatus, Player, preClue, setup, takeTurn, TestVariant}, Player._
 import scala_bot.hgroup.HGroup
 
 import scala_bot.utils.{pipe, tap}
@@ -380,3 +380,17 @@ class General extends munit.FunSuite:
 
 		// Alice is not finessed for b1.
 		hasStatus(game, Alice, 1, CardStatus.None)
+
+	test("doesn't try to self-prompt colour clues"):
+		val game = setup(HGroup.atLevel(2), Vector(
+			Vector("xx", "xx", "xx", "xx", "xx"),
+			Vector("r1", "y3", "g3", "b3", "p3"),
+			Vector("r4", "y4", "g4", "b4", "p4")
+		),
+			starting = Cathy,
+			discarded = Vector("r1", "r1"),
+			init = preClue(Alice, 5, Seq("red"))
+		)
+		.pipe(takeTurn("Cathy clues red to Alice (slots 1,5)"))
+
+		hasInfs(game, None, Alice, 1, Vector("r1", "r2"))

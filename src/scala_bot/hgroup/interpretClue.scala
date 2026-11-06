@@ -188,10 +188,10 @@ def interpNormalClue(ctx: ClueContext, symmetricInterp: SymmetricInterp, thinksS
 	if savePoss.nonEmpty then
 		Log.info(s"found saves: [${savePoss.map(fp => state.logId(fp.id)).mkString(",")}]")
 
-	val focusPoss =
-		val looksDirect = common.thoughts(focus).id().isEmpty &&
-			(action.clue.kind == ClueKind.Colour || savePoss.nonEmpty || positional.isDefined)
+	val initialLooksDirect = common.thoughts(focus).id().isEmpty &&
+		(action.clue.kind == ClueKind.Colour || savePoss.nonEmpty || positional.isDefined)
 
+	val focusPoss =
 		common.thoughts(focus).inferred.filter: inf =>
 			!prev.invalidFocus(giver, clue, inf, ctx.focusResult) &&
 			!state.heldOrders.exists: o =>
@@ -204,7 +204,7 @@ def interpNormalClue(ctx: ClueContext, symmetricInterp: SymmetricInterp, thinksS
 			&&
 			!savePoss.exists(_.id == inf)
 		.flatMap:
-			connect(ctx, _, looksDirect, thinksStall)
+			connect(ctx, _, initialLooksDirect, thinksStall)
 
 	val simplest =
 		val possible = (savePoss ++ focusPoss)
@@ -229,13 +229,13 @@ def interpNormalClue(ctx: ClueContext, symmetricInterp: SymmetricInterp, thinksS
 					game.withMove(ClueInterp.Mistake)
 			else
 				Log.info(s"simplest focus possibilities [${simplest.map(fp => state.logId(fp.id)).mkString(",")}]")
-				resolveClue(ctx, simplest, symmetricInterp, thinksStall)
+				resolveClue(ctx, simplest, symmetricInterp, initialLooksDirect, thinksStall)
 		else
 			Log.highlight(Console.YELLOW, s"finding own!")
 
-			val ownFps =
-				val looksDirect = game.players(target).thoughts(focus).id().isEmpty && {
-					// clue.kind == ClueKind.Colour ||
+			val looksDirect = game.players(target).thoughts(focus).id().isEmpty &&
+				simplest.nonEmpty && {
+					clue.kind == ClueKind.Colour ||
 					positional.isDefined ||
 					savePoss.nonEmpty ||
 					// Looks like an existing possibility
@@ -246,13 +246,15 @@ def interpNormalClue(ctx: ClueContext, symmetricInterp: SymmetricInterp, thinksS
 							!game.isBlindPlaying(c.order)		// A blind-playing card is still unknown
 				}
 
+			val ownFps =
 				common.thoughts(focus).inferred.filter: inf =>
 					!game.invalidFocus(giver, clue, inf, ctx.focusResult) &&
 					!(savePoss.exists(_.id == inf) || simplest.exists(_.id == inf))
 				.flatMap:
 					connect(ctx, _, looksDirect, thinksStall, findOwn = Some(state.ourPlayerIndex))
 
-			val simplestOwn = occamsRazor(ctx, filterFps(ctx, simplest ++ ownFps), state.ourPlayerIndex, actualId = game.me.thoughts(focus).id())
+			val filtered = filterFps(ctx, simplest ++ ownFps)
+			val simplestOwn = occamsRazor(ctx, filtered, state.ourPlayerIndex, actualId = game.me.thoughts(focus).id())
 
 			if simplestOwn.isEmpty then
 				Log.warn("no inferences!")
@@ -299,11 +301,11 @@ def interpNormalClue(ctx: ClueContext, symmetricInterp: SymmetricInterp, thinksS
 						game.withMove(ClueInterp.Mistake)
 					else
 						Log.info(s"simplest focus possibilities [${newSimplest.map(fp => state.logId(fp.id)).mkString(",")}]")
-						resolveClue(newCtx, newSimplest, symmetricInterp, thinksStall)
+						resolveClue(newCtx, newSimplest, symmetricInterp, looksDirect, thinksStall)
 				else
 					game.withMove(ClueInterp.Mistake)
 			else
-				resolveClue(ctx, simplestOwn, symmetricInterp, thinksStall, ambiguousOwn = if savePoss.nonEmpty then Nil else ownFps.filter(fp => !simplestOwn.contains(fp) && !fp.symmetric))
+				resolveClue(ctx, simplestOwn, symmetricInterp, looksDirect, thinksStall, ambiguousOwn = if savePoss.nonEmpty then Nil else ownFps.filter(fp => filtered.contains(fp) && !simplestOwn.contains(fp) && !fp.symmetric))
 	}
 	.when(g => g.lastMove != Some(ClueInterp.Mistake) && g.level >= Level.TempoClues && state.numPlayers > 2): g =>
 		val newCtx = ctx.copy(game = g)

@@ -926,7 +926,7 @@ object HGroup:
 			Log.info(s"ptd? ${game.chop(state.ourPlayerIndex).map(game.meta(_).status)}")
 
 			val solveEndgame =
-				if state.cardsLeft <= 2 || (state.remScore <= state.variant.suits.length + 1 && state.pace + state.cardsLeft <= 7) then
+				if state.cardsLeft <= 3 || (state.remScore <= state.variant.suits.length + 1 && state.pace + state.cardsLeft <= 7) then
 					IO.blocking:
 						Log.highlight(Console.MAGENTA, "trying to solve endgame...")
 

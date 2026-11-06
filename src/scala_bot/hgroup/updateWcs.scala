@@ -357,7 +357,7 @@ def resolveRetained(prev: HGroup, game: HGroup, action: Action, wc: WaitingConne
 		Log.info(s"$name didn't play into unplayable ${wc.currConn.kind}: ${unplayableWcs.map(w => s"${state.logId(w.inference)} ${w.connections.find(_.ids.exists(i => state.isUseful(i) && !prev.state.isPlayable(i))).map(_.ids.map(state.logId))}")}")
 		return UpdateResult.Keep
 
-	val hiddenWc = game.waiting.find: wc =>
+	val hiddenWc = if wc.currConn.isBluff then None else game.waiting.find: wc =>
 		// This is a hidden connection that is not currently revealed
 		wc.connections.nonEmpty && wc.connections.tail.exists(c => c.order == connOrder && c.hidden)
 

@@ -61,6 +61,35 @@ def filterFps(ctx: ClueContext, fps: Seq[FocusPossibility]) =
 			||
 			// There is an extra self-finesse required from us (we may not have that card)
 			!fp.ambiguous && selfFinesses(trueFp) > 0 && selfFinesses(fp) > selfFinesses(trueFp)
+	.pipe(filterDominated(ctx, _))
+
+def filterDominated(ctx: ClueContext, fps: Seq[FocusPossibility]) =
+	val ClueContext(_, game, action, _) = ctx
+	val state = game.state
+
+	fps.filterNot: fp =>
+		// Log.info(s"checking ${state.logConns(fp.connections, fp.id)}")
+
+		val nextSelfConn = fp.connections.zipWithIndex.find: (c, _) =>
+			c.reacting == action.target && !(c.isInstanceOf[KnownConn] || c.isInstanceOf[PlayableConn])
+
+		val dominated = nextSelfConn match
+			case Some(f: FinesseConn, index) if f.reacting == action.target =>
+				fps.find: fp2 =>
+					fp != fp2 &&
+					!fp2.symmetric &&
+					fp2.connections.length == index &&
+					// All of the other connections exist in this focus possibility before the self-connection
+					fp2.connections.zipWithIndex.forall: (c, i) =>
+						val c2 = fp.connections(i)
+						c2.order == c.order// && c.ids.forall(c2.ids.contains)
+			case _ => None
+
+		dominated match
+			case Some(d) => Log.highlight(Console.CYAN, s"excluding ${state.logConns(fp.connections, fp.id)} due to strictly simpler possibility ${state.logConns(d.connections, d.id)}!")
+			case None => ()
+
+		dominated.isDefined
 
 def occamsRazor(ctx: ClueContext, fps: Seq[FocusPossibility], playerIndex: Int, actualId: Option[Identity] = None) =
 	val ClueContext(_, game, action, _) = ctx
@@ -98,27 +127,4 @@ def occamsRazor(ctx: ClueContext, fps: Seq[FocusPossibility], playerIndex: Int, 
 
 		simplest ++ sameSelfStart.map(_.copy(complicated = true))
 
-	.pipe: simplest =>
-		simplest.filterNot: fp =>
-			// Log.info(s"checking ${state.logConns(fp.connections, fp.id)}")
-
-			val nextSelfConn = fp.connections.zipWithIndex.find: (c, _) =>
-				c.reacting == action.target && !(c.isInstanceOf[KnownConn] || c.isInstanceOf[PlayableConn])
-
-			val dominated = nextSelfConn match
-				case Some(f: FinesseConn, index) if f.reacting == action.target =>
-					fps.find: fp2 =>
-						fp != fp2 &&
-						!fp2.symmetric &&
-						fp2.connections.length == index &&
-						// All of the other connections exist in this focus possibility before the self-connection
-						fp2.connections.zipWithIndex.forall: (c, i) =>
-							val c2 = fp.connections(i)
-							c2.order == c.order// && c.ids.forall(c2.ids.contains)
-				case _ => None
-
-			dominated match
-				case Some(d) => Log.highlight(Console.CYAN, s"excluding ${state.logConns(fp.connections, fp.id)} due to strictly simpler possibility ${state.logConns(d.connections, d.id)}!")
-				case None => ()
-
-			dominated.isDefined
+	.pipe(filterDominated(ctx, _))
