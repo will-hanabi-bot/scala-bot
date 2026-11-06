@@ -58,7 +58,7 @@ def interpretTransfer(ctx: DiscardContext, holder: Int, dupe: Option[Int]): (Dis
 				val hypoState = hypoGame.state
 				(if inverted then hypoGame.chop(holder) else hypoGame.findGD(holder, connected)).flatMap: f =>
 					val finesseId =
-						val futureIds = if inverted then game.future(f) else game.future(f).intersect(hypoGame.state.playableSet)
+						val futureIds = if inverted then game.future(f) else game.future(f).intersect(hypoGame.state.playableSet.union(hypoGame.state.allIds.filter(state.isInverted)))
 
 						if futureIds.length == 1 then
 							Some(futureIds.head)
@@ -68,6 +68,12 @@ def interpretTransfer(ctx: DiscardContext, holder: Int, dupe: Option[Int]): (Dis
 					finesseId match
 						case None => Some(List(f))
 						case Some(i) if i.matches(id) => Some(List(f))
+						case Some(i) if !inverted && state.isInverted(i) =>
+							// A gentleman's discard can be layered through any orange card: discarding it gets the "land mine" out of the game early
+							val nextState = hypoState.withDiscard(i, f).copy(hands = hypoState.hands.updated(holder, hypoState.hands(holder).filter(_ != f)))
+
+							findGD(hypoGame.copy(state = nextState), connected.incl(f)).map: rest =>
+								f +: rest
 						case Some(i) if (if inverted ^ state.isInverted(i) then hypoState.isBasicTrash(i) else hypoState.isPlayable(i)) =>
 							val nextState =
 								if inverted then
