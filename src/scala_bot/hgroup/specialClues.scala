@@ -8,14 +8,26 @@ import scala_bot.logger.Log
 
 import SpecialClueResult._
 
+def isIntermediateBluffTarget(prev: HGroup, game: HGroup, action: ClueAction, id: Identity, focus: Int): Boolean =
+	val state = game.state
+	val clue = action.clue
+
+	game.level >= Level.IntermediateBluffs && (
+		id.rank == 3 ||
+		(clue.kind == ClueKind.Colour && !prev.state.deck(focus).clued && id.rank != 5 && state.isCritical(id))
+	)
+
 def validBluff(game: HGroup, action: ClueAction, blind: Identity, reacting: Int, connected: FastBitSet, symmetric: Boolean = false) =
 	val state = game.state
 	val ClueAction(giver, target, _, clue) = action
 	val focus = connected.head
 
 	lazy val disconnect = symmetric ||
-		(clue.kind == ClueKind.Rank && clue.value != blind.rank + 1) ||
-		blind.next.forall(!game.common.thoughts(focus).possible.contains(_))
+		(if clue.kind == ClueKind.Rank then
+			clue.value != blind.rank + 1 ||
+			blind.next.forall(!game.common.thoughts(focus).possible.contains(_))
+		else
+			!game.common.thoughts(focus).possible.exists(i => i.suitIndex == blind.suitIndex && i.rank > blind.rank))
 
 	val interferes = state.hands(reacting).find: o =>
 		// game.players(reacting).thoughts(o).possible.contains(truth) &&	// any f/gd should block a bluff
