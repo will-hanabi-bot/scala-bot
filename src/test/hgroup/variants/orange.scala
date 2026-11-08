@@ -414,3 +414,21 @@ class Orange extends munit.FunSuite:
 
 		// Alice doesn't have o5 in slot 1.
 		hasStatus(game, Alice, 5, CardStatus.ChopMoved)
+
+	test("layers a gentleman's discard through an orange card"):
+		val game = setup(HGroup.atLevel(11), Vector(
+			Vector("xx", "xx", "xx", "xx", "xx"),
+			Vector("r3", "b4", "b4", "y4", "g4"),
+			Vector("g4", "y4", "r4", "y2", "y3")
+		),
+			variant = TestVariant.Orange5,
+			playStacks = Some(Vector(2, 0, 0, 0, 0)),
+			clueTokens = 4
+		)
+		.pipe(takeTurn("Alice clues 3 to Bob"))
+		.pipe(takeTurn("Bob discards r3", "b5"))		// r3 is on Alice's finesse position
+		.pipe(takeTurn("Cathy discards y3", "g3"))
+		.pipe(takeTurn("Alice discards o3 (slot 1)"))	// It is really the orange 3, so the r3 is behind it.
+
+		hasStatus(game, Alice, 2, CardStatus.GentlemansDiscard)
+		hasInfs(game, None, Alice, 2, Vector("r3"))

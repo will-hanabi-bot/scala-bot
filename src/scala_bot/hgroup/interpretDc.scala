@@ -56,9 +56,16 @@ def interpretTransfer(ctx: DiscardContext, holder: Int, dupe: Option[Int]): (Dis
 		else if state.isPlayable(id) || (prev.common.hypoPlays.contains(order) && !game.common.thoughts(order).reset) || prev.common.orderPlayable(prev, order) then
 			def findGD(hypoGame: HGroup, connected: FastBitSet): Option[List[Int]] =
 				val hypoState = hypoGame.state
+
+				/** Whether discarding this card (instead of playing it) is plausible: it is trash, or another copy is visible or inferred. */
+				def possibleTrash(i: Identity, f: Int) =
+					hypoState.isBasicTrash(i) ||
+					visibleFind(hypoState, hypoGame.me, i, infer = true, excludeOrder = f).nonEmpty ||
+					hypoState.ourHand.exists(hypoGame.me.thoughts(_).inferred.contains(i))
+
 				(if inverted then hypoGame.chop(holder) else hypoGame.findGD(holder, connected)).flatMap: f =>
 					val finesseId =
-						val futureIds = if inverted then game.future(f) else game.future(f).intersect(hypoGame.state.playableSet)
+						val futureIds = if inverted then game.future(f) else game.future(f).intersect(hypoGame.state.playableSet.union(state.allIds.filter(state.isInverted)))
 
 						if futureIds.length == 1 then
 							Some(futureIds.head)
@@ -68,9 +75,9 @@ def interpretTransfer(ctx: DiscardContext, holder: Int, dupe: Option[Int]): (Dis
 					finesseId match
 						case None => Some(List(f))
 						case Some(i) if i.matches(id) => Some(List(f))
-						case Some(i) if (if inverted ^ state.isInverted(i) then hypoState.isBasicTrash(i) else hypoState.isPlayable(i)) =>
+						case Some(i) if (if inverted ^ state.isInverted(i) then possibleTrash(i, f) else hypoState.isPlayable(i)) =>
 							val nextState =
-								if inverted then
+								if inverted ^ state.isInverted(i) then
 									hypoState.withDiscard(i, f).copy(hands = hypoState.hands.updated(holder, hypoState.hands(holder).filter(_ != f)))
 								else
 									hypoState.withPlay(i)

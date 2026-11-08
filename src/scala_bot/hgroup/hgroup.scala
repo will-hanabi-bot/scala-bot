@@ -805,7 +805,10 @@ object HGroup:
 
 			val updatedGame = game.refreshUncertain.elim()
 
-			val reinterp = failed || prev.common.thoughts(order).possibilities.forall(prev.state.isInverted)
+			val reinterp = failed ||
+				prev.common.thoughts(order).possibilities.forall(prev.state.isInverted) ||
+				// An orange card discarded where a gentleman's discard promised another card: it was a layer
+				(prev.meta(order).status == CardStatus.GentlemansDiscard && suitIndex != -1 && rank != -1 && prev.state.isInverted(Identity(suitIndex, rank)))
 			val reinterpGame = if reinterp then updatedGame.reinterpPlay(prev, action) else None
 
 			if reinterpGame.isDefined then
