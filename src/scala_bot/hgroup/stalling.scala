@@ -127,11 +127,10 @@ def alternativeClue(ctx: ClueContext, severity: Int, maxStall: Int) =
 
 	var foundFPE: Option[Identity] = None
 
-	def satisfied(hypo: HGroup, hypoAction: ClueAction) =
+	def satisfied(hypo: HGroup, hypoAction: ClueAction, focus: Int) =
 		val (badTouch, _, _) = badTouchResult(game, hypo, hypoAction)
 		val (_, playables) = playablesResult(game, hypo)
 
-		val focus = game.determineFocus(game, hypoAction).focus
 		val focusId = state.deck(focus).id().get
 
 		hypo.lastMove.get.matchesP:
@@ -205,9 +204,9 @@ def alternativeClue(ctx: ClueContext, severity: Int, maxStall: Int) =
 				clue   <- state.allValidClues(target) if clue != origClue
 				list = prev.state.clueTouched(prev.state.hands(target), clue)
 				action = ClueAction(giver, target, list, clue.base)
-				focus = prev.determineFocus(prev, action).focus if focus != origFocus && !prev.isTouched(focus)
+				focus = prev.determineFocus(prev, action).focus if focus != origFocus && !prev.isTouched(focus) && state.deck(focus).id().isDefined
 				hypo = prev.copy(allowFindOwn = false, noRecurse = true, assumePlays = false)
-					.simulateClue(action) if satisfied(hypo, action)
+					.simulateClue(action) if satisfied(hypo, action, focus)
 			yield
 				Log.info(s"found alt clue ${clue.fmt(state)} ${hypo.lastMove.get}")
 				val newWCs = hypo.waiting.filter: wc =>

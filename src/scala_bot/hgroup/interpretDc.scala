@@ -312,9 +312,6 @@ private def checkSdcm(prev: HGroup, game: Game, action: DiscardAction): Option[D
 	val bob = state.nextPlayerIndex(playerIndex)
 	val cathy = state.nextPlayerIndex(bob)
 
-	if common.thinksLocked(prev, bob) && state.clueTokens == 0 then
-		return None
-
 	val chop = prev.chop(playerIndex)
 
 	val scream =
@@ -334,10 +331,22 @@ private def checkSdcm(prev: HGroup, game: Game, action: DiscardAction): Option[D
 		prev.me.thinksPlayables(prev, playerIndex).exists(_ != order) &&
 		game.me.thinksPlayables(game, playerIndex).nonEmpty 	// still needs to be playable
 
-	Option.when(scream || shout):
-		val result = if scream then DcStatus.Scream else DcStatus.Shout
+	val ocm = prev.level >= Level.TrashMoves &&
+		common.thinksTrash(prev, playerIndex).indexOf(order) > 0 && (
+			shout ||
+			(state.deck(order).clued && common.thinksPlayables(prev, playerIndex).isEmpty)
+		)
 
-		if state.numPlayers == 2 then
+	if common.thinksLocked(prev, bob) && state.clueTokens == 0 && !ocm then
+		return None
+
+	Option.when(scream || shout || ocm):
+		val result =
+			if scream then DcStatus.Scream
+			else if shout then DcStatus.Shout
+			else DcStatus.None
+
+		if ocm || state.numPlayers == 2 then
 			result
 		// else if state.clueTokens == 0 && common.thinksLoaded(prev, bob) then
 		// 	Log.warn(s"${state.names(playerIndex)} discarded with a playable/kt but next player was safe! (echo?)")
@@ -360,13 +369,21 @@ def interpretSdcm(ctx: DiscardContext): Option[HGroup] =
 		return None
 
 	val bob = state.nextPlayerIndex(action.playerIndex)
-	val bobChop = game.chop(bob)
 
 	checkSdcm(prev, game, action).flatMap: status =>
+		val index = prev.common.thinksTrash(prev, action.playerIndex).indexOf(action.order)
+		val offset =
+			if game.level >= Level.TrashMoves && status != DcStatus.Scream && status != DcStatus.Generation && index != -1 then
+				index + (if status == DcStatus.None then 0 else 1)
+			else
+				1
+		val target = (action.playerIndex + offset) % state.numPlayers
+		val targetChop = game.chop(target)
+
 		if game.level < Level.LastResorts then
 			// Only allow generation and screaming for criticals when out-of-level
 			val mistake = status.matchesP:
-				case DcStatus.Scream => bobChop.flatMap(state.deck(_).id()).exists(!state.isCritical(_))
+				case DcStatus.Scream => targetChop.flatMap(state.deck(_).id()).exists(!state.isCritical(_))
 				case DcStatus.Shout => true
 
 			if mistake then
@@ -376,8 +393,8 @@ def interpretSdcm(ctx: DiscardContext): Option[HGroup] =
 				Log.warn(s"interpreted out-of-level ${status.toString().toLowerCase()} in an emergency!")
 				None
 
-		else if (status == DcStatus.Scream || status == DcStatus.Shout) && bobChop.isEmpty then
-			Log.warn(s"interpreted scream/shout but ${state.names(bob)} has no chop! interpreting mistake")
+		else if target == action.playerIndex || (status != DcStatus.Generation && targetChop.isEmpty) then
+			Log.warn(s"interpreted scream/shout/tocm but ${state.names(target)} has no chop! interpreting mistake")
 			Some:
 				game.copy(dcStatus = DcStatus.None)
 					.checkDDA(action.playerIndex, Identity(action.suitIndex, action.rank))
@@ -393,22 +410,24 @@ def interpretSdcm(ctx: DiscardContext): Option[HGroup] =
 						.withMove(DiscardInterp.Mistake)
 
 		else
-			val bobChopId = bobChop.flatMap(state.deck(_).id())
-			val mistake = bobChopId.exists: i =>
-				(!state.isInverted(i) && state.hands(bob).exists(o => bobChop.get != o && state.deck(o).matches(i))) ||		// duped in same hand
-				(state.isInverted(i) && state.isPlayable(i)) || {				// playable orange
-					!(state.isInverted(i) && !state.isPlayable(i)) &&			// allow screaming for unplayable orage
-					status.matchesP:
-						case DcStatus.Scream =>
+			val targetChopId = targetChop.flatMap(state.deck(_).id())
+			val mistake =
+				((status == DcStatus.None || offset > 1) && game.common.thinksLoaded(prev, target)) ||
+				targetChopId.exists: i =>
+					(!state.isInverted(i) && state.hands(target).exists(o => targetChop.get != o && state.deck(o).matches(i))) ||		// duped in same hand
+					(state.isInverted(i) && state.isPlayable(i)) || {				// playable orange
+						!(state.isInverted(i) && !state.isPlayable(i)) &&			// allow screaming for unplayable orage
+						(if status == DcStatus.Scream || status == DcStatus.None || offset > 1 then
 							prev.common.hypoStacks(i.suitIndex) + 1 != i.rank &&
 							!state.isCritical(i)
-
-						case DcStatus.Shout =>
+						else if status == DcStatus.Shout then
 							state.isBasicTrash(i)
-				}
+						else
+							false)
+					}
 
 			if mistake then
-				Log.warn(s"interpreted ${status.toString().toLowerCase()} but ${state.names(bob)}'s chop isn't worth saving!")
+				Log.warn(s"interpreted ${status.toString().toLowerCase()} but ${state.names(target)}'s chop isn't worth saving!")
 			else
 				Log.info(s"interpreting ${status.toString().toLowerCase()}!")
 
@@ -417,7 +436,7 @@ def interpretSdcm(ctx: DiscardContext): Option[HGroup] =
 					.checkDDA(action.playerIndex, Identity(action.suitIndex, action.rank))
 					.withMove(if mistake then DiscardInterp.Mistake else DiscardInterp.Emergency)
 					.when(_ => status != DcStatus.Generation): h =>
-						h.withMeta(bobChop.get)(_.copy(status = CardStatus.ChopMoved))
+						h.withMeta(targetChop.get)(_.copy(status = CardStatus.ChopMoved))
 
 private def playablePoss(game: HGroup, playerIndex: Int, discarder: Int) =
 	val state = game.state

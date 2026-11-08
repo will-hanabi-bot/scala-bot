@@ -255,7 +255,7 @@ def interpSpecialClue(ctx: ClueContext): SpecialClueResult =
 						game.state.isBasicTrash(Identity(suitIndex, clue.value))
 				)
 			.withMove:
-				if giver == state.ourPlayerIndex && !game.me.isTrash(game, state.deck(focus).id().get, focus) then
+				if giver == state.ourPlayerIndex && !state.deck(focus).id().exists(game.me.isTrash(game, _, focus)) then
 					ClueInterp.Mistake
 				else
 					ClueInterp.Fix
