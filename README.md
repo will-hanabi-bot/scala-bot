@@ -21,7 +21,7 @@ Send a PM to the bot on hanab.live (`/pm <HANABI_USERNAME> <message>`) to intera
 - `/rejoin` to rejoin a game that has already started, if it had disconnected.
 - `/leave` to kick the bot from your table.
 - `/settings [convention]` to modify the convention set. For example, `/settings HGroup11` sets the bot to H-Group level 11.
-	- Supported conventions: `RefSieve`, `Reactor1`, `HGroup[1-12]`
+	- Supported conventions: `RefSieve`, `Reactor1`, `HGroup[1-13]`
 - `/analyze <replayId> <convention>` to provide a list of potential mistakes and suggested actions in the given replay.
 - `/fastmode` toggles whether the bot plays with a human-like delay (default) or no delay at all.
 - `/start` starts a table. The bot must be the leader of the table.
