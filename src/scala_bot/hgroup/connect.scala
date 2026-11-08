@@ -336,12 +336,13 @@ def findUnknownConnecting(ctx: ClueContext, reacting: Int, id: Identity, connect
 				// Log.warn(s"future knowledge of ${finesse.get} is [${game.future(finesse.get).fmt(state)}], but all unplayable!")
 				None
 			else
-				val fKind = if futureIds.isExactly(id) then
-					FinesseKind.True
-				else if opts.assumeTruth || !futureIds.exists(validBluff(game, action, _, reacting, connected)) then
-					FinesseKind.Hidden
-				else
-					FinesseKind.Bluff
+				val fKind =
+					if !opts.assumeTruth && futureIds.exists(validBluff(game, action, _, reacting, connected)) then
+						FinesseKind.Bluff
+					else if futureIds.isExactly(id) then
+						FinesseKind.True
+					else
+						FinesseKind.Hidden
 
 				Some(FinesseConn(reacting, finesse.get, futureIds.toList, fKind, inverted = inverted))
 
@@ -613,7 +614,10 @@ def connect(ctx: ClueContext, id: Identity, looksDirect: Boolean, thinksStall: F
 					insertingInto = opts.insertingInto.orElse(conns.collectFirst { case c: PlayableConn if c.insertingInto.isDefined => c.insertingInto.get })
 				)
 
-				loop(newGame, nextRank + 1, connections ++ conns, newConnCtx, newOpts)
+				if connections.isEmpty && ignoreKnown.isEmpty && conns.exists(_.isPossiblyBluff) && isIntermediateBluffTarget(prev, game, action, id, focus) then
+					List((Right(conns), true))
+				else
+					loop(newGame, nextRank + 1, connections ++ conns, newConnCtx, newOpts)
 
 	val ignore =
 		// Assume mud clues aren't selfish
