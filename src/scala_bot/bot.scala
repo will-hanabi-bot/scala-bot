@@ -139,7 +139,7 @@ object main extends IOApp:
 							.send(backend)
 						cookie = response.headers.find(_.name == "set-cookie").map(_.value).getOrElse(throw new Exception(s"No cookie found ${response.headers}"))
 						_ <- basicRequest
-							.get(uri"${if useSSL then "wss" else "ws"}://${HOSTNAME}${if CUSTOM_PORT then s":${PORT}" else ""}/ws")
+							.get(uri"${if useSSL then "wss" else "ws"}://${HOSTNAME}${if CUSTOM_PORT then s":${PORT}" else ""}/ws?version=bot")
 							.response(asWebSocket(useWebSocketWithReset))
 							.header("Cookie", cookie)
 							.send(backend)
