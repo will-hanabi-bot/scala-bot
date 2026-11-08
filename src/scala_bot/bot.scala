@@ -121,6 +121,7 @@ object main extends IOApp:
 
 		val useSSL = env.getOrElse("SSL_DISABLED", "1") == "1"
 		val HOSTNAME = env.getOrElse("HANABI_HOSTNAME", "hanab.live")
+		val HANABI_VERSION = env.getOrElse("HANABI_VERSION", "60ad452ff0c9f8a2d8d8e24d2232cf7c92f7688c")
 		val PORT = env.lift("HANABI_PORT") match
 			case Some(port) => port.toInt
 			case None => if useSSL then 443 else 80
@@ -139,7 +140,7 @@ object main extends IOApp:
 							.send(backend)
 						cookie = response.headers.find(_.name == "set-cookie").map(_.value).getOrElse(throw new Exception(s"No cookie found ${response.headers}"))
 						_ <- basicRequest
-							.get(uri"${if useSSL then "wss" else "ws"}://${HOSTNAME}${if CUSTOM_PORT then s":${PORT}" else ""}/ws")
+							.get(uri"${if useSSL then "wss" else "ws"}://${HOSTNAME}${if CUSTOM_PORT then s":${PORT}" else ""}/ws?version=${HANABI_VERSION}")
 							.response(asWebSocket(useWebSocketWithReset))
 							.header("Cookie", cookie)
 							.send(backend)

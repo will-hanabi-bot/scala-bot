@@ -35,7 +35,6 @@ object GameActionMessage:
 case class Spectator(
 	name: String,
 	shadowingPlayerIndex: Int,
-	shadowingPlayerUsername: String
 ) derives ReadWriter
 
 case class Table(
@@ -71,7 +70,7 @@ object Table:
 			obj("players").arr.toVector.map(_.str),
 			obj("spectators").arr.toList.map: spec =>
 				spec.objOpt match
-					case None => Spectator(spec.str, -1, "")
+					case None => Spectator(spec.str, -1)
 					case _ => upickle.read[Spectator](spec)
 			,
 			obj("maxPlayers").numOpt.map(_.toInt).getOrElse(6)
@@ -102,7 +101,6 @@ case class SelfData(
 	userID: Int,
 	username: String,
 	playingAtTables: List[Int],
-	randomTableName: String
 ) derives ReadWriter
 
 case class GameActionListMessage(
