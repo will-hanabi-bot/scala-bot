@@ -117,7 +117,7 @@ object main extends IOApp:
 				_        <- (console.join, receive(client), senderLoop(wsQueue), heartbeat).parTupled
 			yield ()
 
-		val maxRetries = 5
+		val maxRetries = 8
 
 		val useSSL = env.getOrElse("SSL_DISABLED", "1") == "1"
 		val HOSTNAME = env.getOrElse("HANABI_HOSTNAME", "hanab.live")
@@ -137,12 +137,16 @@ object main extends IOApp:
 							.header("Content-Type", "application/x-www-form-urlencoded")
 							.body(Map("username" -> username, "password" -> password, "version" -> "bot"))
 							.send(backend)
-						cookie = response.headers.find(_.name == "set-cookie").map(_.value).getOrElse(throw new Exception(s"No cookie found ${response.headers}"))
+						_ <- IO.whenA(response.cookies.forall(_.isLeft)):
+								IO.raiseError(new Exception(s"No cookie found ${response.headers}"))
 						_ <- basicRequest
 							.get(uri"${if useSSL then "wss" else "ws"}://${HOSTNAME}${if CUSTOM_PORT then s":${PORT}" else ""}/ws?version=bot")
 							.response(asWebSocket(useWebSocketWithReset))
-							.header("Cookie", cookie)
+							.cookies(response)
 							.send(backend)
+						_ <- response.body match
+							case Left(body) => IO.raiseError(new IOException(s"WebSocket upgrade failed (${response.code}): $body"))
+							case Right(_) => IO.unit
 					yield ()
 
 					attempt.handleErrorWith:
