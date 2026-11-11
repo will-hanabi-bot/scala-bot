@@ -37,6 +37,8 @@ case class Table(
 	def running = phase == "playing"
 	def sharedReplay = phase == "sharedReplay"
 
+case class TableList(tables: List[Table]) derives Reader
+
 case class TableOptions(
 	variantName: String = "No Variant",
 	deckPlays: Boolean = false,
@@ -46,10 +48,12 @@ case class TableOptions(
 	oneLessCard: Boolean = false
 ) derives Reader
 
+case class ViewMode(ourPlayerIndex: Int = 0) derives Reader
+
 case class InitMessage(
 	tableId: Int,
 	playerNames: Vector[String],
-	ourPlayerIndex: Int,
+	mode: ViewMode,
 	options: TableOptions = TableOptions()
 ) derives Reader
 
@@ -69,7 +73,9 @@ object GameEventListMessage:
 			json.obj("events").arr.flatMap(Action.fromJSON).toSeq
 		)
 
-case class NoteListPlayerMessage(tableId: Int, notes: Vector[String]) derives Reader
+case class PlayerNotes(username: String = "", notes: Vector[String]) derives Reader
+
+case class NoteListMessage(tableId: Int, notes: Vector[PlayerNotes]) derives Reader
 
 case class BotConfig(
 	leaveReplayIfOnlyBots: Boolean = true,
@@ -102,7 +108,7 @@ class BotClient(queue: Queue[IO, String], gameRef: Ref[IO, Option[Game]], config
 			case Convention.RefSieve => RefSieve(tID, state, inProgress = true)
 			case Convention.HGroup(level) => HGroup(tID, state, inProgress = true, level = level)
 
-	private def writeInfoNote(msg: NoteListPlayerMessage, game: Game, convention: Convention): (IO[Unit], Game) =
+	private def writeInfoNote(tableId: Int, notes: Vector[String], game: Game, convention: Convention): (IO[Unit], Game) =
 		def addInfoNote(game: Game, note: String): Game =
 			game match
 				case r: Reactor => r.copy(notes = r.notes + (0 -> Note(0, note, note)))
@@ -110,8 +116,8 @@ class BotClient(queue: Queue[IO, String], gameRef: Ref[IO, Option[Game]], config
 				case h: HGroup => h.copy(notes = h.notes + (0 -> Note(0, note, note)))
 
 		val noteStr = infoNote(convention)
-		if !game.notes.contains(0) && game.inProgress && msg.notes.headOption.getOrElse("").isEmpty then
-			val io = sendCmd("note", ujson.write(ujson.Obj("tableId" -> msg.tableId, "order" -> 0, "text" -> noteStr)))
+		if !game.notes.contains(0) && game.inProgress && notes.headOption.getOrElse("").isEmpty then
+			val io = sendCmd("note", ujson.write(ujson.Obj("tableId" -> tableId, "order" -> 0, "text" -> noteStr)))
 			(io, addInfoNote(game, noteStr))
 		else
 			(IO.unit, game)
@@ -200,15 +206,18 @@ class BotClient(queue: Queue[IO, String], gameRef: Ref[IO, Option[Game]], config
 			case "gameEvent" =>
 				Action.fromJSON(ujson.read(args)("event")).fold(IO.unit)(handleAction)
 
-			case "noteListPlayer" =>
+			case "noteList" =>
 				// If the settings have already been restored do nothing.
 				IO.whenA(!restoredSettings):
 					gameRef.get.flatMap:
 						case None => IO.unit
 						case Some(g) =>
 							// Restore bot level from the note on the first card after rejoin
-							val msg = upickle.read[NoteListPlayerMessage](args)
-							val maybeNewConvention = msg.notes.headOption.flatMap(parseConventionFromNote)
+							val msg = upickle.read[NoteListMessage](args)
+							val notes = msg.notes.find(n => info.exists(_.username == n.username))
+								.orElse(msg.notes.headOption)
+								.fold(Vector.empty)(_.notes)
+							val maybeNewConvention = notes.headOption.flatMap(parseConventionFromNote)
 							val game: Game = maybeNewConvention.flatMap: c =>
 									Option.when(c != convention):
 										Log.info(s"restored settings from first card note: $c")
@@ -217,18 +226,18 @@ class BotClient(queue: Queue[IO, String], gameRef: Ref[IO, Option[Game]], config
 								.getOrElse(g)
 							// Write the note with the settings as early as possible.
 							// This does not fully protect against the note not being written if the bot crashes before this point.
-							val (noteIO, gameWithNote) = writeInfoNote(msg, game, convention)
+							val (noteIO, gameWithNote) = writeInfoNote(msg.tableId, notes, game, convention)
 							gameRef.set(Some(gameWithNote)) *>
 							noteIO *>
 							IO { restoredSettings = true } *>
-							// This causes 'gameEventList' to be sent again and 'noteListPlayer'.
+							// This causes 'gameEventList' to be sent again and 'noteList'.
 							// This time around we can properly catch up with the game using the correct settings.
 							sendCmd("gameStateLoad", ujson.write(ujson.Obj("tableId" -> msg.tableId)))
 
 			// Received at the beginning of the game, as a list of all events that have happened so far.
 			case "gameEventList" =>
 				// The settings have not been (attempted to be) restored so far.
-				// This will happen in 'noteListPlayer', which will then request the 'gameEventList' again.
+				// This will happen in 'noteList', which will then request the 'gameEventList' again.
 				IO.whenA(restoredSettings):
 					val msg = GameEventListMessage.fromJSON(ujson.read(args))
 
@@ -252,7 +261,7 @@ class BotClient(queue: Queue[IO, String], gameRef: Ref[IO, Option[Game]], config
 							IO.sleep(1000.millis) *>
 							msg.events.lastOption.fold(IO.unit)(handleAction)
 
-			case "joined" =>
+			case "tableJoined" =>
 				val id = ujson.read(args)("tableId").num.toInt
 
 				IO:
@@ -267,7 +276,7 @@ class BotClient(queue: Queue[IO, String], gameRef: Ref[IO, Option[Game]], config
 			case "init" =>
 				handleInit(upickle.read[InitMessage](args))
 
-			case "left" =>
+			case "tableLeft" | "tableBooted" =>
 				IO:
 					tableID = None
 					gameStarted = false
@@ -291,12 +300,12 @@ class BotClient(queue: Queue[IO, String], gameRef: Ref[IO, Option[Game]], config
 				*>
 				IO { tables = tables + (table.tableId -> table) }
 
-			case "tableGone" =>
+			case "tableRemoved" =>
 				val id = ujson.read(args)("tableId").num.toInt
 				IO { tables = tables - id }
 
 			case "tableList" =>
-				val list = upickle.read[List[Table]](args)
+				val list = upickle.read[TableList](args).tables
 				IO {
 					tables = tables ++ list.map(t => t.tableId -> t)
 					tables
@@ -343,14 +352,14 @@ class BotClient(queue: Queue[IO, String], gameRef: Ref[IO, Option[Game]], config
 		gameRef.set(None)
 
 	def handleInit(data: InitMessage) =
-		val InitMessage(tID, playerNames, ourPlayerIndex, options) = data
+		val InitMessage(tID, playerNames, ViewMode(ourPlayerIndex), options) = data
 		val variant = Variant.getVariant(options.variantName)
 		val state = State(playerNames, ourPlayerIndex, variant, options)
 		val game = newGameFromSettings(tID, state, convention)
 
 		IO { tableID = Some(tID); restoredSettings = false } *>
 		gameRef.set(Some(game)) *>
-		// We will receive the 'noteListPlayer' next. This is when we can restore the settings.
+		// We will receive the 'noteList' next. This is when we can restore the settings.
 		sendCmd("gameStateLoad", ujson.write(ujson.Obj("tableId" -> tID)))
 
 	def handleChat(data: ChatMessage): IO[Unit] =

@@ -28,7 +28,7 @@ case class TurnAction(
 object TurnAction:
 	def fromJSON(json: ujson.Value) =
 		TurnAction(
-			json.obj("num").num.toInt,
+			json.obj("turn").num.toInt,
 			json.obj.get("currentPlayerIndex").fold(-1)(_.num.toInt)
 		)
 
@@ -56,8 +56,8 @@ case class ClueAction(
 object ClueAction:
 	def fromJSON(json: ujson.Value) =
 		ClueAction(
-			json.obj("giver").num.toInt,
-			json.obj("target").num.toInt,
+			json.obj("playerIndex").num.toInt,
+			json.obj("receiverIndex").num.toInt,
 			json.obj("orders").arr.toSeq.map(_.num.toInt),
 			BaseClue.fromJSON(json.obj("clue"))
 		)
@@ -153,14 +153,14 @@ case class DiscardAction(
 	def isPlayerAction = true
 
 object DiscardAction:
-	def fromJSON(json: ujson.Value) =
+	def fromJSON(json: ujson.Value, failed: Boolean = false) =
 		val identity = json.obj.get("identity")
 		DiscardAction(
 			json.obj("playerIndex").num.toInt,
 			json.obj("order").num.toInt,
 			identity.fold(-1)(_("suitIndex").num.toInt),
 			identity.fold(-1)(_("rank").num.toInt),
-			json.obj.get("failed").exists(_.bool)
+			failed
 		)
 
 	def apply(playerIndex: Int, order: Int, id: Option[Identity]): DiscardAction =
@@ -195,6 +195,7 @@ object Action:
 		json.obj("type").str match
 			case "clue"     => Some(ClueAction.fromJSON(json))
 			case "discard"  => Some(DiscardAction.fromJSON(json))
+			case "misplay"  => Some(DiscardAction.fromJSON(json, failed = true))
 			case "play"     => Some(PlayAction.fromJSON(json))
 			case "draw"     => Some(DrawAction.fromJSON(json))
 			case "turn"     => Some(TurnAction.fromJSON(json))
@@ -358,11 +359,11 @@ enum PerformAction:
 			case Discard(target) =>
 				ujson.Obj("type" -> "discard", "order" -> target)
 			case Colour(target, value) =>
-				ujson.Obj("type" -> "clue", "target" -> target, "clue" -> ujson.Obj("type" -> "color", "value" -> value))
+				ujson.Obj("type" -> "clue", "receiverIndex" -> target, "clue" -> ujson.Obj("type" -> "color", "value" -> value))
 			case Rank(target, value) =>
-				ujson.Obj("type" -> "clue", "target" -> target, "clue" -> ujson.Obj("type" -> "rank", "value" -> value))
-			case Terminate(_, _) =>
-				ujson.Obj("type" -> "gameOver", "endCondition" -> "terminated")
+				ujson.Obj("type" -> "clue", "receiverIndex" -> target, "clue" -> ujson.Obj("type" -> "rank", "value" -> value))
+			case Terminate(target, _) =>
+				ujson.Obj("type" -> "gameOver", "endCondition" -> "terminatedByPlayer", "playerIndex" -> target)
 
 	def json(tableId: Int) =
 		ujson.Obj("tableId" -> tableId, "action" -> actionJson)
@@ -418,7 +419,7 @@ object PerformAction:
 		json("type").str match
 			case "play"     => PerformAction.Play(json("order").num.toInt)
 			case "discard"  => PerformAction.Discard(json("order").num.toInt)
-			case "clue"     => PerformAction.fromClue(BaseClue.fromJSON(json("clue")).toClue(json("target").num.toInt))
+			case "clue"     => PerformAction.fromClue(BaseClue.fromJSON(json("clue")).toClue(json("receiverIndex").num.toInt))
 			case "gameOver" => PerformAction.Terminate(0, 0)
 			case other      => throw new IllegalArgumentException(s"Invalid PerformAction type: $other")
 
