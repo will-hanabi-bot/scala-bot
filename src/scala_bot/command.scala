@@ -18,39 +18,25 @@ case class ChatMessage(
 	who: String = "",
 	room: String = "",
 	recipient: String = ""
-) derives ReadWriter
+) derives Reader
 
-case class ChatList(list: Vector[ChatMessage]) derives ReadWriter
+case class ChatList(list: Vector[ChatMessage]) derives Reader
 
-case class GameActionMessage(
-	tableID: Int,
-	action: Action
-)
+case class Spectator(name: String)
 
-object GameActionMessage:
-	def fromJSON(json: ujson.Value): Option[GameActionMessage] =
-		Action.fromJSON(json.obj("action")).map:
-			GameActionMessage(json.obj("tableID").num.toInt, _)
-
-case class Spectator(
-	name: String,
-	shadowingPlayerIndex: Int,
-	shadowingPlayerUsername: String = ""
-) derives ReadWriter
+object Spectator:
+	given Reader[Spectator] = reader[ujson.Value].map:
+		case ujson.Str(name) => Spectator(name)
+		case json => Spectator(json.obj("name").str)
 
 case class Table(
 	id: Int,
-	name: String,
-	passwordProtected: Boolean,
-	joined: Boolean,
-	running: Boolean,
-	variant: String,
+	passwordProtected: Boolean = false,
+	running: Boolean = false,
 	options: Option[TableOptions] = None,
-	sharedReplay: Boolean,
-	progress: Int,
+	sharedReplay: Boolean = false,
 	players: Vector[String],
-	spectators: List[Spectator],
-	maxPlayers: Int
+	spectators: List[Spectator] = Nil
 )
 
 object Table:
@@ -59,50 +45,34 @@ object Table:
 		val obj = json.obj
 
 		Table(
-			obj("id").num.toInt,
-			obj("name").str,
-			obj("passwordProtected").bool,
-			obj("joined").bool,
-			obj("running").bool,
-			obj("variant").str,
-			obj.get("options").map(upickle.read[TableOptions](_)),
-			obj("sharedReplay").bool,
-			obj("progress").num.toInt,
-			obj("players").arr.toVector.map(_.str),
-			obj("spectators").arr.toList.map: spec =>
-				spec.objOpt match
-					case None => Spectator(spec.str, -1)
-					case _ => upickle.read[Spectator](spec)
-			,
-			obj("maxPlayers").numOpt.map(_.toInt).getOrElse(6)
+			id = obj("id").num.toInt,
+			passwordProtected = obj.get("passwordProtected").exists(_.bool),
+			running = obj.get("running").exists(_.bool),
+			options = obj.get("options").filterNot(_.isNull).map(upickle.read[TableOptions](_)),
+			sharedReplay = obj.get("sharedReplay").exists(_.bool),
+			players = obj("players").arr.toVector.map(_.str),
+			spectators = obj.get("spectators").filterNot(_.isNull).fold(Nil)(_.arr.toList.map(upickle.read[Spectator](_)))
 		)
 
 case class TableOptions(
-	numPlayers: Int,
-	variantName: String,
-	startingPlayer: Int = 0,
+	variantName: String = "No Variant",
 	deckPlays: Boolean = false,
 	detrimentalCharacters: Boolean = false,
 	emptyClues: Boolean = false,
 	oneExtraCard: Boolean = false,
-	oneLessCard: Boolean = false,
-	speedrun: Boolean = false
-) derives ReadWriter
+	oneLessCard: Boolean = false
+) derives Reader
 
 case class InitMessage(
 	tableID: Int,
 	playerNames: Vector[String],
 	ourPlayerIndex: Int,
-	replay: Boolean,
-	seed: String,
-	options: TableOptions
-) derives ReadWriter
+	options: TableOptions = TableOptions()
+) derives Reader
 
 case class SelfData(
-	userID: Int,
-	username: String,
-	playingAtTables: List[Int]
-) derives ReadWriter
+	username: String
+) derives Reader
 
 case class GameActionListMessage(
 	tableID: Int,
@@ -113,10 +83,10 @@ object GameActionListMessage:
 	def fromJSON(json: ujson.Value): GameActionListMessage =
 		GameActionListMessage(
 			json.obj("tableID").num.toInt,
-			json.obj("list").arr.map(Action.fromJSON).flatten.toSeq
+			json.obj("list").arr.flatMap(Action.fromJSON).toSeq
 		)
 
-case class NoteListPlayerMessage(tableID: Int, notes: Vector[String]) derives ReadWriter
+case class NoteListPlayerMessage(tableID: Int, notes: Vector[String]) derives Reader
 
 case class BotConfig(
 	leaveReplayIfOnlyBots: Boolean = true,
@@ -232,10 +202,10 @@ class BotClient(queue: Queue[IO, String], gameRef: Ref[IO, Option[Game]], config
 
 		command match
 			case "chat" =>
-				handleChat(upickle.read[ChatMessage](ujson.read(args)))
+				handleChat(upickle.read[ChatMessage](args))
 
 			case "chatList" =>
-				val msgs = upickle.read[ChatList](ujson.read(args)).list
+				val msgs = upickle.read[ChatList](args).list
 				val helpMsg = "PM /help for help."
 
 				val sendHelp = msgs.headOption.exists(msg => tableID.exists(id => msg.room == s"table${id}")) &&
@@ -245,10 +215,7 @@ class BotClient(queue: Queue[IO, String], gameRef: Ref[IO, Option[Game]], config
 					sendChat(helpMsg)
 
 			case "gameAction" =>
-				GameActionMessage.fromJSON(ujson.read(args)) match
-					case None =>
-						IO.println(s"${Console.RED}failed to read gameAction $args${Console.RESET}")
-					case Some(action) => handleAction(action)
+				Action.fromJSON(ujson.read(args)("action")).fold(IO.unit)(handleAction)
 
 			case "noteListPlayer" =>
 				// If the settings have already been restored do nothing.
@@ -257,7 +224,7 @@ class BotClient(queue: Queue[IO, String], gameRef: Ref[IO, Option[Game]], config
 						case None => IO.unit
 						case Some(g) =>
 							// Restore bot level from the note on the first card after rejoin
-							val msg = upickle.read[NoteListPlayerMessage](ujson.read(args))
+							val msg = upickle.read[NoteListPlayerMessage](args)
 							val maybeNewConvention = msg.notes.headOption.flatMap(parseConventionFromNote)
 							val game: Game = maybeNewConvention.flatMap: c =>
 									Option.when(c != convention):
@@ -291,9 +258,7 @@ class BotClient(queue: Queue[IO, String], gameRef: Ref[IO, Option[Game]], config
 								case h: HGroup => gameRef.set(Some(h.copy(catchup = true)))
 
 							setAction *>
-							msg.list.init.traverse_ : action =>
-								handleAction(GameActionMessage(msg.tableID, action))
-							*>
+							msg.list.dropRight(1).traverse_(handleAction) *>
 							gameRef.update:
 								case Some(g2: Reactor) => Some(g2.copy(catchup = false))
 								case Some(g2: RefSieve) => Some(g2.copy(catchup = false))
@@ -302,7 +267,7 @@ class BotClient(queue: Queue[IO, String], gameRef: Ref[IO, Option[Game]], config
 							*>
 							sendCmd("loaded", ujson.write(ujson.Obj("tableID" -> msg.tableID))) *>
 							IO.sleep(1000.millis) *>
-							handleAction(GameActionMessage(msg.tableID, msg.list.last))
+							msg.list.lastOption.fold(IO.unit)(handleAction)
 
 			case "joined" =>
 				val id = ujson.read(args)("tableID").num.toInt
@@ -395,7 +360,7 @@ class BotClient(queue: Queue[IO, String], gameRef: Ref[IO, Option[Game]], config
 		gameRef.set(None)
 
 	def handleInit(data: InitMessage) =
-		val InitMessage(tID, playerNames, ourPlayerIndex, _, _, options) = data
+		val InitMessage(tID, playerNames, ourPlayerIndex, options) = data
 		val variant = Variant.getVariant(options.variantName)
 		val state = State(playerNames, ourPlayerIndex, variant, options)
 		val game = newGameFromSettings(tID, state, convention)
@@ -527,8 +492,7 @@ class BotClient(queue: Queue[IO, String], gameRef: Ref[IO, Option[Game]], config
 		else
 			IO.unit
 
-	def handleAction(data: GameActionMessage): IO[Unit] =
-		val action = data.action
+	def handleAction(action: Action): IO[Unit] =
 		gameRef.get.flatMap:
 			case None => IO.unit //throw new IllegalStateException("Game not initialized")
 			case Some(g) =>

@@ -30,7 +30,7 @@ def benchmark(args: String*) =
 	val variant = Variant.getVariant(variantName)
 	val playerNames = NAMES.take(numPlayers)
 	val deck = variant.allIds.flatMap(id => Vector.fill(variant.cardCount(id))(id))
-	val tableOpts = TableOptions(numPlayers, variant.name)
+	val tableOpts = TableOptions(variant.name)
 
 	val gameData =
 		for

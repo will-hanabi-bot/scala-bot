@@ -11,30 +11,6 @@ sealed trait Action:
 	def requiresDraw: Boolean
 	def isPlayerAction: Boolean
 
-/** @param clues The number of clues in the bank.
-  * @param score The current score.
-  * @param maxScore The maximum score possible, given the current state.
-  */
-case class StatusAction(
-	clues: Int,
-	score: Int,
-	maxScore: Int
-) extends Action:
-	def fmt(state: State) =
-		s"Status! Clues: $clues, Score: $score/$maxScore"
-
-	def playerIndex = -1
-	def requiresDraw = false
-	def isPlayerAction = false
-
-object StatusAction:
-	def fromJSON(json: ujson.Value) =
-		StatusAction(
-			json.obj("clues").num.toInt,
-			json.obj("score").num.toInt,
-			json.obj("maxScore").num.toInt
-		)
-
 /** @param num The turn number (1-indexed).
   * @param currentPlayerIndex The index of the player whose turn it is.
   */
@@ -181,7 +157,7 @@ object DiscardAction:
 			json.obj("order").num.toInt,
 			json.obj("suitIndex").num.toInt,
 			json.obj("rank").num.toInt,
-			json.obj("failed").bool
+			json.obj.get("failed").exists(_.bool)
 		)
 
 	def apply(playerIndex: Int, order: Int, id: Option[Identity]): DiscardAction =
@@ -191,50 +167,11 @@ object DiscardAction:
 			case None =>
 				DiscardAction(playerIndex, order, -1, -1)
 
-/** @param num The current number of strikes.
-  * @param turn The current turn number.
-  * @param order The order of the card that caused the strike.
-  */
-case class StrikeAction(
-	num: Int,
-	turn: Int,
-	order: Int
-) extends Action:
-	def fmt(state: State) = ""
+case class GameOverAction() extends Action:
+	def fmt(state: State) = "Game over!"
 	def playerIndex = -1
 	def requiresDraw = false
 	def isPlayerAction = false
-
-object StrikeAction:
-	def fromJSON(json: ujson.Value) =
-		StrikeAction(
-			json.obj("num").num.toInt,
-			json.obj("turn").num.toInt,
-			json.obj("order").num.toInt
-		)
-
-enum EndCondition:
-	case InProgress, Normal, Strikeout, Timeout, Terminated,
-		SpeedrunFail, IdleTimeout, CharacterSoftlock, AllOrNothingFail, AllOrNothingSoftlock,
-		TerminatedByVote
-
-/** @param endCondition The reason for the game over (see [[EndCondition]]).
-  * @param playerIndex The index of the player who caused the game over.
-  */
-case class GameOverAction(
-	endCondition: Int,
-	playerIndex: Int
-) extends Action:
-	def fmt(state: State) = "Game over!"
-	def requiresDraw = false
-	def isPlayerAction = false
-
-object GameOverAction:
-	def fromJSON(json: ujson.Value) =
-		GameOverAction(
-			json.obj("endCondition").num.toInt,
-			json.obj("playerIndex").num.toInt
-		)
 
 /** A custom action used to signal that the next clue should be interpreted a particular way.
   * Typically inserted after rewinding when something has been proven.
@@ -253,15 +190,13 @@ object InterpAction:
 object Action:
 	def fromJSON(json: ujson.Value): Option[Action] =
 		json.obj("type").str match
-			case "clue"    => Some(ClueAction.fromJSON(json))
-			case "discard" => Some(DiscardAction.fromJSON(json))
-			case "play"    => Some(PlayAction.fromJSON(json))
-			case "draw"    => Some(DrawAction.fromJSON(json))
-			case "status"  => Some(StatusAction.fromJSON(json))
-			case "turn"    => Some(TurnAction.fromJSON(json))
-			case "strike"  => Some(StrikeAction.fromJSON(json))
-			case "gameOver" => Some(GameOverAction.fromJSON(json))
-			case _     => None
+			case "clue"     => Some(ClueAction.fromJSON(json))
+			case "discard"  => Some(DiscardAction.fromJSON(json))
+			case "play"     => Some(PlayAction.fromJSON(json))
+			case "draw"     => Some(DrawAction.fromJSON(json))
+			case "turn"     => Some(TurnAction.fromJSON(json))
+			case "gameOver" => Some(GameOverAction())
+			case _          => None
 
 	def fromClue(state: State, clue: Clue, giver: Int): ClueAction =
 		val list = state.clueTouched(state.hands(clue.target), clue)
@@ -469,8 +404,8 @@ enum PerformAction:
 				val list = clueTouched(state.hands(target), clue)
 				ClueAction(playerIndex, target, list, clue)
 
-			case PerformAction.Terminate(target, value) =>
-				GameOverAction(value, target)
+			case PerformAction.Terminate(_, _) =>
+				GameOverAction()
 
 object PerformAction:
 	def fromJSON(json: ujson.Value): PerformAction =
@@ -483,7 +418,10 @@ object PerformAction:
 			case 1 => PerformAction.Discard(target)
 			case 2 => PerformAction.Colour(target, value)
 			case 3 => PerformAction.Rank(target, value)
-			case 4 => PerformAction.Terminate(target, value)
+			case 4 => PerformAction.Terminate(
+				json.obj.get("target").fold(0)(_.num.toInt),
+				json.obj.get("value").fold(0)(_.num.toInt)
+			)
 
 	def fromAction(action: Action): PerformAction =
 		action match

@@ -40,7 +40,6 @@ object GameData:
 		val emptyClues = opts.map(_.lift("emptyClues").map(_.bool)).flatten
 
 		val options = TableOptions(
-			players.length,
 			variantName = variant.getOrElse("No Variant"),
 			deckPlays = deckPlays.getOrElse(false),
 			emptyClues = emptyClues.getOrElse(false)
@@ -115,7 +114,7 @@ def processGame[G <: Game](game: G, data: GameData, index: Int)(using ops: GameO
 								))
 							case _ => a
 					.when(p => perform.isInstanceOf[PerformAction.Play] && p.state.strikes == 3):
-						_.handleAction(GameOverAction(0, playerIndex))
+						_.handleAction(GameOverAction())
 					.pipe: g =>
 						val nextPlayerIndex = g.state.nextPlayerIndex(g.state.currentPlayerIndex)
 						g.handleAction(TurnAction(g.state.turnCount, nextPlayerIndex))
