@@ -29,7 +29,7 @@ object TurnAction:
 	def fromJSON(json: ujson.Value) =
 		TurnAction(
 			json.obj("num").num.toInt,
-			json.obj("currentPlayerIndex").num.toInt
+			json.obj.get("currentPlayerIndex").fold(-1)(_.num.toInt)
 		)
 
 /** @param giver The index of the player who gave this clue.
@@ -58,7 +58,7 @@ object ClueAction:
 		ClueAction(
 			json.obj("giver").num.toInt,
 			json.obj("target").num.toInt,
-			json.obj("list").arr.toSeq.map(_.num.toInt),
+			json.obj("orders").arr.toSeq.map(_.num.toInt),
 			BaseClue.fromJSON(json.obj("clue"))
 		)
 
@@ -90,11 +90,12 @@ case class DrawAction(
 
 object DrawAction:
 	def fromJSON(json: ujson.Value) =
+		val identity = json.obj.get("identity")
 		DrawAction(
 			json.obj("playerIndex").num.toInt,
 			json.obj("order").num.toInt,
-			json.obj("suitIndex").num.toInt,
-			json.obj("rank").num.toInt
+			identity.fold(-1)(_("suitIndex").num.toInt),
+			identity.fold(-1)(_("rank").num.toInt)
 		)
 
 /** @param playerIndex The index of the player who played the card.
@@ -116,11 +117,12 @@ case class PlayAction(
 
 object PlayAction:
 	def fromJSON(json: ujson.Value) =
+		val identity = json.obj.get("identity")
 		PlayAction(
 			json.obj("playerIndex").num.toInt,
 			json.obj("order").num.toInt,
-			json.obj("suitIndex").num.toInt,
-			json.obj("rank").num.toInt
+			identity.fold(-1)(_("suitIndex").num.toInt),
+			identity.fold(-1)(_("rank").num.toInt)
 		)
 
 	def apply(playerIndex: Int, order: Int, id: Option[Identity]): PlayAction =
@@ -152,11 +154,12 @@ case class DiscardAction(
 
 object DiscardAction:
 	def fromJSON(json: ujson.Value) =
+		val identity = json.obj.get("identity")
 		DiscardAction(
 			json.obj("playerIndex").num.toInt,
 			json.obj("order").num.toInt,
-			json.obj("suitIndex").num.toInt,
-			json.obj("rank").num.toInt,
+			identity.fold(-1)(_("suitIndex").num.toInt),
+			identity.fold(-1)(_("rank").num.toInt),
 			json.obj.get("failed").exists(_.bool)
 		)
 
@@ -348,18 +351,21 @@ enum PerformAction:
 			case _ => fmt(game)
 		s"$actionType (${state.names(playerIndex)})"
 
-	def json(tableID: Int) =
+	def actionJson =
 		this match
 			case Play(target) =>
-				ujson.Obj("tableID" -> tableID, "type" -> 0, "target" -> target)
+				ujson.Obj("type" -> "play", "order" -> target)
 			case Discard(target) =>
-				ujson.Obj("tableID" -> tableID, "type" -> 1, "target" -> target)
+				ujson.Obj("type" -> "discard", "order" -> target)
 			case Colour(target, value) =>
-				ujson.Obj("tableID" -> tableID, "type" -> 2, "target" -> target, "value" -> value)
+				ujson.Obj("type" -> "clue", "target" -> target, "clue" -> ujson.Obj("type" -> "color", "value" -> value))
 			case Rank(target, value) =>
-				ujson.Obj("tableID" -> tableID, "type" -> 3, "target" -> target, "value" -> value)
-			case Terminate(target, value) =>
-				ujson.Obj("tableID" -> tableID, "type" -> 4, "target" -> target, "value" -> value)
+				ujson.Obj("type" -> "clue", "target" -> target, "clue" -> ujson.Obj("type" -> "rank", "value" -> value))
+			case Terminate(_, _) =>
+				ujson.Obj("type" -> "gameOver", "endCondition" -> "terminated")
+
+	def json(tableId: Int) =
+		ujson.Obj("tableId" -> tableId, "action" -> actionJson)
 
 	def toAction(state: State, playerIndex: Int, deck: Option[IndexedSeq[Identity]] = None, retain: Boolean = false) =
 		val deckId = (order: Int) =>
@@ -409,19 +415,12 @@ enum PerformAction:
 
 object PerformAction:
 	def fromJSON(json: ujson.Value): PerformAction =
-		val actionType = json("type").num.toInt
-		lazy val target = json("target").num.toInt
-		lazy val value = json("value").num.toInt
-
-		actionType match
-			case 0 => PerformAction.Play(target)
-			case 1 => PerformAction.Discard(target)
-			case 2 => PerformAction.Colour(target, value)
-			case 3 => PerformAction.Rank(target, value)
-			case 4 => PerformAction.Terminate(
-				json.obj.get("target").fold(0)(_.num.toInt),
-				json.obj.get("value").fold(0)(_.num.toInt)
-			)
+		json("type").str match
+			case "play"     => PerformAction.Play(json("order").num.toInt)
+			case "discard"  => PerformAction.Discard(json("order").num.toInt)
+			case "clue"     => PerformAction.fromClue(BaseClue.fromJSON(json("clue")).toClue(json("target").num.toInt))
+			case "gameOver" => PerformAction.Terminate(0, 0)
+			case other      => throw new IllegalArgumentException(s"Invalid PerformAction type: $other")
 
 	def fromAction(action: Action): PerformAction =
 		action match

@@ -629,7 +629,7 @@ extension[G <: Game](game: G)
 
 					val newCmds =
 						if !game.catchup && game.inProgress then
-							("note", ujson.Obj("tableID" -> game.tableID, "order" -> order, "note" -> full).toString) +: cmds
+							("note", ujson.Obj("tableId" -> game.tableID, "order" -> order, "text" -> full).toString) +: cmds
 						else
 							cmds
 

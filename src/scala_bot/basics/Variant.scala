@@ -160,6 +160,9 @@ object Variant:
 
 		variants = variantsJSON.map(Variant.fromJSON).map(v => v.name -> v).toMap
 
+	def init(vs: Iterable[Variant]): Unit =
+		variants = vs.map(v => v.name -> v).toMap
+
 	def apply(
 		id: Int,
 		name: String,

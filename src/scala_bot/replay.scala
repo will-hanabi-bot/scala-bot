@@ -27,23 +27,13 @@ object GameData:
 		parse(ujson.read(fromFile(file).mkString))
 
 	def parse(data: ujson.Value) =
-		val players = data("players").arr.map(_.str).toVector
+		val players = data("playerNames").arr.map(_.str).toVector
 		val deck = data("deck").arr
 			.map(id => Identity(id("suitIndex").num.toInt, id("rank").num.toInt))
 			.toVector
 
-		val actions = data("actions").arr.map(PerformAction.fromJSON).toVector
-
-		val opts = data.obj.lift("options").map(_.objOpt).flatten
-		val variant = opts.map(_.lift("variant").map(_.str)).flatten
-		val deckPlays = opts.map(_.lift("deckPlays").map(_.bool)).flatten
-		val emptyClues = opts.map(_.lift("emptyClues").map(_.bool)).flatten
-
-		val options = TableOptions(
-			variantName = variant.getOrElse("No Variant"),
-			deckPlays = deckPlays.getOrElse(false),
-			emptyClues = emptyClues.getOrElse(false)
-		)
+		val actions = data.obj.get("actions").fold(Vector.empty)(_.arr.map(PerformAction.fromJSON).toVector)
+		val options = data.obj.get("options").fold(TableOptions())(upickle.read[TableOptions](_))
 
 		GameData(players, deck, actions, options)
 

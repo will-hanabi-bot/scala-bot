@@ -144,13 +144,13 @@ def selfPlay(args: String*) =
 			case Convention.RefSieve => simulateGame(states.map(RefSieve(0, _, false)), shuffledDeck)
 			case Convention.HGroup(level)   => simulateGame(states.map(HGroup(0, _, false, level)), shuffledDeck)
 
-		val actionsJSON = actions.map(_.json(tableID = 0))
+		val actionsJSON = actions.map(_.actionJson)
 		val data = ujson.Obj(
-			"players" -> NAMES.take(numPlayers),
-			"deck"    -> shuffledDeck.map(id => ujson.Obj("suitIndex" -> id.suitIndex, "rank" -> id.rank)),
-			"actions" -> actionsJSON,
-			"notes"   -> notes,
-			"options" -> ujson.Obj("variant" -> variant.name)
+			"playerNames" -> NAMES.take(numPlayers),
+			"deck"        -> shuffledDeck.map(id => ujson.Obj("suitIndex" -> id.suitIndex, "rank" -> id.rank)),
+			"actions"     -> actionsJSON,
+			"notes"       -> notes,
+			"options"     -> ujson.Obj("variantName" -> variant.name)
 		).toString
 
 		Files.write(Paths.get(s"seeds/$i.json"), data.getBytes(StandardCharsets.UTF_8))
