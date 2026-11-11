@@ -17,7 +17,7 @@ https://github.com/user-attachments/assets/665e7d78-7c8b-4f07-b4c3-9116ec2ec8ab
 ## Supported commands
 
 Send a PM to the bot on hanab.live (`/pm <HANABI_USERNAME> <message>`) to interact with it.
-- `/join [password]` to join your lobby.
+- `/join [password]` to join your lobby. A bot already playing at another table will refuse the invitation.
 - `/rejoin` to rejoin a game that has already started, if it had disconnected.
 - `/leave` to kick the bot from your table.
 - `/settings [convention]` to modify the convention set. For example, `/settings HGroup11` sets the bot to H-Group level 11.
