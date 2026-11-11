@@ -655,8 +655,13 @@ case class HGroup(
 
 	/** Returns whether a real waiting connection was lost, which usually indicates that a mistake occurred. */
 	def wcLost(prev: HGroup, action: Action): Option[WaitingConnection] =
+		// Playing a card that links another reading of the same clue only rules this reading out.
+		def disambiguates(wc: WaitingConnection) = action.matchesP:
+			case PlayAction(_, order, _, _) =>
+				prev.waiting.exists(w => w.focus == wc.focus && w.turn == wc.turn && w.inference != wc.inference && w.connections.exists(_.order == order))
+
 		prev.waiting.find: wc =>
-			!wc.symmetric && !wc.ambiguousSelf &&
+			!wc.symmetric && !wc.ambiguousSelf && !disambiguates(wc) &&
 			!action.matchesP:
 				case PlayAction(playerIndex, order, suitIndex, rank) =>
 					order == wc.currConn.order ||
