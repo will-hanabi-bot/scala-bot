@@ -46,6 +46,17 @@ def unacceptableClue(prev: HGroup, game: HGroup, @annotation.unused action: Clue
 		Log.warn(s"clue finesses ${fSymmetric.get}, preventing a symmetric finesse from being dispoven!")
 		return true
 
+	val focus = game.determineFocus(prev, action).focus
+	val stompedTrashFinesse = state.heldOrders.find: o =>
+		unconfirmedTrashPlay(prev, giver, o) && (
+			(list.contains(o) && (focus == o || game.common.thoughts(o).possible.difference(state.trashSet).forall(state.isPlayable))) ||
+			game.waiting.exists(w => w.turn == state.turnCount && w.connections.exists(_.order == o))
+		)
+
+	if stompedTrashFinesse.isDefined then
+		Log.warn(s"clue causes ${stompedTrashFinesse.get} to play, confusing an unconfirmed trash finesse!")
+		return true
+
 	if game.lastMove == Some(ClueInterp.Play) && playablesResult(prev, game)._2.isEmpty then
 		// Log.info(s"${prev.me.hypoPlays.fmt} ${game.me.hypoPlays.fmt}")
 		Log.warn("play clue with no new playables! (duped existing playable?)")
@@ -56,7 +67,13 @@ def unacceptableClue(prev: HGroup, game: HGroup, @annotation.unused action: Clue
 		game.gainedStatus(game, o, CardStatus.CalledToPlay)
 
 	val badPlay = newPlayables.find: o =>
-		!(game.me.hypoPlays.contains(o) || (prev.inEndgame && state.deck(o).id().exists(state.isPlayable)))
+		!(
+			game.me.hypoPlays.contains(o) ||
+			(prev.inEndgame && state.deck(o).id().exists(state.isPlayable)) ||
+			(giver != state.ourPlayerIndex && state.ourHand.contains(o) && game.me.thoughts(o).inferred.exists(id =>
+				state.heldOrders.exists(o2 => unconfirmedTrashPlay(prev, giver, o2) && prev.common.thoughts(o2).matches(id, infer = true))
+			))
+		)
 
 	if badPlay.isDefined then
 		Log.warn(s"clue ${action.fmt(state)} results in ${state.logId(badPlay.get)} ${badPlay.get} looking playable! ${game.me.hypoPlays.fmt}")

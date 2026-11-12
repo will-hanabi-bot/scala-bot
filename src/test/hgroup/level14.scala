@@ -861,6 +861,89 @@ class TrashFinesse extends munit.FunSuite:
 
 		hasStatus(game, Alice, 1, CardStatus.Finessed)
 
+	test("doesn't finesse already finessed trash clue"):
+		val game = setup(HGroup.atLevel(14), Vector(
+			Vector("xx", "xx", "xx", "xx"),
+			Vector("p1", "y2", "y3", "p4"),
+			Vector("r1", "y4", "r1", "p2"),
+			Vector("b5", "b4", "r4", "y1")
+		),
+			playStacks = Some(Vector(1, 1, 0, 0, 0)),
+			starting = Donald
+		)
+		.pipe(takeTurn("Donald clues 1 to Cathy"))
+
+		hasStatus(game, Bob, 1, CardStatus.Finessed)
+		// With the 1 already finessed, we shouldn't give purple, or yellow
+		// as the resulting p1 play would confuse Cathy about their 1s.
+		val badFinesse = takeTurn("Alice clues purple to Cathy")(game)
+		assertEquals(badFinesse.lastMove, Some(ClueInterp.Mistake))
+		val badLayer = takeTurn("Alice clues yellow to Cathy")(game)
+		assertEquals(badLayer.lastMove, Some(ClueInterp.Mistake))
+
+		val badDirect = takeTurn("Alice clues 1 to Bob")(game)
+		assertEquals(badDirect.lastMove, Some(ClueInterp.Mistake))
+
+	test("allows connecting through trash finesse when valid as reverse trash finesse"):
+		val game = setup(HGroup.atLevel(14), Vector(
+			Vector("xx", "xx", "xx", "xx"),
+			Vector("p1", "y2", "y3", "p4"),
+			Vector("r1", "p2", "y1", "b2"),
+			Vector("b5", "b4", "r4", "r1")
+		),
+			playStacks = Some(Vector(1, 1, 1, 1, 0)),
+			starting = Donald
+		)
+		.pipe(takeTurn("Donald clues 1 to Cathy"))
+
+		hasStatus(game, Bob, 1, CardStatus.Finessed)
+		// Since Cathy can already tell her 1's are trash (valid as a reverse trash finesse),
+		// connecting p2 through Bob's p1 is allowed.
+		val good = takeTurn("Alice clues purple to Cathy")(game)
+		assertEquals(good.lastMove, Some(ClueInterp.Play))
+		hasInfs(good, None, Cathy, 2, Vector("p2"))
+
+	test("allows connecting through trash finesse in endgame when recipient knows trash"):
+		val game = setup(HGroup.atLevel(14), Vector(
+			Vector("xx", "xx", "xx", "xx"),
+			Vector("p1", "y3", "g3", "p4"),
+			Vector("r1", "p2", "y1", "b2"),
+			Vector("p5", "b4", "r4", "r1")
+		),
+			playStacks = Some(Vector(5, 5, 5, 5, 0)),
+			discarded = Vector("r2", "r3", "y2", "y4", "g1", "g1", "g2", "b1", "b1", "b3", "g4"),
+			starting = Donald
+		)
+		.tap: g =>
+			assert(g.inEndgame)
+		.pipe(takeTurn("Donald clues 1 to Cathy"))
+
+		hasStatus(game, Bob, 1, CardStatus.Finessed)
+		val good = takeTurn("Alice clues purple to Cathy")(game)
+		assertEquals(good.lastMove, Some(ClueInterp.Play))
+		hasInfs(good, None, Cathy, 2, Vector("p2"))
+
+	test("connects to own hand instead of already finessed trash clue"):
+		val game = setup(HGroup.atLevel(14), Vector(
+			Vector("xx", "xx", "xx", "xx"),
+			Vector("b5", "b4", "r4", "r1"),
+			Vector("p1", "y2", "y3", "p4"),
+			Vector("r1", "p2", "y1", "b2")
+		),
+			playStacks = Some(Vector(1, 1, 0, 0, 0))
+		)
+		.pipe(takeTurn("Alice clues 1 to Donald"))
+		.tap: g =>
+			hasStatus(g, Cathy, 1, CardStatus.Finessed)
+		.pipe(takeTurn("Bob clues purple to Donald"))
+
+		// Since Bob cannot connect p2 through Cathy's p1 without confusing Donald's trash finesse,
+		// Alice should assume p1 is finessed in her own hand instead.
+		assertEquals(game.lastMove, Some(ClueInterp.Play))
+		hasStatus(game, Alice, 1, CardStatus.Finessed)
+		hasInfs(game, None, Alice, 1, Vector("p1"))
+		hasInfs(game, None, Donald, 2, Vector("p2"))
+
 	test("understands a trash finesse where giver knows they have the last id"):
 		val game = setup(HGroup.atLevel(14), Vector(
 			Vector("xx", "xx", "xx", "xx"),

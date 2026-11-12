@@ -211,7 +211,7 @@ def refreshWCs(prev: HGroup, game: HGroup, action: Action, beforeClueInterp: Boo
 					val ambiguousWcs = sameFocusWcs.filter(_.ambiguousSelf)
 
 					Log.error(s"assigning previously-ambiguous connections on $focus to ${ambiguousWcs.map(w => g.state.logId(w.inference))}")
-					val assigned = assignConns(currGame, action, ambiguousWcs.map(wc => FocusPossibility(wc.inference, wc.connections, ClueInterp.Play, symmetric = wc.symmetric, trashFinesse = wc.trashFinesse)), focus, retroactive = true)
+					val assigned = assignConns(currGame, action, ambiguousWcs.map(wc => FocusPossibility(wc.inference, wc.connections, ClueInterp.Play, symmetric = wc.symmetric, trashFinesse = wc.trashFinesse, needsBlindPlay = wc.needsBlindPlay)), focus, retroactive = true)
 						.withThought(focus): t =>
 							t.copy(inferred = t.possible.intersect(ambiguousWcs.map(_.inference)))
 					(assigned, disambiguatedWcs ++ ambiguousWcs)

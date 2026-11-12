@@ -354,7 +354,8 @@ def resolveClue(ctx: ClueContext, fps: Seq[FocusPossibility], symmetricInterp: S
 
 	val trueFp = simplestFps.find(fp => state.deck(focus).matches(fp.id))
 
-	lazy val stompedWc = !game.inEndgame && game.waiting.exists: wc =>
+	lazy val stompedWc = game.waiting.exists: wc =>
+		(!game.inEndgame || wc.needsBlindPlay) &&
 		!wc.symmetric && !wc.ambiguousSelf &&
 		wc.connections.exists: conn =>
 			conn.order == focus ||
@@ -533,7 +534,8 @@ def resolveClue(ctx: ClueContext, fps: Seq[FocusPossibility], symmetricInterp: S
 				fp.id,
 				symmetric = fp.symmetric,
 				ambiguousSelf = !simplestFps.contains(fp) || fp.complicated,	// If it's too complicated, it could be an ambiguous connection
-				trashFinesse = fp.trashFinesse
+				trashFinesse = fp.trashFinesse,
+				needsBlindPlay = fp.needsBlindPlay
 			)
 
 		val ambiguousWcs = (ambiguousOwn ++ ambiguousFps).collect:
@@ -545,7 +547,8 @@ def resolveClue(ctx: ClueContext, fps: Seq[FocusPossibility], symmetricInterp: S
 				focus,
 				fp.id,
 				ambiguousSelf = true,
-				trashFinesse = fp.trashFinesse
+				trashFinesse = fp.trashFinesse,
+				needsBlindPlay = fp.needsBlindPlay
 			)
 
 		g.copy(

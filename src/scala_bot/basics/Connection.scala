@@ -131,7 +131,9 @@ case class FocusPossibility(
 	/** Whether this requires extra plays from us (revealing a different suit than we expected). */
 	complicated: Boolean = false,
 	/** Whether this is a Trash Finesse or Trash Bluff. */
-	trashFinesse: Boolean = false
+	trashFinesse: Boolean = false,
+	/** Whether the target needs to see the blind play to know their card is trash. */
+	needsBlindPlay: Boolean = false
 ):
 	/** Returns true if the first connection is a bluff. */
 	def isBluff =
@@ -167,7 +169,9 @@ case class WaitingConnection(
 	/** $ambiguousDesc */
 	ambiguousSelf: Boolean = false,
 	/** Whether this is a Trash Finesse or Trash Bluff. */
-	trashFinesse: Boolean = false
+	trashFinesse: Boolean = false,
+	/** Whether the target needs to see the blind play to know their card is trash. */
+	needsBlindPlay: Boolean = false
 ):
 	/** Returns the index of the next connection that still exists. */
 	def getNextIndex(state: State) =
