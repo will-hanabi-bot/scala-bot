@@ -1,0 +1,1549 @@
+{
+  "source": {
+    "repository": "Hanabi-Live/hanabi-live",
+    "revision": "7e4dd3325e8acc68332a10ad7e11aa21ced1b9a1",
+    "validation": "Generated client and server Zod schemas at this revision; all original compatibility fixtures passed."
+  },
+  "server": {
+    "welcome": {
+      "command": "welcome",
+      "data": {
+        "blocked": [],
+        "firstTimeUser": false,
+        "friends": [],
+        "muted": false,
+        "playingAtTables": [],
+        "settings": {
+          "colorblindMode": false,
+          "createTable": {
+            "maxPlayers": 5,
+            "options": {
+              "allOrNothing": false,
+              "deckPlays": false,
+              "detrimentalCharacters": false,
+              "emptyClues": false,
+              "oneExtraCard": false,
+              "oneLessCard": false,
+              "speedrun": false,
+              "variantName": "No Variant"
+            },
+            "timeControl": {
+              "baseSeconds": 120,
+              "perTurnSeconds": 20
+            }
+          },
+          "darkMode": false,
+          "desktopNotification": false,
+          "hGroupConventions": false,
+          "keldonMode": false,
+          "newUi": false,
+          "realLifeMode": false,
+          "reverseHands": false,
+          "showTimerInUntimed": false,
+          "soundMove": "all",
+          "soundTimer": true,
+          "speedrunMode": false,
+          "speedrunPreplay": false,
+          "styleNumbers": false,
+          "volume": 50
+        },
+        "spectatingAtTables": [],
+        "userId": 9,
+        "username": "TestBot"
+      }
+    },
+    "table": {
+      "command": "table",
+      "data": {
+        "ownerId": 7,
+        "passwordProtected": false,
+        "phase": "pregame",
+        "playerNames": [
+          "Alice"
+        ],
+        "progress": 0,
+        "settings": {
+          "maxPlayers": 5,
+          "name": "Alice's game",
+          "options": {
+            "allOrNothing": false,
+            "deckPlays": false,
+            "detrimentalCharacters": false,
+            "emptyClues": false,
+            "oneExtraCard": false,
+            "oneLessCard": false,
+            "speedrun": false,
+            "variantName": "No Variant"
+          }
+        },
+        "spectators": [
+          {
+            "userId": 13,
+            "username": "Observer"
+          }
+        ],
+        "tableId": 3
+      }
+    },
+    "pregame": {
+      "command": "table",
+      "data": {
+        "ownerId": 7,
+        "passwordProtected": false,
+        "phase": "pregame",
+        "playerNames": [
+          "Alice",
+          "TestBot"
+        ],
+        "progress": 0,
+        "settings": {
+          "maxPlayers": 5,
+          "name": "Alice's game",
+          "options": {
+            "allOrNothing": false,
+            "deckPlays": false,
+            "detrimentalCharacters": false,
+            "emptyClues": false,
+            "oneExtraCard": false,
+            "oneLessCard": false,
+            "speedrun": false,
+            "variantName": "No Variant"
+          }
+        },
+        "spectators": [
+          {
+            "userId": 13,
+            "username": "Observer"
+          }
+        ],
+        "tableId": 3
+      }
+    },
+    "playing": {
+      "command": "table",
+      "data": {
+        "ownerId": 7,
+        "passwordProtected": false,
+        "phase": "playing",
+        "playerNames": [
+          "Alice",
+          "TestBot"
+        ],
+        "progress": 0,
+        "settings": {
+          "maxPlayers": 5,
+          "name": "Alice's game",
+          "options": {
+            "allOrNothing": false,
+            "deckPlays": false,
+            "detrimentalCharacters": false,
+            "emptyClues": false,
+            "oneExtraCard": false,
+            "oneLessCard": false,
+            "speedrun": false,
+            "variantName": "No Variant"
+          }
+        },
+        "spectators": [
+          {
+            "userId": 13,
+            "username": "Observer"
+          }
+        ],
+        "tableId": 3
+      }
+    },
+    "replay": {
+      "command": "table",
+      "data": {
+        "ownerId": 7,
+        "passwordProtected": false,
+        "phase": "replay",
+        "playerNames": [
+          "Alice",
+          "TestBot"
+        ],
+        "progress": 0,
+        "settings": {
+          "maxPlayers": 5,
+          "name": "Alice's game",
+          "options": {
+            "allOrNothing": false,
+            "deckPlays": false,
+            "detrimentalCharacters": false,
+            "emptyClues": false,
+            "oneExtraCard": false,
+            "oneLessCard": false,
+            "speedrun": false,
+            "variantName": "No Variant"
+          }
+        },
+        "spectators": [
+          {
+            "userId": 13,
+            "username": "Observer"
+          }
+        ],
+        "tableId": 3
+      }
+    },
+    "sharedReplay": {
+      "command": "table",
+      "data": {
+        "ownerId": 7,
+        "passwordProtected": false,
+        "phase": "sharedReplay",
+        "playerNames": [
+          "Alice",
+          "TestBot"
+        ],
+        "progress": 0,
+        "settings": {
+          "maxPlayers": 5,
+          "name": "Alice's game",
+          "options": {
+            "allOrNothing": false,
+            "deckPlays": false,
+            "detrimentalCharacters": false,
+            "emptyClues": false,
+            "oneExtraCard": false,
+            "oneLessCard": false,
+            "speedrun": false,
+            "variantName": "No Variant"
+          }
+        },
+        "spectators": [
+          {
+            "userId": 13,
+            "username": "Observer"
+          }
+        ],
+        "tableId": 3
+      }
+    },
+    "tableList": {
+      "command": "tableList",
+      "data": {
+        "tables": [
+          {
+            "ownerId": 7,
+            "passwordProtected": false,
+            "phase": "pregame",
+            "playerNames": [
+              "Alice"
+            ],
+            "progress": 0,
+            "settings": {
+              "maxPlayers": 5,
+              "name": "Alice's game",
+              "options": {
+                "allOrNothing": false,
+                "deckPlays": false,
+                "detrimentalCharacters": false,
+                "emptyClues": false,
+                "oneExtraCard": false,
+                "oneLessCard": false,
+                "speedrun": false,
+                "variantName": "No Variant"
+              }
+            },
+            "spectators": [
+              {
+                "userId": 13,
+                "username": "Observer"
+              }
+            ],
+            "tableId": 3
+          }
+        ]
+      }
+    },
+    "emptyTableList": {
+      "command": "tableList",
+      "data": {
+        "tables": []
+      }
+    },
+    "playingList": {
+      "command": "tableList",
+      "data": {
+        "tables": [
+          {
+            "ownerId": 7,
+            "passwordProtected": false,
+            "phase": "playing",
+            "playerNames": [
+              "Alice",
+              "TestBot"
+            ],
+            "progress": 0,
+            "settings": {
+              "maxPlayers": 5,
+              "name": "Alice's game",
+              "options": {
+                "allOrNothing": false,
+                "deckPlays": false,
+                "detrimentalCharacters": false,
+                "emptyClues": false,
+                "oneExtraCard": false,
+                "oneLessCard": false,
+                "speedrun": false,
+                "variantName": "No Variant"
+              }
+            },
+            "spectators": [
+              {
+                "userId": 13,
+                "username": "Observer"
+              }
+            ],
+            "tableId": 3
+          }
+        ]
+      }
+    },
+    "init": {
+      "command": "init",
+      "data": {
+        "characters": [],
+        "customSeed": false,
+        "mode": {
+          "ourPlayerIndex": 0,
+          "type": "playing"
+        },
+        "options": {
+          "allOrNothing": false,
+          "deckPlays": false,
+          "detrimentalCharacters": false,
+          "emptyClues": false,
+          "oneExtraCard": false,
+          "oneLessCard": false,
+          "speedrun": false,
+          "variantName": "No Variant"
+        },
+        "pauseQueued": false,
+        "playerNames": [
+          "TestBot",
+          "Alice"
+        ],
+        "seed": "p2v0s1",
+        "startedAt": "2026-11-11T06:00:00.000Z",
+        "tableId": 3
+      }
+    },
+    "initNoSeed": {
+      "command": "init",
+      "data": {
+        "characters": [],
+        "customSeed": false,
+        "mode": {
+          "ourPlayerIndex": 0,
+          "type": "replay"
+        },
+        "options": {
+          "allOrNothing": false,
+          "deckPlays": false,
+          "detrimentalCharacters": false,
+          "emptyClues": false,
+          "oneExtraCard": false,
+          "oneLessCard": false,
+          "speedrun": false,
+          "variantName": "No Variant"
+        },
+        "pauseQueued": false,
+        "playerNames": [
+          "TestBot",
+          "Alice"
+        ],
+        "startedAt": "2026-11-11T06:00:00.000Z",
+        "tableId": 3
+      }
+    },
+    "unseated": {
+      "command": "init",
+      "data": {
+        "characters": [],
+        "customSeed": false,
+        "mode": {
+          "type": "spectating"
+        },
+        "options": {
+          "allOrNothing": false,
+          "deckPlays": false,
+          "detrimentalCharacters": false,
+          "emptyClues": false,
+          "oneExtraCard": false,
+          "oneLessCard": false,
+          "speedrun": false,
+          "variantName": "No Variant"
+        },
+        "pauseQueued": false,
+        "playerNames": [
+          "TestBot",
+          "Alice"
+        ],
+        "seed": "p2v0s1",
+        "startedAt": "2026-11-11T06:00:00.000Z",
+        "tableId": 3
+      }
+    },
+    "initplaying": {
+      "command": "init",
+      "data": {
+        "characters": [],
+        "customSeed": false,
+        "mode": {
+          "ourPlayerIndex": 1,
+          "type": "playing"
+        },
+        "options": {
+          "allOrNothing": false,
+          "deckPlays": false,
+          "detrimentalCharacters": false,
+          "emptyClues": false,
+          "oneExtraCard": false,
+          "oneLessCard": false,
+          "speedrun": false,
+          "variantName": "No Variant"
+        },
+        "pauseQueued": false,
+        "playerNames": [
+          "TestBot",
+          "Alice"
+        ],
+        "seed": "p2v0s1",
+        "startedAt": "2026-11-11T06:00:00.000Z",
+        "tableId": 3
+      }
+    },
+    "initshadowing": {
+      "command": "init",
+      "data": {
+        "characters": [],
+        "customSeed": false,
+        "mode": {
+          "ourPlayerIndex": 1,
+          "type": "shadowing"
+        },
+        "options": {
+          "allOrNothing": false,
+          "deckPlays": false,
+          "detrimentalCharacters": false,
+          "emptyClues": false,
+          "oneExtraCard": false,
+          "oneLessCard": false,
+          "speedrun": false,
+          "variantName": "No Variant"
+        },
+        "pauseQueued": false,
+        "playerNames": [
+          "TestBot",
+          "Alice"
+        ],
+        "seed": "p2v0s1",
+        "startedAt": "2026-11-11T06:00:00.000Z",
+        "tableId": 3
+      }
+    },
+    "initreplay": {
+      "command": "init",
+      "data": {
+        "characters": [],
+        "customSeed": false,
+        "mode": {
+          "ourPlayerIndex": 1,
+          "type": "replay"
+        },
+        "options": {
+          "allOrNothing": false,
+          "deckPlays": false,
+          "detrimentalCharacters": false,
+          "emptyClues": false,
+          "oneExtraCard": false,
+          "oneLessCard": false,
+          "speedrun": false,
+          "variantName": "No Variant"
+        },
+        "pauseQueued": false,
+        "playerNames": [
+          "TestBot",
+          "Alice"
+        ],
+        "seed": "p2v0s1",
+        "startedAt": "2026-11-11T06:00:00.000Z",
+        "tableId": 3
+      }
+    },
+    "unseatedreplay": {
+      "command": "init",
+      "data": {
+        "characters": [],
+        "customSeed": false,
+        "mode": {
+          "type": "replay"
+        },
+        "options": {
+          "allOrNothing": false,
+          "deckPlays": false,
+          "detrimentalCharacters": false,
+          "emptyClues": false,
+          "oneExtraCard": false,
+          "oneLessCard": false,
+          "speedrun": false,
+          "variantName": "No Variant"
+        },
+        "pauseQueued": false,
+        "playerNames": [
+          "TestBot",
+          "Alice"
+        ],
+        "seed": "p2v0s1",
+        "startedAt": "2026-11-11T06:00:00.000Z",
+        "tableId": 3
+      }
+    },
+    "initsharedReplay": {
+      "command": "init",
+      "data": {
+        "characters": [],
+        "customSeed": false,
+        "mode": {
+          "ourPlayerIndex": 1,
+          "sharedReplay": {
+            "canPlayAgain": true,
+            "efficiencyModifier": 0,
+            "ownerId": 9,
+            "restartDeclined": [],
+            "spoilerFree": false,
+            "startedAt": "2026-11-11T06:00:00.000Z",
+            "turn": 0
+          },
+          "type": "sharedReplay"
+        },
+        "options": {
+          "allOrNothing": false,
+          "deckPlays": false,
+          "detrimentalCharacters": false,
+          "emptyClues": false,
+          "oneExtraCard": false,
+          "oneLessCard": false,
+          "speedrun": false,
+          "variantName": "No Variant"
+        },
+        "pauseQueued": false,
+        "playerNames": [
+          "TestBot",
+          "Alice"
+        ],
+        "seed": "p2v0s1",
+        "startedAt": "2026-11-11T06:00:00.000Z",
+        "tableId": 3
+      }
+    },
+    "unseatedsharedReplay": {
+      "command": "init",
+      "data": {
+        "characters": [],
+        "customSeed": false,
+        "mode": {
+          "sharedReplay": {
+            "canPlayAgain": true,
+            "efficiencyModifier": 0,
+            "ownerId": 9,
+            "restartDeclined": [],
+            "spoilerFree": false,
+            "startedAt": "2026-11-11T06:00:00.000Z",
+            "turn": 0
+          },
+          "type": "sharedReplay"
+        },
+        "options": {
+          "allOrNothing": false,
+          "deckPlays": false,
+          "detrimentalCharacters": false,
+          "emptyClues": false,
+          "oneExtraCard": false,
+          "oneLessCard": false,
+          "speedrun": false,
+          "variantName": "No Variant"
+        },
+        "pauseQueued": false,
+        "playerNames": [
+          "TestBot",
+          "Alice"
+        ],
+        "seed": "p2v0s1",
+        "startedAt": "2026-11-11T06:00:00.000Z",
+        "tableId": 3
+      }
+    },
+    "notes": {
+      "command": "noteList",
+      "data": {
+        "notes": [
+          {
+            "notes": [],
+            "spectator": false,
+            "username": "TestBot"
+          }
+        ],
+        "tableId": 3
+      }
+    },
+    "mixedNotes": {
+      "command": "noteList",
+      "data": {
+        "notes": [
+          {
+            "notes": [
+              "other settings"
+            ],
+            "spectator": false,
+            "username": "Alice"
+          },
+          {
+            "notes": [
+              "[INFO: v1.4.1 (scala-bot), HGroup5]"
+            ],
+            "spectator": false,
+            "username": "TestBot"
+          }
+        ],
+        "tableId": 3
+      }
+    },
+    "replayNotes": {
+      "command": "noteList",
+      "data": {
+        "notes": [
+          {
+            "notes": [
+              "[INFO: v1.4.1 (scala-bot), HGroup5]"
+            ],
+            "spectator": false,
+            "username": "TestBot"
+          },
+          {
+            "notes": [
+              "spectator settings"
+            ],
+            "spectator": true,
+            "username": "TestBot"
+          }
+        ],
+        "tableId": 3
+      }
+    },
+    "spectatorNotes": {
+      "command": "noteList",
+      "data": {
+        "notes": [
+          {
+            "notes": [
+              "other settings"
+            ],
+            "spectator": false,
+            "username": "Alice"
+          },
+          {
+            "notes": [
+              "spectator settings"
+            ],
+            "spectator": true,
+            "username": "TestBot"
+          }
+        ],
+        "tableId": 3
+      }
+    },
+    "missingOwnNotes": {
+      "command": "noteList",
+      "data": {
+        "notes": [
+          {
+            "notes": [],
+            "spectator": false,
+            "username": "Alice"
+          }
+        ],
+        "tableId": 3
+      }
+    },
+    "hiddenDraw": {
+      "command": "gameEvent",
+      "data": {
+        "event": {
+          "order": 0,
+          "playerIndex": 0,
+          "type": "draw"
+        },
+        "tableId": 3
+      }
+    },
+    "visibleDraw": {
+      "command": "gameEvent",
+      "data": {
+        "event": {
+          "identity": {
+            "rank": 1,
+            "suitIndex": 0
+          },
+          "order": 5,
+          "playerIndex": 1,
+          "type": "draw"
+        },
+        "tableId": 3
+      }
+    },
+    "play": {
+      "command": "gameEvent",
+      "data": {
+        "event": {
+          "identity": {
+            "rank": 1,
+            "suitIndex": 0
+          },
+          "order": 5,
+          "playerIndex": 1,
+          "type": "play"
+        },
+        "tableId": 3
+      }
+    },
+    "discard": {
+      "command": "gameEvent",
+      "data": {
+        "event": {
+          "identity": {
+            "rank": 1,
+            "suitIndex": 0
+          },
+          "order": 5,
+          "playerIndex": 1,
+          "type": "discard"
+        },
+        "tableId": 3
+      }
+    },
+    "misplay": {
+      "command": "gameEvent",
+      "data": {
+        "event": {
+          "identity": {
+            "rank": 3,
+            "suitIndex": 0
+          },
+          "order": 0,
+          "playerIndex": 0,
+          "type": "misplay"
+        },
+        "tableId": 3
+      }
+    },
+    "hiddenMisplay": {
+      "command": "gameEvent",
+      "data": {
+        "event": {
+          "order": 0,
+          "playerIndex": 0,
+          "type": "misplay"
+        },
+        "tableId": 3
+      }
+    },
+    "colorClue": {
+      "command": "gameEvent",
+      "data": {
+        "event": {
+          "clue": {
+            "type": "color",
+            "value": 1
+          },
+          "orders": [
+            0,
+            1
+          ],
+          "playerIndex": 1,
+          "receiverIndex": 0,
+          "type": "clue"
+        },
+        "tableId": 3
+      }
+    },
+    "rankClue": {
+      "command": "gameEvent",
+      "data": {
+        "event": {
+          "clue": {
+            "type": "rank",
+            "value": 1
+          },
+          "orders": [
+            0,
+            1
+          ],
+          "playerIndex": 1,
+          "receiverIndex": 0,
+          "type": "clue"
+        },
+        "tableId": 3
+      }
+    },
+    "turn": {
+      "command": "gameEvent",
+      "data": {
+        "event": {
+          "currentPlayerIndex": 0,
+          "turn": 0,
+          "type": "turn"
+        },
+        "tableId": 3
+      }
+    },
+    "clueHistory": {
+      "command": "gameState",
+      "data": {
+        "clocks": {
+          "playerTimesMs": [
+            0,
+            0
+          ],
+          "turnElapsedMs": 0
+        },
+        "connected": [
+          false,
+          false
+        ],
+        "events": [
+          {
+            "clue": {
+              "type": "color",
+              "value": 1
+            },
+            "orders": [
+              0,
+              1
+            ],
+            "playerIndex": 1,
+            "receiverIndex": 0,
+            "type": "clue"
+          },
+          {
+            "clue": {
+              "type": "rank",
+              "value": 1
+            },
+            "orders": [
+              0,
+              1
+            ],
+            "playerIndex": 1,
+            "receiverIndex": 0,
+            "type": "clue"
+          },
+          {
+            "currentPlayerIndex": 0,
+            "turn": 0,
+            "type": "turn"
+          }
+        ],
+        "notes": [
+          {
+            "notes": [],
+            "spectator": false,
+            "username": "TestBot"
+          }
+        ],
+        "spectators": [],
+        "tableId": 3
+      }
+    },
+    "deal": {
+      "command": "gameState",
+      "data": {
+        "clocks": {
+          "playerTimesMs": [
+            0,
+            0
+          ],
+          "turnElapsedMs": 0
+        },
+        "connected": [
+          false,
+          false
+        ],
+        "events": [
+          {
+            "order": 0,
+            "playerIndex": 0,
+            "type": "draw"
+          },
+          {
+            "order": 1,
+            "playerIndex": 0,
+            "type": "draw"
+          },
+          {
+            "order": 2,
+            "playerIndex": 0,
+            "type": "draw"
+          },
+          {
+            "order": 3,
+            "playerIndex": 0,
+            "type": "draw"
+          },
+          {
+            "order": 4,
+            "playerIndex": 0,
+            "type": "draw"
+          },
+          {
+            "identity": {
+              "rank": 1,
+              "suitIndex": 0
+            },
+            "order": 5,
+            "playerIndex": 1,
+            "type": "draw"
+          },
+          {
+            "identity": {
+              "rank": 1,
+              "suitIndex": 1
+            },
+            "order": 6,
+            "playerIndex": 1,
+            "type": "draw"
+          },
+          {
+            "identity": {
+              "rank": 1,
+              "suitIndex": 2
+            },
+            "order": 7,
+            "playerIndex": 1,
+            "type": "draw"
+          },
+          {
+            "identity": {
+              "rank": 1,
+              "suitIndex": 3
+            },
+            "order": 8,
+            "playerIndex": 1,
+            "type": "draw"
+          },
+          {
+            "identity": {
+              "rank": 1,
+              "suitIndex": 4
+            },
+            "order": 9,
+            "playerIndex": 1,
+            "type": "draw"
+          },
+          {
+            "currentPlayerIndex": 0,
+            "turn": 0,
+            "type": "turn"
+          }
+        ],
+        "notes": [
+          {
+            "notes": [],
+            "spectator": false,
+            "username": "TestBot"
+          }
+        ],
+        "spectators": [],
+        "tableId": 3
+      }
+    },
+    "emptyState": {
+      "command": "gameState",
+      "data": {
+        "clocks": {
+          "playerTimesMs": [
+            0,
+            0
+          ],
+          "turnElapsedMs": 0
+        },
+        "connected": [
+          false,
+          false
+        ],
+        "events": [],
+        "notes": [
+          {
+            "notes": [],
+            "spectator": false,
+            "username": "TestBot"
+          }
+        ],
+        "spectators": [],
+        "tableId": 3
+      }
+    },
+    "endedTurn": {
+      "command": "gameEvent",
+      "data": {
+        "event": {
+          "turn": 5,
+          "type": "turn"
+        },
+        "tableId": 3
+      }
+    },
+    "gameOver": {
+      "command": "gameEvent",
+      "data": {
+        "event": {
+          "endCondition": "normal",
+          "type": "gameOver",
+          "votes": []
+        },
+        "tableId": 3
+      }
+    },
+    "timing": {
+      "command": "gameEvent",
+      "data": {
+        "event": {
+          "durationMs": 3000,
+          "playerTimesMs": [
+            1000,
+            2000
+          ],
+          "type": "playerTimes"
+        },
+        "tableId": 3
+      }
+    },
+    "ending": {
+      "command": "gameState",
+      "data": {
+        "clocks": {
+          "playerTimesMs": [
+            0,
+            0
+          ],
+          "turnElapsedMs": 0
+        },
+        "connected": [
+          false,
+          false
+        ],
+        "events": [
+          {
+            "turn": 5,
+            "type": "turn"
+          },
+          {
+            "endCondition": "normal",
+            "type": "gameOver",
+            "votes": []
+          },
+          {
+            "durationMs": 3000,
+            "playerTimesMs": [
+              1000,
+              2000
+            ],
+            "type": "playerTimes"
+          }
+        ],
+        "notes": [
+          {
+            "notes": [],
+            "spectator": false,
+            "username": "TestBot"
+          }
+        ],
+        "spectators": [],
+        "tableId": 3
+      }
+    },
+    "fullGame": {
+      "command": "gameState",
+      "data": {
+        "clocks": {
+          "playerTimesMs": [
+            0,
+            0
+          ],
+          "turnElapsedMs": 0
+        },
+        "connected": [
+          false,
+          false
+        ],
+        "events": [
+          {
+            "order": 0,
+            "playerIndex": 0,
+            "type": "draw"
+          },
+          {
+            "order": 1,
+            "playerIndex": 0,
+            "type": "draw"
+          },
+          {
+            "order": 2,
+            "playerIndex": 0,
+            "type": "draw"
+          },
+          {
+            "order": 3,
+            "playerIndex": 0,
+            "type": "draw"
+          },
+          {
+            "order": 4,
+            "playerIndex": 0,
+            "type": "draw"
+          },
+          {
+            "identity": {
+              "rank": 1,
+              "suitIndex": 0
+            },
+            "order": 5,
+            "playerIndex": 1,
+            "type": "draw"
+          },
+          {
+            "identity": {
+              "rank": 1,
+              "suitIndex": 1
+            },
+            "order": 6,
+            "playerIndex": 1,
+            "type": "draw"
+          },
+          {
+            "identity": {
+              "rank": 1,
+              "suitIndex": 2
+            },
+            "order": 7,
+            "playerIndex": 1,
+            "type": "draw"
+          },
+          {
+            "identity": {
+              "rank": 1,
+              "suitIndex": 3
+            },
+            "order": 8,
+            "playerIndex": 1,
+            "type": "draw"
+          },
+          {
+            "identity": {
+              "rank": 1,
+              "suitIndex": 4
+            },
+            "order": 9,
+            "playerIndex": 1,
+            "type": "draw"
+          },
+          {
+            "currentPlayerIndex": 0,
+            "turn": 0,
+            "type": "turn"
+          },
+          {
+            "clue": {
+              "type": "rank",
+              "value": 1
+            },
+            "orders": [
+              5,
+              6,
+              7,
+              8,
+              9
+            ],
+            "playerIndex": 0,
+            "receiverIndex": 1,
+            "type": "clue"
+          },
+          {
+            "currentPlayerIndex": 1,
+            "turn": 1,
+            "type": "turn"
+          },
+          {
+            "identity": {
+              "rank": 1,
+              "suitIndex": 0
+            },
+            "order": 5,
+            "playerIndex": 1,
+            "type": "play"
+          },
+          {
+            "identity": {
+              "rank": 3,
+              "suitIndex": 0
+            },
+            "order": 10,
+            "playerIndex": 1,
+            "type": "draw"
+          },
+          {
+            "currentPlayerIndex": 0,
+            "turn": 2,
+            "type": "turn"
+          },
+          {
+            "identity": {
+              "rank": 3,
+              "suitIndex": 3
+            },
+            "order": 0,
+            "playerIndex": 0,
+            "type": "discard"
+          },
+          {
+            "order": 11,
+            "playerIndex": 0,
+            "type": "draw"
+          },
+          {
+            "currentPlayerIndex": 1,
+            "turn": 3,
+            "type": "turn"
+          },
+          {
+            "identity": {
+              "rank": 3,
+              "suitIndex": 0
+            },
+            "order": 10,
+            "playerIndex": 1,
+            "type": "misplay"
+          },
+          {
+            "identity": {
+              "rank": 2,
+              "suitIndex": 0
+            },
+            "order": 12,
+            "playerIndex": 1,
+            "type": "draw"
+          },
+          {
+            "currentPlayerIndex": 0,
+            "turn": 4,
+            "type": "turn"
+          },
+          {
+            "clue": {
+              "type": "color",
+              "value": 0
+            },
+            "orders": [
+              12
+            ],
+            "playerIndex": 0,
+            "receiverIndex": 1,
+            "type": "clue"
+          },
+          {
+            "currentPlayerIndex": 1,
+            "turn": 5,
+            "type": "turn"
+          },
+          {
+            "identity": {
+              "rank": 2,
+              "suitIndex": 0
+            },
+            "order": 12,
+            "playerIndex": 1,
+            "type": "play"
+          },
+          {
+            "identity": {
+              "rank": 3,
+              "suitIndex": 0
+            },
+            "order": 13,
+            "playerIndex": 1,
+            "type": "draw"
+          },
+          {
+            "currentPlayerIndex": 0,
+            "turn": 6,
+            "type": "turn"
+          },
+          {
+            "endCondition": "terminatedByPlayer",
+            "playerIndex": 0,
+            "type": "gameOver",
+            "votes": []
+          },
+          {
+            "turn": 6,
+            "type": "turn"
+          },
+          {
+            "durationMs": 3000,
+            "playerTimesMs": [
+              1000,
+              2000
+            ],
+            "type": "playerTimes"
+          }
+        ],
+        "notes": [
+          {
+            "notes": [],
+            "spectator": false,
+            "username": "TestBot"
+          }
+        ],
+        "spectators": [],
+        "tableId": 3
+      }
+    },
+    "chat": {
+      "command": "chat",
+      "data": {
+        "recipient": "TestBot",
+        "sentAt": "2026-11-11T06:00:00.000Z",
+        "source": "user",
+        "text": "/join",
+        "username": "Alice"
+      }
+    },
+    "tableChat": {
+      "command": "chat",
+      "data": {
+        "sentAt": "2026-11-11T06:00:00.000Z",
+        "source": "server",
+        "tableId": 3,
+        "text": "&amp;"
+      }
+    },
+    "chatList": {
+      "command": "chatList",
+      "data": {
+        "messages": [
+          {
+            "sentAt": "2026-11-11T06:00:00.000Z",
+            "source": "server",
+            "tableId": 3,
+            "text": "&amp;"
+          }
+        ],
+        "unread": 0
+      }
+    },
+    "joined": {
+      "command": "tableJoined",
+      "data": {
+        "tableId": 3
+      }
+    },
+    "left": {
+      "command": "tableLeft",
+      "data": {
+        "tableId": 3
+      }
+    },
+    "boot": {
+      "command": "tableBooted",
+      "data": {
+        "tableId": 3
+      }
+    },
+    "tableGone": {
+      "command": "tableRemoved",
+      "data": {
+        "tableId": 3
+      }
+    },
+    "started": {
+      "command": "tableStarted",
+      "data": {
+        "stage": "justStarted",
+        "tableId": 3
+      }
+    },
+    "warning": {
+      "command": "warning",
+      "data": {
+        "message": "Table is full"
+      }
+    }
+  },
+  "client": [
+    {
+      "input": "action {\"tableID\":7,\"type\":0,\"target\":8,\"value\":2}",
+      "command": "playerAction",
+      "data": {
+        "action": {
+          "order": 8,
+          "type": "play"
+        },
+        "tableId": 7
+      }
+    },
+    {
+      "input": "action {\"tableID\":7,\"type\":1,\"target\":8,\"value\":2}",
+      "command": "playerAction",
+      "data": {
+        "action": {
+          "order": 8,
+          "type": "discard"
+        },
+        "tableId": 7
+      }
+    },
+    {
+      "input": "action {\"tableID\":7,\"type\":2,\"target\":1,\"value\":2}",
+      "command": "playerAction",
+      "data": {
+        "action": {
+          "clue": {
+            "type": "color",
+            "value": 2
+          },
+          "receiverIndex": 1,
+          "type": "clue"
+        },
+        "tableId": 7
+      }
+    },
+    {
+      "input": "action {\"tableID\":7,\"type\":3,\"target\":1,\"value\":5}",
+      "command": "playerAction",
+      "data": {
+        "action": {
+          "clue": {
+            "type": "rank",
+            "value": 5
+          },
+          "receiverIndex": 1,
+          "type": "clue"
+        },
+        "tableId": 7
+      }
+    },
+    {
+      "input": "action {\"tableID\":7,\"type\":4,\"target\":0,\"value\":0}",
+      "command": "tableTerminate",
+      "data": {
+        "tableId": 7
+      }
+    },
+    {
+      "input": "getGameInfo1 {\"tableID\":7}",
+      "command": "gameInitLoad",
+      "data": {
+        "tableId": 7
+      }
+    },
+    {
+      "input": "getGameInfo2 {\"tableID\":7}",
+      "command": "gameStateLoad",
+      "data": {
+        "tableId": 7
+      }
+    },
+    {
+      "input": "chatPM {\"msg\":\"hello\",\"recipient\":\"Alice\",\"room\":\"lobby\"}",
+      "command": "chatPm",
+      "data": {
+        "recipient": "Alice",
+        "text": "hello"
+      }
+    },
+    {
+      "input": "chat {\"msg\":\"hello\",\"room\":\"lobby\"}",
+      "command": "chat",
+      "data": {
+        "text": "hello"
+      }
+    },
+    {
+      "input": "chat {\"msg\":\"hello\",\"room\":\"table7\"}",
+      "command": "chat",
+      "data": {
+        "tableId": 7,
+        "text": "hello"
+      }
+    },
+    {
+      "input": "note {\"tableID\":7,\"order\":0,\"note\":\"test\"}",
+      "command": "note",
+      "data": {
+        "order": 0,
+        "tableId": 7,
+        "text": "test"
+      }
+    },
+    {
+      "input": "tableJoin {\"tableID\":7}",
+      "command": "tableJoin",
+      "data": {
+        "tableId": 7
+      }
+    },
+    {
+      "input": "tableJoin {\"tableID\":7,\"password\":\"test-only\"}",
+      "command": "tableJoin",
+      "data": {
+        "password": "test-only",
+        "tableId": 7
+      }
+    },
+    {
+      "input": "tableStart {\"tableID\":7}",
+      "command": "tableStart",
+      "data": {
+        "tableId": 7
+      }
+    },
+    {
+      "input": "tableReattend {\"tableID\":7}",
+      "command": "tableReattend",
+      "data": {
+        "tableId": 7
+      }
+    },
+    {
+      "input": "tableLeave {\"tableID\":7}",
+      "command": "tableLeave",
+      "data": {
+        "tableId": 7
+      }
+    },
+    {
+      "input": "tableUnattend {\"tableID\":7}",
+      "command": "tableUnattend",
+      "data": {
+        "tableId": 7
+      }
+    },
+    {
+      "input": "tableTerminate {\"tableID\":7}",
+      "command": "tableTerminate",
+      "data": {
+        "tableId": 7
+      }
+    },
+    {
+      "input": "loaded {\"tableID\":7}",
+      "command": "loaded",
+      "data": {
+        "tableId": 7
+      }
+    }
+  ]
+}

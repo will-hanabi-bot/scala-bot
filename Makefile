@@ -3,6 +3,10 @@ JVM_OPTS=-Xms128m -Xmx192m -Xss256k -XX:MaxMetaspaceSize=96m -XX:ReservedCodeCac
 NATIVE_IMAGE=
 ASYNC_PROFILER=
 
+.PHONY: test
+test:
+	_JAVA_OPTIONS=-XX:MaxMetaspaceSize=256m scala-cli test . $(TEST_ARGS)
+
 build:
 	scala-cli --power package . --main-class scala_bot.main -o scala-bot-$(LATEST_VER).jar --assembly --preamble=false --force
 

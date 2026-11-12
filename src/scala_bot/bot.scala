@@ -72,7 +72,7 @@ object main extends IOApp:
 			def heartbeat: IO[Unit] =
 				(ws.send(WebSocketFrame.Ping(Array.emptyByteArray)) *> IO.sleep(30.seconds)).foreverM
 
-			def receive(client: BotClient): IO[Unit] =
+			def receive(client: BotClient, wire: WireProtocol.Decoder): IO[Unit] =
 				Ref.of[IO, String]("").flatMap: buffer =>
 					def loop: IO[Unit] =
 						ws.receive().timeout(2.minutes).flatMap:
@@ -83,7 +83,7 @@ object main extends IOApp:
 									for
 										acc <- buffer.getAndUpdate(_ => "")
 										full = acc + text
-										_   <- client.handleMsg(full)
+										_   <- client.handleFrame(full, wire.incoming)
 										_   <- loop
 									yield ()
 
@@ -96,11 +96,11 @@ object main extends IOApp:
 
 					loop
 
-			def senderLoop(queue: Queue[IO, String]): IO[Unit] =
+			def senderLoop(queue: Queue[IO, BotClient.Outgoing]): IO[Unit] =
 				def loop: IO[Unit] =
 					for
 						msg <- queue.take
-						_   <- ws.send(WebSocketFrame.text(msg))
+						_   <- msg.sendIfCurrent(frame => ws.send(WebSocketFrame.text(WireProtocol.outgoing(frame))))
 						_   <- IO.sleep(500.millis)
 						_   <- loop
 					yield ()
@@ -108,13 +108,14 @@ object main extends IOApp:
 
 			for
 				_        <- IO.println("connected!")
-				wsQueue  <- Queue.unbounded[IO, String]
+				wsQueue  <- Queue.unbounded[IO, BotClient.Outgoing]
 				consoleQ <- Queue.unbounded[IO, ConsoleCmd]
 				gameRef  <- Ref.of[IO, Option[Game]](None)
-				client   = new BotClient(wsQueue, gameRef, BotConfig.fromEnv(env))(using runtime)
+				wire     = new WireProtocol.Decoder
+				client   = new BotClient(wsQueue.offer, gameRef, BotConfig.fromEnv(env))(using runtime)
 				console  <- spawnConsole(consoleQ, client, username)
 				_        <- IO { Variant.init() }
-				_        <- (console.join, receive(client), senderLoop(wsQueue), heartbeat).parTupled
+				_        <- (console.join, receive(client, wire), senderLoop(wsQueue), heartbeat).parTupled.guarantee(client.close *> console.cancel)
 			yield ()
 
 		val maxRetries = 8
@@ -133,14 +134,16 @@ object main extends IOApp:
 						connectedRef.set(true) *> useWebSocket(ws)
 
 					val attempt = for
-						response <- basicRequest.post(uri"${if useSSL then "https" else "http"}://${HOSTNAME}:${PORT}/login")
-							.header("Content-Type", "application/x-www-form-urlencoded")
-							.body(Map("username" -> username, "password" -> password, "version" -> "bot"))
-							.send(backend)
+						response <- LoginRetry.run:
+							basicRequest.post(uri"${if useSSL then "https" else "http"}://${HOSTNAME}:${PORT}/login")
+								.header("Content-Type", "application/x-www-form-urlencoded")
+								.body(Map("username" -> username, "password" -> password, "client" -> "bot"))
+								.send(backend)
+								.flatMap(response => LoginRetry.check(response.code.code, response.header("Retry-After")).as(response))
 						_ <- IO.whenA(response.cookies.forall(_.isLeft)):
 								IO.raiseError(new Exception(s"No cookie found ${response.headers}"))
 						_ <- basicRequest
-							.get(uri"${if useSSL then "wss" else "ws"}://${HOSTNAME}${if CUSTOM_PORT then s":${PORT}" else ""}/ws?version=bot")
+							.get(uri"${if useSSL then "wss" else "ws"}://${HOSTNAME}${if CUSTOM_PORT then s":${PORT}" else ""}/ws?client=bot")
 							.response(asWebSocket(useWebSocketWithReset))
 							.cookies(response)
 							.send(backend)

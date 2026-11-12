@@ -61,7 +61,7 @@ Once you have everything set up, feel free to tackle any of the existing issues 
 ### Testing
 
 There are a suite of tests in the `src/test/` folder.
-- Tests in a particular folder can be run using `scala-cli test <path>`. To run all of them, use `scala-cli test .`.
+- Tests in a particular folder can be run using `scala-cli test <path>`. To run all of them, use `make test`; it gives the full test runner more class-metadata space while retaining the bot's runtime limits.
 - Pass `--test-only <testPattern>` to only run tests matching a particular pattern.
 	- For example, `scala-cli test . --test-only "tests.hgroup.level8.PositionalMisplays*` only runs the tests in the `PositionalMisplays` class in `test/hgroup/level8.scala`.
 - To run a particular test in a class, append `.only` to the test name.
