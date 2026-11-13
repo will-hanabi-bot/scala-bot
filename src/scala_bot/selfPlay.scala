@@ -138,19 +138,19 @@ def selfPlay(args: String*) =
 	val results = (seed until seed + numGames).par.map: i =>
 		val rng = Random(i)
 		val shuffledDeck = rng.shuffle(deck).toVector
-		val states = (0 until numPlayers).map(State(NAMES.take(numPlayers), _, variant, TableOptions(numPlayers, variant.name)))
+		val states = (0 until numPlayers).map(State(NAMES.take(numPlayers), _, variant, TableOptions(variant.id)))
 		val GameSummary(score, result, actions, notes) = convention match
 			case Convention.Reactor  => simulateGame(states.map(Reactor(0, _, false)), shuffledDeck)
 			case Convention.RefSieve => simulateGame(states.map(RefSieve(0, _, false)), shuffledDeck)
 			case Convention.HGroup(level)   => simulateGame(states.map(HGroup(0, _, false, level)), shuffledDeck)
 
-		val actionsJSON = actions.map(_.json(tableID = 0))
+		val actionsJSON = actions.map(_.actionJson)
 		val data = ujson.Obj(
-			"players" -> NAMES.take(numPlayers),
-			"deck"    -> shuffledDeck.map(id => ujson.Obj("suitIndex" -> id.suitIndex, "rank" -> id.rank)),
-			"actions" -> actionsJSON,
-			"notes"   -> notes,
-			"options" -> ujson.Obj("variant" -> variant.name)
+			"playerNames" -> NAMES.take(numPlayers),
+			"deck"        -> shuffledDeck.map(id => ujson.Obj("suitIndex" -> id.suitIndex, "rank" -> id.rank)),
+			"actions"     -> actionsJSON,
+			"notes"       -> notes,
+			"options"     -> ujson.Obj("variantId" -> variant.id)
 		).toString
 
 		Files.write(Paths.get(s"seeds/$i.json"), data.getBytes(StandardCharsets.UTF_8))

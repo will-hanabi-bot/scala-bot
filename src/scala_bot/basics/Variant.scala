@@ -1,7 +1,6 @@
 package scala_bot.basics
 
 import scala_bot.utils._
-import upickle.default._
 
 val VARIANTS_URL = "https://raw.githubusercontent.com/Hanabi-Live/hanabi-live/main/packages/game/src/json/variants.json"
 val COLOURS_URL = "https://raw.githubusercontent.com/Hanabi-Live/hanabi-live/main/packages/game/src/json/suits.json"
@@ -137,6 +136,7 @@ case class Suit(
 
 object Variant:
 	private var variants: Map[String, Variant] = Map()
+	private var variantsById: Map[Int, Variant] = Map()
 	private var colours: Seq[Suit] = Seq()
 
 	def stripName(name: String) =
@@ -148,8 +148,8 @@ object Variant:
 			name
 
 	def init(): Unit =
-		val variantsJSON = read[ujson.Value](requests.get(VARIANTS_URL).text()).arr
-		val coloursJSON = read[ujson.Value](requests.get(COLOURS_URL).text()).arr
+		val variantsJSON = ujson.read(requests.get(VARIANTS_URL).text()).arr
+		val coloursJSON = ujson.read(requests.get(COLOURS_URL).text()).arr
 
 		colours = coloursJSON.map(suitJson =>
 			Suit(
@@ -159,7 +159,11 @@ object Variant:
 			)
 		).toSeq
 
-		variants = variantsJSON.map(Variant.fromJSON).map(v => v.name -> v).toMap
+		init(variantsJSON.map(Variant.fromJSON))
+
+	def init(vs: Iterable[Variant]): Unit =
+		variants = vs.map(v => v.name -> v).toMap
+		variantsById = vs.map(v => v.id -> v).toMap
 
 	def apply(
 		id: Int,
@@ -222,9 +226,9 @@ object Variant:
 	def fromJSON(json: ujson.Value) =
 		val obj = json.obj
 		Variant(
-			json("id").num.toInt,
-			json("name").str,
-			json("suits").arr.map(_.str).toVector,
+			obj.get("id").fold(0)(_.num.toInt),
+			obj("name").str,
+			obj("suits").arr.map(_.str).toVector,
 			criticalRank = obj.get("criticalRank").map(_.num.toInt),
 			clueStarved = obj.get("clueStarved").map(_.bool).getOrElse(false),
 			specialRank = obj.get("specialRank").map(_.num.toInt),
@@ -238,3 +242,6 @@ object Variant:
 
 	def getVariant(name: String) =
 		variants.get(name).getOrElse(throw new IllegalArgumentException(s"Variant '$name' not found! Were variants initialized?"))
+
+	def getVariant(id: Int) =
+		variantsById.get(id).getOrElse(throw new IllegalArgumentException(s"Variant id '$id' not found! Were variants initialized?"))
