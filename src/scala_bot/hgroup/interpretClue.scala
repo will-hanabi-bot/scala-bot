@@ -46,6 +46,17 @@ def unacceptableClue(prev: HGroup, game: HGroup, @annotation.unused action: Clue
 		Log.warn(s"clue finesses ${fSymmetric.get}, preventing a symmetric finesse from being dispoven!")
 		return true
 
+	val focus = game.determineFocus(prev, action).focus
+	val stompedTrashFinesse = state.heldOrders.find: o =>
+		unconfirmedTrashPlay(prev, giver, o) && (
+			(list.contains(o) && (focus == o || game.common.thoughts(o).possible.difference(state.trashSet).forall(state.isPlayable))) ||
+			game.waiting.exists(w => w.turn == state.turnCount && w.connections.exists(_.order == o))
+		)
+
+	if stompedTrashFinesse.isDefined then
+		Log.warn(s"clue causes ${stompedTrashFinesse.get} to play, confusing an unconfirmed trash finesse!")
+		return true
+
 	if game.lastMove == Some(ClueInterp.Play) && playablesResult(prev, game)._2.isEmpty then
 		// Log.info(s"${prev.me.hypoPlays.fmt} ${game.me.hypoPlays.fmt}")
 		Log.warn("play clue with no new playables! (duped existing playable?)")
@@ -56,7 +67,13 @@ def unacceptableClue(prev: HGroup, game: HGroup, @annotation.unused action: Clue
 		game.gainedStatus(game, o, CardStatus.CalledToPlay)
 
 	val badPlay = newPlayables.find: o =>
-		!(game.me.hypoPlays.contains(o) || (prev.inEndgame && state.deck(o).id().exists(state.isPlayable)))
+		!(
+			game.me.hypoPlays.contains(o) ||
+			(prev.inEndgame && state.deck(o).id().exists(state.isPlayable)) ||
+			(giver != state.ourPlayerIndex && state.ourHand.contains(o) && game.me.thoughts(o).inferred.exists(id =>
+				state.heldOrders.exists(o2 => unconfirmedTrashPlay(prev, giver, o2) && prev.common.thoughts(o2).matches(id, infer = true))
+			))
+		)
 
 	if badPlay.isDefined then
 		Log.warn(s"clue ${action.fmt(state)} results in ${state.logId(badPlay.get)} ${badPlay.get} looking playable! ${game.me.hypoPlays.fmt}")
@@ -69,6 +86,11 @@ def unacceptableClue(prev: HGroup, game: HGroup, @annotation.unused action: Clue
 
 	if badTrash.isDefined then
 		Log.warn(s"clue ${action.fmt(state)} results in ${state.logId(badTrash.get)} ${badTrash.get} looking trash!")
+		return true
+
+	val chopMoved = state.hands(target).filter(o => !prev.isCM(o) && game.isCM(o))
+	if game.lastMove == Some(ClueInterp.Play) && chopMoved.nonEmpty && chopMoved.forall(state.deck(_).id().exists(state.isBasicTrash)) then
+		Log.warn("did not chop move any valuable cards!")
 		return true
 
 	def distance5(g: HGroup, playerIndex: Int) =
@@ -191,7 +213,7 @@ def interpNormalClue(ctx: ClueContext, symmetricInterp: SymmetricInterp, thinksS
 	val initialLooksDirect = common.thoughts(focus).id().isEmpty &&
 		(action.clue.kind == ClueKind.Colour || savePoss.nonEmpty || positional.isDefined)
 
-	val focusPoss =
+	val normalFocusPoss =
 		common.thoughts(focus).inferred.filter: inf =>
 			!prev.invalidFocus(giver, clue, inf, ctx.focusResult) &&
 			!state.heldOrders.exists: o =>
@@ -206,6 +228,21 @@ def interpNormalClue(ctx: ClueContext, symmetricInterp: SymmetricInterp, thinksS
 		.flatMap:
 			connect(ctx, _, initialLooksDirect, thinksStall)
 
+	val hasNormalBluff = normalFocusPoss.exists(_.isBluff)
+	val rawTrashFocusPoss = connectTrashFinesses(ctx, initialLooksDirect, thinksStall).filterNot: fp =>
+		hasNormalBluff && fp.connections.headOption.exists(c => c.isInstanceOf[FinesseConn] && c.reacting == state.nextPlayerIndex(giver))
+
+	val considerTrash = rawTrashFocusPoss.nonEmpty && (
+		target == state.ourPlayerIndex ||
+		!normalFocusPoss.exists(fp => !fp.symmetric && state.deck(focus).matches(fp.id))
+	)
+
+	val focusPoss =
+		if considerTrash then
+			normalFocusPoss.filterNot(fp => rawTrashFocusPoss.exists(_.id == fp.id)) ++ rawTrashFocusPoss
+		else
+			normalFocusPoss
+
 	val simplest =
 		val possible = (savePoss ++ focusPoss)
 			.filter: fp =>
@@ -216,7 +253,8 @@ def interpNormalClue(ctx: ClueContext, symmetricInterp: SymmetricInterp, thinksS
 
 	val noSelf = !game.allowFindOwn ||
 		giver == state.ourPlayerIndex ||
-		simplest.exists(fp => state.deck(focus).matches(fp.id))
+		simplest.exists(fp => state.deck(focus).matches(fp.id)) ||
+		(positional.contains(Positional.TrashPush) && target == state.ourPlayerIndex)
 
 	{
 		if noSelf then
@@ -246,12 +284,15 @@ def interpNormalClue(ctx: ClueContext, symmetricInterp: SymmetricInterp, thinksS
 							!game.isBlindPlaying(c.order)		// A blind-playing card is still unknown
 				}
 
-			val ownFps =
+			val normalOwnFps =
 				common.thoughts(focus).inferred.filter: inf =>
 					!game.invalidFocus(giver, clue, inf, ctx.focusResult) &&
 					!(savePoss.exists(_.id == inf) || simplest.exists(_.id == inf))
 				.flatMap:
 					connect(ctx, _, looksDirect, thinksStall, findOwn = Some(state.ourPlayerIndex))
+
+			val trashOwnFps = connectTrashFinesses(ctx, looksDirect, thinksStall, findOwn = Some(state.ourPlayerIndex))
+			val ownFps = normalOwnFps ++ trashOwnFps
 
 			val filtered = filterFps(ctx, simplest ++ ownFps)
 			val simplestOwn = occamsRazor(ctx, filtered, state.ourPlayerIndex, actualId = game.me.thoughts(focus).id())
