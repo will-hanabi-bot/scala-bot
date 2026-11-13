@@ -359,9 +359,9 @@ enum PerformAction:
 			case Discard(target) =>
 				ujson.Obj("type" -> "discard", "order" -> target)
 			case Colour(target, value) =>
-				ujson.Obj("type" -> "clue", "receiverIndex" -> target, "clue" -> ujson.Obj("type" -> "color", "value" -> value))
+				ujson.Obj("type" -> "clue", "receiverIndex" -> target, "clue" -> ujson.Obj("type" -> "color", "color" -> value))
 			case Rank(target, value) =>
-				ujson.Obj("type" -> "clue", "receiverIndex" -> target, "clue" -> ujson.Obj("type" -> "rank", "value" -> value))
+				ujson.Obj("type" -> "clue", "receiverIndex" -> target, "clue" -> ujson.Obj("type" -> "rank", "rank" -> value))
 			case Terminate(target, _) =>
 				ujson.Obj("type" -> "gameOver", "endCondition" -> "terminatedByPlayer", "playerIndex" -> target)
 

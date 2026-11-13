@@ -27,7 +27,7 @@ def fetchAnalyzeGame(args: Seq[String])(using runtime: IORuntime) =
 		case None     => GameData.fetchFile(file.get)
 
 	Variant.init()
-	val variant = Variant.getVariant(options.variantName)
+	val variant = Variant.getVariant(options.variantId)
 
 	val state = State(players, 0, variant, options)
 	convention match

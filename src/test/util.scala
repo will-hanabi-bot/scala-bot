@@ -49,7 +49,7 @@ def setup[G <: Game](
 	val _variant = variant match
 		case v: Variant => v
 		case t: TestVariant => VARIANTS(t)
-	val _state = State(playerNames, 0, _variant, TableOptions(_variant.name))
+	val _state = State(playerNames, 0, _variant, TableOptions(_variant.id))
 
 	ops.copyWith(constructor(0, _state, false), GameUpdates(catchup = Some(true)))
 		.pipe: g =>

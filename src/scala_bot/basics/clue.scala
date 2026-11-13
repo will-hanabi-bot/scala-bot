@@ -37,11 +37,10 @@ case class BaseClue(kind: ClueKind, value: Int) extends ClueLike:
 
 object BaseClue:
 	def fromJSON(json: ujson.Value) =
-		val kind = json.obj("type").str match
-			case "color" => ClueKind.Colour
-			case "rank"  => ClueKind.Rank
+		json.obj("type").str match
+			case "color" => BaseClue(ClueKind.Colour, json.obj("color").num.toInt)
+			case "rank"  => BaseClue(ClueKind.Rank, json.obj("rank").num.toInt)
 			case other   => throw new IllegalArgumentException(s"Invalid clue kind: $other")
-		BaseClue(kind, json.obj("value").num.toInt)
 
 /** A clue that has touched a card.
   * @param kind   Whether the clue is rank or colour.

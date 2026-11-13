@@ -61,7 +61,7 @@ def fetchGame(args: Seq[String]) =
 		throw new IllegalArgumentException(s"Replay only has ${players.length} players!")
 
 	Variant.init()
-	val variant = Variant.getVariant(options.variantName)
+	val variant = Variant.getVariant(options.variantId)
 
 	val state = State(players, index, variant, options)
 	convention match

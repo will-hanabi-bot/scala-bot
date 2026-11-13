@@ -136,6 +136,7 @@ case class Suit(
 
 object Variant:
 	private var variants: Map[String, Variant] = Map()
+	private var variantsById: Map[Int, Variant] = Map()
 	private var colours: Seq[Suit] = Seq()
 
 	def stripName(name: String) =
@@ -158,10 +159,11 @@ object Variant:
 			)
 		).toSeq
 
-		variants = variantsJSON.map(Variant.fromJSON).map(v => v.name -> v).toMap
+		init(variantsJSON.map(Variant.fromJSON))
 
 	def init(vs: Iterable[Variant]): Unit =
 		variants = vs.map(v => v.name -> v).toMap
+		variantsById = vs.map(v => v.id -> v).toMap
 
 	def apply(
 		id: Int,
@@ -240,3 +242,6 @@ object Variant:
 
 	def getVariant(name: String) =
 		variants.get(name).getOrElse(throw new IllegalArgumentException(s"Variant '$name' not found! Were variants initialized?"))
+
+	def getVariant(id: Int) =
+		variantsById.get(id).getOrElse(throw new IllegalArgumentException(s"Variant id '$id' not found! Were variants initialized?"))

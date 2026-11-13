@@ -138,7 +138,7 @@ def selfPlay(args: String*) =
 	val results = (seed until seed + numGames).par.map: i =>
 		val rng = Random(i)
 		val shuffledDeck = rng.shuffle(deck).toVector
-		val states = (0 until numPlayers).map(State(NAMES.take(numPlayers), _, variant, TableOptions(variant.name)))
+		val states = (0 until numPlayers).map(State(NAMES.take(numPlayers), _, variant, TableOptions(variant.id)))
 		val GameSummary(score, result, actions, notes) = convention match
 			case Convention.Reactor  => simulateGame(states.map(Reactor(0, _, false)), shuffledDeck)
 			case Convention.RefSieve => simulateGame(states.map(RefSieve(0, _, false)), shuffledDeck)
@@ -150,7 +150,7 @@ def selfPlay(args: String*) =
 			"deck"        -> shuffledDeck.map(id => ujson.Obj("suitIndex" -> id.suitIndex, "rank" -> id.rank)),
 			"actions"     -> actionsJSON,
 			"notes"       -> notes,
-			"options"     -> ujson.Obj("variantName" -> variant.name)
+			"options"     -> ujson.Obj("variantId" -> variant.id)
 		).toString
 
 		Files.write(Paths.get(s"seeds/$i.json"), data.getBytes(StandardCharsets.UTF_8))
