@@ -29,7 +29,10 @@ case class ChatMessage(
 	def username = kind.author.username
 	def recipient = kind.recipient
 
-case class ChatList(messages: Vector[ChatMessage], tableId: Int = -1) derives Reader
+/** The table of a table's chat list. The lobby's chat list has none, which reads as the table -1. */
+case class ChatListTable(tableId: Int = -1) derives Reader
+
+case class ChatList(messages: Vector[ChatMessage], table: ChatListTable = ChatListTable()) derives Reader
 
 case class Spectator(username: String) derives Reader
 
@@ -238,7 +241,7 @@ class BotClient(queue: Queue[IO, String], gameRef: Ref[IO, Option[Game]], config
 				case "chatList" =>
 					val chatList = upickle.read[ChatList](data)
 					val helpMsg = "PM /help for help."
-					val sendHelp = tableID.contains(chatList.tableId) &&
+					val sendHelp = tableID.contains(chatList.table.tableId) &&
 						!chatList.messages.exists(_.text == helpMsg)
 
 					IO.whenA(sendHelp):
