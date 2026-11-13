@@ -90,7 +90,7 @@ extension[G <: Game] (solver: EndgameSolver[G])
 			val (trashIds, otherIds) = remIds.partition(state.isBasicTrash)
 
 			def isWinnable(drawId: Identity) =
-				val draw = Card(drawId.suitIndex, drawId.rank, state.nextCardOrder + 1, state.turnCount)
+				val draw = Card(Some(drawId), state.nextCardOrder + 1, state.turnCount)
 				val newState = advanceState(state, perform, playerTurn, Some(draw))
 				// Log.info(s"${indent(depth)}drew, stacks ${newState.playStacks} ($perform)")
 				val newRemaining = remaining.rem(drawId)
@@ -124,7 +124,7 @@ def advanceState(state: State, perform: PerformAction, playerIndex: Int, draw: O
 		)
 		.when(_.deck.lift(newCardOrder).flatMap(_.id()).isEmpty): st =>
 			val deck = st.deck
-			val newCard = draw.getOrElse(Card(-1, -1, newCardOrder, st.turnCount))
+			val newCard = draw.getOrElse(Card(None, newCardOrder, st.turnCount))
 			if deck.length == newCardOrder then
 				st.copy(deck = deck :+ newCard)
 			else

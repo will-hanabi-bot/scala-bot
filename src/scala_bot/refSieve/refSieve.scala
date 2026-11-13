@@ -93,11 +93,11 @@ case class RefSieve(
 		waiting.filter(_.connections.exists(_.order == order))
 
 	def reinterpPlay(prev: RefSieve, action: PlayAction | DiscardAction): Option[RefSieve] =
-		val (order, suitIndex, rank) = action match
-			case PlayAction(playerIndex, order, suitIndex, rank) => (order, suitIndex, rank)
-			case DiscardAction(playerIndex, order, suitIndex, rank, _) => (order, suitIndex, rank)
+		val (order, id) = action match
+			case PlayAction(playerIndex, order, id) => (order, id)
+			case DiscardAction(playerIndex, order, id, _) => (order, id)
 
-		if suitIndex == -1 || rank == -1 then
+		if id.isEmpty then
 			return None
 
 		val needsReplay =
@@ -106,7 +106,7 @@ case class RefSieve(
 			future(order).length > 1
 
 		Option.when(needsReplay) {
-			copy(future = future.updated(order, IdentitySet.single(Identity(suitIndex, rank))))
+			copy(future = future.updated(order, IdentitySet.single(id.get)))
 			.replay(state.deck(order).turnDrawn)
 			.toOption
 		}.flatten
@@ -138,7 +138,7 @@ case class RefSieve(
 
 	/** Determines the unlocked card (if it exists), given a play action. */
 	def unlockPromise(prev: RefSieve, action: PlayAction): Option[Int] =
-		val PlayAction(playerIndex, order, suitIndex, rank) = action
+		val PlayAction(playerIndex, order, id) = action
 
 		if prev.common.thoughts(order).id(infer = true).isEmpty then
 			Log.highlight(Console.CYAN, s"playing unknown card, not unlocking")
@@ -152,9 +152,12 @@ case class RefSieve(
 			Log.highlight(Console.CYAN, s"playing oldest/only safe playable, not unlocking")
 			return None
 
+		if id.isEmpty then
+			return None
+
 		val lockedHandR = state.hands(state.nextPlayerIndex(playerIndex)).reverse
 		val knownUnlock = lockedHandR.find: o =>
-			this.common.thoughts(o).matches(Identity(suitIndex, rank), infer = true)
+			this.common.thoughts(o).matches(id.get, infer = true)
 
 		if knownUnlock.isDefined then
 			Log.highlight(Console.CYAN, s"known unlock ${knownUnlock.get}")
@@ -162,7 +165,7 @@ case class RefSieve(
 
 		val lockedShifts = this.lockedShifts(order)
 
-		Identity(suitIndex, rank).next match
+		id.get.next match
 			case Some(nextId) =>
 				if state.hands(playerIndex).exists(this.common.thoughts(_).matches(nextId, infer = true)) then
 					Log.highlight(Console.CYAN, "unlocked player may be playing into their own hand, waiting")
@@ -260,7 +263,8 @@ object RefSieve:
 					val removePtd =
 						state.deck(o).clued &&
 						(prev.meta(o).status == CardStatus.PermissionToDiscard || prev.meta(o).status == CardStatus.CalledToDiscard) &&
-						!game.common.thoughts(o).id(partial = true).exists(id => id.rank == 1 || id.rank == 2)
+						!game.common.thoughts(o).id().exists(id => id.rank == 1 || id.rank == 2) &&
+						!game.common.thoughts(o).possible.forall(id => id.rank == 1 || id.rank == 2)
 
 					if removePtd then
 						Log.highlight(Console.CYAN, s"revoking ptd from $o")
@@ -420,8 +424,7 @@ object RefSieve:
 
 		def interpretDiscard(prev: RefSieve, game: RefSieve, action: DiscardAction): RefSieve =
 			val state = game.state
-			val DiscardAction(playerIndex, order, suitIndex, rank, failed) = action
-			val id = Identity(suitIndex, rank)
+			val DiscardAction(playerIndex, order, id, failed) = action
 
 			val newGame =
 				if !failed && prev.state.deck(order).clued then
@@ -431,7 +434,7 @@ object RefSieve:
 					if sacrifice then
 						Log.info(s"sacrifice dc!")
 						game.withMove(DiscardInterp.Sacrifice)
-					else if suitIndex != -1 && rank != -1 && state.isUseful(id) then
+					else if id.exists(state.isUseful) then
 						interpretUsefulDc(game, action) match
 							case DiscardResult.None =>
 								game.withMove(DiscardInterp.None)
@@ -443,7 +446,7 @@ object RefSieve:
 								targets.foldLeft((game, game.state)):
 									case ((acc, hypoState), o) =>
 										val hidden = o != targets.last
-										val inferred = if hidden then hypoState.playableSet else IdentitySet.single(id)
+										val inferred = if hidden then hypoState.playableSet else IdentitySet.single(id.get)
 										val newState = game.me.thoughts(o).id().fold(hypoState): i =>
 											hypoState.withPlay(i)
 
@@ -459,7 +462,7 @@ object RefSieve:
 
 							case DiscardResult.Sarcastic(orders) =>
 								game.copy(
-									common = game.common.copy(links = Link.Sarcastic(FastBitSet.from(orders), id) +: game.common.links)
+									common = game.common.copy(links = Link.Sarcastic(FastBitSet.from(orders), id.get) +: game.common.links)
 								)
 								.withMove(DiscardInterp.Sarcastic)
 

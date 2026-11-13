@@ -96,8 +96,7 @@ def processGame[G <: Game](game: G, data: GameData, index: Int)(using ops: GameO
 					acc.handleAction(DrawAction(
 						playerIndex,
 						order,
-						if playerIndex == index then -1 else deck(order).suitIndex,
-						if playerIndex == index then -1 else deck(order).rank
+						if playerIndex == index then None else Some(deck(order))
 					))
 		.pipe:
 			actions.foldLeft(_): (acc, perform) =>
@@ -110,8 +109,7 @@ def processGame[G <: Game](game: G, data: GameData, index: Int)(using ops: GameO
 								a.handleAction(DrawAction(
 									playerIndex,
 									order,
-									if playerIndex == index then -1 else deck(order).suitIndex,
-									if playerIndex == index then -1 else deck(order).rank
+									if playerIndex == index then None else Some(deck(order))
 								))
 							case _ => a
 					.when(p => perform.isInstanceOf[PerformAction.Play] && p.state.strikes == 3):

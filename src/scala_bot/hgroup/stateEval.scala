@@ -144,7 +144,7 @@ def advance(orig: HGroup, game: HGroup, offset: Int): Double =
 
 		def orderToAction(order: Int) =
 			game.me.thoughts(order).id(infer = true) match
-				case None =>     (None,     PlayAction(playerIndex, order, -1, -1))
+				case None =>     (None,     PlayAction(playerIndex, order, None))
 				case Some(id) => (Some(id), game.players(playerIndex).tryPlay(game, order, id))
 
 		playables.filter(o => meta(o).status == CardStatus.Finessed || game.isBlindPlaying(o)).minByOption(game.xmeta(_).turnFinessed.getOrElse(99)) match
@@ -351,7 +351,7 @@ def _evalAction(game: HGroup, action: Action): Double =
 				Log.info(f"${action.fmt(state)}%s: $best%.2f (${hypoGame.lastMove.get}%s) + $bonus")
 				best + bonus
 
-		case PlayAction(playerIndex, order, suitIndex, rank) if suitIndex != -1 && rank != -1 =>
+		case PlayAction(playerIndex, order, id) if id.isDefined =>
 			val hypoGame = game.copy(allowFindOwn = false).simulate(action)
 
 			if hypoGame.lastMove == Some(PlayInterp.Mistake) then
@@ -362,13 +362,13 @@ def _evalAction(game: HGroup, action: Action): Double =
 				Log.info(f"${action.fmt(state)}%s: $best%.2f (${hypoGame.lastMove.get}%s) + $bonus")
 				best + bonus
 
-		case PlayAction(playerIndex, order, _, _) =>
+		case PlayAction(playerIndex, order, _) =>
 			val uniqueInfs = game.me.thoughts(order).possibilities.toList.filterNot: id =>
 				visibleFind(state, game.me, id, cond = (playerIndex, _) => playerIndex != state.ourPlayerIndex).exists(state.deck(_).clued)
 
 			uniqueInfs.foldLeftOpt(0.0): (value, id) =>
 				Log.highlight(Console.GREEN, s"playing ${state.logId(id)}")
-				val hypoGame = game.copy(allowFindOwn = false).simulate(PlayAction(playerIndex, order, id.suitIndex, id.rank))
+				val hypoGame = game.copy(allowFindOwn = false).simulate(PlayAction(playerIndex, order, Some(id)))
 
 				if hypoGame.lastMove == Some(PlayInterp.Mistake) then
 					Left(-100.0)
@@ -382,7 +382,7 @@ def _evalAction(game: HGroup, action: Action): Double =
 				Log.highlight(Console.GREEN, f"average for ${action.fmt(state)}%s: $average%.2f")
 				average
 
-		case DiscardAction(_, order, suitIndex, rank, _) if game.me.orderKt(game, order) || game.me.thoughts(order).inferred.isEmpty =>
+		case DiscardAction(_, order, _, _) if game.me.orderKt(game, order) || game.me.thoughts(order).inferred.isEmpty =>
 			val hypoGame = game.copy(allowFindOwn = false).simulate(action)
 
 			if hypoGame.lastMove == Some(DiscardInterp.Mistake) then
@@ -392,7 +392,7 @@ def _evalAction(game: HGroup, action: Action): Double =
 				Log.info(f"${action.fmt(state)}%s: $best%.2f (${hypoGame.lastMove.get}%s)")
 				best
 
-		case DiscardAction(_, order, suitIndex, rank, _) if !state.deck(order).clued =>
+		case DiscardAction(_, order, _, _) if !state.deck(order).clued =>
 			val hypoGame = game.copy(allowFindOwn = false).simulate(action)
 
 			if hypoGame.lastMove == Some(DiscardInterp.Mistake) then
@@ -408,13 +408,13 @@ def _evalAction(game: HGroup, action: Action): Double =
 				Log.info(f"${action.fmt(state)}%s: $best%.2f (${hypoGame.lastMove.get}%s)")
 				best
 
-		case DiscardAction(playerIndex, order, _, _, failed) =>
+		case DiscardAction(playerIndex, order, _, failed) =>
 			val thought = game.me.thoughts(order)
 			val poss = thought.infoLock.getOrElse(thought.possibilities)
 
 			poss.toList.foldLeftOpt(0.0): (accValue, i) =>
 				Log.highlight(Console.GREEN, s"discarding ${state.logId(i)}")
-				val hypoGame = game.copy(allowFindOwn = false).simulate(DiscardAction(playerIndex, order, i.suitIndex, i.rank, failed))
+				val hypoGame = game.copy(allowFindOwn = false).simulate(DiscardAction(playerIndex, order, Some(i), failed))
 
 				if hypoGame.lastMove == Some(DiscardInterp.Mistake) then
 					Left(-100.0)

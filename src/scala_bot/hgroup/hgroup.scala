@@ -168,8 +168,8 @@ case class HGroup(
 		copy(xmeta = xmeta.updated(order, f(xmeta(order))))
 
 	/** Marks DDA if the the next player could be double discarding. */
-	def checkDDA(discarder: Int, id: Identity): HGroup =
-		if level < Level.Stalling || state.numPlayers == 2 || id.suitIndex == -1 || id.rank == -1 || state.isBasicTrash(id) then
+	def checkDDA(discarder: Int, id: Option[Identity]): HGroup =
+		if level < Level.Stalling || state.numPlayers == 2 || id.forall(state.isBasicTrash) then
 			if this.dda.isDefined then
 				return copy(dda = None)
 			else
@@ -178,12 +178,12 @@ case class HGroup(
 		val nextPlayerIndex = state.nextPlayerIndex(discarder)
 
 		val dda =
-			state.isCritical(id) &&
+			state.isCritical(id.get) &&
 			chop(nextPlayerIndex).exists: chop =>
-				this.common.thoughts(chop).possible.contains(id) &&
-				!visibleFind(state, this.common, id, infer = true).exists(this.isTouched)
+				this.common.thoughts(chop).possible.contains(id.get) &&
+				!visibleFind(state, this.common, id.get, infer = true).exists(this.isTouched)
 
-		if dda then copy(dda = Some(id)) else this
+		if dda then copy(dda = Some(id.get)) else this
 
 	def isCM(order: Int) =
 		meta(order).cm && !state.deck(order).clued
@@ -615,11 +615,11 @@ case class HGroup(
 				case f: FinesseConn => f.order != order && f.reacting != state.holderOf(wc.focus)
 
 	def reinterpPlay(prev: HGroup, action: PlayAction | DiscardAction): Option[HGroup] =
-		val (order, suitIndex, rank) = action match
-			case PlayAction(playerIndex, order, suitIndex, rank) => (order, suitIndex, rank)
-			case DiscardAction(playerIndex, order, suitIndex, rank, _) => (order, suitIndex, rank)
+		val (order, id) = action match
+			case PlayAction(playerIndex, order, id) => (order, id)
+			case DiscardAction(playerIndex, order, id, _) => (order, id)
 
-		if suitIndex == -1 || rank == -1 then
+		if id.isEmpty then
 			return None
 
 		val needsReplay =
@@ -628,7 +628,7 @@ case class HGroup(
 			future(order).length > 1
 
 		Option.when(needsReplay) {
-			copy(future = future.updated(order, IdentitySet.single(Identity(suitIndex, rank))))
+			copy(future = future.updated(order, IdentitySet.single(id.get)))
 				.replay(state.deck(order).turnDrawn)
 				.toOption
 		}.flatten
@@ -658,9 +658,9 @@ case class HGroup(
 		prev.waiting.find: wc =>
 			!wc.symmetric && !wc.ambiguousSelf &&
 			!action.matchesP:
-				case PlayAction(playerIndex, order, suitIndex, rank) =>
+				case PlayAction(playerIndex, order, id) =>
 					order == wc.currConn.order ||
-					(suitIndex != -1 && rank != -1 && wc.currConn.ids.length == 1 && wc.currConn.ids.head.matches(Identity(suitIndex, rank)))
+					(id.exists(wc.currConn.ids.length == 1 && wc.currConn.ids.head.matches(_)))
 			&&
 			!this.waiting.exists(w => w.connections.forall(wc.connections.contains) && w.inference == wc.inference && w.turn == wc.turn)
 
@@ -801,14 +801,16 @@ object HGroup:
 				g.withMove(ClueInterp.Mistake, overwrite = true)
 
 		def interpretDiscard(prev: HGroup, game: HGroup, action: DiscardAction): HGroup =
-			val DiscardAction(playerIndex, order, suitIndex, rank, failed) = action
+			val DiscardAction(playerIndex, order, id, failed) = action
+			val state = game.state
 
 			val updatedGame = game.refreshUncertain.elim()
+			val inverted = id.exists(state.isInverted)
 
 			val reinterp = failed ||
-				prev.common.thoughts(order).possibilities.forall(prev.state.isInverted) ||
+				prev.common.thoughts(order).possibilities.forall(state.isInverted) ||
 				// An orange card discarded where a gentleman's discard promised another card: it was a layer
-				(prev.meta(order).status == CardStatus.GentlemansDiscard && suitIndex != -1 && rank != -1 && prev.state.isInverted(Identity(suitIndex, rank)))
+				(prev.meta(order).status == CardStatus.GentlemansDiscard && inverted)
 			val reinterpGame = if reinterp then updatedGame.reinterpPlay(prev, action) else None
 
 			if reinterpGame.isDefined then
@@ -824,15 +826,15 @@ object HGroup:
 			.orElse(interpretSdcm(ctx))
 			.orElse(interpretPosDc(ctx))
 			.getOrElse:
-				refreshedGame.when(g => !failed ^ g.state.isInverted(Identity(suitIndex, rank))): g =>
+				refreshedGame.when(g => id.exists(i => !failed ^ g.state.isInverted(i))): g =>
 					g.writeExtraCMs(prev, playerIndex, order)
 				.copy(dcStatus = DcStatus.None)
-				.checkDDA(playerIndex, Identity(suitIndex, rank))
+				.checkDDA(playerIndex, id)
 				.withMove(DiscardInterp.None)
 			.when(_.inEarlyGame): g =>
 				// Bombing an inverted card on chop ends early game
-				val endEarlyGame = (!failed || (prev.chop(playerIndex).contains(order) && g.state.isInverted(Identity(suitIndex, rank)))) &&
-					!game.state.deck(order).clued && {
+				val endEarlyGame = (!failed || (prev.chop(playerIndex).contains(order) && inverted)) &&
+					!state.deck(order).clued && {
 						game.meta(order).status == CardStatus.None ||
 						game.meta(order).status == CardStatus.PermissionToDiscard
 					}
@@ -843,7 +845,7 @@ object HGroup:
 					prev.state.canClue
 
 				// Whether cluing 1 to the discarder was blocked by this card
-				val blocked = rank == 1 || game.state.variant.suits.lift(suitIndex).exists(_.suitType.pinkish)
+				val blocked = id.exists(i => i.rank == 1 || state.variant.suits(i.suitIndex).suitType.pinkish)
 
 				g.when(_ => writeStaleness): g =>
 					g.state.hands.zipWithIndex.foldLeft(g) { case (acc, (hand, index)) =>
@@ -858,8 +860,8 @@ object HGroup:
 			.elim()
 
 		def interpretPlay(prev: HGroup, game: HGroup, action: PlayAction): HGroup =
-			val PlayAction(playerIndex, order, suitIndex, rank) = action
-			val isInverted = game.state.variant.suits.lift(suitIndex).exists(_.suitType.inverted)
+			val PlayAction(playerIndex, order, id) = action
+			val isInverted = id.exists(i => game.state.variant.suits(i.suitIndex).suitType.inverted)
 
 			val updatedGame = game.refreshUncertain
 
@@ -875,7 +877,7 @@ object HGroup:
 					case None =>
 						pre.resetImportant(playerIndex).pipe: g =>
 							if isInverted && prev.chop(playerIndex).contains(order) then
-								val ctx = DiscardContext(prev, g, DiscardAction(playerIndex, order, suitIndex, rank, failed = false))
+								val ctx = DiscardContext(prev, g, DiscardAction(playerIndex, order, id, failed = false))
 
 								interpretSdcm(ctx)
 								.orElse(interpretPosDc(ctx))
@@ -984,7 +986,7 @@ object HGroup:
 									(perform, action, value)
 
 							val allPlays = playableOrders.map: o =>
-								val action = PlayAction(state.ourPlayerIndex, o, me.thoughts(o).id(infer = true, partial = true))
+								val action = PlayAction(state.ourPlayerIndex, o, me.thoughts(o).id(infer = true))
 								val value = evalAction(game, action)
 								(PerformAction.tryPlay(game, o), action, value)
 
@@ -1028,7 +1030,7 @@ object HGroup:
 								.when(_ => !cantDiscard):
 									_ ++ allDiscards
 								.when(_ => canDiscardChop): as =>
-									val action = DiscardAction(state.ourPlayerIndex, chop.get, -1, -1, false)
+									val action = DiscardAction(state.ourPlayerIndex, chop.get, None, false)
 									val value = evalAction(game, action)
 									as :+ (PerformAction.tryDiscard(game, chop.get), action, value)
 

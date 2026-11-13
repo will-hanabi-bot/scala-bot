@@ -10,8 +10,8 @@ case class DiscardContext(prev: HGroup, game: HGroup, action: DiscardAction)
 def interpretTransfer(ctx: DiscardContext, holder: Int, dupe: Option[Int]): (DiscardResult, Boolean) =
 	val DiscardContext(prev, game, action) = ctx
 	val state = game.state
-	val DiscardAction(playerIndex, order, suitIndex, rank, _) = action
-	val id = Identity(suitIndex, rank)
+	val DiscardAction(playerIndex, order, _id, _) = action
+	val id = _id.get
 
 	/** Tries to find a third copy of a card. */
 	def findThird: Option[(Int, Int)] =
@@ -135,8 +135,7 @@ def interpretTransfer(ctx: DiscardContext, holder: Int, dupe: Option[Int]): (Dis
 def checkUsefulDcH(ctx: DiscardContext): (DiscardResult, Boolean) =
 	val DiscardContext(prev, game, action) = ctx
 	val state = game.state
-	val DiscardAction(playerIndex, order, suitIndex, rank, _) = action
-	val id = Identity(suitIndex, rank)
+	val DiscardAction(playerIndex, order, id, _) = action
 
 	Log.info("interpreting useful dc!")
 
@@ -145,7 +144,7 @@ def checkUsefulDcH(ctx: DiscardContext): (DiscardResult, Boolean) =
 		return (result = DiscardResult.None, dda = false)		// no dda after sacrifice?
 
 	val dupe = (0 until state.numPlayers).findSome: i =>
-		state.hands(i).find(state.deck(_).matches(id)).map(i -> _)
+		state.hands(i).find(state.deck(_).matches(id.get)).map(i -> _)
 
 	dupe match
 		case Some((dupeHolder, dupeOrder)) =>
@@ -162,8 +161,8 @@ def checkUsefulDcH(ctx: DiscardContext): (DiscardResult, Boolean) =
 def transferWCs(ctx: DiscardContext, result: DiscardResult): HGroup =
 	val DiscardContext(prev, game, action) = ctx
 	val state = game.state
-	val DiscardAction(playerIndex, order, suitIndex, rank, failed) = action
-	val id = Identity(suitIndex, rank)
+	val DiscardAction(playerIndex, order, _id, failed) = action
+	val id = _id.get
 
 	result match
 		case DiscardResult.Sarcastic(orders) if orders.length == 1 =>
@@ -221,24 +220,25 @@ def interpretUsefulDcH(ctx: DiscardContext): Option[HGroup] =
 	val DiscardContext(prev, game, action) = ctx
 	val state = game.state
 
-	val DiscardAction(playerIndex, order, suitIndex, rank, failed) = action
-	val id = Identity(suitIndex, rank)
+	val DiscardAction(playerIndex, order, _id, failed) = action
 
 	val valid = !failed &&
-		suitIndex != -1 && rank != -1 &&
-		!state.isBasicTrash(id) &&
-		!prev.meta(order).trash &&
-		prev.isTouched(order) && {
-			val dupe = (0 until state.numPlayers).find: i =>
-				state.hands(i).exists: o =>
-					game.common.thoughts(o).matches(id, infer = true) &&
-					state.deck(o).matches(id, assume = true)
+		_id.exists: id =>
+			!state.isBasicTrash(id) &&
+			!prev.meta(order).trash &&
+			prev.isTouched(order) && {
+				val dupe = (0 until state.numPlayers).find: i =>
+					state.hands(i).exists: o =>
+						game.common.thoughts(o).matches(id, infer = true) &&
+						state.deck(o).matches(id, assume = true)
 
-			// Discarding a dupe in the same hand doesn't count as a useful dc
-			dupe.forall(_ != playerIndex)
-		}
+				// Discarding a dupe in the same hand doesn't count as a useful dc
+				dupe.forall(_ != playerIndex)
+			}
 
 	Option.when(valid):
+		val id = _id.get
+
 		(checkUsefulDcH(ctx) match
 			case (DiscardResult.None, _) =>
 				game.withMove(DiscardInterp.None).copy(dda = None)
@@ -250,7 +250,7 @@ def interpretUsefulDcH(ctx: DiscardContext): Option[HGroup] =
 						wc.focus == order
 				)
 				.when(_ => dda):
-					_.checkDDA(playerIndex, id)
+					_.checkDDA(playerIndex, _id)
 				.withMove(DiscardInterp.Mistake)
 
 			case (DiscardResult.GentlemansDiscard(targets, inverted), _) =>
@@ -308,7 +308,7 @@ def valid1ClueScream(game: HGroup, bob: Int) =
 
 private def checkSdcm(prev: HGroup, game: Game, action: DiscardAction): Option[DcStatus] =
 	val (common, state) = (prev.common, prev.state)
-	val DiscardAction(playerIndex, order, _, _, _) = action
+	val DiscardAction(playerIndex, order, _, _) = action
 	val bob = state.nextPlayerIndex(playerIndex)
 	val cathy = state.nextPlayerIndex(bob)
 
@@ -355,11 +355,12 @@ private def checkSdcm(prev: HGroup, game: Game, action: DiscardAction): Option[D
 def interpretSdcm(ctx: DiscardContext): Option[HGroup] =
 	val DiscardContext(prev, game, action) = ctx
 	val state = game.state
+	val DiscardAction(playerIndex, order, id, failed) = action
 
-	if game.inEndgame || (state.remScore < state.variant.suits.length && prev.state.canClue) || action.failed || prev.meta(action.order).status == CardStatus.GDInverted then
+	if game.inEndgame || (state.remScore < state.variant.suits.length && prev.state.canClue) || failed || prev.meta(order).status == CardStatus.GDInverted then
 		return None
 
-	val bob = state.nextPlayerIndex(action.playerIndex)
+	val bob = state.nextPlayerIndex(playerIndex)
 	val bobChop = game.chop(bob)
 
 	checkSdcm(prev, game, action).flatMap: status =>
@@ -380,16 +381,16 @@ def interpretSdcm(ctx: DiscardContext): Option[HGroup] =
 			Log.warn(s"interpreted scream/shout but ${state.names(bob)} has no chop! interpreting mistake")
 			Some:
 				game.copy(dcStatus = DcStatus.None)
-					.checkDDA(action.playerIndex, Identity(action.suitIndex, action.rank))
+					.checkDDA(playerIndex, id)
 					.withMove(DiscardInterp.Mistake)
 
 		else if status == DcStatus.Scream && game.common.thinksLoaded(prev, bob) then
-			Log.warn(s"${state.names(action.playerIndex)} discarded with a playable/kt but next player was safe! (echo?) checking pos dc")
+			Log.warn(s"${state.names(playerIndex)} discarded with a playable/kt but next player was safe! (echo?) checking pos dc")
 
 			interpretPosDc(ctx).orElse:
 				Some:
 					game.copy(dcStatus = DcStatus.None)
-						.checkDDA(action.playerIndex, Identity(action.suitIndex, action.rank))
+						.checkDDA(playerIndex, id)
 						.withMove(DiscardInterp.Mistake)
 
 		else
@@ -414,7 +415,7 @@ def interpretSdcm(ctx: DiscardContext): Option[HGroup] =
 
 			Some:
 				game.copy(dcStatus = status)
-					.checkDDA(action.playerIndex, Identity(action.suitIndex, action.rank))
+					.checkDDA(playerIndex, id)
 					.withMove(if mistake then DiscardInterp.Mistake else DiscardInterp.Emergency)
 					.when(_ => status != DcStatus.Generation): h =>
 						h.withMeta(bobChop.get)(_.copy(status = CardStatus.ChopMoved))
@@ -445,7 +446,7 @@ enum PosDcResult:
 
 private def checkPosDc(ctx: DiscardContext): PosDcResult =
 	val DiscardContext(prev, game, action) = ctx
-	val DiscardAction(playerIndex, order, suitIndex, rank, failed) = action
+	val DiscardAction(playerIndex, order, id, failed) = action
 	val state = game.state
 	val thought = prev.common.thoughts(order)
 	val slot = prev.state.hands(playerIndex).indexOf(order) + 1
@@ -468,7 +469,7 @@ private def checkPosDc(ctx: DiscardContext): PosDcResult =
 	if unintended then
 		return PosDcResult.NotPosDc
 
-	val numPlays = if (action.failed && !expectedDc.contains(order) && prev.state.clueTokens < 8) ^ state.isInverted(Identity(suitIndex, rank)) then 2 else 1
+	val numPlays = if (action.failed && !expectedDc.contains(order) && prev.state.clueTokens < 8) ^ id.exists(state.isInverted) then 2 else 1
 
 	val targets = {
 		for
@@ -499,7 +500,7 @@ private def checkPosDc(ctx: DiscardContext): PosDcResult =
 
 def interpretPosDc(ctx: DiscardContext): Option[HGroup] =
 	val DiscardContext(prev, game, action) = ctx
-	val DiscardAction(playerIndex, order, _, _, failed) = action
+	val DiscardAction(playerIndex, order, _, failed) = action
 	val state = game.state
 	val slot = prev.state.hands(playerIndex).indexOf(order) + 1
 

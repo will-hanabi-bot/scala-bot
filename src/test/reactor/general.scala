@@ -268,7 +268,7 @@ class General extends munit.FunSuite:
 			clueTokens = 6
 		)
 
-		val action = DiscardAction(0, Alice.ordinal, 2, 1, failed = false)
+		val action = DiscardAction(0, Alice.ordinal, Some(Identity(2, 1)), failed = false)
 		val result = _evalAction(game, action)
 
 		// Discarding g1 in slot 5 is a bad GD.

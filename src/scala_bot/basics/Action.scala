@@ -11,30 +11,6 @@ sealed trait Action:
 	def requiresDraw: Boolean
 	def isPlayerAction: Boolean
 
-/** @param clues The number of clues in the bank.
-  * @param score The current score.
-  * @param maxScore The maximum score possible, given the current state.
-  */
-case class StatusAction(
-	clues: Int,
-	score: Int,
-	maxScore: Int
-) extends Action:
-	def fmt(state: State) =
-		s"Status! Clues: $clues, Score: $score/$maxScore"
-
-	def playerIndex = -1
-	def requiresDraw = false
-	def isPlayerAction = false
-
-object StatusAction:
-	def fromJSON(json: ujson.Value) =
-		StatusAction(
-			json.obj("clues").num.toInt,
-			json.obj("score").num.toInt,
-			json.obj("maxScore").num.toInt
-		)
-
 /** @param num The turn number (1-indexed).
   * @param currentPlayerIndex The index of the player whose turn it is.
   */
@@ -103,11 +79,10 @@ def logId(state: State, suitIndex: Int, rank: Int) =
 case class DrawAction(
 	playerIndex: Int,
 	order: Int,
-	suitIndex: Int,
-	rank: Int
+	identity: Option[Identity]
 ) extends Action:
 	def fmt(state: State) =
-		s"${state.names(playerIndex)} draws ${logId(state, suitIndex, rank)} ($order)"
+		s"${state.names(playerIndex)} draws ${state.logId(identity)} ($order)"
 
 	def requiresDraw = false
 	def isPlayerAction = false
@@ -117,8 +92,8 @@ object DrawAction:
 		DrawAction(
 			json.obj("playerIndex").num.toInt,
 			json.obj("order").num.toInt,
-			json.obj("suitIndex").num.toInt,
-			json.obj("rank").num.toInt
+			json.obj.get("identity").map: idObj =>
+				Identity(idObj("suitIndex").num.toInt, idObj("rank").num.toInt)
 		)
 
 /** @param playerIndex The index of the player who played the card.
@@ -129,11 +104,10 @@ object DrawAction:
 case class PlayAction(
 	playerIndex: Int,
 	order: Int,
-	suitIndex: Int,
-	rank: Int
+	identity: Option[Identity]
 ) extends Action:
 	def fmt(state: State) =
-		s"${state.names(playerIndex)} plays ${logId(state, suitIndex, rank)} ($order)"
+		s"${state.names(playerIndex)} plays ${state.logId(identity)} ($order)"
 
 	def requiresDraw = true
 	def isPlayerAction = true
@@ -143,16 +117,9 @@ object PlayAction:
 		PlayAction(
 			json.obj("playerIndex").num.toInt,
 			json.obj("order").num.toInt,
-			json.obj("suitIndex").num.toInt,
-			json.obj("rank").num.toInt
+			json.obj.get("identity").map: idObj =>
+				Identity(idObj("suitIndex").num.toInt, idObj("rank").num.toInt)
 		)
-
-	def apply(playerIndex: Int, order: Int, id: Option[Identity]): PlayAction =
-		id match
-			case Some(Identity(suitIndex, rank)) =>
-				PlayAction(playerIndex, order, suitIndex, rank)
-			case None =>
-				PlayAction(playerIndex, order, -1, -1)
 
 /** @param playerIndex The index of the player who discarded the card.
   * @param order The position of the card in the deck (0 is the topmost card).
@@ -163,13 +130,12 @@ object PlayAction:
 case class DiscardAction(
 	playerIndex: Int,
 	order: Int,
-	suitIndex: Int,
-	rank: Int,
+	identity: Option[Identity],
 	failed: Boolean = false
 ) extends Action:
 	def fmt(state: State) =
 		val verb = if failed then "bombs" else "discards"
-		s"${state.names(playerIndex)} $verb ${logId(state, suitIndex, rank)} ($order)"
+		s"${state.names(playerIndex)} $verb ${state.logId(identity)} ($order)"
 
 	def requiresDraw = true
 	def isPlayerAction = true
@@ -179,38 +145,10 @@ object DiscardAction:
 		DiscardAction(
 			json.obj("playerIndex").num.toInt,
 			json.obj("order").num.toInt,
-			json.obj("suitIndex").num.toInt,
-			json.obj("rank").num.toInt,
+			json.obj.get("identity").map: idObj =>
+				Identity(idObj("suitIndex").num.toInt, idObj("rank").num.toInt)
+			,
 			json.obj("failed").bool
-		)
-
-	def apply(playerIndex: Int, order: Int, id: Option[Identity]): DiscardAction =
-		id match
-			case Some(Identity(suitIndex, rank)) =>
-				DiscardAction(playerIndex, order, suitIndex, rank)
-			case None =>
-				DiscardAction(playerIndex, order, -1, -1)
-
-/** @param num The current number of strikes.
-  * @param turn The current turn number.
-  * @param order The order of the card that caused the strike.
-  */
-case class StrikeAction(
-	num: Int,
-	turn: Int,
-	order: Int
-) extends Action:
-	def fmt(state: State) = ""
-	def playerIndex = -1
-	def requiresDraw = false
-	def isPlayerAction = false
-
-object StrikeAction:
-	def fromJSON(json: ujson.Value) =
-		StrikeAction(
-			json.obj("num").num.toInt,
-			json.obj("turn").num.toInt,
-			json.obj("order").num.toInt
 		)
 
 enum EndCondition:
@@ -257,9 +195,7 @@ object Action:
 			case "discard" => Some(DiscardAction.fromJSON(json))
 			case "play"    => Some(PlayAction.fromJSON(json))
 			case "draw"    => Some(DrawAction.fromJSON(json))
-			case "status"  => Some(StatusAction.fromJSON(json))
 			case "turn"    => Some(TurnAction.fromJSON(json))
-			case "strike"  => Some(StrikeAction.fromJSON(json))
 			case "gameOver" => Some(GameOverAction.fromJSON(json))
 			case _     => None
 
@@ -280,16 +216,16 @@ object Action:
 	 */
 	def dragDiscard(state: State, playerIndex: Int, order: Int, id: Option[Identity] = None) =
 		id.orElse(state.deck(order).id()) match
-			case Some(id) =>
-				if state.isInverted(id) then
-					if state.isPlayable(id) then
-						PlayAction(playerIndex, order, id.suitIndex, id.rank)
+			case Some(i) =>
+				if state.isInverted(i) then
+					if state.isPlayable(i) then
+						PlayAction(playerIndex, order, Some(i))
 					else
-						DiscardAction(playerIndex, order, id.suitIndex, id.rank, failed = true)
+						DiscardAction(playerIndex, order, Some(i), failed = true)
 				else
-					DiscardAction(playerIndex, order, id.suitIndex, id.rank)
+					DiscardAction(playerIndex, order, Some(i))
 			case _ =>
-				DiscardAction(playerIndex, order, -1, -1)
+				DiscardAction(playerIndex, order, None)
 
 	/**
 	 * Returns the result of dragging this card to the discard pile.
@@ -297,15 +233,15 @@ object Action:
 	 */
 	def dragPlay(state: State, playerIndex: Int, order: Int, id: Option[Identity] = None) =
 		id.orElse(state.deck(order).id()) match
-			case Some(id) =>
-				if state.isInverted(id) then
-					DiscardAction(playerIndex, order, id.suitIndex, id.rank)
-				else if state.isPlayable(id) then
-					PlayAction(playerIndex, order, id.suitIndex, id.rank)
+			case Some(i) =>
+				if state.isInverted(i) then
+					DiscardAction(playerIndex, order, Some(i))
+				else if state.isPlayable(i) then
+					PlayAction(playerIndex, order, Some(i))
 				else
-					DiscardAction(playerIndex, order, id.suitIndex, id.rank, failed = true)
+					DiscardAction(playerIndex, order, Some(i), failed = true)
 			case _ =>
-				PlayAction(playerIndex, order, -1, -1)
+				PlayAction(playerIndex, order, None)
 
 /** Returns an updated action list after trying to insert the action on the specified turn.
   * Does nothing if that turn already contains the action.
@@ -366,6 +302,11 @@ enum PerformAction:
 	def isClue: Boolean = this match
 		case Colour(_, _) | Rank(_, _) => true
 		case _ => false
+
+	def getOrder: Int = this match
+		case Play(target) => target
+		case Discard(target) => target
+			case _ => throw new Error(s"tried to get order of $this!")
 
 	/** Returns a human-readable string of the action (must be from our hand).
 	  * For plays and discards, a player can be provided whose inferences will be used.
@@ -438,26 +379,26 @@ enum PerformAction:
 				deckId(target) match
 					case Some(id) =>
 						if !retain && state.isInverted(id) then
-							DiscardAction(playerIndex, target, id.suitIndex, id.rank)
+							DiscardAction(playerIndex, target, Some(id))
 						else if state.isPlayable(id) then
-							PlayAction(playerIndex, target, id.suitIndex, id.rank)
+							PlayAction(playerIndex, target, Some(id))
 						else
-							DiscardAction(playerIndex, target, id.suitIndex, id.rank, true)
+							DiscardAction(playerIndex, target, Some(id), true)
 					case None =>
-						DiscardAction(playerIndex, target, -1, -1, true)
+						DiscardAction(playerIndex, target, None, true)
 
 			case PerformAction.Discard(target) =>
 				deckId(target) match
 					case Some(id) =>
 						if !retain && state.isInverted(id) then
 							if state.isPlayable(id) then
-								PlayAction(playerIndex, target, id.suitIndex, id.rank)
+								PlayAction(playerIndex, target, Some(id))
 							else
-								DiscardAction(playerIndex, target, id.suitIndex, id.rank, true)
+								DiscardAction(playerIndex, target, Some(id), true)
 						else
-							DiscardAction(playerIndex, target, id.suitIndex, id.rank, false)
+							DiscardAction(playerIndex, target, Some(id), false)
 					case None =>
-						DiscardAction(playerIndex, target, -1, -1, false)
+						DiscardAction(playerIndex, target, None, false)
 
 			case PerformAction.Colour(target, value) =>
 				val clue = BaseClue(ClueKind.Colour, value)
@@ -493,13 +434,13 @@ object PerformAction:
 				else
 					PerformAction.Rank(target, clue.value)
 
-			case DiscardAction(_, order, _, _, failed) =>
+			case DiscardAction(_, order, _, failed) =>
 				if failed then
 					PerformAction.Play(order)
 				else
 					PerformAction.Discard(order)
 
-			case PlayAction(_, order, _, _) =>
+			case PlayAction(_, order, _) =>
 				PerformAction.Play(order)
 
 			case _ =>

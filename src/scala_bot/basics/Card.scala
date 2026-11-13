@@ -5,16 +5,12 @@ package scala_bot.basics
   * Requires id() to be defined, and provides matches() based on it.
   */
 trait Identifiable:
-	def suitIndex: Int
-	def rank: Int
-
 	/** Returns the contained identity, or None if unknown.
 	  *
 	  * @param infer Whether to return Some(inf) if there is exactly 1 inference and is otherwise unknown.
 	  * @param symmetric Whether to ignore info from "looking" at the card.
-	  * @param partial Whether to return partial information about an unknown identity. May return -1 for suitIndex or rank.
 	  */
-	def id(infer: Boolean = false, symmetric: Boolean = false, partial: Boolean = false): Option[Identity]
+	def id(infer: Boolean = false, symmetric: Boolean = false): Option[Identity]
 
 	/** Returns whether this identity is the same as the other.
 	  * If the other's identity is unknown, returns false.
@@ -31,7 +27,7 @@ trait Identifiable:
 
 /** The pairing of a suitIndex and rank.*/
 case class Identity(suitIndex: Int, rank: Int) extends Identifiable:
-	def id(infer: Boolean = false, symmetric: Boolean = false, partial: Boolean = false) =
+	def id(infer: Boolean = false, symmetric: Boolean = false) =
 		Some(this)
 
 	/** Converts the identity to its ordinal. */
@@ -97,8 +93,7 @@ enum CardStatus:
 
 /** The physical card in the game. */
 case class Card(
-	suitIndex: Int,
-	rank: Int,
+	identity: Option[Identity],
 	/** The position of the card in the deck (0 is the topmost card). */
 	order: Int,
 	turnDrawn: Int,
@@ -107,13 +102,12 @@ case class Card(
 	/** The clues that have touched this card. */
 	clues: List[CardClue] = Nil
 ) extends Identifiable:
-	def id(infer: Boolean = false, symmetric: Boolean = false, partial: Boolean = false) =
-		Option.when(suitIndex != -1 && rank != -1)(Identity(suitIndex, rank))
+	def id(infer: Boolean = false, symmetric: Boolean = false) =
+		identity
 
 /** What a player thinks about a card. */
 case class Thought(
-	suitIndex: Int,
-	rank: Int,
+	identity: Option[Identity],
 	/** The position of the card in the deck (0 is the topmost card). */
 	order: Int,
 	/** The possible ids of this card based on clues and what this player knows (except "looking" at the card). */
@@ -131,24 +125,16 @@ case class Thought(
 	/** Whether this card has previously lost all of its inferences (e.g. due to being bad touched and fixed). */
 	reset: Boolean = false
 ) extends Identifiable:
-	def id(infer: Boolean = false, symmetric: Boolean = false, partial: Boolean = false) =
+	def id(infer: Boolean = false, symmetric: Boolean = false) =
 		if possible.length == 1 then
 			Some(possible.head)
-		else if !symmetric && suitIndex != -1 then
-			Some(Identity(suitIndex, rank))
+		else if !symmetric && identity.isDefined then
+			identity
 		else if infer then
 			if inferred.length == 1 then
 				Some(inferred.head)
 			else if infoLock.existsO(_.length == 1) then
 				infoLock.mapA(_.head)
-			else
-				None
-		else if partial then
-			val Identity(suitIndex, rank) = possible.head
-			if possible.forall(_.suitIndex == suitIndex) then
-				Some(Identity(suitIndex, -1))
-			else if possible.forall(_.rank == rank) then
-				Some(Identity(-1, rank))
 			else
 				None
 		else
@@ -180,12 +166,11 @@ case class Thought(
 
 object Thought:
 	def apply(
-		suitIndex: Int,
-		rank: Int,
+		identity: Option[Identity],
 		order: Int,
 		possible: IdentitySet
 	): Thought =
-		Thought(suitIndex, rank, order, possible, possible)
+		Thought(identity, order, possible, possible)
 
 /** The conventional information on a card common to all players. */
 case class ConvData(

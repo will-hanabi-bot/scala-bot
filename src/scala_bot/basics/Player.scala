@@ -577,7 +577,7 @@ case class Player(
 
 					case Some(id) =>
 						if hypo.state.isPlayable(id) then
-							val playAction = PlayAction(holder, order, id.suitIndex, id.rank)
+							val playAction = PlayAction(holder, order, Some(id))
 
 							val level = Logger.level
 							Logger.setLevel(LogLevel.Error.min(level))

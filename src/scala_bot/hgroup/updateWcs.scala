@@ -58,7 +58,7 @@ def unplayableAlt(game: HGroup, action: Action, wc: WaitingConnection) =
 			conn.ids.exists: i =>
 				!game.state.isPlayable(i) ||
 				action.matchesP:
-					case PlayAction(_, _, suitIndex, rank) => i.prev.contains(Identity(suitIndex, rank))
+					case PlayAction(_, _, Some(id)) => i.prev.contains(id)
 
 private def revert(g: HGroup, order: Int, ids: List[Identity], forceReset: Boolean = false) =
 	val newInferred = g.common.thoughts(order).inferred.difference(ids)
@@ -289,13 +289,13 @@ def updateWc(prev: HGroup, game: HGroup, action: Action, wc: WaitingConnection, 
 				resolveRetained(prev, game, action, wc)
 		else
 			action match
-				case PlayAction(_, order, _, _) =>
+				case PlayAction(_, order, _) =>
 					resolvePlayed(game, wc, order)
 
 				case d: DiscardAction if d.failed || wc.currConn.matchesP { case f: FinesseConn => f.inverted } =>
 					resolvePlayed(game, wc, d.order)
 
-				case DiscardAction(playerIndex, order, _, _, failed) =>
+				case DiscardAction(playerIndex, order, _, failed) =>
 					Log.highlight(Console.YELLOW, s"waiting card ${state.logId(wc.currConn.order)} discarded?? ${prev.chop(playerIndex)}")
 
 					if prev.chop(playerIndex).contains(order) && !wc.currConn.matchesP { case f: FinesseConn => f.certain } then
@@ -314,10 +314,11 @@ def otherPlay(game: HGroup, action: Action, wc: WaitingConnection) =
 	val ids = wc.currConn.ids
 
 	// The card needs to match our thoughts as well as the hypothesized identity in the connection
-	action.matchesP { case PlayAction(_, order, suitIndex, rank) =>
-		order != wc.currConn.order &&
-		thought.matches(Identity(suitIndex, rank), infer = true, assume = true) &&
-		ids.length == 1 && ids.contains(Identity(suitIndex, rank))
+	action.matchesP { case PlayAction(_, order, id) =>
+		id.exists: i =>
+			order != wc.currConn.order &&
+			thought.matches(i, infer = true, assume = true) &&
+			ids.length == 1 && ids.contains(i)
 	} &&
 	// currConn.ids.length == 1 &&
 	// thought.matches(currConn.ids.head, infer = true) &&
@@ -378,8 +379,8 @@ def resolveRetained(prev: HGroup, game: HGroup, action: Action, wc: WaitingConne
 			case c: KnownConn => game.isBlindPlaying(c.order)
 			case _: FinesseConn => true
 			case _: PromptConn => game.lastActions(reacting).matchesP:
-				case Some(ClueAction(_, _, _, _)) => game.lastMove == Some(ClueInterp.Stall)
-				case Some(DiscardAction(_, _, _, _, _)) => true
+				case Some(_: ClueAction) => game.lastMove == Some(ClueInterp.Stall)
+				case Some(_: DiscardAction) => true
 			case _: PositionalConn => true
 
 	if !missedReaction then
@@ -421,7 +422,7 @@ def resolveRetained(prev: HGroup, game: HGroup, action: Action, wc: WaitingConne
 				Log.info(s"allowing $name to defer a positional by cluing!")
 				return UpdateResult.Keep
 
-		case PlayAction(_, order, _, _) =>
+		case PlayAction(_, order, _) =>
 			if game.isBlindPlaying(order) then
 				if game.xmeta(order).turnFinessed.exists(_ < wc.turn) then
 					Log.info(s"$name played into older finesse, continuing to wait")
@@ -433,7 +434,7 @@ def resolveRetained(prev: HGroup, game: HGroup, action: Action, wc: WaitingConne
 			// else
 			// 	Log.info(s"$name played into something else, continuing")
 			// 	return UpdateResult.Keep
-		case DiscardAction(playerIndex, order, _, _, _) =>
+		case DiscardAction(playerIndex, order, _, _) =>
 			if wc.currConn.isInstanceOf[PositionalConn] && !prev.chop(playerIndex).contains(order) then
 				Log.info(s"allowing $name to defer a positional by performing a positional!")
 				return UpdateResult.Keep

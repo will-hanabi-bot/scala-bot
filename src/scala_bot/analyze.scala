@@ -52,7 +52,7 @@ def analyzeGame[G <: Game](game: G, data: GameData)(using ops: GameOps[G], runti
 			(0 until g.state.numPlayers).foldLeft(g): (a, playerIndex) =>
 				(0 until HAND_SIZE(g.state.numPlayers)).foldLeft(a): (acc, _) =>
 					val order = acc.state.nextCardOrder
-					acc.handleAction(DrawAction(playerIndex, order, deck(order).suitIndex, deck(order).rank))
+					acc.handleAction(DrawAction(playerIndex, order, Some(deck(order))))
 		.pipe:
 			actions.foldLeft(_): (acc, perform) =>
 				val playerIndex = acc.state.currentPlayerIndex
@@ -61,7 +61,7 @@ def analyzeGame[G <: Game](game: G, data: GameData)(using ops: GameOps[G], runti
 						perform match
 							case PerformAction.Play(_) | PerformAction.Discard(_) =>
 								val order = a.state.nextCardOrder
-								a.handleAction(DrawAction(playerIndex, order, deck(order).suitIndex, deck(order).rank))
+								a.handleAction(DrawAction(playerIndex, order, Some(deck(order))))
 							case _ => a
 					.when(p => perform.isInstanceOf[PerformAction.Play] && p.state.strikes == 3):
 						_.handleAction(GameOverAction(0, playerIndex))

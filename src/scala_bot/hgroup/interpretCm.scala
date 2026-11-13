@@ -161,11 +161,11 @@ def interpret5cm(ctx: ClueContext, log: Boolean = true): Result5cm =
 
 def checkOcm(prev: HGroup, action: PlayAction | DiscardAction): Option[List[Int]] =
 	val state = prev.state
-	val (playerIndex, order, rank) = action match
-		case PlayAction(p, o, _, rank) => (p, o, rank)
-		case DiscardAction(p, o, _, rank, _) => (p, o, rank)
+	val (playerIndex, order, id) = action match
+		case PlayAction(p, o, id) => (p, o, id)
+		case DiscardAction(p, o, id, _) => (p, o, id)
 
-	if prev.level < Level.BasicCM || rank != 1 || prev.state.variant.pinkish || prev.state.playStacks.count(_ == 0) <= 1 then
+	if prev.level < Level.BasicCM || id.forall(_.rank != 1) || prev.state.variant.pinkish || prev.state.playStacks.count(_ == 0) <= 1 then
 		return None
 
 	val unknown1s = state.hands(playerIndex).filter(prev.unknown1)
@@ -231,7 +231,7 @@ def interpretBombOcm(ctx: DiscardContext): Option[HGroup] =
 				Log.warn("ocm on trash!")
 
 			performCM(game, orders).copy(dcStatus = DcStatus.None)
-				.checkDDA(action.playerIndex, Identity(action.suitIndex, action.rank))
+				.checkDDA(action.playerIndex, action.identity)
 				.withMove(if mistake then PlayInterp.Mistake else PlayInterp.OrderCM)
 
 def interpretTccm(ctx: ClueContext): Option[List[Int]] =

@@ -259,7 +259,7 @@ class GentlemansDiscards extends munit.FunSuite:
 			init = preClue(Alice, 5, Seq("2"))
 		)
 
-		assert(_evalAction(game, DiscardAction(Alice.ordinal, game.state.hands(Alice.ordinal)(4), -1, -1, false)) < 0)
+		assert(_evalAction(game, DiscardAction(Alice.ordinal, game.state.hands(Alice.ordinal)(4), None, false)) < 0)
 
 	test("interprets a tcm with info from a layered gd"):
 		val game = setup(HGroup.atLevel(10), Vector(

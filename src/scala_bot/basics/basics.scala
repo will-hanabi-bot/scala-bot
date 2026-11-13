@@ -29,7 +29,7 @@ extension[G <: Game](game: G)
 				touchedGame
 					.when(_ => newThought.possible.length == 1): g =>
 						val id = newThought.possible.head
-						g.withCard(order)(c => c.copy(suitIndex = id.suitIndex, rank = id.rank))
+						g.withCard(order)(_.copy(identity = Some(id)))
 							.pipe(ops.copyWith(_, GameUpdates(deckIds = Some(g.deckIds.updated(order, Some(id))))))
 
 					.when(_ => newThought.inferred.length < game.common.thoughts(order).inferred.length):
@@ -45,8 +45,7 @@ extension[G <: Game](game: G)
 
 	/** Returns the updated game after the discard, without conventional interpretations or elim. */
 	def onDiscard(action: DiscardAction)(using ops: GameOps[G]): G =
-		val DiscardAction(playerIndex, order, suitIndex, rank, failed) = action
-		val id = Identity(suitIndex, rank)
+		val DiscardAction(playerIndex, order, id, failed) = action
 
 		game.withState: s =>
 			s.copy(
@@ -58,35 +57,33 @@ extension[G <: Game](game: G)
 				(_.copy(strikes = s.strikes + 1))
 				(_.regainClue)
 
-		.when(_ => suitIndex != -1 && rank != -1): g =>
-			g.withState(_.withDiscard(id, order))
-			.withId(order, id)
-			.withThought(order): t =>
-				t.copy(
-					suitIndex,
-					rank,
-					inferred = IdentitySet.single(id),
-					oldInferred = t.inferred.toOpt,
-					possible = IdentitySet.single(id),
-					oldPossible = t.possible.toOpt,
-				)
+		.pipe: g =>
+			id.fold(g): i =>
+				g.withState(_.withDiscard(i, order))
+				.withId(order, i)
+				.withThought(order): t =>
+					t.copy(
+						identity = Some(i),
+						inferred = IdentitySet.single(i),
+						oldInferred = t.inferred.toOpt,
+						possible = IdentitySet.single(i),
+						oldPossible = t.possible.toOpt,
+					)
 
 	/** Returns the updated game after the draw, without conventional interpretations or elim.
 	  * @throws Exception If the draw reveals an inconsistent state, like the card order not matching the # of cards in the deck.
 	  */
 	def onDraw(action: DrawAction)(using ops: GameOps[G]): G =
 		val state = game.state
-		val DrawAction(playerIndex, order, suitIndex, rank) = action
+		val DrawAction(playerIndex, order, id) = action
 
 		if state.hands(playerIndex).length == HAND_SIZE(state.numPlayers) && !(state.options.deckPlays && order == state.cardCount.sum - 1) then
 			throw new Exception(s"${state.names(playerIndex)} already has a full hand!")
 
-		val id = Option.when(suitIndex != -1 && rank != -1):
-			game.deckIds.lift(order).flatten.foreach: id =>
-				if id != Identity(suitIndex, rank) then
-					throw new Exception(s"drew ${state.logId(Identity(suitIndex, rank))}, expected ${state.logId(id)} ${game.deckIds.map(state.logId)} ${order}")
-
-			Identity(suitIndex, rank)
+		id.foreach: i =>
+			game.deckIds.lift(order).flatten.foreach: deckId =>
+				if deckId != i then
+					throw new Exception(s"drew ${state.logId(i)}, expected ${state.logId(deckId)} ${game.deckIds.map(state.logId)} ${order}")
 
 		game.pipe: g =>
 			val deckIds = g.deckIds
@@ -109,7 +106,7 @@ extension[G <: Game](game: G)
 		.withState: s =>
 			s.copy(
 				hands = s.hands.updated(playerIndex, order +: s.hands(playerIndex)),
-				deck = s.deck :+ Card(suitIndex, rank, order, s.turnCount),
+				deck = s.deck :+ Card(id, order, s.turnCount),
 				holderOf = s.holderOf :+ playerIndex,
 				heldOrders = s.heldOrders.incl(order),
 				nextCardOrder = order + 1,
@@ -122,15 +119,14 @@ extension[G <: Game](game: G)
 			ops.copyWith(g, GameUpdates(
 				players = Some(g.players.zipWithIndex.map((player, i) => player.copy(
 					thoughts = player.thoughts :+ Thought(
-						if i != playerIndex then suitIndex else -1,
-						if i != playerIndex then rank else -1,
+						if i == playerIndex then None else id,
 						order,
 						g.common.allPossible
 					),
 					dirty = player.dirty.incl(order)
 				))),
 				common = Some(g.common.copy(
-					thoughts = g.common.thoughts :+ Thought(-1, -1, order, g.common.allPossible),
+					thoughts = g.common.thoughts :+ Thought(None, order, g.common.allPossible),
 					dirty = g.common.dirty.incl(order)
 				)),
 				meta = Some(g.meta :+ ConvData(order))
@@ -138,8 +134,7 @@ extension[G <: Game](game: G)
 
 	/** Returns the updated game after the play, without conventional interpretations or elim. */
 	def onPlay(action: PlayAction)(using ops: GameOps[G]): G =
-		val PlayAction(playerIndex, order, suitIndex, rank) = action
-		val id = Identity(suitIndex, rank)
+		val PlayAction(playerIndex, order, id) = action
 
 		game.withState: s =>
 			s.copy(
@@ -150,7 +145,7 @@ extension[G <: Game](game: G)
 		.when(_ => game.state.options.deckPlays && order == game.state.cardCount.sum - 1 && game.state.deck.length == order): g =>
 			g.withState: s =>
 				s.copy(
-					deck = s.deck :+ Card(suitIndex, rank, order, s.turnCount),
+					deck = s.deck :+ Card(id, order, s.turnCount),
 					holderOf = s.holderOf :+ playerIndex,
 					nextCardOrder = s.nextCardOrder + 1,
 					cardsLeft = s.cardsLeft - 1,
@@ -159,15 +154,14 @@ extension[G <: Game](game: G)
 			.pipe(ops.copyWith(_, GameUpdates(
 				players = Some(g.players.zipWithIndex.map((player, i) => player.copy(
 					thoughts = player.thoughts :+ Thought(
-						if i != playerIndex then suitIndex else -1,
-						if i != playerIndex then rank else -1,
+						if i == playerIndex then None else id,
 						order,
 						player.allPossible
 					),
 					dirty = player.dirty.incl(order)
 				))),
 				common = Some(g.common.copy(
-					thoughts = g.common.thoughts :+ Thought(-1, -1, order, g.common.allPossible),
+					thoughts = g.common.thoughts :+ Thought(None, order, g.common.allPossible),
 					dirty = g.common.dirty.incl(order)
 				)),
 				meta = Some(g.meta :+ ConvData(order))
@@ -178,16 +172,16 @@ extension[G <: Game](game: G)
 					oldInferred = t.inferred.toOpt,
 					oldPossible = t.possible.toOpt
 				)
-		.when(_ => suitIndex != -1 && rank != -1):
-			_.withState(_.withPlay(id))
-			.withId(order, id)
-			.withThought(order): t =>
-				t.copy(
-					suitIndex,
-					rank,
-					inferred = IdentitySet.single(id),
-					possible = IdentitySet.single(id),
-				)
+		.pipe: g =>
+			id.fold(g): i =>
+				g.withState(_.withPlay(i))
+				.withId(order, i)
+				.withThought(order): t =>
+					t.copy(
+						Some(i),
+						inferred = IdentitySet.single(i),
+						possible = IdentitySet.single(i),
+					)
 
 	/** Returns the updated game after performing empathy operations, including good touch if the convention uses it.
 	  * Also clears the dirty bit on all players.

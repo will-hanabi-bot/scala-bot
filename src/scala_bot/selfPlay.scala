@@ -35,8 +35,7 @@ def simulateGame[G <: Game](gs: Seq[G], deck: Vector[Identity])(using ops: GameO
 					val action = DrawAction(
 						playerIndex,
 						order,
-						if playerIndex == i then -1 else deck(order).suitIndex,
-						if playerIndex == i then -1 else deck(order).rank,
+						if playerIndex == i then None else Some(deck(order))
 					)
 					game.handleAction(action)
 
@@ -61,8 +60,7 @@ def simulateGame[G <: Game](gs: Seq[G], deck: Vector[Identity])(using ops: GameO
 								g.handleAction(DrawAction(
 									currentPlayerIndex,
 									order,
-									if currentPlayerIndex == g.state.ourPlayerIndex then -1 else deck(order).suitIndex,
-									if currentPlayerIndex == g.state.ourPlayerIndex then -1 else deck(order).rank,
+									if currentPlayerIndex == g.state.ourPlayerIndex then None else Some(deck(order))
 								))
 							case _ => g
 					.pipe: g =>

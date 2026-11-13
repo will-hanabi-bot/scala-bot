@@ -341,7 +341,7 @@ case class EndgameSolver[G <: Game](
 
 			state.heldOrders.find(game.common.thoughts(_).matches(id, infer = true)) match
 				case Some(order) if state.deck(order).id().forall(_.matches(id)) =>
-					val newCard = state.deck(order).copy(suitIndex = id.suitIndex, rank = id.rank)
+					val newCard = state.deck(order).copy(identity = Some(id))
 					val newState = cluelessState.copy(deck = cluelessState.deck.updated(order, newCard))
 					Right((true, newState, modified.incl(order)))
 
@@ -349,7 +349,7 @@ case class EndgameSolver[G <: Game](
 		.pipe: (viableClueless, cluelessState, modified) =>
 			Option.when(viableClueless):
 				state.heldOrders.difference(modified).foldLeft(cluelessState): (acc, order) =>
-					acc.copy(deck = acc.deck.updated(order, acc.deck(order).copy(suitIndex = -1, rank = -1)))
+					acc.copy(deck = acc.deck.updated(order, acc.deck(order).copy(identity = None)))
 
 		cluelessState.flatMap(this.cluelessWinnable(_, playerTurn, remaining, deadline, depth)) match
 			case Some(cluelessWin) =>

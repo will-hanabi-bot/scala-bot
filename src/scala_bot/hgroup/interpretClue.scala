@@ -76,10 +76,11 @@ def unacceptableClue(prev: HGroup, game: HGroup, @annotation.unused action: Clue
 			val oldest5 = state.hands(playerIndex).findLast: o =>
 				val card = state.deck(o)
 
-				o > chop &&
-				card.rank == 5 &&
-				!state.variant.suits(card.suitIndex).suitType.brownish &&
-				!card.clued
+				card.id().exists: id =>
+					o > chop &&
+					id.rank == 5 &&
+					!state.variant.suits(id.suitIndex).suitType.brownish &&
+					!card.clued
 
 			oldest5.map(g.chopDistance(playerIndex, _))
 

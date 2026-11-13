@@ -585,7 +585,7 @@ def connect(ctx: ClueContext, id: Identity, looksDirect: Boolean, thinksStall: F
 					acc.state.deck(conn.order).id()
 						.orElse(Option.when(conn.ids.length == 1)(conn.ids.head))
 						.fold(acc): i =>
-							val playAction = PlayAction(state.holderOf(conn.order), conn.order, i.suitIndex, i.rank)
+							val playAction = PlayAction(state.holderOf(conn.order), conn.order, Some(i))
 							val level = Logger.level
 
 							Logger.setLevel(LogLevel.Error.min(level))

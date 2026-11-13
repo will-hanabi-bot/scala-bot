@@ -71,7 +71,7 @@ def connectableSimple[G <: Game](game: G, player: Player, start: Int, target: In
 				val newGame =
 					ops.copyWith(game, GameUpdates(noRecurse = Some(true))).when(_.state.currentPlayerIndex != start):
 						_.simulateAction(TurnAction(state.turnCount, start))	// Go to starting player's turn
-					.simulateAction(PlayAction(start, order, playId.suitIndex, playId.rank))
+					.simulateAction(PlayAction(start, order, Some(playId)))
 
 				val newPlayer = if player.isCommon then
 					newGame.common
@@ -139,7 +139,7 @@ def rainbowMismatch(prev: Game, game: Game, action: ClueAction, id: Identity, pr
 				game.me.thoughts(o).possible.forall: c =>
 					state.variant.suits(c.suitIndex).suitType.rainbowish
 			else
-				state.variant.suits(state.deck(o).suitIndex).suitType.rainbowish
+				state.variant.suits(state.deck(o).id().get.suitIndex).suitType.rainbowish
 
 	if !allRainbow then
 		return false
