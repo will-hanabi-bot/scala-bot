@@ -27,7 +27,7 @@ def fetchAnalyzeGame(args: Seq[String])(using runtime: IORuntime) =
 		case None     => GameData.fetchFile(file.get)
 
 	Variant.init()
-	val variant = Variant.getVariant(options.variantName)
+	val variant = Variant.getVariant(options.variantId)
 
 	val state = State(players, 0, variant, options)
 	convention match
@@ -64,7 +64,7 @@ def analyzeGame[G <: Game](game: G, data: GameData)(using ops: GameOps[G], runti
 								a.handleAction(DrawAction(playerIndex, order, deck(order).suitIndex, deck(order).rank))
 							case _ => a
 					.when(p => perform.isInstanceOf[PerformAction.Play] && p.state.strikes == 3):
-						_.handleAction(GameOverAction(0, playerIndex))
+						_.handleAction(GameOverAction())
 					.pipe: g =>
 						val nextPlayerIndex = g.state.nextPlayerIndex(g.state.currentPlayerIndex)
 						g.handleAction(TurnAction(g.state.turnCount, nextPlayerIndex))
