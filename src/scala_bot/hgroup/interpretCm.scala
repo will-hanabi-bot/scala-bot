@@ -12,7 +12,7 @@ def interpretTcm(ctx: ClueContext, log: Boolean = true): Option[Seq[Int]] =
 	val ClueContext(prev, game, action, _) = ctx
 	val (common, state) = (game.common, game.state)
 
-	val ClueAction(_, target, list, clue) = action
+	val ClueAction(_, receiver, orders, clue) = action
 	val focus = ctx.focusResult.focus
 	val thought = common.thoughts(focus)
 
@@ -29,16 +29,16 @@ def interpretTcm(ctx: ClueContext, log: Boolean = true): Option[Seq[Int]] =
 			// If we allow inferring, the card must have been clued before this clue
 			visibleFind(state, common, id, infer = true, excludeOrder = focus, cond = (_, o) => prev.isTouched(o) && game.me.thoughts(o).matches(id, assume = true)).nonEmpty ||
 			// Only touching 1 new card and stale
-			(game.level >= Level.Context && list.count(!prev.state.deck(_).clued) == 1 && game.meta(focus).staleIds.contains(id))
+			(game.level >= Level.Context && orders.count(!prev.state.deck(_).clued) == 1 && game.meta(focus).staleIds.contains(id))
 		&&
 		!ctx.common.orderKp(game, focus)
 
 	if !tcm then
 		return None
 
-	val oldestTrash = list.filter(!prev.state.deck(_).clued).min
+	val oldestTrash = orders.filter(!prev.state.deck(_).clued).min
 
-	val cmOrders = state.hands(target).filter: o =>
+	val cmOrders = state.hands(receiver).filter: o =>
 		o < oldestTrash && !state.deck(o).clued && !game.meta(o).cm
 
 	if cmOrders.isEmpty then
@@ -51,11 +51,11 @@ def interpretTcm(ctx: ClueContext, log: Boolean = true): Option[Seq[Int]] =
 def handleTcm(ctx: ClueContext, tcm: Seq[Int], notStall: Boolean) =
 	val ClueContext(prev, game, action, _) = ctx
 	val (common, state) = (game.common, game.state)
-	val ClueAction(giver, target, list, clue) = action
+	val ClueAction(giver, receiver, orders, clue) = action
 
 	// Prefer TCCM over TCM
-	val newObvious = common.obviousPlayables(game, target)
-	val oldObvious = prev.common.obviousPlayables(game, target)
+	val newObvious = common.obviousPlayables(game, receiver)
+	val oldObvious = prev.common.obviousPlayables(game, receiver)
 
 	if newObvious.exists(!oldObvious.contains(_)) then
 		if game.level < Level.TempoClues then
@@ -74,7 +74,7 @@ def handleTcm(ctx: ClueContext, tcm: Seq[Int], notStall: Boolean) =
 					game.withMove(ClueInterp.Reveal)
 	else
 		// All newly cards are trash, except to the right of a gd note
-		list.takeWhile(game.meta(_).status != CardStatus.GentlemansDiscard).foldLeft(game): (acc, order) =>
+		orders.takeWhile(game.meta(_).status != CardStatus.GentlemansDiscard).foldLeft(game): (acc, order) =>
 			if prev.state.deck(order).clued || common.thoughts(order).id().isDefined then acc else
 				acc.withThought(order): t =>
 					val newInferred = t.possible.intersect(state.trashSet)
@@ -85,14 +85,14 @@ def handleTcm(ctx: ClueContext, tcm: Seq[Int], notStall: Boolean) =
 				.withMeta(order)(_.copy(trash = true))
 		.pipe(performCM(_, tcm))
 		.pipe: g =>
-			lazy val badTCM = game.chop(target).exists: oldChop =>
+			lazy val badTCM = game.chop(receiver).exists: oldChop =>
 				state.deck(oldChop).id().exists: chopId =>
 					state.isBasicTrash(chopId) ||
 					tcm.exists(o => o != oldChop && state.deck(o).matches(chopId)) ||
-					state.hands(target).exists(o => o != oldChop && game.me.thoughts(o).matches(chopId, infer = true) && game.isSaved(o)) ||
+					state.hands(receiver).exists(o => o != oldChop && game.me.thoughts(o).matches(chopId, infer = true) && game.isSaved(o)) ||
 					// Could be directly clued
-					state.allValidClues(target).exists: clue =>
-						val directList = state.clueTouched(state.hands(target), clue)
+					state.allValidClues(receiver).exists: clue =>
+						val directList = state.clueTouched(state.hands(receiver), clue)
 
 						// Clue must touch all non-trash CM'd cards
 						tcm.forall: o =>
@@ -125,24 +125,24 @@ enum Result5cm:
 def interpret5cm(ctx: ClueContext, log: Boolean = true): Result5cm =
 	val ClueContext(prev, game, action, _) = ctx
 	val state = game.state
-	val ClueAction(_, target, list, clue) = action
+	val ClueAction(_, receiver, orders, clue) = action
 	val focus = ctx.focusResult.focus
-	val chop = prev.chop(target)
+	val chop = prev.chop(receiver)
 
 	val not5cm =
 		game.inEndgame ||
 		clue != BaseClue(ClueKind.Rank, 5) ||
 		prev.state.deck(focus).clued ||
 		game.inEarlyGame ||
-		chop.forall(list.contains)
+		chop.forall(orders.contains)
 
 	if not5cm then
 		return Result5cm.None
 
-	list.filter(o => o > chop.get && !prev.state.deck(o).clued).minOption match
+	orders.filter(o => o > chop.get && !prev.state.deck(o).clued).minOption match
 		case None => Result5cm.None
 		case Some(oldest5) =>
-			val distance = prev.chopDistance(target, oldest5)
+			val distance = prev.chopDistance(receiver, oldest5)
 
 			if distance != 1 then
 				if log then Log.info(s"rightmost 5 was clued $distance-away from chop, not 5cm!")
@@ -237,7 +237,7 @@ def interpretBombOcm(ctx: DiscardContext): Option[HGroup] =
 def interpretTccm(ctx: ClueContext): Option[List[Int]] =
 	val ClueContext(prev, game, action, _) = ctx
 	val (common, state) = (game.common.updateHypoStacks(game), game.state)
-	val ClueAction(_, target, list, clue) = action
+	val ClueAction(_, receiver, orders, clue) = action
 	val FocusResult(focus, _, positional) = ctx.focusResult
 
 	if game.inEndgame then
@@ -248,11 +248,11 @@ def interpretTccm(ctx: ClueContext): Option[List[Int]] =
 		Log.info("positional, not tccm")
 		return None
 
-	if prev.common.thinksLocked(prev, target) then
-		Log.info("target was locked, not tccm")
+	if prev.common.thinksLocked(prev, receiver) then
+		Log.info("receiver was locked, not tccm")
 		return None
 
-	if list.exists(o => !prev.state.deck(o).clued && !common.orderTrash(game, o)) then
+	if orders.exists(o => !prev.state.deck(o).clued && !common.orderTrash(game, o)) then
 		Log.info("touched at least 1 new card, not tccm")
 		return None
 
@@ -274,7 +274,7 @@ def interpretTccm(ctx: ClueContext): Option[List[Int]] =
 
 	val focusThoughts = common.thoughts(focus)
 	val notPromptable = focusThoughts.inferred.forall: id =>
-		val prompt = prev.common.findPrompt(prev, target, id)
+		val prompt = prev.common.findPrompt(prev, receiver, id)
 		prompt.exists(_ != focus)
 	val id = focusThoughts.id(infer = true)
 
@@ -282,9 +282,9 @@ def interpretTccm(ctx: ClueContext): Option[List[Int]] =
 		Log.info(s"tempo on non-promptable non-5, not tccm")
 		return None
 
-	game.chop(target) match
+	game.chop(receiver) match
 		case Some(chop) =>
-			Log.info(s"tccm, chop moving ${if target == state.ourPlayerIndex then s"slot ${state.ourHand.indexOf(chop) + 1}" else state.logId(state.deck(chop))}")
+			Log.info(s"tccm, chop moving ${if receiver == state.ourPlayerIndex then s"slot ${state.ourHand.indexOf(chop) + 1}" else state.logId(state.deck(chop))}")
 			Some(List(chop))
 		case None =>
 			Log.warn("looked like tccm but no chop!")

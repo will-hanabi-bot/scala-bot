@@ -226,14 +226,14 @@ object Reactor:
 
 		def interpretClue(prev: Reactor, game: Reactor, action: ClueAction): Reactor =
 			val state = game.state
-			val ClueAction(giver, target, list, _) = action
+			val ClueAction(giver, receiver, orders, _) = action
 
 			val interpretedGame = checkMissed(game.elim(), giver, 99)
 				.when(_.waiting.exists(_.reacter == giver)):
 					_.copy(waiting = None)
 				.pipe: g =>
 					val (interp, interpGame) = g.nextInterp match
-						case _ if g.state.options.emptyClues && list.length == 0 =>
+						case _ if g.state.options.emptyClues && orders.isEmpty =>
 							Log.highlight(Console.YELLOW, "empty clue!")
 							(ClueInterp.Useless, g)
 
@@ -268,16 +268,16 @@ object Reactor:
 								case FixResult.Normal(cluedResets, duplicateReveals) =>
 									cluedResets ++ duplicateReveals
 								case _ => Nil
-							val allowableFix = target == state.nextPlayerIndex(giver) && fixed.nonEmpty
+							val allowableFix = receiver == state.nextPlayerIndex(giver) && fixed.nonEmpty
 
 							reacter match
 								case None => (if allowableFix then ClueInterp.Fix else ClueInterp.Mistake, g)
 
-								case Some(reacter) if reacter == target =>
+								case Some(reacter) if reacter == receiver =>
 									interpretStable(prev, g, action, stall = false)
 
 								case Some(reacter) =>
-									val prevPlayables = prev.players(target).obviousPlayables(prev, target)
+									val prevPlayables = prev.players(receiver).obviousPlayables(prev, receiver)
 
 									// Urgent fix on previous playable
 									if allowableFix && fixed.exists(prevPlayables.contains) then
@@ -552,8 +552,8 @@ object Reactor:
 
 				val allClues = if !canClue then Nil else
 					for
-						target <- (0 until state.numPlayers) if target != state.ourPlayerIndex
-						clue   <- state.allValidClues(target)
+						receiver <- (0 until state.numPlayers) if receiver != state.ourPlayerIndex
+						clue   <- state.allValidClues(receiver)
 					yield
 						val perform = PerformAction.fromClue(clue)
 						val action = perform.toAction(state, state.ourPlayerIndex)
@@ -620,11 +620,11 @@ object Reactor:
 			Logger.setLevel(LogLevel.Off)
 
 			def clueValue(clue: Clue): Double =
-				val list = state.clueTouched(state.hands(clue.target), clue)
-				val action = ClueAction(giver, clue.target, list, clue.base)
+				val orders = state.clueTouched(state.hands(clue.receiver), clue)
+				val action = ClueAction(giver, clue.receiver, orders, clue.base)
 
 				// Only touches previously-clued trash
-				if list.forall(o => state.deck(o).clued && state.isBasicTrash(state.deck(o).id().get)) then
+				if orders.forall(o => state.deck(o).clued && state.isBasicTrash(state.deck(o).id().get)) then
 					return -99
 
 				Log.highlight(Console.GREEN, s"===== Predicting value for ${clue.fmt(state)} =====")
@@ -637,8 +637,8 @@ object Reactor:
 
 			val allClues =
 				(for
-					target <- (0 until state.numPlayers) if target != giver
-					clue   <- state.allValidClues(target)
+					receiver <- (0 until state.numPlayers) if receiver != giver
+					clue   <- state.allValidClues(receiver)
 					value = clueValue(clue)
 				yield
 					(clue, value))

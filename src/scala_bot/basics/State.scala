@@ -133,28 +133,28 @@ case class State(
 	def clueTouched(orders: Seq[Int], clue: ClueLike) =
 		orders.filter(order => variant.cardTouched(deck(order), clue))
 
-	def allColourClues(target: Int) =
+	def allColourClues(receiver: Int) =
 		for
 			suitIndex <- (0 until variant.colourableSuits.length).view
-			clue = Clue(ClueKind.Colour, suitIndex, target) if clueTouched(hands(target), clue).nonEmpty
+			clue = Clue(ClueKind.Colour, suitIndex, receiver) if clueTouched(hands(receiver), clue).nonEmpty
 		yield
 			clue
 
-	def allValidClues(target: Int) =
+	def allValidClues(receiver: Int) =
 		val rankClues =
 			for
 				rank <- (1 to 5).view if !(variant.specialRank.contains(rank) && (variant.pinkS || variant.brownS || variant.deceptiveS))
 			yield
-				Clue(ClueKind.Rank, rank, target)
+				Clue(ClueKind.Rank, rank, receiver)
 
 		val colourClues =
 			for
 				suitIndex <- (0 until variant.colourableSuits.length).view
 			yield
-				Clue(ClueKind.Colour, suitIndex, target)
+				Clue(ClueKind.Colour, suitIndex, receiver)
 
 		rankClues.concat(colourClues).filter: clue =>
-			clueTouched(hands(target), clue.base).nonEmpty
+			clueTouched(hands(receiver), clue.base).nonEmpty
 
 	def hasConsistentInfs(thought: Thought, me: Player) =
 		thought.possible.length == 1 || {

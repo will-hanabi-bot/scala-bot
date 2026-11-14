@@ -131,22 +131,22 @@ def advanceState(state: State, perform: PerformAction, playerIndex: Int, draw: O
 				st.copy(deck = deck.updated(newCardOrder, newCard))
 
 	perform match
-		case PerformAction.Play(target) =>
-			(state.deck(target).id() match
+		case PerformAction.Play(order) =>
+			(state.deck(order).id() match
 				case None =>
 					state.copy(strikes = state.strikes + 1)
 				case Some(id) =>
 					if state.isPlayable(id) then
 						state.withPlay(id)
 					else
-						state.copy(strikes = state.strikes + 1).withDiscard(id, target)
+						state.copy(strikes = state.strikes + 1).withDiscard(id, order)
 			)
-			.pipe(removeAndDraw(playerIndex, target))
+			.pipe(removeAndDraw(playerIndex, order))
 
-		case PerformAction.Discard(target) =>
-			state.deck(target).id().fold(state)(state.withDiscard(_, target))
+		case PerformAction.Discard(order) =>
+			state.deck(order).id().fold(state)(state.withDiscard(_, order))
 				.regainClue
-				.pipe(removeAndDraw(playerIndex, target))
+				.pipe(removeAndDraw(playerIndex, order))
 
 		case _ =>
 			state.copy(

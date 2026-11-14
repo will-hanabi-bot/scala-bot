@@ -8,17 +8,17 @@ import scala_bot.utils.visibleFind
 def getResult(game: HGroup, hypo: HGroup, action: ClueAction, log: Boolean = true): Double =
 	val (common, state) = (game.common, game.state)
 	val FocusResult(focus, chop, _) = game.determineFocus(game, action)
-	val ClueAction(giver, target, list, clue) = action
+	val ClueAction(giver, receiver, orders, clue) = action
 
 	if hypo.lastMove == Some(ClueInterp.Mistake) then
 		return -100
 
-	val (newTouched, fill, elim) = elimResult(game, hypo, hypo.state.hands(target), list)
+	val (newTouched, fill, elim) = elimResult(game, hypo, hypo.state.hands(receiver), orders)
 	val (badTouch, _, avoidableDupe) = badTouchResult(game, hypo, action)
 	val (_, playables) = playablesResult(game, hypo)
 
-	val revealedTrash = hypo.common.thinksTrash(hypo, target).count: o =>
-		hypo.state.deck(o).clued && !common.thinksTrash(game, target).contains(o)
+	val revealedTrash = hypo.common.thinksTrash(hypo, receiver).count: o =>
+		hypo.state.deck(o).clued && !common.thinksTrash(game, receiver).contains(o)
 
 	// Previously-unclued playables whose copies are already touched
 	val dupedPlayables = hypo.me.hypoPlays.count: p =>
@@ -35,11 +35,11 @@ def getResult(game: HGroup, hypo: HGroup, action: ClueAction, log: Boolean = tru
 		else
 			2 * List(0.0, 0.125, 0.25, 0.35, 0.45, 0.55)(newTouched.length)
 
-	val precision = (list.summing(o => -0.001 * hypo.common.thoughts(o).inferred.length)) / list.length
+	val precision = (orders.summing(o => -0.001 * hypo.common.thoughts(o).inferred.length)) / orders.length
 
 	// val untouchedPlays = playables.count(!hypo.state.deck(_).clued)
 
-	val pangOfGuilt = if state.clueTokens > 1 && target != state.nextPlayerIndex(state.ourPlayerIndex) && game.findFinesse(target).contains(focus) then -0.25 else 0
+	val pangOfGuilt = if state.clueTokens > 1 && receiver != state.nextPlayerIndex(state.ourPlayerIndex) && game.findFinesse(receiver).contains(focus) then -0.25 else 0
 
 	val playablesS = playables.map(state.logId(_)).mkString(",")
 	if log then Log.info(s"good touch: $goodTouch, playables: [$playablesS], duped: $dupedPlayables, trash: $revealedTrash, fill: ${fill.length}, elim: ${elim.length}, bad touch: ${badTouch.fmt}, avoidDupe: $avoidableDupe, guilt? $pangOfGuilt, precision: $precision ${hypo.lastMove}")
@@ -64,9 +64,9 @@ private def clueFilter(game: HGroup, giver: Int) =
 	val state = game.state
 
 	(clue: Clue) =>
-		val Clue(kind, value, target) = clue
-		val list = state.clueTouched(state.hands(target), clue)
-		val focus = game.determineFocus(game, ClueAction(giver, target, list, clue.base)).focus
+		val Clue(kind, value, receiver) = clue
+		val orders = state.clueTouched(state.hands(receiver), clue)
+		val focus = game.determineFocus(game, ClueAction(giver, receiver, orders, clue.base)).focus
 
 		// Don't clue known duplicates
 		state.deck(focus).id().forall: id =>

@@ -138,7 +138,7 @@ case class FocusPossibility(
 /** A potential set of connections that needs more information before its truthiness can be determined.
   * @param connections   The involved connections if true.
   * @param giver         The index of the player who gave the clue.
-  * @param target        The index of the player who received the clue.
+  * @param receiver      The index of the player who received the clue.
   * @param turn          The turn the clue was given.
   * @param focus         The order of the card focused.
   * @param inference     The identity of the focused card if true.
@@ -150,7 +150,7 @@ case class FocusPossibility(
 case class WaitingConnection(
 	connections: List[Connection],
 	giver: Int,
-	target: Int,
+	receiver: Int,
 	turn: Int,
 	/** The order of the card focused. */
 	focus: Int,

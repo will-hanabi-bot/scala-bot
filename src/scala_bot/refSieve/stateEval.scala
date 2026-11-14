@@ -6,14 +6,14 @@ import scala_bot.logger.Log
 
 def getResult(game: RefSieve, hypo: RefSieve, action: ClueAction): Double =
 	val (common, state) = (game.common, game.state)
-	val ClueAction(giver, target, list, clue) = action
+	val ClueAction(giver, receiver, orders, clue) = action
 
-	val (newTouched, fill, elim) = elimResult(game, hypo, hypo.state.hands(target), list)
+	val (newTouched, fill, elim) = elimResult(game, hypo, hypo.state.hands(receiver), orders)
 	val (badTouch, trash, _) = badTouchResult(game, hypo, action)
 	val (_, playables) = playablesResult(game, hypo)
 
-	val revealedTrash = hypo.common.thinksTrash(hypo, target).count: o =>
-		hypo.state.deck(o).clued && !common.thinksTrash(game, target).contains(o)
+	val revealedTrash = hypo.common.thinksTrash(hypo, receiver).count: o =>
+		hypo.state.deck(o).clued && !common.thinksTrash(game, receiver).contains(o)
 
 	val newPlayables = state.heldOrders.filter: o =>
 		hypo.gainedStatus(game, o, CardStatus.CalledToPlay) ||
@@ -27,19 +27,19 @@ def getResult(game: RefSieve, hypo: RefSieve, action: ClueAction): Double =
 
 	badPlayable match
 		case Some(badPlay) =>
-			Log.warn(s"clue ${clue.fmt(state, target)} results in ${state.logId(badPlay)} ${badPlay} looking playable! ${hypo.me.hypoPlays.fmt}")
+			Log.warn(s"clue ${clue.fmt(state, receiver)} results in ${state.logId(badPlay)} ${badPlay} looking playable! ${hypo.me.hypoPlays.fmt}")
 			return -100
 		case None => ()
 
 	hypo.lastMove match
 		case Some(ClueInterp.Play) if playables.isEmpty && !game.inEndgame =>
-			Log.warn(s"clue ${clue.fmt(state, target)} looks like ref play but gets no playables!")
+			Log.warn(s"clue ${clue.fmt(state, receiver)} looks like ref play but gets no playables!")
 			-100
 		case Some(ClueInterp.Reveal) if playables.isEmpty && trash.nonEmpty && trash.forall(state.deck(_).clued) =>
-			Log.warn(s"clue ${clue.fmt(state, target)} only reveals new trash but isn't a trash push!")
+			Log.warn(s"clue ${clue.fmt(state, receiver)} only reveals new trash but isn't a trash push!")
 			-100
 		case Some(i) if i != ClueInterp.Fix && badTouch.nonEmpty && newTouched.forall(badTouch.contains) && playables.isEmpty =>
-			Log.warn(s"clue ${clue.fmt(state, target)} only bad touches and gets no playables! ${common.hypoPlays}")
+			Log.warn(s"clue ${clue.fmt(state, receiver)} only bad touches and gets no playables! ${common.hypoPlays}")
 			-100
 		case _ =>
 			// Previously-unclued playables whose copies are already touched
@@ -56,8 +56,8 @@ def getResult(game: RefSieve, hypo: RefSieve, action: ClueAction): Double =
 
 			val untouchedPlays = playables.count(!hypo.state.deck(_).clued)
 
-			val lockedTouch = if state.numPlayers == 2 && game.common.thinksLocked(game, state.nextPlayerIndex(target)) then
-				state.hands(target).summing: o =>
+			val lockedTouch = if state.numPlayers == 2 && game.common.thinksLocked(game, state.nextPlayerIndex(receiver)) then
+				state.hands(receiver).summing: o =>
 					val card = hypo.state.deck(o)
 					if card.clued then 0 else card.id().fold(0.0): id =>
 						if state.isCritical(id) then

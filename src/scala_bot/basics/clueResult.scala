@@ -6,7 +6,7 @@ import scala_bot.utils._
 /** Computes empathy-related statistics of the clue.
   * @return A tuple of the orders that were newly touched, filled-in, and had inferences removed from negative info.
   */
-def elimResult(prev: Game, game: Game, hand: IndexedSeq[Int], list: Seq[Int]) =
+def elimResult(prev: Game, game: Game, hand: IndexedSeq[Int], orders: Seq[Int]) =
 	val state = game.state
 	val initial = (List[Int](), List[Int](), List[Int]())
 
@@ -23,7 +23,7 @@ def elimResult(prev: Game, game: Game, hand: IndexedSeq[Int], list: Seq[Int]) =
 			else if !prev.state.deck(order).clued && !prev.isBlindPlaying(order) then
 				(order +: newTouched, fill, elim)
 
-			else if list.contains(order) && state.hasConsistentInfs(thought, game.me) && status != CardStatus.CalledToPlay && status != CardStatus.DragToPlay then
+			else if orders.contains(order) && state.hasConsistentInfs(thought, game.me) && status != CardStatus.CalledToPlay && status != CardStatus.DragToPlay then
 				(newTouched, order +: fill, elim)
 
 			else if state.hasConsistentInfs(thought, game.me) then
@@ -63,11 +63,11 @@ def dupeResponsibility(game: Game, id: Identity, except: Int) =
   */
 def badTouchResult(prev: Game, game: Game, action: ClueAction) =
 	val state = game.state
-	val ClueAction(giver, target, _, _) = action
+	val ClueAction(giver, receiver, _, _) = action
 
 	val dupeScores = prev.players.zipWithIndex.map: (player, i) =>
-		if i == target then 99 else
-			state.hands(target).summing: order =>
+		if i == receiver then 99 else
+			state.hands(receiver).summing: order =>
 				val card = state.deck(order)
 
 				// Not newly clued, trash id or we don't know: don't care about duplicating
@@ -89,7 +89,7 @@ def badTouchResult(prev: Game, game: Game, action: ClueAction) =
 		!trash.contains(o2) &&
 		(game.common.thoughts(o1).id().isEmpty || game.common.thoughts(o2).id().isEmpty)
 
-	val inter = state.hands(target).foldLeft((FastBitSet.empty, FastBitSet.empty, FastBitSet.empty)): (acc, order) =>
+	val inter = state.hands(receiver).foldLeft((FastBitSet.empty, FastBitSet.empty, FastBitSet.empty)): (acc, order) =>
 		val (badTouch, trash, potentialDupes) = acc
 
 		if badTouch.contains(order) || trash.contains(order) || prev.state.deck(order).clued || !state.deck(order).clued then
@@ -106,7 +106,7 @@ def badTouchResult(prev: Game, game: Game, action: ClueAction) =
 	.pipe: (bt, t, dupes) =>
 		dupes.foldLeft((bt, t)):
 			case ((badTouch, trash), order) =>
-				state.hands(target).find(areDupes(order, _, badTouch, trash)) match
+				state.hands(receiver).find(areDupes(order, _, badTouch, trash)) match
 					case None => (badTouch, trash)
 					case Some(dupe) =>
 						if prev.state.deck(dupe).clued then
@@ -127,7 +127,7 @@ def badTouchResult(prev: Game, game: Game, action: ClueAction) =
 							(badTouch.incl(badCopy), trash)
 
 	// Previously-finessed cards can be reset (and no longer touched) after the clue, so double-check for "duplicates".
-	val (badTouch, trash) = state.hands(target).foldRight(inter) { case (order, (badTouch, trash)) =>
+	val (badTouch, trash) = state.hands(receiver).foldRight(inter) { case (order, (badTouch, trash)) =>
 		val duplicated =
 			(!prev.state.deck(order).clued && state.deck(order).clued && !badTouch.contains(order) && !trash.contains(order)) &&
 			state.heldOrders.exists: o =>

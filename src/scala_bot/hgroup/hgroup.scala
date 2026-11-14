@@ -250,7 +250,7 @@ case class HGroup(
 			case Link.Promised(_, i, target) => target != focus && id.matches(i)
 		||
 		waiting.exists: wc =>
-			!wc.symmetric && !wc.ambiguousSelf && wc.target == giver &&
+			!wc.symmetric && !wc.ambiguousSelf && wc.receiver == giver &&
 			common.thoughts(wc.focus).inferred.contains(id) &&
 			wc.connections.exists: conn =>
 				xmeta(conn.order).fStatus.contains(FStatus.PossiblyOn(giver))
@@ -380,10 +380,10 @@ case class HGroup(
 			)
 
 	def determineFocus(prev: HGroup, action: ClueAction): FocusResult =
-		val ClueAction(giver, target, list, clue) = action
-		val hand = state.hands(target)
-		val chop = prev.chop(target)
-		val newlyClued = list.filter(!prev.state.deck(_).clued)
+		val ClueAction(giver, receiver, orders, clue) = action
+		val hand = state.hands(receiver)
+		val chop = prev.chop(receiver)
+		val newlyClued = orders.filter(!prev.state.deck(_).clued)
 
 		val stale1 =
 			prev.level >= Level.Context &&
@@ -391,7 +391,7 @@ case class HGroup(
 			newlyClued.length > 1 &&
 			newlyClued.forall(state.inStartingHand)
 
-		if chop.exists(list.contains) && !stale1 then
+		if chop.exists(orders.contains) && !stale1 then
 			return FocusResult(chop.get, chop = true)
 
 		val reclue = newlyClued.isEmpty
@@ -400,8 +400,8 @@ case class HGroup(
 			state.variant.pinkish &&
 			reclue &&
 			clue.value <= hand.length &&
-			list.contains(hand(clue.value - 1)) &&
-			List(list.max, hand(clue.value - 1)).forall(this.knownAs(_, PINKISH))
+			orders.contains(hand(clue.value - 1)) &&
+			List(orders.max, hand(clue.value - 1)).forall(this.knownAs(_, PINKISH))
 
 		if pinkChoiceTempo then
 			return FocusResult(hand(clue.value - 1), positional = Some(Positional.Pink))
@@ -411,7 +411,7 @@ case class HGroup(
 			reclue
 
 		if brownTempo then
-			val sortedBrowns = list.filter(o => prev.knownAs(o, "Brown".r.unanchored)).sorted
+			val sortedBrowns = orders.filter(o => prev.knownAs(o, "Brown".r.unanchored)).sorted
 
 			if sortedBrowns.nonEmpty then
 				val focus =
@@ -445,7 +445,7 @@ case class HGroup(
 			else
 				return FocusResult(next1)
 
-		val muddyCards = list.filter: o =>
+		val muddyCards = orders.filter: o =>
 			val variant = state.variant
 
 			// All possible ids are rainbowish
@@ -467,7 +467,7 @@ case class HGroup(
 			(state.variant.muddy || state.variant.suits.exists(s => s.suitType.pinkish && s.suitType.rainbowish) || state.variant.rainbowS) &&
 			reclue &&
 			// Mud clues should only work if the leftmost (non-kt) card is muddy.
-			muddyCards.contains(list.maxIf(o => !prev.common.orderKt(prev, o), -1))
+			muddyCards.contains(orders.maxIf(o => !prev.common.orderKt(prev, o), -1))
 
 		if mudClue then
 			val coloursAvailable = state.variant.colourableSuits.length
@@ -487,7 +487,7 @@ case class HGroup(
 			FocusResult(pinkStall5.get)
 
 		else
-			val sortedList = list.sortBy(o => -o)
+			val sortedList = orders.sortBy(o => -o)
 			val focus =
 				sortedList.find(o => !prev.state.deck(o).clued && (prev.meta(o).status == CardStatus.None || prev.meta(o).status == CardStatus.PermissionToDiscard))
 					.orElse(sortedList.find(prev.isCM))
@@ -504,8 +504,8 @@ case class HGroup(
 			return None
 
 		val allClues = for
-			target <- (0 until state.numPlayers).view if target != giver
-			clue   <- state.allValidClues(target)
+			receiver <- (0 until state.numPlayers).view if receiver != giver
+			clue   <- state.allValidClues(receiver)
 		yield
 			clue
 
@@ -526,7 +526,7 @@ case class HGroup(
 							giver == state.ourPlayerIndex &&	// we can only expect ourselves to give a 2 save
 							focusId.rank == 2 &&
 							visibleFind(state, this.players(giver), focusId, infer = true, excludeOrder = focus).isEmpty &&
-							dupeResponsibility(this, focusId, action.target).contains(giver)
+							dupeResponsibility(this, focusId, action.receiver).contains(giver)
 						}
 
 					case Some(ClueInterp.Stall) =>
@@ -547,8 +547,8 @@ case class HGroup(
 			return None
 
 		val allClues = for
-			target <- (0 until state.numPlayers).view if target != giver && target != state.lastPlayerIndex(giver)
-			clue   <- state.allValidClues(target)
+			receiver <- (0 until state.numPlayers).view if receiver != giver && receiver != state.lastPlayerIndex(giver)
+			clue   <- state.allValidClues(receiver)
 		yield
 			clue
 
@@ -569,7 +569,7 @@ case class HGroup(
 							giver == state.ourPlayerIndex &&	// we can only expect ourselves to give a 2 save
 							focusId.rank == 2 &&
 							visibleFind(state, this.players(giver), focusId, infer = true, excludeOrder = focus).isEmpty &&
-							dupeResponsibility(this, focusId, action.target).contains(giver)
+							dupeResponsibility(this, focusId, action.receiver).contains(giver)
 						}
 
 					case Some(ClueInterp.Stall) =>
@@ -610,7 +610,7 @@ case class HGroup(
 			wc != containingWc &&
 			!wc.symmetric && !wc.ambiguousSelf &&
 			wc.focus == containingWc.focus &&
-			wc.target == playerIndex &&
+			wc.receiver == playerIndex &&
 			wc.currConn.matchesP:
 				case f: FinesseConn => f.order != order && f.reacting != state.holderOf(wc.focus)
 
@@ -977,8 +977,8 @@ object HGroup:
 						else
 							val allClues =
 								for
-									target <- (0 until state.numPlayers) if state.canClue && target != state.ourPlayerIndex
-									clue   <- state.allValidClues(target)
+									receiver <- (0 until state.numPlayers) if state.canClue && receiver != state.ourPlayerIndex
+									clue     <- state.allValidClues(receiver)
 								yield
 									val perform = PerformAction.fromClue(clue)
 									val action = perform.toAction(state, state.ourPlayerIndex)
@@ -1098,8 +1098,8 @@ object HGroup:
 			Logger.setLevel(LogLevel.Off)
 
 			def clueValue(clue: Clue): Double =
-				val list = state.clueTouched(state.hands(clue.target), clue)
-				val action = ClueAction(giver, clue.target, list, clue.base)
+				val orders = state.clueTouched(state.hands(clue.receiver), clue)
+				val action = ClueAction(giver, clue.receiver, orders, clue.base)
 
 				Log.highlight(Console.GREEN, s"===== Predicting value for ${clue.fmt(state)} =====")
 				val hypoGame = game.simulate(action)
@@ -1122,8 +1122,8 @@ object HGroup:
 				.filter(_ != giver)
 				.flatMap(state.allValidClues)
 				.partition: clue =>
-					val list = state.clueTouched(state.hands(clue.target), clue)
-					list.exists: o =>
+					val orders = state.clueTouched(state.hands(clue.receiver), clue)
+					orders.exists: o =>
 						state.deck(o).id().exists(state.isUseful)
 				.pipe: (useful, useless) =>
 					if useful.isEmpty then

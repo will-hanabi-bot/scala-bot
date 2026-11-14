@@ -18,7 +18,7 @@ case class ClueContext(prev: HGroup, game: HGroup, action: ClueAction, focusOver
 def evaluateCM(ctx: ClueContext, chopMoved: Seq[Int]): ClueInterp =
 	val ClueContext(prev, game, action, _) = ctx
 	val state = game.state
-	val ClueAction(giver, target, list, clue) = action
+	val ClueAction(giver, receiver, _, clue) = action
 
 	// Chop is a playable inverted card
 	if state.deck(chopMoved.min).id().exists(id => state.isInverted(id) && state.isPlayable(id)) then
@@ -33,7 +33,7 @@ def evaluateCM(ctx: ClueContext, chopMoved: Seq[Int]): ClueInterp =
 
 def unacceptableClue(prev: HGroup, game: HGroup, @annotation.unused action: ClueAction): Boolean =
 	val state = game.state
-	val ClueAction(giver, target, list, clue) = action
+	val ClueAction(giver, receiver, orders, clue) = action
 
 	val fSymmetric = state.heldOrders.find: o =>
 		game.isBlindPlaying(o) &&
@@ -85,7 +85,7 @@ def unacceptableClue(prev: HGroup, game: HGroup, @annotation.unused action: Clue
 			oldest5.map(g.chopDistance(playerIndex, _))
 
 	if giver == state.ourPlayerIndex && game.lastMove == Some(ClueInterp.Stall) && game.stallInterp == Some(StallInterp.Stall5) then
-		val dist5 = prev.chopDistance(target, list.filter(o => !prev.state.deck(o).clued && prev.meta(o).status != CardStatus.ChopMoved).min)
+		val dist5 = prev.chopDistance(receiver, orders.filter(o => !prev.state.deck(o).clued && prev.meta(o).status != CardStatus.ChopMoved).min)
 
 		val bad5Stall = (0 until state.numPlayers).exists: i =>
 			i != giver &&
@@ -101,12 +101,12 @@ def checkHFix(ctx: ClueContext): Option[HGroup] =
 	val ClueContext(prev, game, action, _) = ctx
 	val state = game.state
 	val FocusResult(focus, chop, _) = ctx.focusResult
-	val ClueAction(giver, _, list, clue) = action
+	val ClueAction(giver, _, orders, clue) = action
 
 	checkFix(prev, game, action) match
 		// Check for pink 1's fix, which won't be caught by checkFix().
 		case FixResult.None if state.variant.pinkish && prev.common.hypoStacks.contains(0) =>
-			val fixed = list.filter: o =>
+			val fixed = orders.filter: o =>
 				!prev.meta(o).focused &&
 				// state.deck(o).rank != 1 &&
 				prev.common.thoughts(o).inferred.forall(_.rank == 1) &&
@@ -139,7 +139,7 @@ def checkHFix(ctx: ClueContext): Option[HGroup] =
 							infoLock = newInferred.toOpt
 						)
 					.pipe: g =>
-						list.foldLeft(g): (acc, o) =>
+						orders.foldLeft(g): (acc, o) =>
 							if o == fixedOrder then
 								acc
 							else
@@ -154,9 +154,9 @@ def checkHFix(ctx: ClueContext): Option[HGroup] =
 
 def interpClue(ctx: ClueContext): HGroup =
 	val ClueContext(prev, game, action, _) = ctx
-	val ClueAction(giver, target, list, clue) = action
+	val ClueAction(giver, _, orders, clue) = action
 
-	if game.state.options.emptyClues && list.length == 0 then
+	if game.state.options.emptyClues && orders.isEmpty then
 		Log.highlight(Console.YELLOW, "empty clue!")
 		return game.withMove(ClueInterp.Useless)
 
@@ -168,7 +168,7 @@ def interpClue(ctx: ClueContext): HGroup =
 def interpNormalClue(ctx: ClueContext, symmetricInterp: SymmetricInterp, thinksStall: FastBitSet) =
 	val ClueContext(prev, game, action, _) = ctx
 	val (common, state) = (game.common, game.state)
-	val ClueAction(giver, target, list, clue) = action
+	val ClueAction(giver, receiver, orders, clue) = action
 
 	val FocusResult(focus, chop, positional) = ctx.focusResult
 
@@ -199,7 +199,7 @@ def interpNormalClue(ctx: ClueContext, symmetricInterp: SymmetricInterp, thinksS
 				o != focus &&
 				prev.state.deck(o).clued &&
 				game.players(giver).thoughts(o).matches(inf, infer = true) && {			// giver knows about it, and
-					game.players(target).thoughts(o).matches(inf, infer = true) ||		// either target knows about it too, or
+					game.players(receiver).thoughts(o).matches(inf, infer = true) ||		// either target knows about it too, or
 					(state.ourHand.contains(o) && game.me.thoughts(o).matches(inf, infer = true))	// we know we have it in our hand
 				}
 			&&
@@ -210,10 +210,10 @@ def interpNormalClue(ctx: ClueContext, symmetricInterp: SymmetricInterp, thinksS
 	val simplest =
 		val possible = (savePoss ++ focusPoss)
 			.filter: fp =>
-				game.players(target).thoughts(focus).possible.contains(fp.id) ||
+				game.players(receiver).thoughts(focus).possible.contains(fp.id) ||
 				game.players(giver).thoughts(focus).possible.contains(fp.id)
 
-		occamsRazor(ctx, possible, target)
+		occamsRazor(ctx, possible, receiver)
 
 	val noSelf = !game.allowFindOwn ||
 		giver == state.ourPlayerIndex ||
@@ -224,7 +224,7 @@ def interpNormalClue(ctx: ClueContext, symmetricInterp: SymmetricInterp, thinksS
 			if simplest.isEmpty then
 				Log.warn("no inferences!")
 
-				if game.inEndgame && clue.kind == ClueKind.Colour && list.length == 1 && game.common.thoughts(focus).id().nonEmpty && state.numPlayers == 2 then
+				if game.inEndgame && clue.kind == ClueKind.Colour && orders.length == 1 && game.common.thoughts(focus).id().nonEmpty && state.numPlayers == 2 then
 					game.withMove(ClueInterp.Useless)
 				else
 					game.withMove(ClueInterp.Mistake)
@@ -234,14 +234,14 @@ def interpNormalClue(ctx: ClueContext, symmetricInterp: SymmetricInterp, thinksS
 		else
 			Log.highlight(Console.YELLOW, s"finding own!")
 
-			val looksDirect = game.players(target).thoughts(focus).id().isEmpty &&
+			val looksDirect = game.players(receiver).thoughts(focus).id().isEmpty &&
 				simplest.nonEmpty && {
 					clue.kind == ClueKind.Colour ||
 					positional.isDefined ||
 					savePoss.nonEmpty ||
 					// Looks like an existing possibility
 					focusPoss.exists: fp =>
-						game.players(target).thoughts(focus).possible.contains(fp.id) &&
+						game.players(receiver).thoughts(focus).possible.contains(fp.id) &&
 						fp.connections.forall: c =>
 							(c.isInstanceOf[KnownConn] || (c.isInstanceOf[PlayableConn] && c.reacting != state.ourPlayerIndex)) &&
 							!game.isBlindPlaying(c.order)		// A blind-playing card is still unknown
@@ -265,8 +265,8 @@ def interpNormalClue(ctx: ClueContext, symmetricInterp: SymmetricInterp, thinksS
 					game.withThought(focus)(t => t.copy(inferred = IdentitySet.empty))
 						.withMeta(focus)(_.copy(trash = true))
 						.withMove(ClueInterp.Fix)
-				else if game.level >= Level.Context && chop && list.size > 1 then
-					val newFocus = list.max
+				else if game.level >= Level.Context && chop && orders.size > 1 then
+					val newFocus = orders.max
 					val newCtx = ctx.withFocus(newFocus)
 
 					Log.highlight(Console.YELLOW, s"attempting focus inversion to $newFocus!")
@@ -280,7 +280,7 @@ def interpNormalClue(ctx: ClueContext, symmetricInterp: SymmetricInterp, thinksS
 							o != newFocus &&
 							prev.state.deck(o).clued &&
 							game.players(giver).thoughts(o).matches(inf, infer = true) && {			// giver knows about it, and
-								game.players(target).thoughts(o).matches(inf, infer = true) ||		// either target knows about it too, or
+								game.players(receiver).thoughts(o).matches(inf, infer = true) ||		// either target knows about it too, or
 								(state.ourHand.contains(o) && game.me.thoughts(o).matches(inf, infer = true))	// we know we have it in our hand
 							}
 						&&
@@ -290,12 +290,12 @@ def interpNormalClue(ctx: ClueContext, symmetricInterp: SymmetricInterp, thinksS
 
 					val newSimplest =
 						val possible = focusPoss.filter: fp =>
-							game.players(target).thoughts(newFocus).possible.contains(fp.id) ||
+							game.players(receiver).thoughts(newFocus).possible.contains(fp.id) ||
 							game.players(giver).thoughts(newFocus).possible.contains(fp.id)
 
 						Log.info(s"focus poss ${focusPoss.map(_.id)} ${possible.map(_.id)} ${newCtx.focusResult.focus}")
 
-						occamsRazor(newCtx, possible, target)
+						occamsRazor(newCtx, possible, receiver)
 
 					if newSimplest.isEmpty then
 						Log.warn(s"no inferences! (still)")
@@ -321,5 +321,5 @@ def interpNormalClue(ctx: ClueContext, symmetricInterp: SymmetricInterp, thinksS
 
 	.when(_.state.variant.pinkish && clue.isEq(ClueKind.Rank, 1)): g =>
 		// Pink 1's Assumption
-		list.filter(g.unknown1).foldLeft(g): (acc, o) =>
+		orders.filter(g.unknown1).foldLeft(g): (acc, o) =>
 			acc.withThought(o)(t => t.copy(inferred = t.inferred.filter(_.rank == 1)))

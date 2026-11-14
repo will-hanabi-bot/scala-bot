@@ -7,7 +7,7 @@ import scala_bot.logger.Log
 
 def assignConns(game: HGroup, action: ClueAction, fps: Seq[FocusPossibility], focus: Int, ambiguousOwn: Seq[FocusPossibility] = Nil, retroactive: Boolean = false) =
 	val state = game.state
-	val ClueAction(giver, target, _, clue) = action
+	val ClueAction(giver, receiver, _, clue) = action
 
 	/** Never a valid bluff target if the copy is clued. */
 	def validTarget(id: Identity) =
@@ -124,14 +124,14 @@ def assignConns(game: HGroup, action: ClueAction, fps: Seq[FocusPossibility], fo
 				val fStatus =
 					if !maybeFinessed then
 						Nil
-					else if target == state.ourPlayerIndex then
+					else if receiver == state.ourPlayerIndex then
 						List(FStatus.PossiblyOn(state.ourPlayerIndex))
 					else
 						List(
 							Option.when(giver != state.ourPlayerIndex && conn.reacting != state.ourPlayerIndex)
 								(FStatus.PossiblyAmbiguous(state.ourPlayerIndex)),
-							Option.when(conn.reacting != target)
-								(FStatus.PossiblyOn(target))
+							Option.when(conn.reacting != receiver)
+								(FStatus.PossiblyOn(receiver))
 						).flatten
 
 				if fStatus.nonEmpty then
@@ -212,7 +212,7 @@ def assignConns(game: HGroup, action: ClueAction, fps: Seq[FocusPossibility], fo
 			newGame
 
 def importantFinesse(state: State, action: ClueAction, fps: Seq[FocusPossibility]) =
-	val ClueAction(giver, target, _, _) = action
+	val ClueAction(giver, receiver, _, _) = action
 
 	fps.exists: fp =>
 		val conns = fp.connections
@@ -228,7 +228,7 @@ def importantFinesse(state: State, action: ClueAction, fps: Seq[FocusPossibility
 				true
 
 			// Target can't clue themselves, unknown conns can't clue
-			else if playerIndex == target || conns.exists(c => c.reacting == playerIndex && !c.isInstanceOf[KnownConn]) then
+			else if playerIndex == receiver || conns.exists(c => c.reacting == playerIndex && !c.isInstanceOf[KnownConn]) then
 				loop(state.nextPlayerIndex(playerIndex))
 
 			else
@@ -253,15 +253,15 @@ def urgentSave(ctx: ClueContext): Boolean =
 	if !validSave then
 		return false
 
-	val earlyGameClue = game.withMove(ClueInterp.Save).earlyGameClue(action.target)
+	val earlyGameClue = game.withMove(ClueInterp.Save).earlyGameClue(action.receiver)
 
 	if earlyGameClue.isDefined then
-		// Log.info(s"${state.names(action.target)} could clue ${earlyGameClue.get.fmt(state)}, not urgent save")
+		// Log.info(s"${state.names(receiver)} could clue ${earlyGameClue.get.fmt(state)}, not urgent save")
 		return false
 
 	@annotation.tailrec
 	def loop(hypoState: State, playerIndex: Int): Boolean =
-		if playerIndex == action.target then
+		if playerIndex == action.receiver then
 			return true
 
 		def getFinessedOrder(includeHidden: Boolean) =
@@ -284,11 +284,11 @@ def urgentSave(ctx: ClueContext): Boolean =
 def resolveClue(ctx: ClueContext, fps: Seq[FocusPossibility], symmetricInterp: SymmetricInterp, looksDirect: Boolean, thinksStall: FastBitSet, ambiguousOwn: Seq[FocusPossibility] = Nil) =
 	val ClueContext(prev, game, action, _) = ctx
 	val state = game.state
-	val ClueAction(giver, target, _, clue) = action
+	val ClueAction(giver, receiver, _, clue) = action
 	val FocusResult(focus, chop, positional) = ctx.focusResult
 
 	val symmetricFps =
-		if target == state.ourPlayerIndex || fps.exists(_.save) then
+		if receiver == state.ourPlayerIndex || fps.exists(_.save) then
 			Nil
 		else
 			Log.highlight(Console.YELLOW, "finding symmetric connections!")
@@ -297,10 +297,10 @@ def resolveClue(ctx: ClueContext, fps: Seq[FocusPossibility], symmetricInterp: S
 					!game.invalidFocus(giver, clue, inf, ctx.focusResult) &&
 					!fps.exists(_.id == inf)
 				.flatMap:
-					connect(ctx, _, looksDirect, thinksStall = FastBitSet.empty, findOwn = Some(target))
+					connect(ctx, _, looksDirect, thinksStall = FastBitSet.empty, findOwn = Some(receiver))
 
 			symmetricFps
-			// occamsRazor(ctx, symmetricFps, target)
+			// occamsRazor(ctx, symmetricFps, receiver)
 
 	val ambiguousFps = if !game.allowFindOwn || giver == state.ourPlayerIndex || fps.exists(_.save) then Nil else
 		Log.highlight(Console.YELLOW, "finding ambiguous connections!")
@@ -324,12 +324,12 @@ def resolveClue(ctx: ClueContext, fps: Seq[FocusPossibility], symmetricInterp: S
 			.filter: fp =>
 				!(fps ++ ambiguousOwn).exists(_.connections == fp.connections)
 
-		// occamsRazor(ctx, ambiguousFps, target)
+		// occamsRazor(ctx, ambiguousFps, receiver)
 		ambiguousFps
 
 	val allFps = filterFps(ctx, fps ++ symmetricFps ++ ambiguousFps)
 	val simplestFps =
-		val simplest = occamsRazor(ctx, allFps, target)
+		val simplest = occamsRazor(ctx, allFps, receiver)
 
 		// Simplest connections are all symmetric, but we could play into something more complicated
 		if giver != state.ourPlayerIndex && simplest.forall(_.symmetric) && fps.nonEmpty then
@@ -359,7 +359,7 @@ def resolveClue(ctx: ClueContext, fps: Seq[FocusPossibility], symmetricInterp: S
 				holder != giver && !game.chop(holder).contains(d)
 
 	lazy val delayedBluff = trueFp.flatMap: trueFp =>
-		Option.when(trueFp.isBluff && trueFp.connections.head.reacting == target):
+		Option.when(trueFp.isBluff && trueFp.connections.head.reacting == receiver):
 			val reacting = trueFp.connections.head.reacting
 
 			(fps ++ symmetricFps).filter: fp =>
@@ -418,7 +418,7 @@ def resolveClue(ctx: ClueContext, fps: Seq[FocusPossibility], symmetricInterp: S
 
 	val undoScream =
 		interp == ClueInterp.Save &&
-		target == state.nextPlayerIndex(giver) &&
+		receiver == state.nextPlayerIndex(giver) &&
 		game.dcStatus == DcStatus.Scream &&
 		state.numPlayers > 2
 
@@ -438,7 +438,7 @@ def resolveClue(ctx: ClueContext, fps: Seq[FocusPossibility], symmetricInterp: S
 
 	.when(_ => action.clue.kind == ClueKind.Rank):		// with a colour clue, there shouldn't be ambiguity about ids (maybe in rainbow?)
 		def nextReacting(fp: FocusPossibility, i: Int) =
-			fp.connections.lift(i + 1).map(_.reacting).getOrElse(action.target)
+			fp.connections.lift(i + 1).map(_.reacting).getOrElse(action.receiver)
 
 		simplestFps.foldLeft(_): (a, fp) =>
 			if fp.symmetric || fp.complicated then a else
@@ -456,7 +456,7 @@ def resolveClue(ctx: ClueContext, fps: Seq[FocusPossibility], symmetricInterp: S
 								fp2 != fp && {
 									(fp2.save && !state.isPlayable(fp2.id)) ||
 									// If there exists a focus possibility sharing this playable whose next reacting player is different,
-									// don't write a play link (otherwise, playing this card may trigger writing playable ids on the target too early).
+									// don't write a play link (otherwise, playing this card may trigger writing playable ids on the receiver too early).
 									(matchingIndex != -1 && nextReacting(fp2, matchingIndex) != nextReact)
 								}
 
@@ -502,7 +502,7 @@ def resolveClue(ctx: ClueContext, fps: Seq[FocusPossibility], symmetricInterp: S
 			case fp if requiresWc(fp) => WaitingConnection(
 				fp.connections,
 				giver,
-				target,
+				receiver,
 				state.turnCount,
 				focus,
 				fp.id,
@@ -514,7 +514,7 @@ def resolveClue(ctx: ClueContext, fps: Seq[FocusPossibility], symmetricInterp: S
 			case fp if requiresWc(fp) && fp.connections.nonEmpty && !fp.isBluff => WaitingConnection(
 				fp.connections,
 				giver,
-				target,
+				receiver,
 				state.turnCount,
 				focus,
 				fp.id,

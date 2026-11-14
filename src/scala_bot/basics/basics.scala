@@ -8,12 +8,12 @@ extension[G <: Game](game: G)
 	/** Returns the updated game after the clue, without conventional interpretations or elim. */
 	def onClue(action: ClueAction)(using ops: GameOps[G]): G =
 		val state = game.state
-		val ClueAction(giver, target, list, clue) = action
+		val ClueAction(giver, receiver, orders, clue) = action
 		val BaseClue(kind, value) = clue
 		val newPossible = IdentitySet.from(state.variant.touchPossibilities(clue))
 
-		state.hands(target).foldLeft(game): (newGame, order) =>
-			if list.contains(order) then
+		state.hands(receiver).foldLeft(game): (newGame, order) =>
+			if orders.contains(order) then
 				val touchedGame = newGame.withCard(order)(c => c.copy(
 						clued = true,
 						clues = c.clues :+ CardClue(kind, value, giver, state.turnCount)

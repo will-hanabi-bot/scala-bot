@@ -136,7 +136,7 @@ def selfPlay(args: String*) =
 	val results = (seed until seed + numGames).par.map: i =>
 		val rng = Random(i)
 		val shuffledDeck = rng.shuffle(deck).toVector
-		val states = (0 until numPlayers).map(State(NAMES.take(numPlayers), _, variant, TableOptions(numPlayers, variant.name)))
+		val states = (0 until numPlayers).map(State(NAMES.take(numPlayers), _, variant, TableOptions(variant.id)))
 		val GameSummary(score, result, actions, notes) = convention match
 			case Convention.Reactor  => simulateGame(states.map(Reactor(0, _, false)), shuffledDeck)
 			case Convention.RefSieve => simulateGame(states.map(RefSieve(0, _, false)), shuffledDeck)

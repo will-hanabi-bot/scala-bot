@@ -11,15 +11,15 @@ sealed trait Action:
 	def requiresDraw: Boolean
 	def isPlayerAction: Boolean
 
-/** @param num The turn number (1-indexed).
+/** @param turn The turn number (1-indexed).
   * @param currentPlayerIndex The index of the player whose turn it is.
   */
 case class TurnAction(
-	num: Int,
+	turn: Int,
 	currentPlayerIndex: Int
 ) extends Action:
 	def fmt(state: State) =
-		s"Turn $num (${state.names(currentPlayerIndex)})"
+		s"Turn $turn (${state.names(currentPlayerIndex)})"
 
 	def playerIndex = currentPlayerIndex
 	def requiresDraw = false
@@ -28,26 +28,26 @@ case class TurnAction(
 object TurnAction:
 	def fromJSON(json: ujson.Value) =
 		TurnAction(
-			json.obj("num").num.toInt,
-			json.obj("currentPlayerIndex").num.toInt
+			json.obj("turn").num.toInt,
+			json.obj.get("currentPlayerIndex").fold(-1)(_.num.toInt)
 		)
 
 /** @param giver The index of the player who gave this clue.
-  * @param target The index of the player who received this clue.
+  * @param receiver The index of the player who received this clue.
   * @param list The orders touched by the clue.
   * @param clue The clue kind and value.
   */
 case class ClueAction(
 	giver: Int,
-	target: Int,
-	list: Seq[Int],
+	receiver: Int,
+	orders: Seq[Int],
 	clue: BaseClue
 ) extends Action:
 	def fmt(state: State) =
 		val value = clue.kind match
 			case ClueKind.Colour => state.variant.colourableSuits(clue.value).name.toLowerCase()
 			case ClueKind.Rank => clue.value.toString
-		s"${state.names(giver)} clues $value to ${state.names(target)}"
+		s"${state.names(giver)} clues $value to ${state.names(receiver)}"
 
 	def playerIndex = giver
 	def requiresDraw = false
@@ -56,20 +56,15 @@ case class ClueAction(
 object ClueAction:
 	def fromJSON(json: ujson.Value) =
 		ClueAction(
-			json.obj("giver").num.toInt,
-			json.obj("target").num.toInt,
-			json.obj("list").arr.toSeq.map(_.num.toInt),
+			json.obj("playerIndex").num.toInt,
+			json.obj("receiverIndex").num.toInt,
+			json.obj("orders").arr.toSeq.map(_.num.toInt),
 			BaseClue.fromJSON(json.obj("clue"))
 		)
 
-/** Returns a human-readable string of an identity.
-  * Accepts -1 for [[suitIndex]] and [[rank]].
-  */
-def logId(state: State, suitIndex: Int, rank: Int) =
-	if suitIndex == -1 || rank == -1 then
-		"xx"
-	else
-		state.logId(Identity(suitIndex, rank))
+def parseId(json: ujson.Value) =
+	json.obj.get("identity").map: idObj =>
+		Identity(idObj("suitIndex").num.toInt, idObj("rank").num.toInt)
 
 /** @param playerIndex The index of the player who drew the card.
   * @param order The position of the card in the deck (0 is the topmost card).
@@ -79,7 +74,7 @@ def logId(state: State, suitIndex: Int, rank: Int) =
 case class DrawAction(
 	playerIndex: Int,
 	order: Int,
-	identity: Option[Identity]
+	identity: Option[Identity] = None
 ) extends Action:
 	def fmt(state: State) =
 		s"${state.names(playerIndex)} draws ${state.logId(identity)} ($order)"
@@ -92,8 +87,7 @@ object DrawAction:
 		DrawAction(
 			json.obj("playerIndex").num.toInt,
 			json.obj("order").num.toInt,
-			json.obj.get("identity").map: idObj =>
-				Identity(idObj("suitIndex").num.toInt, idObj("rank").num.toInt)
+			parseId(json)
 		)
 
 /** @param playerIndex The index of the player who played the card.
@@ -104,7 +98,7 @@ object DrawAction:
 case class PlayAction(
 	playerIndex: Int,
 	order: Int,
-	identity: Option[Identity]
+	identity: Option[Identity] = None
 ) extends Action:
 	def fmt(state: State) =
 		s"${state.names(playerIndex)} plays ${state.logId(identity)} ($order)"
@@ -117,8 +111,7 @@ object PlayAction:
 		PlayAction(
 			json.obj("playerIndex").num.toInt,
 			json.obj("order").num.toInt,
-			json.obj.get("identity").map: idObj =>
-				Identity(idObj("suitIndex").num.toInt, idObj("rank").num.toInt)
+			parseId(json)
 		)
 
 /** @param playerIndex The index of the player who discarded the card.
@@ -130,7 +123,7 @@ object PlayAction:
 case class DiscardAction(
 	playerIndex: Int,
 	order: Int,
-	identity: Option[Identity],
+	identity: Option[Identity] = None,
 	failed: Boolean = false
 ) extends Action:
 	def fmt(state: State) =
@@ -141,38 +134,22 @@ case class DiscardAction(
 	def isPlayerAction = true
 
 object DiscardAction:
-	def fromJSON(json: ujson.Value) =
+	def fromJSON(json: ujson.Value, failed: Boolean = false) =
 		DiscardAction(
 			json.obj("playerIndex").num.toInt,
 			json.obj("order").num.toInt,
-			json.obj.get("identity").map: idObj =>
-				Identity(idObj("suitIndex").num.toInt, idObj("rank").num.toInt)
-			,
-			json.obj("failed").bool
+			parseId(json),
+			json.obj.get("failed").map(_.bool).getOrElse(failed)
 		)
-
-enum EndCondition:
-	case InProgress, Normal, Strikeout, Timeout, Terminated,
-		SpeedrunFail, IdleTimeout, CharacterSoftlock, AllOrNothingFail, AllOrNothingSoftlock,
-		TerminatedByVote
 
 /** @param endCondition The reason for the game over (see [[EndCondition]]).
   * @param playerIndex The index of the player who caused the game over.
   */
-case class GameOverAction(
-	endCondition: Int,
-	playerIndex: Int
-) extends Action:
+case class GameOverAction() extends Action:
 	def fmt(state: State) = "Game over!"
+	def playerIndex = -1
 	def requiresDraw = false
 	def isPlayerAction = false
-
-object GameOverAction:
-	def fromJSON(json: ujson.Value) =
-		GameOverAction(
-			json.obj("endCondition").num.toInt,
-			json.obj("playerIndex").num.toInt
-		)
 
 /** A custom action used to signal that the next clue should be interpreted a particular way.
   * Typically inserted after rewinding when something has been proven.
@@ -193,15 +170,16 @@ object Action:
 		json.obj("type").str match
 			case "clue"    => Some(ClueAction.fromJSON(json))
 			case "discard" => Some(DiscardAction.fromJSON(json))
+			case "misplay" => Some(DiscardAction.fromJSON(json, failed = true))
 			case "play"    => Some(PlayAction.fromJSON(json))
 			case "draw"    => Some(DrawAction.fromJSON(json))
 			case "turn"    => Some(TurnAction.fromJSON(json))
-			case "gameOver" => Some(GameOverAction.fromJSON(json))
+			case "gameOver" => Some(GameOverAction())
 			case _     => None
 
 	def fromClue(state: State, clue: Clue, giver: Int): ClueAction =
-		val list = state.clueTouched(state.hands(clue.target), clue)
-		ClueAction(giver, clue.target, list, clue.base)
+		val orders = state.clueTouched(state.hands(clue.receiver), clue)
+		ClueAction(giver, clue.receiver, orders, clue.base)
 
 	def gerund(action: Action) =
 		action match
@@ -269,18 +247,18 @@ def addAction(actionList: Vector[List[Action]], action: Action, turn: Int) =
   * Variants: Play, Discard, Colour, Rank, Terminate
   */
 enum PerformAction:
-	/** @param target The order of the card to play. */
-	case Play(target: Int)
-	/** @param target The order of the card to discard. */
-	case Discard(target: Int)
-	/** @param target The index of the player to clue.
+	/** @param order The order of the card to play. */
+	case Play(order: Int)
+	/** @param order The order of the card to discard. */
+	case Discard(order: Int)
+	/** @param receiver The index of the player to clue.
 	  * @param value The index of the colour to clue (leftmost is 0, skipping colourless suits).
 	  */
-	case Colour(target: Int, value: Int)
-	/** @param target The index of the player to clue.
+	case Colour(receiver: Int, value: Int)
+	/** @param receiver The index of the player to clue.
 	  * @param value The rank to clue.
 	  */
-	case Rank(target: Int, value: Int)
+	case Rank(receiver: Int, value: Int)
 	/** @param target ??
 	  * @param value ??
 	  */
@@ -288,25 +266,25 @@ enum PerformAction:
 
 	def hash: Int =
 		this match
-			case Play(target) =>
-				target
-			case Discard(target) =>
-				10 + target
-			case Colour(target, value) =>
-				20 + target + value * 100
-			case Rank(target, value) =>
-				30 + target + value * 100
+			case Play(order) =>
+				order
+			case Discard(order) =>
+				10 + order
+			case Colour(receiver, value) =>
+				20 + receiver + value * 100
+			case Rank(receiver, value) =>
+				30 + receiver + value * 100
 			case Terminate(target, value) =>
 				-1
 
 	def isClue: Boolean = this match
-		case Colour(_, _) | Rank(_, _) => true
+		case _: Colour | _: Rank => true
 		case _ => false
 
 	def getOrder: Int = this match
-		case Play(target) => target
-		case Discard(target) => target
-			case _ => throw new Error(s"tried to get order of $this!")
+		case Play(order) => order
+		case Discard(order) => order
+		case _ => throw new Error(s"tried to get order of $this!")
 
 	/** Returns a human-readable string of the action (must be from our hand).
 	  * For plays and discards, a player can be provided whose inferences will be used.
@@ -317,22 +295,22 @@ enum PerformAction:
 		val player = accordingTo.getOrElse(game.common)
 
 		this match
-			case Play(target) =>
-				val slot = state.ourHand.indexOf(target) + 1
-				s"Play slot $slot, inferences ${player.strInfs(state, target)}"
+			case Play(order) =>
+				val slot = state.ourHand.indexOf(order) + 1
+				s"Play slot $slot, inferences ${player.strInfs(state, order)}"
 
-			case Discard(target) =>
-				val slot = state.ourHand.indexOf(target) + 1
-				s"Discard slot $slot, inferences ${player.strInfs(state, target)}"
+			case Discard(order) =>
+				val slot = state.ourHand.indexOf(order) + 1
+				s"Discard slot $slot, inferences ${player.strInfs(state, order)}"
 
-			case Colour(target, value) =>
+			case Colour(receiver, value) =>
 				// A PerformAction can only clue the colourable suits, but logging uses the index out of all suits.
 				// e.g. In Rainbow & Pink (6 Suits), a value of 5 is a pink clue, not a "rainbow" clue.
 				val adjustedValue = state.variant.suits.indexOf(state.variant.colourableSuits(value))
-				Clue(ClueKind.Colour, adjustedValue, target).fmt(state)
+				Clue(ClueKind.Colour, adjustedValue, receiver).fmt(state)
 
-			case Rank(target, value) =>
-				Clue(ClueKind.Rank, value, target).fmt(state)
+			case Rank(receiver, value) =>
+				Clue(ClueKind.Rank, value, receiver).fmt(state)
 
 			case Terminate(target, value) =>
 				s"Game ended: $target $value"
@@ -344,28 +322,30 @@ enum PerformAction:
 		val (state, deckIds) = (game.state, game.deckIds)
 
 		val actionType = this match
-			case Play(target) =>
-				val id = deckIds(target)
-				s"${if id.exists(!state.isPlayable(_)) then "bomb" else "play"} ${state.logId(id)}, order $target"
+			case Play(order) =>
+				val id = deckIds(order)
+				s"${if id.exists(!state.isPlayable(_)) then "bomb" else "play"} ${state.logId(id)}, order $order"
 
-			case Discard(target) =>
-				s"discard ${state.logId(deckIds(target))}, order $target"
+			case Discard(order) =>
+				s"discard ${state.logId(deckIds(order))}, order $order"
 
 			case _ => fmt(game)
 		s"$actionType (${state.names(playerIndex)})"
 
 	def json(tableID: Int) =
 		this match
-			case Play(target) =>
-				ujson.Obj("tableID" -> tableID, "type" -> 0, "target" -> target)
-			case Discard(target) =>
-				ujson.Obj("tableID" -> tableID, "type" -> 1, "target" -> target)
-			case Colour(target, value) =>
-				ujson.Obj("tableID" -> tableID, "type" -> 2, "target" -> target, "value" -> value)
-			case Rank(target, value) =>
-				ujson.Obj("tableID" -> tableID, "type" -> 3, "target" -> target, "value" -> value)
+			case Play(order) =>
+				ujson.Obj("tableID" -> tableID, "type" -> "play", "order" -> order)
+			case Discard(order) =>
+				ujson.Obj("tableID" -> tableID, "type" -> "discard", "order" -> order)
+			case Colour(receiver, value) =>
+				val clue = ujson.Obj("type" -> "color", "color" -> value)
+				ujson.Obj("tableID" -> tableID, "type" -> "clue", "receiverIndex" -> receiver, "clue" -> clue)
+			case Rank(receiver, value) =>
+				val clue = ujson.Obj("type" -> "rank", "rank" -> value)
+				ujson.Obj("tableID" -> tableID, "type" -> "clue", "receiverIndex" -> receiver, "clue" -> clue)
 			case Terminate(target, value) =>
-				ujson.Obj("tableID" -> tableID, "type" -> 4, "target" -> target, "value" -> value)
+				ujson.Obj("tableID" -> tableID, "type" -> "gameOver", "endCondition" -> "terminatedByPlayer", "playerIndex" -> target)
 
 	def toAction(state: State, playerIndex: Int, deck: Option[IndexedSeq[Identity]] = None, retain: Boolean = false) =
 		val deckId = (order: Int) =>
@@ -375,64 +355,71 @@ enum PerformAction:
 			orders.filter(deckId(_).map(state.variant.cardTouched(_, clue)).getOrElse(false))
 
 		this match
-			case PerformAction.Play(target) =>
-				deckId(target) match
+			case PerformAction.Play(order) =>
+				deckId(order) match
 					case Some(id) =>
 						if !retain && state.isInverted(id) then
-							DiscardAction(playerIndex, target, Some(id))
+							DiscardAction(playerIndex, order, Some(id))
 						else if state.isPlayable(id) then
-							PlayAction(playerIndex, target, Some(id))
+							PlayAction(playerIndex, order, Some(id))
 						else
-							DiscardAction(playerIndex, target, Some(id), true)
+							DiscardAction(playerIndex, order, Some(id), true)
 					case None =>
-						DiscardAction(playerIndex, target, None, true)
+						DiscardAction(playerIndex, order, None, true)
 
-			case PerformAction.Discard(target) =>
-				deckId(target) match
+			case PerformAction.Discard(order) =>
+				deckId(order) match
 					case Some(id) =>
 						if !retain && state.isInverted(id) then
 							if state.isPlayable(id) then
-								PlayAction(playerIndex, target, Some(id))
+								PlayAction(playerIndex, order, Some(id))
 							else
-								DiscardAction(playerIndex, target, Some(id), true)
+								DiscardAction(playerIndex, order, Some(id), true)
 						else
-							DiscardAction(playerIndex, target, Some(id), false)
+							DiscardAction(playerIndex, order, Some(id), false)
 					case None =>
-						DiscardAction(playerIndex, target, None, false)
+						DiscardAction(playerIndex, order, None, false)
 
-			case PerformAction.Colour(target, value) =>
+			case PerformAction.Colour(receiver, value) =>
 				val clue = BaseClue(ClueKind.Colour, value)
-				val list = clueTouched(state.hands(target), clue)
-				ClueAction(playerIndex, target, list, clue)
+				val orders = clueTouched(state.hands(receiver), clue)
+				ClueAction(playerIndex, receiver, orders, clue)
 
-			case PerformAction.Rank(target, value) =>
+			case PerformAction.Rank(receiver, value) =>
 				val clue = BaseClue(ClueKind.Rank, value)
-				val list = clueTouched(state.hands(target), clue)
-				ClueAction(playerIndex, target, list, clue)
+				val orders = clueTouched(state.hands(receiver), clue)
+				ClueAction(playerIndex, receiver, orders, clue)
 
 			case PerformAction.Terminate(target, value) =>
-				GameOverAction(value, target)
+				GameOverAction()
 
 object PerformAction:
 	def fromJSON(json: ujson.Value): PerformAction =
-		val actionType = json("type").num.toInt
-		lazy val target = json("target").num.toInt
-		lazy val value = json("value").num.toInt
+		val actionType = json("type").str
 
 		actionType match
-			case 0 => PerformAction.Play(target)
-			case 1 => PerformAction.Discard(target)
-			case 2 => PerformAction.Colour(target, value)
-			case 3 => PerformAction.Rank(target, value)
-			case 4 => PerformAction.Terminate(target, value)
+			case "play" =>
+				val order = json("order").num.toInt
+				PerformAction.Play(order)
+			case "discard" =>
+				val order = json("order").num.toInt
+				PerformAction.Discard(order)
+			case "clue" =>
+				val receiver = json("receiverIndex").num.toInt
+				val clue = BaseClue.fromJSON(json("clue")).toClue(receiver)
+				PerformAction.fromClue(clue)
+			case "gameOver" =>
+				PerformAction.Terminate(0, 0)
+			case x =>
+				throw new IllegalArgumentException(s"Unknown PerformAction type: $x")
 
 	def fromAction(action: Action): PerformAction =
 		action match
-			case ClueAction(_, target, _, clue) =>
+			case ClueAction(_, receiver, _, clue) =>
 				if clue.kind == ClueKind.Colour then
-					PerformAction.Colour(target, clue.value)
+					PerformAction.Colour(receiver, clue.value)
 				else
-					PerformAction.Rank(target, clue.value)
+					PerformAction.Rank(receiver, clue.value)
 
 			case DiscardAction(_, order, _, failed) =>
 				if failed then
@@ -447,10 +434,10 @@ object PerformAction:
 				throw new Error(s"can't convert non-performed action $action to a PerformAction!")
 
 	def fromClue(clue: Clue): PerformAction =
-		val Clue(kind, value, target) = clue
+		val Clue(kind, value, receiver) = clue
 		kind match
-			case ClueKind.Colour => PerformAction.Colour(target, value)
-			case ClueKind.Rank   => PerformAction.Rank(target, value)
+			case ClueKind.Colour => PerformAction.Colour(receiver, value)
+			case ClueKind.Rank   => PerformAction.Rank(receiver, value)
 
 	def tryPlay(game: Game, order: Int) =
 		if game.meta(order).status == CardStatus.CalledToDiscard || (game.assumeInverted(game.me, order) && game.me.thoughts(order).possibilities.difference(game.state.playableSet).isEmpty) then

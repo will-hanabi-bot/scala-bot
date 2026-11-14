@@ -135,12 +135,12 @@ object main extends IOApp:
 					val attempt = for
 						response <- basicRequest.post(uri"${if useSSL then "https" else "http"}://${HOSTNAME}:${PORT}/login")
 							.header("Content-Type", "application/x-www-form-urlencoded")
-							.body(Map("username" -> username, "password" -> password, "version" -> "bot"))
+							.body(Map("username" -> username, "password" -> password, "client" -> "bot"))
 							.send(backend)
 						_ <- IO.whenA(response.cookies.forall(_.isLeft)):
 								IO.raiseError(new Exception(s"No cookie found ${response.headers}"))
 						_ <- basicRequest
-							.get(uri"${if useSSL then "wss" else "ws"}://${HOSTNAME}${if CUSTOM_PORT then s":${PORT}" else ""}/ws?version=bot")
+							.get(uri"${if useSSL then "wss" else "ws"}://${HOSTNAME}${if CUSTOM_PORT then s":${PORT}" else ""}/ws?client=bot")
 							.response(asWebSocket(useWebSocketWithReset))
 							.cookies(response)
 							.send(backend)

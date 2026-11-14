@@ -17,10 +17,10 @@ enum FixResult:
   * @param action The clue action.
   */
 def checkFix(prev: Game, game: Game, action: ClueAction): FixResult =
-	val list = action.list
+	val orders = action.orders
 
-	val (cluedResets, duplicateReveals) = list.foldRight((List[Int](), List[Int]())) { case (order, (cluedResets, duplicateReveals)) =>
-		lazy val duplicated = prev.state.deck(order).clued && game.common.thoughts(order).id().isDefined && list.exists: o =>
+	val (cluedResets, duplicateReveals) = orders.foldRight((List[Int](), List[Int]())) { case (order, (cluedResets, duplicateReveals)) =>
+		lazy val duplicated = prev.state.deck(order).clued && game.common.thoughts(order).id().isDefined && orders.exists: o =>
 			o != order &&
 			prev.state.deck(o).clued &&
 			!prev.common.thoughts(o).reset &&
@@ -86,10 +86,10 @@ def connectableSimple[G <: Game](game: G, player: Player, start: Int, target: In
 /** Returns the possible ids of a distribution clue. */
 def distributionClue(prev: Game, game: Game, action: ClueAction, focus: Int): Option[IdentitySet] =
 	val state = game.state
-	val ClueAction(_, target, list, clue) = action
+	val ClueAction(_, receiver, orders, clue) = action
 	val thought = game.common.thoughts(focus)
 
-	if list.forall(prev.state.deck(_).clued) || (!game.inEndgame && state.remScore > state.variant.suits.length) then
+	if orders.forall(prev.state.deck(_).clued) || (!game.inEndgame && state.remScore > state.variant.suits.length) then
 		return None
 
 	if state.deck(focus).id().exists(state.isBasicTrash) then
@@ -102,7 +102,7 @@ def distributionClue(prev: Game, game: Game, action: ClueAction, focus: Int): Op
 
 	val useful = poss.iter.foldLeftOpt(IdentitySet.empty): (acc, id) =>
 		lazy val duplicated = state.hands.zipWithIndex.exists: (hand, i) =>
-			i != target && hand.exists(o => game.isTouched(o) && game.orderMatches(o, id, infer = true))
+			i != receiver && hand.exists(o => game.isTouched(o) && game.orderMatches(o, id, infer = true))
 
 		if state.isBasicTrash(id) || state.isCritical(id) then
 			Right(acc)
@@ -122,7 +122,7 @@ def distributionClue(prev: Game, game: Game, action: ClueAction, focus: Int): Op
   */
 def rainbowMismatch(prev: Game, game: Game, action: ClueAction, id: Identity, prompt: Int): Boolean =
 	val state = game.state
-	val ClueAction(_, target, list, clue) = action
+	val ClueAction(_, receiver, orders, clue) = action
 
 	val skip =
 		clue.kind != ClueKind.Colour ||
@@ -134,8 +134,8 @@ def rainbowMismatch(prev: Game, game: Game, action: ClueAction, id: Identity, pr
 		return false
 
 	val allRainbow =
-		list.forall: o =>
-			if target == state.ourPlayerIndex then
+		orders.forall: o =>
+			if receiver == state.ourPlayerIndex then
 				game.me.thoughts(o).possible.forall: c =>
 					state.variant.suits(c.suitIndex).suitType.rainbowish
 			else
@@ -145,6 +145,6 @@ def rainbowMismatch(prev: Game, game: Game, action: ClueAction, id: Identity, pr
 		return false
 
 	// A matching colour would have touched the same cards.
-	target == state.ourPlayerIndex ||
+	receiver == state.ourPlayerIndex ||
 	state.deck(prompt).clues.exists: c =>
-		state.clueTouched(state.hands(target), c).sorted == list.sorted
+		state.clueTouched(state.hands(receiver), c).sorted == orders.sorted

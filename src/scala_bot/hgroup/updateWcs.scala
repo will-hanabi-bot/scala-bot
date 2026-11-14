@@ -17,9 +17,9 @@ enum UpdateResult:
 
 def checkRevealLayer(prev: HGroup, game: HGroup, action: ClueAction) =
 	val state = game.state
-	val ClueAction(giver, target, list, clue) = action
+	val ClueAction(giver, receiver, _, clue) = action
 
-	val revealed = state.hands(target).find: o =>
+	val revealed = state.hands(receiver).find: o =>
 		val status = prev.meta(o).status
 
 		(!prev.state.deck(o).clued && (status == CardStatus.Finessed || status == CardStatus.GentlemansDiscard)) &&
@@ -37,7 +37,7 @@ def checkRevealLayer(prev: HGroup, game: HGroup, action: ClueAction) =
 
 def stompedWc(prev: HGroup, game: HGroup, action: Action, wc: WaitingConnection) =
 	action.matchesP:
-		case action @ ClueAction(giver, target, list, clue) if wc.target != giver =>
+		case action @ ClueAction(giver, _, _, _) if wc.receiver != giver =>
 			val focus = game.determineFocus(prev, action).focus
 
 			wc.connections.exists: conn =>
@@ -92,7 +92,7 @@ def refreshWCs(prev: HGroup, game: HGroup, action: Action, beforeClueInterp: Boo
 		val res =
 			// Do not allow the hypo'ing player to resolve wcs on themselves
 			// Do not refresh wcs that were just generated this turn
-			if hypo.contains(wc.target) || wc.turn == game.state.turnCount then
+			if hypo.contains(wc.receiver) || wc.turn == game.state.turnCount then
 				UpdateResult.Keep
 			else
 				updateWc(prev, game, action, wc, struct.toRemove, beforeClueInterp)
@@ -459,11 +459,11 @@ def resolveRetained(prev: HGroup, game: HGroup, action: Action, wc: WaitingConne
 		Log.info(s"$name didn't play into ${wc.currConn.kind} but they need to play multiple non-hidden cards, passing back")
 		return UpdateResult.AmbiguousPassback
 
-	val allowableHesitation = if reacting != wc.target || wc.currConn.isBluff then None else
+	val allowableHesitation = if reacting != wc.receiver || wc.currConn.isBluff then None else
 		// Find all waiting connections using this order OR self-identities, and merge their possible identities
 		val linkedIds = (for
 			w     <- game.waiting if w != wc && w.focus == wc.focus
-			conns <- w.connections if conns.order == connOrder || conns.reacting == w.target
+			conns <- w.connections if conns.order == connOrder || conns.reacting == w.receiver
 		yield
 			conns.ids
 		).flatten

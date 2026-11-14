@@ -14,9 +14,9 @@ enum StableResult:
 	case Mistake
 
 private def reactiveFocus(state: State, receiver: Int, action: ClueAction) =
-	val ClueAction(_, _, list, clue) = action
+	val ClueAction(_, _, orders, clue) = action
 	lazy val (_, focusIndex) = state.hands(receiver).zipWithIndex
-		.filter((o, _) => list.contains(o))
+		.filter((o, _) => orders.contains(o))
 		.maxBy((o, _) => if o == state.hands(receiver)(0) then -1 else o)
 
 	clue.kind match
@@ -26,7 +26,7 @@ private def reactiveFocus(state: State, receiver: Int, action: ClueAction) =
 			if state.variant.pinkish || state.variant.pinkS then clue.value else focusIndex + 1
 
 def interpretStable(prev: Reactor, game: Reactor, action: ClueAction, stall: Boolean) =
-	val ClueAction(giver, target, _, _) = action
+	val ClueAction(giver, receiver, _, _) = action
 
 	val bob = game.state.nextPlayerIndex(giver)
 
@@ -40,11 +40,11 @@ def interpretStable(prev: Reactor, game: Reactor, action: ClueAction, stall: Boo
 		interpretReactive(prev, hypoGame, action, bob, looksStable = true)
 
 	tryStable(prev, game, action, stall) match
-		case StableResult.TryReactive if target != bob =>
+		case StableResult.TryReactive if receiver != bob =>
 			reactiveGame
 
 		case StableResult.Stable(interp, newGame) =>
-			if target != bob && badStable(prev, newGame, action, interp, stall) then
+			if receiver != bob && badStable(prev, newGame, action, interp, stall) then
 				reactiveGame
 			else
 				(interp, newGame)
@@ -55,15 +55,15 @@ def interpretStable(prev: Reactor, game: Reactor, action: ClueAction, stall: Boo
 private def tryStable(prev: Reactor, game: Reactor, action: ClueAction, stall: Boolean): StableResult =
 	Log.info(s"interpreting stable clue!")
 	val state = game.state
-	val ClueAction(giver, target, list, clue) = action
-	val newlyTouched = list.filter(!prev.state.deck(_).clued)
+	val ClueAction(giver, receiver, orders, clue) = action
+	val newlyTouched = orders.filter(!prev.state.deck(_).clued)
 	val nextPlayerIndex = state.nextPlayerIndex(giver)
 
 	game.when(_ => clue.kind == ClueKind.Rank && newlyTouched.nonEmpty): g =>
 		val trashPush = (0 until state.variant.suits.length).forall(suitIndex => state.isBasicTrash(Identity(suitIndex, clue.value)))
 		lazy val playableRankFocus =
 			if state.variant.pinkish then
-				g.state.hands(target).filter(!prev.state.deck(_).clued).minOption.filter(list.contains).getOrElse(newlyTouched.max)
+				g.state.hands(receiver).filter(!prev.state.deck(_).clued).minOption.filter(orders.contains).getOrElse(newlyTouched.max)
 			else
 				newlyTouched.max
 
@@ -100,8 +100,7 @@ private def tryStable(prev: Reactor, game: Reactor, action: ClueAction, stall: B
 		else
 			g
 	.copy(
-		waiting = Option.when(game.waiting.isEmpty && nextPlayerIndex != target):
-			val receiver = target
+		waiting = Option.when(game.waiting.isEmpty && nextPlayerIndex != receiver):
 			val focusSlot = reactiveFocus(state, receiver, action)
 
 			Log.info("writing potential response inversion!")
@@ -125,24 +124,24 @@ private def tryStable(prev: Reactor, game: Reactor, action: ClueAction, stall: B
 			case _ => ()
 
 		val common = g.common
-		val prevPlayables = prev.common.obviousPlayables(prev, target)
-			.concat(connectableSimple(prev, prev.players(giver), nextPlayerIndex, target)).distinct
-		val playables = common.obviousPlayables(g, target)
-			.concat(connectableSimple(g.withMove(ClueInterp.Play), g.players(giver), nextPlayerIndex, target)).distinct
+		val prevPlayables = prev.common.obviousPlayables(prev, receiver)
+			.concat(connectableSimple(prev, prev.players(giver), nextPlayerIndex, receiver)).distinct
+		val playables = common.obviousPlayables(g, receiver)
+			.concat(connectableSimple(g.withMove(ClueInterp.Play), g.players(giver), nextPlayerIndex, receiver)).distinct
 
 		Log.info(s"playables $playables, prev_playables $prevPlayables")
 
 		lazy val revealed = playables.filter: o =>
-			list.contains(o) &&
+			orders.contains(o) &&
 			!prevPlayables.contains(o) &&
 			(clue.kind == ClueKind.Rank || prev.state.deck(o).clued)
 
 		// Try connecting with an unknown playable
-		lazy val revealConnectable = if nextPlayerIndex == target then None else
+		lazy val revealConnectable = if nextPlayerIndex == receiver then None else
 			val prevPlays = prev.common.obviousPlayables(prev, nextPlayerIndex)
 			val possibleConnections =
 				for
-					o      <- list if prev.state.deck(o).clued
+					o      <- orders if prev.state.deck(o).clued
 					thought = game.common.thoughts(o) if game.state.hasConsistentInfs(thought, game.me)
 					id     <- thought.id() if state.playableAway(id) == 1
 				yield
@@ -155,10 +154,10 @@ private def tryStable(prev: Reactor, game: Reactor, action: ClueAction, stall: B
 				connectId.map(o -> _)
 
 		if newlyTouched.isEmpty then
-			val safeActions = playables.concat(common.thinksTrash(g, target).filter(prev.state.deck(_).clued))
-			val oldSafeActions = prevPlayables.concat(prev.common.thinksTrash(prev, target))
+			val safeActions = playables.concat(common.thinksTrash(g, receiver).filter(prev.state.deck(_).clued))
+			val oldSafeActions = prevPlayables.concat(prev.common.thinksTrash(prev, receiver))
 
-			lazy val connectable = connectableSimple(game.withMove(ClueInterp.Reveal), game.common, state.nextPlayerIndex(giver), target)
+			lazy val connectable = connectableSimple(game.withMove(ClueInterp.Reveal), game.common, state.nextPlayerIndex(giver), receiver)
 				.filterNot(oldSafeActions.contains)
 
 			if safeActions.exists(!oldSafeActions.contains(_)) then
@@ -185,17 +184,17 @@ private def tryStable(prev: Reactor, game: Reactor, action: ClueAction, stall: B
 						else
 							StableResult.Mistake
 
-					case None if list.forall(game.common.thoughts(_).id().isDefined) =>
+					case None if orders.forall(game.common.thoughts(_).id().isDefined) =>
 						// All fully known - must be reactive
 						StableResult.TryReactive
 
 					case None =>
 						val focus =
-							lazy val muddyCards = list.filter(game.knownAs(_, MUDDY, if state.variant.rainbowS then state.variant.specialRank else None)).sortBy(o => -o)
+							lazy val muddyCards = orders.filter(game.knownAs(_, MUDDY, if state.variant.rainbowS then state.variant.specialRank else None)).sortBy(o => -o)
 
 							if state.variant.pinkish && clue.kind == ClueKind.Rank then
 								// Pink positional
-								state.hands(target).lift(clue.value - 1)
+								state.hands(receiver).lift(clue.value - 1)
 							else if (state.variant.rainbowS || state.variant.muddy || (state.variant.rainbowish && state.variant.pinkish)) && clue.kind == ClueKind.Colour && muddyCards.nonEmpty then
 								// Mud clue
 								val coloursAvailable = state.variant.colourableSuits.length
@@ -203,7 +202,7 @@ private def tryStable(prev: Reactor, game: Reactor, action: ClueAction, stall: B
 
 								muddyCards.lift(focusIndex)
 							else
-								val possiblePlays = list.filter(game.common.thoughts(_).inferred.intersect(state.playableSet).nonEmpty)
+								val possiblePlays = orders.filter(game.common.thoughts(_).inferred.intersect(state.playableSet).nonEmpty)
 
 								if clue.kind == ClueKind.Rank || state.variant.colourableSuits(clue.value).suitType.pinkish then
 									possiblePlays.maxOption
@@ -248,10 +247,10 @@ private def tryStable(prev: Reactor, game: Reactor, action: ClueAction, stall: B
 			val brownishTcm =
 				state.variant.brownish &&
 				clue.kind == ClueKind.Rank &&
-				!prev.common.obviousLoaded(game, target) &&
+				!prev.common.obviousLoaded(game, receiver) &&
 				state.variant.suits.zipWithIndex.exists: (suit, suitIndex) =>
 					suit.suitType.brownish && state.playStacks(suitIndex) + 1 < state.maxRanks(suitIndex) &&
-					!newlyTouched.contains(state.hands(target)(0))
+					!newlyTouched.contains(state.hands(receiver)(0))
 
 			if brownishTcm then
 				Log.info("brown direct discard!")
@@ -271,7 +270,7 @@ private def tryStable(prev: Reactor, game: Reactor, action: ClueAction, stall: B
 /**
 * Returns the best alternative clue, if it exists, and whether it is a ref play.
 */
-private def alternativeClue(prev: Reactor, giver: Int, target: Int) =
+private def alternativeClue(prev: Reactor, giver: Int, receiver: Int) =
 	if prev.noRecurse then (None, false) else
 		val state = prev.state
 
@@ -294,7 +293,7 @@ private def alternativeClue(prev: Reactor, giver: Int, target: Int) =
 							case ClueInterp.Play => (Some(clue), true)
 							case ClueInterp.Reveal => recur(clues.tail, Some(clue), false)
 							case ClueInterp.Discard =>
-								val dcTarget = hypo.state.hands(target).find: o =>
+								val dcTarget = hypo.state.hands(receiver).find: o =>
 									hypo.gainedStatus(prev, o, CardStatus.CalledToDiscard)
 
 								// TODO?: The dc target doesn't always exist. Consider a ref dc onto a card that previously had ctd.
@@ -305,11 +304,11 @@ private def alternativeClue(prev: Reactor, giver: Int, target: Int) =
 							case _ =>
 								recur(clues.tail, foundClue, false)
 
-		recur(state.allValidClues(target))
+		recur(state.allValidClues(receiver))
 
 def badStable(prev: Reactor, game: Reactor, action: ClueAction, interp: ClueInterp, stall: Boolean = false): Boolean =
 	val state = game.state
-	val ClueAction(giver, target, _, clue) = action
+	val ClueAction(giver, receiver, _, clue) = action
 
 	if interp == ClueInterp.Mistake then
 		return true
@@ -321,11 +320,11 @@ def badStable(prev: Reactor, game: Reactor, action: ClueAction, interp: ClueInte
 			(game.gainedStatus(prev, o, CardStatus.CalledToDiscard) && state.isInverted(o))
 		}
 
-	lazy val dcTarget = state.hands(target).find: o =>
+	lazy val dcTarget = state.hands(receiver).find: o =>
 		game.gainedStatus(prev, o, CardStatus.CalledToDiscard) ||
 		(game.gainedStatus(prev, o, CardStatus.DragToPlay) && game.state.isInverted(o))
 
-	if target == state.ourPlayerIndex then
+	if receiver == state.ourPlayerIndex then
 		false
 	else if badPlayable.isDefined then
 		val bad = badPlayable.get
@@ -337,7 +336,7 @@ def badStable(prev: Reactor, game: Reactor, action: ClueAction, interp: ClueInte
 	else if game.noRecurse then
 		false
 	else
-		val (altClue, refPlay) = alternativeClue(prev, giver, target)
+		val (altClue, refPlay) = alternativeClue(prev, giver, receiver)
 
 		if stall && dcTarget.exists(o => state.isUseful(state.deck(o).id().get)) && altClue.isDefined then
 			Log.warn(s"bad discard on ${dcTarget.get}! alt clue ${altClue.get.fmt(state)} was available!")
@@ -359,7 +358,7 @@ def badStable(prev: Reactor, game: Reactor, action: ClueAction, interp: ClueInte
 
 def interpretReactive(prev: Reactor, game: Reactor, action: ClueAction, reacter: Int, looksStable: Boolean): (ClueInterp, Reactor) =
 	val state = game.state
-	val ClueAction(giver = giver, target = receiver, clue = clue, list = _) = action
+	val ClueAction(giver, receiver, _, clue) = action
 
 	Log.info("interpreting reactive clue!")
 	Log.info(s"reacter: ${state.hands(reacter)} (${state.names(reacter)}), receiver: ${state.hands(receiver)} (${state.names(receiver)})")
@@ -414,8 +413,8 @@ def delayedPlays(game: Reactor, giver: Int, receiver: Int, stable: Boolean) =
 					case None => common.thoughts(o).inferred.difference(state.trashSet).map(i => o -> Identity(i.suitIndex, i.rank + 1)) ++: acc
 
 def refPlay(prev: Reactor, game: Reactor, action: ClueAction): StableResult =
-	val hand = game.state.hands(action.target)
-	val newlyTouched = action.list.filter(!prev.state.deck(_).clued)
+	val hand = game.state.hands(action.receiver)
+	val newlyTouched = action.orders.filter(!prev.state.deck(_).clued)
 	val target = newlyTouched.map(game.common.refer(prev, hand, _, left = true)).max
 
 	if game.isBlindPlaying(target) then
@@ -472,7 +471,7 @@ def targetPlay(game: Reactor, action: ClueAction, target: Int, urgent: Boolean, 
 			Log.warn(s"target $target was reset!")
 
 			val newGame = g.withThought(target)(_.resetInferences())
-			if action.target == state.nextPlayerIndex(action.giver) then
+			if action.receiver == state.nextPlayerIndex(action.giver) then
 				if newGame.common.orderKt(newGame, target) then
 					StableResult.Stable(ClueInterp.Stall, newGame)
 				else
@@ -523,12 +522,12 @@ def targetDiscard(game: Reactor, action: ClueAction, target: Int, urgent: Boolea
 def refDiscard(prev: Reactor, game: Reactor, action: ClueAction, stall: Boolean): StableResult =
 	boundary:
 		val state = game.state
-		val ClueAction(giver = giver, target = receiver, list = list, clue = clue) = action
+		val ClueAction(giver, receiver, orders, clue) = action
 		val hand = state.hands(receiver)
-		val newlyTouched = list.filter(!prev.state.deck(_).clued)
+		val newlyTouched = orders.filter(!prev.state.deck(_).clued)
 
 		hand.filter(!prev.state.deck(_).clued).minOption match
-			case Some(lockOrder) if list.contains(lockOrder) =>
+			case Some(lockOrder) if orders.contains(lockOrder) =>
 				if stall && state.nextPlayerIndex(receiver) == giver then
 					Log.info("stall to Cathy's lock card!")
 					StableResult.Stable(ClueInterp.Stall, game)
@@ -559,7 +558,7 @@ def refDiscard(prev: Reactor, game: Reactor, action: ClueAction, stall: Boolean)
 				val focus = newlyTouched.max
 				val focusPos = hand.indexOf(focus)
 				val targetIndex = hand.zipWithIndex.indexWhere((o, i) => i > focusPos && !state.deck(o).clued)
-				val promisedOrder = list.filter(_ > hand(targetIndex)).min
+				val promisedOrder = orders.filter(_ > hand(targetIndex)).min
 
 				Log.info(s"ref discard on ${state.names(receiver)}'s slot ${targetIndex + 1}")
 

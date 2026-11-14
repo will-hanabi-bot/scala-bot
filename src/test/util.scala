@@ -49,7 +49,7 @@ def setup[G <: Game](
 	val _variant = variant match
 		case v: Variant => v
 		case t: TestVariant => VARIANTS(t)
-	val _state = State(playerNames, 0, _variant, TableOptions(playerNames.length, _variant.name))
+	val _state = State(playerNames, 0, _variant, TableOptions(_variant.id))
 
 	ops.copyWith(constructor(0, _state, false), GameUpdates(catchup = Some(true)))
 		.pipe: g =>
@@ -209,17 +209,17 @@ def parseAction(state: State, action: String) =
 			val clue = strToClue(state, valueS)
 
 			if target != state.ourPlayerIndex then
-				val list = state.clueTouched(state.hands(target), clue)
+				val orders = state.clueTouched(state.hands(target), clue)
 
-				if list.isEmpty then
+				if orders.isEmpty then
 					throw new IllegalArgumentException(s"No cards touched by clue ($valueS to $targetS)!")
 
-				ClueAction(giver, target, list, clue)
+				ClueAction(giver, target, orders, clue)
 			else if slotsS == null then
 				throw new IllegalArgumentException(s"Not enough arguments provided (clue to us) in $action, needs '(slot x)'")
 			else
-				val list = slotsS.split(",").map(s => state.ourHand(s.toInt - 1))
-				ClueAction(giver, target, list.toSeq, clue)
+				val orders = slotsS.split(",").map(s => state.ourHand(s.toInt - 1))
+				ClueAction(giver, target, orders.toSeq, clue)
 
 		case playPattern(playerS, short, slotS) if playerS != null && short != null =>
 			val playerIndex = parsePlayer(playerS)

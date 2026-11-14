@@ -19,7 +19,7 @@ def isIntermediateBluffTarget(prev: HGroup, game: HGroup, action: ClueAction, id
 
 def validBluff(game: HGroup, action: ClueAction, blind: Identity, reacting: Int, connected: FastBitSet, symmetric: Boolean = false) =
 	val state = game.state
-	val ClueAction(giver, target, _, clue) = action
+	val ClueAction(giver, receiver, _, clue) = action
 	val focus = connected.head
 
 	lazy val disconnect = symmetric ||
@@ -37,13 +37,13 @@ def validBluff(game: HGroup, action: ClueAction, blind: Identity, reacting: Int,
 	state.nextPlayerIndex(giver) == reacting &&
 	connected.size == 1 &&
 	disconnect &&
-	!(clue.kind == ClueKind.Colour && reacting == target) &&	// not self-colour bluff
+	!(clue.kind == ClueKind.Colour && reacting == receiver) &&	// not self-colour bluff
 	interferes.isEmpty
 
 /** Returns whether the colour clue could be a save on the given identity. */
 def colourSave(prev: HGroup, action: ClueAction, id: Identity, focus: Int): Boolean =
 	val state = prev.state
-	val ClueAction(giver, target, list, clue) = action
+	val ClueAction(giver, receiver, orders, clue) = action
 	val Identity(suitIndex, rank) = id
 
 	val thought = prev.common.thoughts(focus)
@@ -60,24 +60,24 @@ def colourSave(prev: HGroup, action: ClueAction, id: Identity, focus: Int): Bool
 
 	if suit.name == "Black" && (rank == 2 || rank == 5) then
 		// Newly touched or fill-in cards
-		val fillIns = list.count: o =>
+		val fillIns = orders.count: o =>
 			!state.deck(o).clued ||
 			prev.common.thoughts(o).possible.exists(!state.variant.idTouched(_, clue))
 
 		// Trash that would be picked up by a rank clue
-		val trash = state.hands(target).count: o =>
+		val trash = state.hands(receiver).count: o =>
 			val card = state.deck(o)
 			!card.clued && card.id().exists(i => i.rank == rank && state.isBasicTrash(i))
 
 		if fillIns < 2 && trash == 0 then
 			return false
 
-	if suit.suitType.brownish && prev.common.thinksLoaded(prev, target) then
+	if suit.suitType.brownish && prev.common.thinksLoaded(prev, receiver) then
 		return false
 
 	if "Dark Rainbow|Dark Prism".r.unanchored.matches(suit.name) then
 		val completed = prev.common.hypoStacks(suitIndex) == state.maxRanks(suitIndex)
-		val savedCrit = list.exists: o =>
+		val savedCrit = orders.exists: o =>
 			val card = state.deck(o)
 
 			o != focus &&
@@ -109,7 +109,7 @@ def colourSave(prev: HGroup, action: ClueAction, id: Identity, focus: Int): Bool
 
 def rankSave(prev: HGroup, action: ClueAction, id: Identity, focus: Int): Boolean =
 	val state = prev.state
-	val ClueAction(giver, target, list, clue) = action
+	val ClueAction(giver, receiver, _, clue) = action
 	val Identity(suitIndex, rank) = id
 	val thought = prev.common.thoughts(focus)
 
@@ -121,7 +121,7 @@ def rankSave(prev: HGroup, action: ClueAction, id: Identity, focus: Int): Boolea
 	if "Black|Dark Pink".r.unanchored.matches(state.variant.suits(suitIndex).name) && (rank == 3 || rank == 4) then
 		return false
 
-	val loaded34 = prev.common.thinksLoaded(prev, target) &&
+	val loaded34 = prev.common.thinksLoaded(prev, receiver) &&
 		(state.variant.suits.exists(s => s.suitType.whitish && !s.suitType.brownish) || state.includesVariant("Dark Rainbow|Dark Prism".r)) &&
 		(rank == 3 || rank == 4)
 
@@ -145,7 +145,7 @@ enum SpecialClueResult:
 def interpSpecialClue(ctx: ClueContext): SpecialClueResult =
 	val ClueContext(prev, game, action, _) = ctx
 	val (common, state) = (game.common, game.state)
-	val ClueAction(giver, target, list, clue) = action
+	val ClueAction(giver, receiver, orders, clue) = action
 	val FocusResult(focus, chop, positional) = ctx.focusResult
 
 	val USELESS = SpecialClue(game.withMove(ClueInterp.Useless))
@@ -218,7 +218,7 @@ def interpSpecialClue(ctx: ClueContext): SpecialClueResult =
 
 		interpret5cm(ctx) match
 			case Result5cm.Mistake => return MISTAKE
-			case Result5cm.Cm(cm5) if !thinksStall.contains(target) =>
+			case Result5cm.Cm(cm5) if !thinksStall.contains(receiver) =>
 				Log.info(s"5cm, saving ${state.logId(cm5)} $cm5")
 				return SpecialClue:
 					performCM(game, List(cm5)).withMove(evaluateCM(ctx, List(cm5))).pipe(saveCtx)
@@ -226,7 +226,7 @@ def interpSpecialClue(ctx: ClueContext): SpecialClueResult =
 
 	val pinkTrashFix = state.variant.pinkish &&
 		!positional.contains(Positional.Pink) && clue.kind == ClueKind.Rank &&
-		list.forall(o => prev.state.deck(o).clued && game.knownAs(o, PINKISH)) &&
+		orders.forall(o => prev.state.deck(o).clued && game.knownAs(o, PINKISH)) &&
 		state.variant.suits.zipWithIndex.forall: (suit, suitIndex) =>
 			!suit.suitType.pinkish ||
 			common.isTrash(game, Identity(suitIndex, clue.value), focus)
@@ -305,7 +305,7 @@ def interpSpecialClue(ctx: ClueContext): SpecialClueResult =
 					game.withThought(focus)(_.copy(inferred = poss))
 						.withMove(ClueInterp.Reveal)
 
-		val playFix = list.find: o =>
+		val playFix = orders.find: o =>
 			prev.common.orderPlayable(prev, o) &&
 			!prev.common.thinksInverted(prev.state, o) &&
 			state.isInverted(o)
@@ -317,7 +317,7 @@ def interpSpecialClue(ctx: ClueContext): SpecialClueResult =
 	if prev.state.deck(focus).clued && positional.isEmpty then
 		if game.level >= Level.Fix then
 			val fixTarget = Option.when(clue == BaseClue(ClueKind.Rank, 1)):
-				prev.next1(list.filter(prev.unknown1))
+				prev.next1(orders.filter(prev.unknown1))
 			.flatten.getOrElse(focus)
 
 			if prev.common.hypoPlays.contains(fixTarget) && common.thoughts(fixTarget).possible.intersect(state.trashSet).nonEmpty then

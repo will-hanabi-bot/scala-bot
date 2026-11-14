@@ -18,9 +18,9 @@ case class ChatMessage(
 	who: String = "",
 	room: String = "",
 	recipient: String = ""
-) derives ReadWriter
+) derives Reader
 
-case class ChatList(list: Vector[ChatMessage]) derives ReadWriter
+case class ChatList(list: Vector[ChatMessage]) derives Reader
 
 case class GameActionMessage(
 	tableID: Int,
@@ -36,7 +36,7 @@ case class Spectator(
 	name: String,
 	shadowingPlayerIndex: Int,
 	shadowingPlayerUsername: String = ""
-) derives ReadWriter
+) derives Reader
 
 case class Table(
 	id: Int,
@@ -78,16 +78,15 @@ object Table:
 		)
 
 case class TableOptions(
-	numPlayers: Int,
-	variantName: String,
-	startingPlayer: Int = 0,
+	variantId: Int = 0,
 	deckPlays: Boolean = false,
-	detrimentalCharacters: Boolean = false,
 	emptyClues: Boolean = false,
 	oneExtraCard: Boolean = false,
 	oneLessCard: Boolean = false,
 	speedrun: Boolean = false
-) derives ReadWriter
+) derives Reader:
+	def variantName =
+		Variant.getVariant(variantId).name
 
 case class InitMessage(
 	tableID: Int,
@@ -96,13 +95,13 @@ case class InitMessage(
 	replay: Boolean,
 	seed: String,
 	options: TableOptions
-) derives ReadWriter
+) derives Reader
 
 case class SelfData(
 	userID: Int,
 	username: String,
 	playingAtTables: List[Int]
-) derives ReadWriter
+) derives Reader
 
 case class GameActionListMessage(
 	tableID: Int,
@@ -116,7 +115,7 @@ object GameActionListMessage:
 			json.obj("list").arr.map(Action.fromJSON).flatten.toSeq
 		)
 
-case class NoteListPlayerMessage(tableID: Int, notes: Vector[String]) derives ReadWriter
+case class NoteListPlayerMessage(tableID: Int, notes: Vector[String]) derives Reader
 
 case class BotConfig(
 	leaveReplayIfOnlyBots: Boolean = true,
@@ -396,7 +395,7 @@ class BotClient(queue: Queue[IO, String], gameRef: Ref[IO, Option[Game]], config
 
 	def handleInit(data: InitMessage) =
 		val InitMessage(tID, playerNames, ourPlayerIndex, _, _, options) = data
-		val variant = Variant.getVariant(options.variantName)
+		val variant = Variant.getVariant(options.variantId)
 		val state = State(playerNames, ourPlayerIndex, variant, options)
 		val game = newGameFromSettings(tID, state, convention)
 
@@ -605,7 +604,6 @@ class BotClient(queue: Queue[IO, String], gameRef: Ref[IO, Option[Game]], config
 		table.options.fold(IO.unit): options =>
 			val unsupportedOptions = List(
 				Option.when(options.emptyClues)("emptyClues"),
-				Option.when(options.detrimentalCharacters)("detrimentalChars"),
 				Option.when(options.oneExtraCard)("oneExtraCard"),
 				Option.when(options.oneLessCard)("oneLessCard"),
 			).flatten
