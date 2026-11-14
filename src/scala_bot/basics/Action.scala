@@ -332,20 +332,20 @@ enum PerformAction:
 			case _ => fmt(game)
 		s"$actionType (${state.names(playerIndex)})"
 
-	def json(tableID: Int) =
+	def json =
 		this match
 			case Play(order) =>
-				ujson.Obj("tableID" -> tableID, "type" -> "play", "order" -> order)
+				ujson.Obj("type" -> "play", "order" -> order)
 			case Discard(order) =>
-				ujson.Obj("tableID" -> tableID, "type" -> "discard", "order" -> order)
+				ujson.Obj("type" -> "discard", "order" -> order)
 			case Colour(receiver, value) =>
 				val clue = ujson.Obj("type" -> "color", "color" -> value)
-				ujson.Obj("tableID" -> tableID, "type" -> "clue", "receiverIndex" -> receiver, "clue" -> clue)
+				ujson.Obj("type" -> "clue", "receiverIndex" -> receiver, "clue" -> clue)
 			case Rank(receiver, value) =>
 				val clue = ujson.Obj("type" -> "rank", "rank" -> value)
-				ujson.Obj("tableID" -> tableID, "type" -> "clue", "receiverIndex" -> receiver, "clue" -> clue)
+				ujson.Obj("type" -> "clue", "receiverIndex" -> receiver, "clue" -> clue)
 			case Terminate(target, value) =>
-				ujson.Obj("tableID" -> tableID, "type" -> "gameOver", "endCondition" -> "terminatedByPlayer", "playerIndex" -> target)
+				ujson.Obj("type" -> "gameOver", "endCondition" -> "terminatedByPlayer", "playerIndex" -> target)
 
 	def toAction(state: State, playerIndex: Int, deck: Option[IndexedSeq[Identity]] = None, retain: Boolean = false) =
 		val deckId = (order: Int) =>

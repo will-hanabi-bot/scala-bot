@@ -54,7 +54,7 @@ case class GameUpdates(
 	notes: Option[Map[Int, Note]] = None,
 	lastActions: Option[Vector[Option[Action]]] = None,
 	moveHistory: Option[Vector[Interp]] = None,
-	queuedCmds: Option[List[(String, String)]] = None,
+	queuedCmds: Option[List[(String, ujson.Value)]] = None,
 	nextInterp: Option[Option[Interp]] = None,
 	rewindDepth: Option[Int] = None,
 	inProgress: Option[Boolean] = None,
@@ -95,7 +95,7 @@ trait Game:
 	/** The interpretation of the most recent move, if it exists. */
 	def moveHistory: Vector[Interp]
 	/** Commands that are queued to be sent to hanab.live (e.g. to play a specific card). */
-	def queuedCmds: List[(String, String)]
+	def queuedCmds: List[(String, ujson.Value)]
 	/** What the next clue should be interpreted as. Used when rewinding after a particular interpretation is demonstrated. */
 	def nextInterp: Option[Interp]
 	/** Whether to disallow recursing into hypothetical states, like seeing if a stall was available. */
@@ -598,7 +598,7 @@ extension[G <: Game](game: G)
 
 	def updateNotes()(using ops: GameOps[G]): G =
 		val (state, notes) = (game.state, game.notes)
-		val (cmds, newNotes) = game.state.heldOrders.foldLeft((List.empty[(String, String)], notes)): (acc, order) =>
+		val (cmds, newNotes) = game.state.heldOrders.foldLeft((List.empty[(String, ujson.Value)], notes)): (acc, order) =>
 			val (cmds, newNotes) = acc
 			val card = state.deck(order)
 			val note = getNote(order)
@@ -625,7 +625,7 @@ extension[G <: Game](game: G)
 
 					val newCmds =
 						if !game.catchup && game.inProgress then
-							("note", ujson.Obj("tableID" -> game.tableID, "order" -> order, "note" -> full).toString) +: cmds
+							("note", ujson.Obj("tableId" -> game.tableID, "order" -> order, "text" -> full)) +: cmds
 						else
 							cmds
 

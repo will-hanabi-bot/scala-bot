@@ -70,7 +70,7 @@ case class HGroup(
 	catchup: Boolean = false,
 	notes: Map[Int, Note] = Map(),
 	moveHistory: Vector[Interp] = Vector.empty,
-	queuedCmds: List[(String, String)] = Nil,
+	queuedCmds: List[(String, ujson.Value)] = Nil,
 	nextInterp: Option[Interp] = None,
 	noRecurse: Boolean = false,
 	hypothetical: Boolean = false,
