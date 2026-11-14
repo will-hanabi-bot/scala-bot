@@ -12,11 +12,11 @@ trait ClueLike:
 
 	def base: BaseClue = BaseClue(kind, value)
 
-	def fmt(state: State, target: Int) =
+	def fmt(state: State, receiver: Int) =
 		val clueValue = kind match
 			case ClueKind.Colour => state.variant.suits(value).name.toLowerCase
 			case ClueKind.Rank => value.toString
-		s"($clueValue to ${state.names(target)})"
+		s"($clueValue to ${state.names(receiver)})"
 
 	def isEq(other: ClueLike): Boolean =
 		kind == other.kind && value == other.value
@@ -32,16 +32,15 @@ case class BaseClue(kind: ClueKind, value: Int) extends ClueLike:
 	def hash: Int =
 		(if kind == ClueKind.Colour then 0 else 10) + value
 
-	def toClue(target: Int) =
-		Clue(kind, value, target)
+	def toClue(receiver: Int) =
+		Clue(kind, value, receiver)
 
 object BaseClue:
 	def fromJSON(json: ujson.Value) =
-		val kind = json.obj("type").num match
-			case 0 => ClueKind.Colour
-			case 1 => ClueKind.Rank
-			case _ => throw new IllegalArgumentException("Invalid clue kind")
-		BaseClue(kind, json.obj("value").num.toInt)
+		json.obj("type").str match
+			case "color" => BaseClue(ClueKind.Colour, json.obj("color").num.toInt)
+			case "rank"  => BaseClue(ClueKind.Rank, json.obj("rank").num.toInt)
+			case other   => throw new IllegalArgumentException(s"Invalid clue kind: $other")
 
 /** A clue that has touched a card.
   * @param kind   Whether the clue is rank or colour.
@@ -57,14 +56,14 @@ case class CardClue(
 ) extends ClueLike
 
 /** A clue that can be given.
-  * @param kind   Whether the clue is rank or colour.
-  * @param value  The rank of a rank clue, or the suitIndex of a colour clue.
-  * @param target  The index of the player to receive this clue.
+  * @param kind      Whether the clue is rank or colour.
+  * @param value     The rank of a rank clue, or the suitIndex of a colour clue.
+  * @param receiver  The index of the player to receive this clue.
   */
 case class Clue(
 	kind: ClueKind,
 	value: Int,
-	target: Int
+	receiver: Int
 ) extends ClueLike:
 	def fmt(state: State) =
-		base.fmt(state, target)
+		base.fmt(state, receiver)

@@ -71,7 +71,7 @@ class Rainbow extends munit.FunSuite:
 		.pipe(takeTurn("Cathy clues 4 to Alice (slot 4)"))
 
 		val wc = game.waiting.find: wc =>
-			wc.target == game.state.hands(Alice.ordinal)(3) &&
+			wc.receiver == game.state.hands(Alice.ordinal)(3) &&
 			wc.inference == game.state.expandShort("g4")
 
 		// Not a prompt. Note that a waiting connection may not be generated for playable connections only.

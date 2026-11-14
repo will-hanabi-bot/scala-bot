@@ -5,7 +5,7 @@ import scala_bot.logger.Log
 import scala_bot.utils._
 
 private def reactiveContext(prev: Reactor, game: Reactor, action: ClueAction, reacter: Int) =
-	val ClueAction(giver = giver, target = receiver, clue = _, list = _) = action
+	val ClueAction(giver, receiver, _, _) = action
 	val state = game.state
 
 	val possibleConns = delayedPlays(game, giver, receiver, stable = false)
@@ -32,7 +32,7 @@ private def reactiveContext(prev: Reactor, game: Reactor, action: ClueAction, re
 	(possibleConns, knownPlays, hypoState)
 
 def interpretReactiveColour(prev: Reactor, game: Reactor, action: ClueAction, focusSlot: Int, reacter: Int, looksStable: Boolean): (ClueInterp, Reactor) =
-	val ClueAction(giver = giver, target = receiver, clue = _, list = _) = action
+	val ClueAction(giver, receiver, _, _) = action
 	val state = game.state
 	val (possibleConns, knownPlays, hypoState) = reactiveContext(prev, game, action, reacter)
 
@@ -164,7 +164,7 @@ def interpretReactiveColour(prev: Reactor, game: Reactor, action: ClueAction, fo
 			.getOrElse(ClueInterp.Mistake, game)
 
 def interpretReactiveRank(prev: Reactor, game: Reactor, action: ClueAction, focusSlot: Int, reacter: Int): (ClueInterp, Reactor) =
-	val ClueAction(giver = _, target = receiver, clue = _, list = _) = action
+	val receiver = action.receiver
 	val state = game.state
 	val (possibleConns, knownPlays, hypoState) = reactiveContext(prev, game, action, reacter)
 

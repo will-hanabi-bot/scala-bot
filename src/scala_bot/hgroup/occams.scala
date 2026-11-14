@@ -56,7 +56,7 @@ def filterFps(ctx: ClueContext, fps: Seq[FocusPossibility]) =
 			// The clue target can see a clued connection in someone else's hand
 			trueFp.connections.exists: conn =>
 				state.deck(conn.order).clued &&
-				conn.reacting != action.target &&
+				conn.reacting != action.receiver &&
 				conn.ids.contains(fp.id)
 			||
 			// There is an extra self-finesse required from us (we may not have that card)
@@ -71,10 +71,10 @@ def filterDominated(ctx: ClueContext, fps: Seq[FocusPossibility]) =
 		// Log.info(s"checking ${state.logConns(fp.connections, fp.id)}")
 
 		val nextSelfConn = fp.connections.zipWithIndex.find: (c, _) =>
-			c.reacting == action.target && !(c.isInstanceOf[KnownConn] || c.isInstanceOf[PlayableConn])
+			c.reacting == action.receiver && !(c.isInstanceOf[KnownConn] || c.isInstanceOf[PlayableConn])
 
 		val dominated = nextSelfConn match
-			case Some(f: FinesseConn, index) if f.reacting == action.target =>
+			case Some(f: FinesseConn, index) if f.reacting == action.receiver =>
 				fps.find: fp2 =>
 					fp != fp2 &&
 					!fp2.symmetric &&

@@ -35,7 +35,7 @@ case class Reactor(
 	catchup: Boolean = false,
 	notes: Map[Int, Note] = Map(),
 	moveHistory: Vector[Interp] = Vector.empty,
-	queuedCmds: List[(String, String)] = Nil,
+	queuedCmds: List[(String, ujson.Value)] = Nil,
 	nextInterp: Option[Interp] = None,
 	noRecurse: Boolean = false,
 	hypothetical: Boolean = false,
@@ -109,9 +109,10 @@ case class Reactor(
 					this.me.thoughts(o).matches(id)
 
 			lazy val unknownPlay = lastActions(zelda).existsM:
-				case PlayAction(_, order, suitIndex, rank) =>
-					bobChopId.contains(Identity(suitIndex, rank)) &&
-					common.thoughts(order).oldInferred.get != IdentitySet.single(Identity(suitIndex, rank))
+				case PlayAction(_, order, id) =>
+					id.exists: i =>
+						bobChopId.contains(i) &&
+						common.thoughts(order).oldInferred.get != IdentitySet.single(i)
 
 			if common.obviousLoaded(this, bob) then
 				false
@@ -127,11 +128,11 @@ case class Reactor(
 				false
 
 	def reinterpPlay(prev: Reactor, action: PlayAction | DiscardAction): Option[Reactor] =
-		val (order, suitIndex, rank) = action match
-			case PlayAction(playerIndex, order, suitIndex, rank) => (order, suitIndex, rank)
-			case DiscardAction(playerIndex, order, suitIndex, rank, _) => (order, suitIndex, rank)
+		val (order, id) = action match
+			case PlayAction(playerIndex, order, id) => (order, id)
+			case DiscardAction(playerIndex, order, id, _) => (order, id)
 
-		if suitIndex == -1 || rank == -1 then
+		if id.isEmpty then
 			return None
 
 		val needsReplay =
@@ -142,7 +143,7 @@ case class Reactor(
 
 		Option.when(needsReplay) {
 			copy(
-				future = future.updated(order, IdentitySet.single(Identity(suitIndex, rank)))
+				future = future.updated(order, IdentitySet.single(id.get))
 			)
 			.replay(state.deck(order).turnDrawn)
 			.toOption
@@ -225,14 +226,14 @@ object Reactor:
 
 		def interpretClue(prev: Reactor, game: Reactor, action: ClueAction): Reactor =
 			val state = game.state
-			val ClueAction(giver, target, list, _) = action
+			val ClueAction(giver, receiver, orders, _) = action
 
 			val interpretedGame = checkMissed(game.elim(), giver, 99)
 				.when(_.waiting.exists(_.reacter == giver)):
 					_.copy(waiting = None)
 				.pipe: g =>
 					val (interp, interpGame) = g.nextInterp match
-						case _ if g.state.options.emptyClues && list.length == 0 =>
+						case _ if g.state.options.emptyClues && orders.isEmpty =>
 							Log.highlight(Console.YELLOW, "empty clue!")
 							(ClueInterp.Useless, g)
 
@@ -267,16 +268,16 @@ object Reactor:
 								case FixResult.Normal(cluedResets, duplicateReveals) =>
 									cluedResets ++ duplicateReveals
 								case _ => Nil
-							val allowableFix = target == state.nextPlayerIndex(giver) && fixed.nonEmpty
+							val allowableFix = receiver == state.nextPlayerIndex(giver) && fixed.nonEmpty
 
 							reacter match
 								case None => (if allowableFix then ClueInterp.Fix else ClueInterp.Mistake, g)
 
-								case Some(reacter) if reacter == target =>
+								case Some(reacter) if reacter == receiver =>
 									interpretStable(prev, g, action, stall = false)
 
 								case Some(reacter) =>
-									val prevPlayables = prev.players(target).obviousPlayables(prev, target)
+									val prevPlayables = prev.players(receiver).obviousPlayables(prev, receiver)
 
 									// Urgent fix on previous playable
 									if allowableFix && fixed.exists(prevPlayables.contains) then
@@ -310,8 +311,7 @@ object Reactor:
 
 		def interpretDiscard(prev: Reactor, game: Reactor, action: DiscardAction): Reactor =
 			val state = game.state
-			val DiscardAction(playerIndex, order, suitIndex, rank, failed) = action
-			val id = Identity(suitIndex, rank)
+			val DiscardAction(playerIndex, order, id, failed) = action
 
 			checkMissed(game, playerIndex, order)
 				.when(_ => failed): g =>
@@ -334,14 +334,13 @@ object Reactor:
 					)
 				.pipe: g =>
 					lazy val usefulDc = !failed && prev.state.deck(order).clued &&
-						suitIndex != -1 && rank != -1 &&
-						state.isUseful(id) &&
+						id.exists(state.isUseful) &&
 						prev.meta(order).status != CardStatus.CalledToDiscard &&
 						!(prev.common.thinksLocked(prev, playerIndex) && prev.state.clueTokens == 0)
 
 					g.waiting match
 						case Some(wc) =>
-							if suitIndex != -1 && state.variant.suits(suitIndex).suitType.inverted then
+							if id.exists(i => state.variant.suits(i.suitIndex).suitType.inverted) then
 								reactPlay(prev, g, playerIndex, order, wc)
 							else
 								reactDiscard(prev, g, playerIndex, order, wc)
@@ -358,7 +357,7 @@ object Reactor:
 									targets.foldLeft((g, state)):
 										case ((acc, hypoState), o) =>
 											val hidden = o != targets.last
-											val inferred = if hidden then hypoState.playableSet else IdentitySet.single(id)
+											val inferred = if hidden then hypoState.playableSet else IdentitySet.single(id.get)
 											val newState = g.me.thoughts(o).id().fold(hypoState): i =>
 												hypoState.withPlay(i)
 
@@ -373,7 +372,7 @@ object Reactor:
 									.withMove(DiscardInterp.GentlemansDiscard)
 
 								case DiscardResult.Sarcastic(orders) =>
-									g.copy(common = g.common.copy(links = Link.Sarcastic(FastBitSet.from(orders), id) +: g.common.links))
+									g.copy(common = g.common.copy(links = Link.Sarcastic(FastBitSet.from(orders), id.get) +: g.common.links))
 										.withMove(DiscardInterp.Sarcastic)
 
 								case DiscardResult.Baton(_, _) =>
@@ -392,14 +391,14 @@ object Reactor:
 				.when(_ => prev.state.canClue)(resetZcs)
 
 		def interpretPlay(prev: Reactor, game: Reactor, action: PlayAction): Reactor =
-			val PlayAction(playerIndex, order, suitIndex, _) = action
+			val PlayAction(playerIndex, order, id) = action
 
 			game.reinterpPlay(prev, action).getOrElse:
 				checkMissed(game, playerIndex, order)
 					.pipe: g =>
 						g.waiting match
 							case Some(wc) =>
-								if suitIndex != -1 && game.state.variant.suits(suitIndex).suitType.inverted then
+								if id.exists(i => game.state.variant.suits(i.suitIndex).suitType.inverted) then
 									reactDiscard(prev, g, playerIndex, order, wc)
 								else
 									reactPlay(prev, g, playerIndex, order, wc)
@@ -553,8 +552,8 @@ object Reactor:
 
 				val allClues = if !canClue then Nil else
 					for
-						target <- (0 until state.numPlayers) if target != state.ourPlayerIndex
-						clue   <- state.allValidClues(target)
+						receiver <- (0 until state.numPlayers) if receiver != state.ourPlayerIndex
+						clue   <- state.allValidClues(receiver)
 					yield
 						val perform = PerformAction.fromClue(clue)
 						val action = perform.toAction(state, state.ourPlayerIndex)
@@ -621,11 +620,11 @@ object Reactor:
 			Logger.setLevel(LogLevel.Off)
 
 			def clueValue(clue: Clue): Double =
-				val list = state.clueTouched(state.hands(clue.target), clue)
-				val action = ClueAction(giver, clue.target, list, clue.base)
+				val orders = state.clueTouched(state.hands(clue.receiver), clue)
+				val action = ClueAction(giver, clue.receiver, orders, clue.base)
 
 				// Only touches previously-clued trash
-				if list.forall(o => state.deck(o).clued && state.isBasicTrash(state.deck(o).id().get)) then
+				if orders.forall(o => state.deck(o).clued && state.isBasicTrash(state.deck(o).id().get)) then
 					return -99
 
 				Log.highlight(Console.GREEN, s"===== Predicting value for ${clue.fmt(state)} =====")
@@ -638,8 +637,8 @@ object Reactor:
 
 			val allClues =
 				(for
-					target <- (0 until state.numPlayers) if target != giver
-					clue   <- state.allValidClues(target)
+					receiver <- (0 until state.numPlayers) if receiver != giver
+					clue   <- state.allValidClues(receiver)
 					value = clueValue(clue)
 				yield
 					(clue, value))

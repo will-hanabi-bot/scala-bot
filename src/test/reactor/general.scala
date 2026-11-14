@@ -82,8 +82,8 @@ class General extends munit.FunSuite:
 		// We cannot give 4 to Bob as a reverse reactive, since Cathy would play b1 to react into r1 and Bob is already playing b1.
 		val clue = ClueAction(
 			giver = Alice.ordinal,
-			target = Bob.ordinal,
-			list = Vector(6, 7),
+			receiver = Bob.ordinal,
+			orders = Vector(6, 7),
 			clue = BaseClue(ClueKind.Rank, 4)
 		)
 		assert(_evalAction(game, clue) < 8.0)
@@ -158,8 +158,8 @@ class General extends munit.FunSuite:
 
 		val clue = ClueAction(
 			giver = Alice.ordinal,
-			target = Cathy.ordinal,
-			list = Vector(12),
+			receiver = Cathy.ordinal,
+			orders = Vector(12),
 			clue = BaseClue(ClueKind.Colour, Colour.Green.ordinal)
 		)
 
@@ -268,7 +268,7 @@ class General extends munit.FunSuite:
 			clueTokens = 6
 		)
 
-		val action = DiscardAction(0, Alice.ordinal, 2, 1, failed = false)
+		val action = DiscardAction(0, Alice.ordinal, Some(Identity(2, 1)), failed = false)
 		val result = _evalAction(game, action)
 
 		// Discarding g1 in slot 5 is a bad GD.
