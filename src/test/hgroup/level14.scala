@@ -1049,3 +1049,25 @@ class TrashFinesse extends munit.FunSuite:
 		hasInfs(game, None, Alice, 2, Vector("b2"))
 		hasStatus(game, Donald, 2, CardStatus.Finessed)
 		hasStatus(game, Donald, 3, CardStatus.Finessed)
+
+	// From https://hanab.live/shared-replay/2068134#11
+	test("will still interpret a play"):
+		val game = setup(HGroup.atLevel(14), Vector(
+			Vector("xx", "xx", "xx", "xx"),
+			Vector("p5", "r5", "g2", "y3"),
+			Vector("b4", "p1", "p3", "p3"),
+			Vector("y1", "g4", "r3", "r4")
+		),
+			starting = Bob,
+			playStacks = Some(Vector(0, 0, 0, 2, 2))
+		)
+		.pipe(takeTurn("Bob clues 1 to Alice (slot 2)"))
+		.pipe(takeTurn("Cathy clues green to Bob"))
+		.pipe(takeTurn("Donald plays y1", "b3"))
+
+		// Our 1 should be assumed to still be good since
+		// the y1 was played for the bluff.
+		hasInfs(game, None, Alice, 2, Vector("r1", "g1"))
+		hasStatus(game, Alice, 3, CardStatus.None)
+		hasStatus(game, Alice, 4, CardStatus.None)
+		hasInfs(game, None, Bob, 3, Vector("g2", "g3"))

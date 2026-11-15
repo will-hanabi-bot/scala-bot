@@ -42,7 +42,14 @@ def stompedWc(prev: HGroup, game: HGroup, action: Action, wc: WaitingConnection)
 
 			wc.connections.exists: conn =>
 				!(conn.hidden && conn.reacting == giver) &&		// Allow a hidden player to stomp, since they don't know
-				conn.ids.forall(game.state.deck(focus).id().contains)
+				(conn.ids.forall(game.state.deck(focus).id().contains) || (
+					wc.trashFinesse && wc.needsBlindPlay &&
+					game.waiting.exists: w =>
+						w.turn == game.state.turnCount &&
+						!w.symmetric &&
+						w.connections.existsM:
+							case f: FinesseConn => f.order == conn.order
+				))
 
 def unplayableAlt(game: HGroup, action: Action, wc: WaitingConnection) =
 	val (order, reacting) = (wc.currConn.order, wc.currConn.reacting)
