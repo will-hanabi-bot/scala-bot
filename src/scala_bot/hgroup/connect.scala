@@ -704,7 +704,8 @@ def unconfirmedTrashPlay(prev: HGroup, giver: Int, order: Int, observer: Option[
 			var found = false
 			var ci = 0
 			while ci < wc.connections.length && !found &&
-				inBetween(state.numPlayers, wc.connections(ci).reacting, state.nextPlayerIndex(lastPlayer), wc.receiver)
+				((ci > 0 && wc.connections(ci - 1).hidden && wc.connections(ci).reacting == lastPlayer) ||
+					inBetween(state.numPlayers, wc.connections(ci).reacting, state.nextPlayerIndex(lastPlayer), wc.receiver))
 			do
 				wc.connections(ci) match
 					case f: FinesseConn if f.order == order => found = true
@@ -744,7 +745,8 @@ def findTrashFinesses(ctx: ClueContext, connections: List[Connection], nextId: I
 	var lastPlayer = giver
 	var ci = 0
 	while ci < connections.length &&
-		inBetween(state.numPlayers, connections(ci).reacting, state.nextPlayerIndex(lastPlayer), receiver) &&
+		((ci > 0 && connections(ci - 1).hidden && connections(ci).reacting == lastPlayer) ||
+			inBetween(state.numPlayers, connections(ci).reacting, state.nextPlayerIndex(lastPlayer), receiver)) &&
 		!prev.state.hands(connections(ci).reacting).exists(prev.isBlindPlaying)
 	do
 		lastPlayer = connections(ci).reacting
@@ -805,7 +807,9 @@ def findTrashFinesses(ctx: ClueContext, connections: List[Connection], nextId: I
 	if !noConnectingPlay && (game.inEndgame || !validReverse) then
 		return Nil
 
-	val possibleTrash = trashWithReverse(if game.inEndgame then Nil else tfConnections.drop(ci))
+	val possibleTrash = trashWithReverse(if !game.inEndgame && validReverse then tfConnections.drop(ci) else Nil)
+	if possibleTrash.isEmpty then
+		return Nil
 
 	val symmetric = !state.deck(focus).id().forall(possibleTrash.contains) || symmetricConns(state, tfConnections)
 

@@ -1023,3 +1023,29 @@ class TrashFinesse extends munit.FunSuite:
 		.pipe(takeTurn("Alice clues 2 to Bob"))
 
 		assertNotEquals(game.lastMove, Some(ClueInterp.Play))
+
+	// From https://hanab.live/shared-replay/2068021#4
+	test("will still interpret a layered finesse"):
+		val game = setup(HGroup.atLevel(14), Vector(
+			Vector("xx", "xx", "xx", "xx"),
+			Vector("g3", "y1", "r4", "r2"),
+			Vector("b3", "y4", "b3", "p3"),
+			Vector("y2", "p1", "b1", "p1")
+		),
+			starting = Bob,
+			playStacks = Some(Vector(0, 1, 0, 0, 0))
+		)
+		.pipe(takeTurn("Bob clues blue to Alice (slot 2)"))
+		.tap: g =>
+			// Should be a possible layered finesse or direct play,
+			// not a trash finesse.
+			hasInfs(g, None, Alice, 2, Vector("b1", "b2"))
+			hasStatus(g, Alice, 3, CardStatus.None)
+			hasStatus(g, Alice, 4, CardStatus.None)
+		.pipe(takeTurn("Cathy clues 2 to Bob"))
+		.pipe(takeTurn("Donald plays y2", "y3"))
+
+		// The play should confirm a layered finesse
+		hasInfs(game, None, Alice, 2, Vector("b2"))
+		hasStatus(game, Donald, 2, CardStatus.Finessed)
+		hasStatus(game, Donald, 3, CardStatus.Finessed)
