@@ -34,8 +34,8 @@ def forceClue[G <: Game](game: G, giver: Int, advance: G => Double, offset: Int,
 			i    <- 0 until state.numPlayers if i != giver && i != state.ourPlayerIndex && only.forall(_ == i)
 			clue <- state.allValidClues(i) if clueFilter(clue)
 		yield
-			val list = state.clueTouched(state.hands(i), clue)
-			ClueAction(giver, i, list, clue.base)
+			val orders = state.clueTouched(state.hands(i), clue)
+			ClueAction(giver, i, orders, clue.base)
 
 	val level = Logger.level
 	val result: ForceClueResult[G] = allClues.foldLeft(Mistake()): (acc, action) =>

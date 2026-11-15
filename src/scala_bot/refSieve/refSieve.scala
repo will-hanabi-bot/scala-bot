@@ -26,7 +26,7 @@ case class RefSieve(
 	catchup: Boolean = false,
 	notes: Map[Int, Note] = Map(),
 	moveHistory: Vector[Interp] = Vector.empty,
-	queuedCmds: List[(String, String)] = Nil,
+	queuedCmds: List[(String, ujson.Value)] = Nil,
 	nextInterp: Option[Interp] = None,
 	noRecurse: Boolean = false,
 	hypothetical: Boolean = false,
@@ -93,11 +93,11 @@ case class RefSieve(
 		waiting.filter(_.connections.exists(_.order == order))
 
 	def reinterpPlay(prev: RefSieve, action: PlayAction | DiscardAction): Option[RefSieve] =
-		val (order, suitIndex, rank) = action match
-			case PlayAction(playerIndex, order, suitIndex, rank) => (order, suitIndex, rank)
-			case DiscardAction(playerIndex, order, suitIndex, rank, _) => (order, suitIndex, rank)
+		val (order, id) = action match
+			case PlayAction(playerIndex, order, id) => (order, id)
+			case DiscardAction(playerIndex, order, id, _) => (order, id)
 
-		if suitIndex == -1 || rank == -1 then
+		if id.isEmpty then
 			return None
 
 		val needsReplay =
@@ -106,7 +106,7 @@ case class RefSieve(
 			future(order).length > 1
 
 		Option.when(needsReplay) {
-			copy(future = future.updated(order, IdentitySet.single(Identity(suitIndex, rank))))
+			copy(future = future.updated(order, IdentitySet.single(id.get)))
 			.replay(state.deck(order).turnDrawn)
 			.toOption
 		}.flatten
@@ -138,7 +138,7 @@ case class RefSieve(
 
 	/** Determines the unlocked card (if it exists), given a play action. */
 	def unlockPromise(prev: RefSieve, action: PlayAction): Option[Int] =
-		val PlayAction(playerIndex, order, suitIndex, rank) = action
+		val PlayAction(playerIndex, order, id) = action
 
 		if prev.common.thoughts(order).id(infer = true).isEmpty then
 			Log.highlight(Console.CYAN, s"playing unknown card, not unlocking")
@@ -152,9 +152,12 @@ case class RefSieve(
 			Log.highlight(Console.CYAN, s"playing oldest/only safe playable, not unlocking")
 			return None
 
+		if id.isEmpty then
+			return None
+
 		val lockedHandR = state.hands(state.nextPlayerIndex(playerIndex)).reverse
 		val knownUnlock = lockedHandR.find: o =>
-			this.common.thoughts(o).matches(Identity(suitIndex, rank), infer = true)
+			this.common.thoughts(o).matches(id.get, infer = true)
 
 		if knownUnlock.isDefined then
 			Log.highlight(Console.CYAN, s"known unlock ${knownUnlock.get}")
@@ -162,7 +165,7 @@ case class RefSieve(
 
 		val lockedShifts = this.lockedShifts(order)
 
-		Identity(suitIndex, rank).next match
+		id.get.next match
 			case Some(nextId) =>
 				if state.hands(playerIndex).exists(this.common.thoughts(_).matches(nextId, infer = true)) then
 					Log.highlight(Console.CYAN, "unlocked player may be playing into their own hand, waiting")
@@ -246,21 +249,22 @@ object RefSieve:
 
 		def interpretClue(_prev: RefSieve, _game: RefSieve, action: ClueAction): RefSieve =
 			val state = _game.state
-			val ClueAction(giver, target, list, clue) = action
-			val newlyTouched = list.filter(!_prev.state.deck(_).clued)
+			val ClueAction(giver, receiver, orders, clue) = action
+			val newlyTouched = orders.filter(!_prev.state.deck(_).clued)
 
-			if _game.state.options.emptyClues && list.length == 0 then
+			if _game.state.options.emptyClues && orders.length == 0 then
 				Log.highlight(Console.YELLOW, "empty clue!")
 				return _game.withMove(ClueInterp.Useless)
 
 			val (prev, game) = if state.numPlayers > 2 then (_prev, _game.elim()) else
-				list.foldLeft((_prev, _game.elim())): (acc, o) =>
+				orders.foldLeft((_prev, _game.elim())): (acc, o) =>
 					val (prev, game) = acc
 					// Remove PTD/CTD on clued cards that are not 1s/2s
 					val removePtd =
 						state.deck(o).clued &&
 						(prev.meta(o).status == CardStatus.PermissionToDiscard || prev.meta(o).status == CardStatus.CalledToDiscard) &&
-						!game.common.thoughts(o).id(partial = true).exists(id => id.rank == 1 || id.rank == 2)
+						!game.common.thoughts(o).id().exists(id => id.rank == 1 || id.rank == 2) &&
+						!game.common.thoughts(o).possible.forall(id => id.rank == 1 || id.rank == 2)
 
 					if removePtd then
 						Log.highlight(Console.CYAN, s"revoking ptd from $o")
@@ -290,11 +294,11 @@ object RefSieve:
 						.elim()
 					case None => ()
 
-			val prevPlayables = prev.common.thinksPlayables(prev, target)
-			val prevLoaded = prev.common.thinksLoaded(prev, target)
+			val prevPlayables = prev.common.thinksPlayables(prev, receiver)
+			val prevLoaded = prev.common.thinksLoaded(prev, receiver)
 			val stalling = prev.common.thinksLocked(prev, giver) || prev.state.clueTokens == 8
 
-			val noInfo = state.numPlayers == 2 && !stalling && !game.inEndgame && list.forall: o =>
+			val noInfo = state.numPlayers == 2 && !stalling && !game.inEndgame && orders.forall: o =>
 				prev.common.thoughts(o).possible == game.common.thoughts(o).possible
 
 			if noInfo then
@@ -307,7 +311,7 @@ object RefSieve:
 						.elim()
 
 				// No-Info Double Bluff
-				return (game.findFinesse(action.target) match
+				return (game.findFinesse(action.receiver) match
 					case Some(f1) =>
 						def validNI(o1: Int, o2: Int) =
 							val valid = for
@@ -319,7 +323,7 @@ object RefSieve:
 
 							valid.forall(x => x)
 
-						game.findFinesse(action.target, FastBitSet.single(f1)) match
+						game.findFinesse(action.receiver, FastBitSet.single(f1)) match
 							case Some(f2) =>
 								Log.info(s"no-info double bluff on $f1 and $f2!")
 
@@ -328,15 +332,15 @@ object RefSieve:
 									.withMove(if validNI(f1, f2) then ClueInterp.Play else ClueInterp.Mistake)
 							case None =>
 								game.withMeta(f1)(_.copy(status = CardStatus.DragToPlay).reason(state.turnCount).signal(state.turnCount))
-									.withMeta(list.max)(_.copy(status = CardStatus.DragToPlay).reason(state.turnCount).signal(state.turnCount))
-									.withMove(if validNI(f1, list.max) then ClueInterp.Play else ClueInterp.Mistake)
+									.withMeta(orders.max)(_.copy(status = CardStatus.DragToPlay).reason(state.turnCount).signal(state.turnCount))
+									.withMove(if validNI(f1, orders.max) then ClueInterp.Play else ClueInterp.Mistake)
 					case None =>
 						game.withMove(ClueInterp.Mistake)
 				).elim()
 
 			val orangeFix = clue.kind == ClueKind.Colour &&
 				state.variant.colourableSuits(clue.value).suitType.inverted &&
-				list.exists(o => prevPlayables.contains(o) && !prev.players(target).thinksInverted(prev.state, o))
+				orders.exists(o => prevPlayables.contains(o) && !prev.players(receiver).thinksInverted(prev.state, o))
 
 			if orangeFix then
 				Log.info(s"orange fix!")
@@ -345,8 +349,8 @@ object RefSieve:
 			lazy val focus = determineFocus(ctx, push = trashPush || clue.kind == ClueKind.Colour)
 			lazy val cluedGame = game.withMeta(focus)(_.copy(focused = true)).elim()
 
-			lazy val newPlayables = cluedGame.common.thinksPlayables(cluedGame, target).filter(!prevPlayables.contains(_))
-			lazy val loaded = cluedGame.common.thinksLoaded(cluedGame, target)
+			lazy val newPlayables = cluedGame.common.thinksPlayables(cluedGame, receiver).filter(!prevPlayables.contains(_))
+			lazy val loaded = cluedGame.common.thinksLoaded(cluedGame, receiver)
 
 			val (interp, newGame) =
 				if !fix && prevLoaded then
@@ -355,7 +359,7 @@ object RefSieve:
 							Log.info("rank stall!")
 							(Some(ClueInterp.Stall), game)
 						else if state.numPlayers == 2 && clue.kind == ClueKind.Colour then
-							targetPlay(ctx, list.max)
+							targetPlay(ctx, orders.max)
 						else if !trashPush && clue.isEq(ClueKind.Rank, 1) then
 							Log.info(s"reordering 1s!")
 							(Some(ClueInterp.Reveal), game)
@@ -367,7 +371,7 @@ object RefSieve:
 						(Some(ClueInterp.Stall), game)
 
 					else	// Loaded reclue
-						targetPlay(ctx, list.max)
+						targetPlay(ctx, orders.max)
 
 				else if newlyTouched.isEmpty then
 					if loaded then
@@ -383,7 +387,7 @@ object RefSieve:
 						(Some(ClueInterp.Stall), game)
 
 					else	// Reclue
-						targetPlay(ctx, list.max)
+						targetPlay(ctx, orders.max)
 
 				else if newPlayables.isEmpty && trashPush then
 					Log.info(s"trash push!")
@@ -420,8 +424,7 @@ object RefSieve:
 
 		def interpretDiscard(prev: RefSieve, game: RefSieve, action: DiscardAction): RefSieve =
 			val state = game.state
-			val DiscardAction(playerIndex, order, suitIndex, rank, failed) = action
-			val id = Identity(suitIndex, rank)
+			val DiscardAction(playerIndex, order, id, failed) = action
 
 			val newGame =
 				if !failed && prev.state.deck(order).clued then
@@ -431,7 +434,7 @@ object RefSieve:
 					if sacrifice then
 						Log.info(s"sacrifice dc!")
 						game.withMove(DiscardInterp.Sacrifice)
-					else if suitIndex != -1 && rank != -1 && state.isUseful(id) then
+					else if id.exists(state.isUseful) then
 						interpretUsefulDc(game, action) match
 							case DiscardResult.None =>
 								game.withMove(DiscardInterp.None)
@@ -443,7 +446,7 @@ object RefSieve:
 								targets.foldLeft((game, game.state)):
 									case ((acc, hypoState), o) =>
 										val hidden = o != targets.last
-										val inferred = if hidden then hypoState.playableSet else IdentitySet.single(id)
+										val inferred = if hidden then hypoState.playableSet else IdentitySet.single(id.get)
 										val newState = game.me.thoughts(o).id().fold(hypoState): i =>
 											hypoState.withPlay(i)
 
@@ -459,7 +462,7 @@ object RefSieve:
 
 							case DiscardResult.Sarcastic(orders) =>
 								game.copy(
-									common = game.common.copy(links = Link.Sarcastic(FastBitSet.from(orders), id) +: game.common.links)
+									common = game.common.copy(links = Link.Sarcastic(FastBitSet.from(orders), id.get) +: game.common.links)
 								)
 								.withMove(DiscardInterp.Sarcastic)
 
@@ -541,8 +544,8 @@ object RefSieve:
 
 					val allClues = if !state.canClue then Nil else
 						for
-							target <- (0 until state.numPlayers) if target != state.ourPlayerIndex
-							clue   <- state.allValidClues(target)
+							receiver <- (0 until state.numPlayers) if receiver != state.ourPlayerIndex
+							clue   <- state.allValidClues(receiver)
 						yield
 							val perform = PerformAction.fromClue(clue)
 							val action = perform.toAction(state, state.ourPlayerIndex)
@@ -630,15 +633,15 @@ object RefSieve:
 				state.isUseful(state.deck(order).id().get) &&
 				hypo.common.thoughts(order).inferred.length < game.common.thoughts(order).inferred.length
 
-			def clueBadness(clue: Clue, target: Int): Int =
-				val list = state.clueTouched(state.hands(target), clue)
-				val useless = list.forall(o => state.deck(o).clued && state.isBasicTrash(state.deck(o).id().get))
+			def clueBadness(clue: Clue, receiver: Int): Int =
+				val orders = state.clueTouched(state.hands(receiver), clue)
+				val useless = orders.forall(o => state.deck(o).clued && state.isBasicTrash(state.deck(o).id().get))
 
 				// Clues that touch only previously-clued trash
 				if useless && addedUselessClue then
 					return 99
 
-				val hypo = game.simulate(ClueAction(giver, clue.target, state.clueTouched(state.hands(clue.target), clue), clue.base))
+				val hypo = game.simulate(ClueAction(giver, clue.receiver, state.clueTouched(state.hands(clue.receiver), clue), clue.base))
 				val legal = hypo.lastMove != Some(ClueInterp.Mistake)
 
 				if !legal then
@@ -651,19 +654,19 @@ object RefSieve:
 					return -3
 
 				// Newly-touched useful card
-				else if list.exists(o => !state.deck(o).clued && state.isUseful(state.deck(o).id().get)) then
+				else if orders.exists(o => !state.deck(o).clued && state.isUseful(state.deck(o).id().get)) then
 					-2
 				// Useful fill-in, or got a playable
-				else if list.exists(usefulFill(hypo, _)) || hypo.common.hypoScore > game.common.hypoScore then
+				else if orders.exists(usefulFill(hypo, _)) || hypo.common.hypoScore > game.common.hypoScore then
 					-1
 				else
 					0
 
 			val allClues =
 				(for
-					target <- (0 until state.numPlayers) if target != giver
-					clue   <- state.allValidClues(target)
-					badness = clueBadness(clue, target) if badness < 99
+					receiver <- (0 until state.numPlayers) if receiver != giver
+					clue   <- state.allValidClues(receiver)
+					badness = clueBadness(clue, receiver) if badness < 99
 				yield
 					(clue, badness))
 				.sortBy(_._2)

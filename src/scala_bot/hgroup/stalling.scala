@@ -47,11 +47,11 @@ def stallSeverity(game: HGroup, player: Player, giver: Int) =
 def isStall(ctx: ClueContext, severity: Int): Option[StallInterp] =
 	val ClueContext(prev, game, action, _) = ctx
 	val state = ctx.state
-	val ClueAction(giver, target, list, clue) = action
+	val ClueAction(giver, receiver, orders, clue) = action
 	val FocusResult(focus, chop, _) = ctx.focusResult
 
 	val focusNew = !prev.state.deck(focus).clued
-	val reclue = list.forall(o => prev.state.deck(o).clued || prev.meta(o).cm)
+	val reclue = orders.forall(o => prev.state.deck(o).clued || prev.meta(o).cm)
 
 	lazy val trash = state.deck(focus).id().exists(state.isBasicTrash) ||
 		game.me.orderKt(game, focus)
@@ -63,7 +63,7 @@ def isStall(ctx: ClueContext, severity: Int): Option[StallInterp] =
 			rankSave(prev, action, id, focus)
 
 	val notStall = severity == 0 ||
-		(chop && game.players(target).thoughts(focus).possible.forall(isSave)) ||
+		(chop && game.players(receiver).thoughts(focus).possible.forall(isSave)) ||
 		(focusNew && (game.common.orderKp(game, focus) || trash))
 
 	if notStall then
@@ -79,7 +79,7 @@ def isStall(ctx: ClueContext, severity: Int): Option[StallInterp] =
 		Log.info(s"5 stall!")
 		return Some(StallInterp.Stall5)
 
-	val (_, fill, _) = elimResult(prev, game, state.hands(target), list)
+	val (_, fill, _) = elimResult(prev, game, state.hands(receiver), orders)
 	val (_, playables) = playablesResult(prev, game)
 
 	if severity >= 2 && reclue then
@@ -87,11 +87,11 @@ def isStall(ctx: ClueContext, severity: Int): Option[StallInterp] =
 			Log.info(s"tempo clue stall! new playables: $playables")
 			return Some(StallInterp.Tempo)
 
-		if fill.nonEmpty || list.exists(o => prev.meta(o).cm && game.common.thoughts(o).possible.length < prev.common.thoughts(o).possible.length) then
+		if fill.nonEmpty || orders.exists(o => prev.meta(o).cm && game.common.thoughts(o).possible.length < prev.common.thoughts(o).possible.length) then
 			Log.info(s"fill-in stall!")
 			return Some(StallInterp.FillIn)
 
-	if severity >= 3 && chop && !game.common.thinksLocked(game, target) && !clue.isEq(ClueKind.Rank, 1) then
+	if severity >= 3 && chop && !game.common.thinksLocked(game, receiver) && !clue.isEq(ClueKind.Rank, 1) then
 		if state.deck(focus).id().exists(isSave) then
 			Log.info("save that could look like lhs!")
 			return Some(StallInterp.SaveLHS)
@@ -103,7 +103,7 @@ def isStall(ctx: ClueContext, severity: Int): Option[StallInterp] =
 		Log.info(s"locked hand stall!")
 		return Some(StallInterp.Locked)
 
-	if severity == 4 && prev.state.clueTokens == 8 && focusNew && !list.contains(state.hands(target).head) && !clue.isEq(ClueKind.Rank, 1) then
+	if severity == 4 && prev.state.clueTokens == 8 && focusNew && !orders.contains(state.hands(receiver).head) && !clue.isEq(ClueKind.Rank, 1) then
 		if state.variant.pinkish && clue.kind == ClueKind.Rank && state.deck(focus).id().exists(_.rank != clue.value) then
 			Log.info(s"8cs that breaks pink promise!")
 			return None
@@ -120,9 +120,9 @@ def isStall(ctx: ClueContext, severity: Int): Option[StallInterp] =
 /** Returns the set of player indices that see an alternative clue. */
 def alternativeClue(ctx: ClueContext, severity: Int, maxStall: Int) =
 	val ClueContext(prev, game, action, _) = ctx
-	val ClueAction(giver, target, list, clue) = action
+	val ClueAction(giver, receiver, _, clue) = action
 	val state = game.state
-	val origClue = Clue(clue.kind, clue.value, target)
+	val origClue = Clue(clue.kind, clue.value, receiver)
 	val origFocus = ctx.focusResult.focus
 
 	var foundFPE: Option[Identity] = None
@@ -143,9 +143,9 @@ def alternativeClue(ctx: ClueContext, severity: Int, maxStall: Int) =
 					(state.hands(giver) ++ state.ourHand).exists: o =>
 						game.isTouched(o) && game.players(giver).thoughts(o).inferred.contains(id)
 				) &&
-				!game.findFinesse(hypoAction.target).exists: finesse =>
+				!game.findFinesse(hypoAction.receiver).exists: finesse =>
 					val fpe =
-						hypoAction.target != state.nextPlayerIndex(giver) &&	// Can't be Bob's finesse pos, since no one can finesse it
+						hypoAction.receiver != state.nextPlayerIndex(giver) &&	// Can't be Bob's finesse pos, since no one can finesse it
 						game.level >= Level.Stalling &&
 						maxStall == 0 &&		// Must have been a 5 Stall
 						playables.contains(finesse) &&
@@ -155,11 +155,11 @@ def alternativeClue(ctx: ClueContext, severity: Int, maxStall: Int) =
 					state.deck(finesse).id().exists: finesseId =>
 						foundFPE match
 							case Some(id) if id != finesseId =>
-								Log.info(s"found FPE previously, not allowing FPE on ${hypoAction.target}")
+								Log.info(s"found FPE previously, not allowing FPE on ${hypoAction.receiver}")
 								false
 							case Some(_) => true	// Same id
 							case _ =>
-								Log.info(s"FPE on ${state.names(hypoAction.target)}'s ${state.logId(finesseId)}")
+								Log.info(s"FPE on ${state.names(hypoAction.receiver)}'s ${state.logId(finesseId)}")
 								foundFPE = Some(finesseId)
 								true
 
@@ -173,7 +173,7 @@ def alternativeClue(ctx: ClueContext, severity: Int, maxStall: Int) =
 				state.isCritical(focusId) || {
 					focusId.rank == 2 &&
 					visibleFind(state, game.players(giver), focusId, infer = true, excludeOrder = focus).isEmpty &&
-					dupeResponsibility(game, focusId, action.target).contains(giver)
+					dupeResponsibility(game, focusId, action.receiver).contains(giver)
 				}
 
 			case ClueInterp.Stall =>
@@ -201,10 +201,10 @@ def alternativeClue(ctx: ClueContext, severity: Int, maxStall: Int) =
 	if thinksStall.isEmpty then thinksStall else
 		val seenBy =
 			for
-				target <- 0 until state.numPlayers if target != giver && target != state.ourPlayerIndex
-				clue   <- state.allValidClues(target) if clue != origClue
-				list = prev.state.clueTouched(prev.state.hands(target), clue)
-				action = ClueAction(giver, target, list, clue.base)
+				receiver <- 0 until state.numPlayers if receiver != giver && receiver != state.ourPlayerIndex
+				clue     <- state.allValidClues(receiver) if clue != origClue
+				orders = prev.state.clueTouched(prev.state.hands(receiver), clue)
+				action = ClueAction(giver, receiver, orders, clue.base)
 				focus = prev.determineFocus(prev, action).focus if focus != origFocus && !prev.isTouched(focus)
 				hypo = prev.copy(allowFindOwn = false, noRecurse = true, assumePlays = false)
 					.simulateClue(action) if satisfied(hypo, action)
@@ -217,7 +217,7 @@ def alternativeClue(ctx: ClueContext, severity: Int, maxStall: Int) =
 						conn.ids.exists(game.common.thoughts(conn.order).possible.contains)
 
 				(0 until state.numPlayers).filterNot: p =>
-					p == target ||
+					p == receiver ||
 					newWCs.exists:
 						_.connections.exists: conn =>
 							conn.kind != "known" && p == state.holderOf(conn.order)
@@ -226,7 +226,7 @@ def alternativeClue(ctx: ClueContext, severity: Int, maxStall: Int) =
 
 def stallingSituation(ctx: ClueContext): Option[(StallInterp, FastBitSet)] =
 	val ClueContext(prev, game, action, _) = ctx
-	val ClueAction(giver, target, list, clue) = action
+	val ClueAction(giver, _, _, clue) = action
 
 	val severity = stallSeverity(prev, prev.common, giver)
 	Log.info(s"severity $severity")

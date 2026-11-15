@@ -2,8 +2,8 @@
 //> using jvm 25
 //> using options -opt -Wall -Wconf:msg=toString:s -Yexplicit-nulls -feature
 //> using javaOpt -Xms128m -Xmx192m -Xss256k -XX:MaxMetaspaceSize=96m -XX:ReservedCodeCacheSize=64m -XX:+UseSerialGC
-//> using dep com.softwaremill.sttp.client4::core:4.1.1
-//> using dep com.softwaremill.sttp.client4::cats:4.1.1
+//> using dep com.softwaremill.sttp.client4::core:4.1.2
+//> using dep com.softwaremill.sttp.client4::cats:4.1.2
 //> using dep org.typelevel::cats-effect:3.7.1
 //> using dep com.lihaoyi::upickle:4.4.3
 //> using dep com.lihaoyi::requests:0.9.3
@@ -135,12 +135,12 @@ object main extends IOApp:
 					val attempt = for
 						response <- basicRequest.post(uri"${if useSSL then "https" else "http"}://${HOSTNAME}:${PORT}/login")
 							.header("Content-Type", "application/x-www-form-urlencoded")
-							.body(Map("username" -> username, "password" -> password, "version" -> "bot"))
+							.body(Map("username" -> username, "password" -> password, "client" -> "bot"))
 							.send(backend)
 						_ <- IO.whenA(response.cookies.forall(_.isLeft)):
 								IO.raiseError(new Exception(s"No cookie found ${response.headers}"))
 						_ <- basicRequest
-							.get(uri"${if useSSL then "wss" else "ws"}://${HOSTNAME}${if CUSTOM_PORT then s":${PORT}" else ""}/ws?version=bot")
+							.get(uri"${if useSSL then "wss" else "ws"}://${HOSTNAME}${if CUSTOM_PORT then s":${PORT}" else ""}/ws?client=bot")
 							.response(asWebSocket(useWebSocketWithReset))
 							.cookies(response)
 							.send(backend)

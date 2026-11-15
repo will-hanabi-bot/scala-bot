@@ -203,7 +203,7 @@ class General extends munit.FunSuite:
 		.pipe(takeTurn("Cathy clues blue to Donald"))
 		.tap: g =>
 			// Clue could be b1 finesse (Bob) -> b2 (Donald)
-			assert(g.waiting.exists(wc => wc.inference.matches(Identity(3, 2)) && wc.target == Donald.ordinal))
+			assert(g.waiting.exists(wc => wc.inference.matches(Identity(3, 2)) && wc.receiver == Donald.ordinal))
 		.pipe(takeTurn("Donald clues 3 to Alice (slots 2,3)"))	// b1 reverse + self composition, or y3 direct
 		.tap: g =>
 			hasInfs(g, None, Alice, 2, Vector("y3", "b3"))

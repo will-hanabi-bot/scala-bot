@@ -49,7 +49,7 @@ def setup[G <: Game](
 	val _variant = variant match
 		case v: Variant => v
 		case t: TestVariant => VARIANTS(t)
-	val _state = State(playerNames, 0, _variant, TableOptions(playerNames.length, _variant.name))
+	val _state = State(playerNames, 0, _variant, TableOptions(_variant.id))
 
 	ops.copyWith(constructor(0, _state, false), GameUpdates(catchup = Some(true)))
 		.pipe: g =>
@@ -93,10 +93,10 @@ def setup[G <: Game](
 				yield
 					orderCounter += 1
 					if short == "xx" then
-						DrawAction(playerIndex, orderCounter, -1, -1)
+						DrawAction(playerIndex, orderCounter, None)
 					else
-						val Identity(suitIndex, rank) = g.state.expandShort(short)
-						DrawAction(playerIndex, orderCounter, suitIndex, rank)
+						val id = g.state.expandShort(short)
+						DrawAction(playerIndex, orderCounter, Some(id))
 
 			drawActions.foldLeft(g)(_.handleAction(_))
 		.pipe: g =>
@@ -152,7 +152,7 @@ def takeTurn[G <: Game](rawAction: String, drawS: String = "")(game: G)(using op
 		_.handleAction(action)
 		.pipe: g =>
 			action match
-				case PlayAction(_, _, _, _) | DiscardAction(_, _, _, _, _) =>
+				case PlayAction(_, _, _) | DiscardAction(_, _, _, _) =>
 					draw match
 						case Some(_) if state.cardsLeft == 0 =>
 							throw new IllegalArgumentException(s"Cannot draw at 0 cards left")
@@ -166,10 +166,10 @@ def takeTurn[G <: Game](rawAction: String, drawS: String = "")(game: G)(using op
 
 							if count + 1 > state.cardCount(id.toOrd) then
 								throw new IllegalArgumentException(s"Found ${count + 1} copies of ${state.logId(id)}")
-							g.handleAction(DrawAction(state.currentPlayerIndex, state.nextCardOrder, suitIndex, rank))
+							g.handleAction(DrawAction(state.currentPlayerIndex, state.nextCardOrder, Some(id)))
 
 						case None =>
-							g.handleAction(DrawAction(state.currentPlayerIndex, state.nextCardOrder, -1, -1))
+							g.handleAction(DrawAction(state.currentPlayerIndex, state.nextCardOrder, None))
 				case _ if draw.isDefined =>
 					throw new IllegalArgumentException(s"Unexpected draw for action $rawAction")
 				case _ => g
@@ -209,17 +209,17 @@ def parseAction(state: State, action: String) =
 			val clue = strToClue(state, valueS)
 
 			if target != state.ourPlayerIndex then
-				val list = state.clueTouched(state.hands(target), clue)
+				val orders = state.clueTouched(state.hands(target), clue)
 
-				if list.isEmpty then
+				if orders.isEmpty then
 					throw new IllegalArgumentException(s"No cards touched by clue ($valueS to $targetS)!")
 
-				ClueAction(giver, target, list, clue)
+				ClueAction(giver, target, orders, clue)
 			else if slotsS == null then
 				throw new IllegalArgumentException(s"Not enough arguments provided (clue to us) in $action, needs '(slot x)'")
 			else
-				val list = slotsS.split(",").map(s => state.ourHand(s.toInt - 1))
-				ClueAction(giver, target, list.toSeq, clue)
+				val orders = slotsS.split(",").map(s => state.ourHand(s.toInt - 1))
+				ClueAction(giver, target, orders.toSeq, clue)
 
 		case playPattern(playerS, short, slotS) if playerS != null && short != null =>
 			val playerIndex = parsePlayer(playerS)
@@ -239,7 +239,7 @@ def parseAction(state: State, action: String) =
 							if state.hands(playerIndex)(slot - 1) != order then
 								throw new IllegalArgumentException(s"Identity $short not in slot $slotS")
 
-						PlayAction(playerIndex, order, suitIndex, rank)
+						PlayAction(playerIndex, order, Some(id))
 					case _ =>
 						if slotS == null then
 							throw new IllegalArgumentException(s"Not enough arguments provided (ambiguous identity) in $action, needs '(slot x)'")
@@ -247,13 +247,13 @@ def parseAction(state: State, action: String) =
 							val order = state.hands(playerIndex)(slotS.toInt - 1)
 							if !state.deck(order).matches(id) then
 								throw new IllegalArgumentException(s"Identity $short not in slot $slotS")
-							PlayAction(playerIndex, order, suitIndex, rank)
+							PlayAction(playerIndex, order, Some(id))
 
 			else if slotS == null then
 				throw new IllegalArgumentException(s"Not enough arguments provided (play from us) in $action, needs '(slot x)'")
 			else
 				val order = state.hands(state.ourPlayerIndex)(slotS.toInt - 1)
-				PlayAction(playerIndex, order, suitIndex, rank)
+				PlayAction(playerIndex, order, Some(id))
 
 		case discardPattern(playerS, action, short, slotS) if playerS != null && short != null =>
 			if state.clueTokens == 8 && action != "bombs" then
@@ -277,7 +277,7 @@ def parseAction(state: State, action: String) =
 							if state.hands(playerIndex)(slot - 1) != order then
 								throw new IllegalArgumentException(s"Identity $short not in slot $slotS")
 
-						DiscardAction(playerIndex, order, suitIndex, rank, failed)
+						DiscardAction(playerIndex, order, Some(id), failed)
 					case _ =>
 						if slotS == null then
 							throw new IllegalArgumentException(s"Not enough arguments provided (ambiguous identity) in $action, needs '(slot x)'")
@@ -285,12 +285,12 @@ def parseAction(state: State, action: String) =
 							val order = state.hands(playerIndex)(slotS.toInt - 1)
 							if !state.deck(order).matches(id) then
 								throw new IllegalArgumentException(s"Identity $short not in slot $slotS")
-							DiscardAction(playerIndex, order, suitIndex, rank, failed)
+							DiscardAction(playerIndex, order, Some(id), failed)
 			else if slotS == null then
 				throw new IllegalArgumentException(s"Not enough arguments provided (discard from us) in $action, needs '(slot x)'")
 			else
 				val order = state.hands(state.ourPlayerIndex)(slotS.toInt - 1)
-				DiscardAction(playerIndex, order, suitIndex, rank, failed)
+				DiscardAction(playerIndex, order, Some(id), failed)
 
 		case _ =>
 			throw new IllegalArgumentException(s"Invalid action: $action")

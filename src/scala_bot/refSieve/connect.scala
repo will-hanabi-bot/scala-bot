@@ -66,15 +66,15 @@ def connect(ctx: ClueContext, targetOrder: Int, id: Identity, unknown: Boolean, 
 		else
 			val nextId = Identity(suitIndex, nextRank)
 			val connected = FastBitSet.from(connections.map(_.order)).incl(targetOrder)
-			val looksDirect = unknown && playerIndex == action.target
+			val looksDirect = unknown && playerIndex == action.receiver
 			val connecting = findConnecting(ctx, nextId, playerIndex, connected, looksDirect, alwaysConnect = alwaysConnect, preferF = remF > 0)
 
 			val nextPlayerIndex = state.nextPlayerIndex(playerIndex)
 
 			connecting match
-				case None if (playerIndex == action.target && unknown) || (turnsSincePlay == state.numPlayers) =>
+				case None if (playerIndex == action.receiver && unknown) || (turnsSincePlay == state.numPlayers) =>
 					if !findOwn then None else
-						val direct = unknown && state.ourPlayerIndex == action.target
+						val direct = unknown && state.ourPlayerIndex == action.receiver
 						val connectOwn = findConnecting(ctx, nextId, state.ourPlayerIndex, connected, direct, findOwn = true, alwaysConnect = alwaysConnect, preferF = remF > 0)
 
 						connectOwn match
@@ -91,13 +91,13 @@ def connect(ctx: ClueContext, targetOrder: Int, id: Identity, unknown: Boolean, 
 	val conns =
 		if state.numPlayers == 2 then
 			lazy val tryBluff = if !prev.state.deck(targetOrder).clued then None else
-				game.findFinesse(action.target)
+				game.findFinesse(action.receiver)
 					.filter: o =>
 						state.deck(o).id() match
 							case Some(i) => state.isPlayable(i)
 							case None if findOwn => game.common.thoughts(o).possible.intersect(state.playableSet).nonEmpty
 							case _ => false
-					.map(o => List(FinesseConn(action.target, o, game.common.thoughts(o).possible.intersect(state.playableSet).toList, FinesseKind.Bluff)))
+					.map(o => List(FinesseConn(action.receiver, o, game.common.thoughts(o).possible.intersect(state.playableSet).toList, FinesseKind.Bluff)))
 
 			// First, count the # of finesses required. Then force finesses first, that many times.
 			loop(state.playStacks(suitIndex) + 1, state.nextPlayerIndex(action.giver), alwaysConnect = true) match

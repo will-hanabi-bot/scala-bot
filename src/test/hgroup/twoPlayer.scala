@@ -6,7 +6,7 @@ import scala_bot.basics._
 import scala_bot.test.{Player, preClue, setup}, Player._
 import scala_bot.hgroup.HGroup
 
-import scala_bot.logger.{Logger,LogLevel}
+import scala_bot.logger.{Logger, LogLevel}
 
 class TwoPlayer extends munit.FunSuite:
 	override def beforeAll() = Logger.setLevel(LogLevel.Off)
