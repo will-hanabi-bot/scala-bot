@@ -324,7 +324,7 @@ class Endgame extends munit.FunSuite:
 			case Right((perform, winrate)) =>
 				assertEquals(winrate, Frac.one)
 				assert(perform match
-					case p: PerformAction.Colour => p.target == Bob.ordinal
+					case p: PerformAction.Colour => p.receiver == Bob.ordinal
 					case _ => false
 				)
 
@@ -355,6 +355,6 @@ class Endgame extends munit.FunSuite:
 			case Right((perform, winrate)) =>
 				assert(winrate > Frac.zero)
 				assert(perform match
-					case p: PerformAction.Play => p.target == game.state.hands(Alice.ordinal)(0)
+					case p: PerformAction.Play => p.order == game.state.hands(Alice.ordinal)(0)
 					case _ => false
 				)

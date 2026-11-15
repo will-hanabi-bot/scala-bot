@@ -164,7 +164,7 @@ def findKnownConn(ctx: ClueContext, id: Identity, finalId: Identity, ignore: Fas
 
 			giverConn != -1 &&
 			wc.giver != giver &&
-			(wc.connections.drop(giverConn + 1).exists(_.reacting == state.ourPlayerIndex) || wc.target == state.ourPlayerIndex)
+			(wc.connections.drop(giverConn + 1).exists(_.reacting == state.ourPlayerIndex) || wc.receiver == state.ourPlayerIndex)
 
 		val play =
 			!ignore.contains(o) &&
@@ -181,7 +181,7 @@ def findKnownConn(ctx: ClueContext, id: Identity, finalId: Identity, ignore: Fas
 def findUnknownConnecting(ctx: ClueContext, reacting: Int, id: Identity, connected: FastBitSet, ignore: FastBitSet, opts: ConnectOpts): Option[Connection] =
 	val ClueContext(prev, game, action, _) = ctx
 	val (state, level) = (game.state, game.level)
-	val ClueAction(giver, target, _, _) = action
+	val ClueAction(giver, receiver, _, _) = action
 
 	// val flags = List(
 	// 	opts.findOwn.map(own => s"own ($own)"),
@@ -403,7 +403,7 @@ def findUnknownConnecting(ctx: ClueContext, reacting: Int, id: Identity, connect
 		case None => None
 
 		case Some(finesseId) if finesseId == id =>
-			if level == 1 && !inBetween(state.numPlayers, reacting, giver, target) then
+			if level == 1 && !inBetween(state.numPlayers, reacting, giver, receiver) then
 				Log.warn(s"found non-forward finesse ${state.logId(id)} in ${state.names(reacting)}'s hand at lv 1!")
 				None
 			else
@@ -448,7 +448,7 @@ def findUnknownConnecting(ctx: ClueContext, reacting: Int, id: Identity, connect
 def findSingleConn(ctx: ClueContext, reacting: Int, id: Identity, connCtx: ConnectContext, opts: ConnectOpts, connections: List[Connection] = Nil): Option[List[Connection]] =
 	val ClueContext(prev, game, action, _) = ctx
 	val state = game.state
-	val ClueAction(giver, target, _, _) = action
+	val ClueAction(giver, receiver, _, _) = action
 
 	lazy val allVisible =
 		val remaining = state.cardCount(id.toOrd) - state.baseCount(id.toOrd)
@@ -462,7 +462,7 @@ def findSingleConn(ctx: ClueContext, reacting: Int, id: Identity, connCtx: Conne
 
 	val skip = reacting == giver ||
 		opts.knownOnly.contains(reacting) ||
-		(reacting == target && connCtx.looksDirect && !allVisible) ||
+		(reacting == receiver && connCtx.looksDirect && !allVisible) ||
 		(connCtx.thinksStall.contains(reacting) && {	// might not think stall if a clue exists in our hand
 			giver == state.ourPlayerIndex ||
 			state.ourHand.forall: o =>
@@ -471,7 +471,7 @@ def findSingleConn(ctx: ClueContext, reacting: Int, id: Identity, connCtx: Conne
 
 	// TODO: When resolving, disallow prompting/finessing a player that may need to prove sth to us
 	if skip then
-		// Log.info(s"skipping ${state.names(reacting)}, giver $giver target $target $connCtx ${opts.knownOnly.fmt}")
+		// Log.info(s"skipping ${state.names(reacting)}, giver $giver receiver $receiver $connCtx ${opts.knownOnly.fmt}")
 		None
 	else
 		findUnknownConnecting(ctx, reacting, id, connCtx.connected, connCtx.ignore, opts) match
@@ -479,7 +479,7 @@ def findSingleConn(ctx: ClueContext, reacting: Int, id: Identity, connCtx: Conne
 
 			// Try again
 			case Some(conn) if conn.hidden =>
-				val selfClandestine = reacting == action.target &&
+				val selfClandestine = reacting == receiver &&
 					conn.ids.head.next.exists(game.common.thoughts(ctx.focusResult.focus).possible.contains) &&
 					// Someone else finessing will prove this is a clandestine self.
 					!opts.nonTargetFinessed
@@ -500,7 +500,7 @@ def findSingleConn(ctx: ClueContext, reacting: Int, id: Identity, connCtx: Conne
 def findConnecting(ctx: ClueContext, id: Identity, finalId: Identity, connCtx: ConnectContext, opts: ConnectOpts): Option[List[Connection]] =
 	val ClueContext(prev, game, action, _) = ctx
 	val state = game.state
-	val ClueAction(giver, target, _, _) = action
+	val ClueAction(giver, receiver, _, _) = action
 
 	// Log.highlight(Console.GREEN, s"find connecting ${state.logId(id)}")
 
@@ -520,11 +520,11 @@ def findConnecting(ctx: ClueContext, id: Identity, finalId: Identity, connCtx: C
 	val connPlayerOrder =
 		if mustPassback then
 			List(
-				List(target),	// first, try without layered
+				List(receiver),	// first, try without layered
 				(0 until state.numPlayers)
 					.map(i => (giver - i - 1 + state.numPlayers) % state.numPlayers)
-					.filterNot(_ == target),
-				List(target),	// allow self-layered if no one will fix a self-clandestine
+					.filterNot(_ == receiver),
+				List(receiver),	// allow self-layered if no one will fix a self-clandestine
 			).flatten
 		else
 			(1 until state.numPlayers).map(i => (giver - i + state.numPlayers) % state.numPlayers)
@@ -534,7 +534,7 @@ def findConnecting(ctx: ClueContext, id: Identity, finalId: Identity, connCtx: C
 
 def connect(ctx: ClueContext, id: Identity, looksDirect: Boolean, thinksStall: FastBitSet, assumeTruth: Boolean = false, ignoreKnown: FastBitSet = FastBitSet.empty, findOwn: Option[Int] = None, preferOwn: Boolean = false, forTrashFinesse: Boolean = false, immediate: Boolean = false): List[FocusPossibility] =
 	val ClueContext(prev, game, action, _) = ctx
-	val ClueAction(giver, target, _, clue) = action
+	val ClueAction(giver, receiver, _, clue) = action
 	val state = game.state
 	val FocusResult(focus, _, positional) = ctx.focusResult
 	val isTrashPush = positional.contains(Positional.TrashPush)
@@ -551,9 +551,9 @@ def connect(ctx: ClueContext, id: Identity, looksDirect: Boolean, thinksStall: F
 		val lastPlayer = connections.lastOption.map(_.reacting).getOrElse(giver)
 		val disallowed = (0 until state.numPlayers).filter: p =>
 			if isTrashPush then
-				!inBetween(state.numPlayers, p, state.nextPlayerIndex(lastPlayer), target)
+				!inBetween(state.numPlayers, p, state.nextPlayerIndex(lastPlayer), receiver)
 			else if forTrashFinesse && (findOwn.isDefined || preferOwn) then
-				p == target || (immediate && p != state.ourPlayerIndex && prev.state.hands(p).exists(prev.isBlindPlaying))
+				p == receiver || (immediate && p != state.ourPlayerIndex && prev.state.hands(p).exists(prev.isBlindPlaying))
 			else
 				false
 		val stepConnCtx = connCtx.when(_ => isTrashPush):
@@ -608,7 +608,7 @@ def connect(ctx: ClueContext, id: Identity, looksDirect: Boolean, thinksStall: F
 					acc.state.deck(conn.order).id()
 						.orElse(Option.when(conn.ids.length == 1)(conn.ids.head))
 						.fold(acc): i =>
-							val playAction = PlayAction(state.holderOf(conn.order), conn.order, i.suitIndex, i.rank)
+							val playAction = PlayAction(state.holderOf(conn.order), conn.order, Some(i))
 							val level = Logger.level
 
 							Logger.setLevel(LogLevel.Error.min(level))
@@ -625,15 +625,15 @@ def connect(ctx: ClueContext, id: Identity, looksDirect: Boolean, thinksStall: F
 						(clue.kind == ClueKind.Colour && nextId.next.exists(game.common.thoughts(focus).possible.contains)) ||
 						positional.isDefined ||
 						!conns.existsM:
-							case f: FinesseConn => f.reacting != target && !f.hidden
-							case f: PromptConn  => f.reacting != target && !f.hidden
+							case f: FinesseConn => f.reacting != receiver && !f.hidden
+							case f: PromptConn  => f.reacting != receiver && !f.hidden
 					},
 					connected = connCtx.connected.union(conns.map(_.order))
 				)
 
 				val newOpts = opts.copy(
 					bluff = opts.bluff || conns.exists(_.isPossiblyBluff),
-					nonTargetFinessed = opts.nonTargetFinessed || conns.exists(c => c.isInstanceOf[FinesseConn] && c.reacting != target),
+					nonTargetFinessed = opts.nonTargetFinessed || conns.exists(c => c.isInstanceOf[FinesseConn] && c.reacting != receiver),
 					insertingInto = opts.insertingInto.orElse(conns.collectFirst { case c: PlayableConn if c.insertingInto.isDefined => c.insertingInto.get })
 				)
 
@@ -678,8 +678,8 @@ def connect(ctx: ClueContext, id: Identity, looksDirect: Boolean, thinksStall: F
 			findTrashFinesses(ctx, conns, id, ambiguous = preferOwn)
 
 		case (Right(conns), _) =>
-			val symmetric = !state.deck(focus).matches(id, assume = target == state.ourPlayerIndex) ||
-				!game.players(target).thoughts(focus).possible.contains(id) ||
+			val symmetric = !state.deck(focus).matches(id, assume = receiver == state.ourPlayerIndex) ||
+				!game.players(receiver).thoughts(focus).possible.contains(id) ||
 				// Newly touching a visible dupe
 				(!prev.isTouched(focus) && visibleFind(state, prev.players(giver), id, infer = true, excludeOrder = focus).exists(prev.isTouched)) ||
 				symmetricConns(state, conns) ||
@@ -696,15 +696,15 @@ def unconfirmedTrashPlay(prev: HGroup, giver: Int, order: Int, observer: Option[
 	prev.waiting.exists: wc =>
 		!wc.symmetric && !wc.ambiguousSelf &&
 		wc.trashFinesse && wc.needsBlindPlay &&
-		wc.target != state.ourPlayerIndex &&
-		wc.target != giver &&
-		!observer.contains(wc.target) &&
+		wc.receiver != state.ourPlayerIndex &&
+		wc.receiver != giver &&
+		!observer.contains(wc.receiver) &&
 		{
 			var lastPlayer = giver
 			var found = false
 			var ci = 0
 			while ci < wc.connections.length && !found &&
-				inBetween(state.numPlayers, wc.connections(ci).reacting, state.nextPlayerIndex(lastPlayer), wc.target)
+				inBetween(state.numPlayers, wc.connections(ci).reacting, state.nextPlayerIndex(lastPlayer), wc.receiver)
 			do
 				wc.connections(ci) match
 					case f: FinesseConn if f.order == order => found = true
@@ -730,7 +730,7 @@ def symmetricConns(state: State, conns: Seq[Connection]): Boolean =
 def findTrashFinesses(ctx: ClueContext, connections: List[Connection], nextId: Identity, ambiguous: Boolean = false): List[FocusPossibility] =
 	val ClueContext(prev, game, action, _) = ctx
 	val (common, state) = (game.common, game.state)
-	val ClueAction(giver, target, _, _) = action
+	val ClueAction(giver, receiver, _, _) = action
 	val focus = ctx.focusResult.focus
 	val focusThoughts = common.thoughts(focus)
 
@@ -738,13 +738,13 @@ def findTrashFinesses(ctx: ClueContext, connections: List[Connection], nextId: I
 		return Nil
 
 	// The first unknown play must come from another player.
-	if connections.find(c => c.isInstanceOf[FinesseConn] || c.isInstanceOf[PromptConn]).exists(_.reacting == target) then
+	if connections.find(c => c.isInstanceOf[FinesseConn] || c.isInstanceOf[PromptConn]).exists(_.reacting == receiver) then
 		return Nil
 
 	var lastPlayer = giver
 	var ci = 0
 	while ci < connections.length &&
-		inBetween(state.numPlayers, connections(ci).reacting, state.nextPlayerIndex(lastPlayer), target) &&
+		inBetween(state.numPlayers, connections(ci).reacting, state.nextPlayerIndex(lastPlayer), receiver) &&
 		!prev.state.hands(connections(ci).reacting).exists(prev.isBlindPlaying)
 	do
 		lastPlayer = connections(ci).reacting
@@ -795,7 +795,7 @@ def findTrashFinesses(ctx: ClueContext, connections: List[Connection], nextId: I
 		lazy val maybeInOurHand = playableIds.length == 1 &&
 			state.isCritical(playableIds.head) &&
 			giver != state.ourPlayerIndex &&
-			target != state.ourPlayerIndex &&
+			receiver != state.ourPlayerIndex &&
 			state.ourHand.exists(o => game.me.thoughts(o).possible.contains(playableIds.head))
 
 		cardMatchesLastPlay || maybeInOurHand
@@ -816,7 +816,7 @@ def findTrashFinesses(ctx: ClueContext, connections: List[Connection], nextId: I
 def connectTrashFinesses(ctx: ClueContext, looksDirect: Boolean, thinksStall: FastBitSet, findOwn: Option[Int] = None, preferOwn: Boolean = false): List[FocusPossibility] =
 	val ClueContext(prev, game, action, _) = ctx
 	val (common, state) = (game.common, game.state)
-	val ClueAction(giver, target, _, clue) = action
+	val ClueAction(giver, receiver, _, clue) = action
 	val FocusResult(focus, _, positional) = ctx.focusResult
 
 	if game.level < Level.TrashMoves || positional.contains(Positional.TrashPush) || isTrashClue(prev, game, action, focus) then
@@ -830,7 +830,7 @@ def connectTrashFinesses(ctx: ClueContext, looksDirect: Boolean, thinksStall: Fa
 	if findOwn.isEmpty && !preferOwn then
 		targetIds.flatMap:
 			connect(ctx, _, looksDirect, thinksStall, forTrashFinesse = true)
-	else if giver != state.ourPlayerIndex && target != state.ourPlayerIndex && state.deck(focus).id().exists(state.isBasicTrash) && common.thoughts(focus).possible.exists(!state.isBasicTrash(_)) then
+	else if giver != state.ourPlayerIndex && receiver != state.ourPlayerIndex && state.deck(focus).id().exists(state.isBasicTrash) && common.thoughts(focus).possible.exists(!state.isBasicTrash(_)) then
 		game.findFinesse(state.ourPlayerIndex) match
 			case None => Nil
 			case Some(ownFinesse) =>

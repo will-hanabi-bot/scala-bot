@@ -9,13 +9,13 @@ case class ClueContext(prev: RefSieve, game: RefSieve, action: ClueAction)
 def determineFocus(ctx: ClueContext, push: Boolean, right: Boolean = false) =
 	val ClueContext(prev, game, action) = ctx
 	val state = game.state
-	val newlyTouched = action.list.filter(o => state.deck(o).clued && !prev.state.deck(o).clued)
+	val newlyTouched = action.orders.filter(o => state.deck(o).clued && !prev.state.deck(o).clued)
 
 	if newlyTouched.isEmpty then
-		action.list.max
+		action.orders.max
 
 	else if push then
-		val hand = state.hands(action.target)
+		val hand = state.hands(action.receiver)
 
 		if right then
 			val leastPriority = hand.findLast(!prev.state.deck(_).clued).getOrElse(-1)
@@ -30,9 +30,9 @@ def determineFocus(ctx: ClueContext, push: Boolean, right: Boolean = false) =
 def refPlay(ctx: ClueContext, right: Boolean = false): (Option[ClueInterp], RefSieve) =
 	val ClueContext(prev, game, action) = ctx
 	val (common, state) = (game.common, game.state)
-	val clueTarget = action.target
+	val clueTarget = action.receiver
 	val hand = state.hands(clueTarget)
-	val newlyTouched = action.list.filter(o => state.deck(o).clued && !prev.state.deck(o).clued)
+	val newlyTouched = action.orders.filter(o => state.deck(o).clued && !prev.state.deck(o).clued)
 
 	val focus = determineFocus(ctx, push = true, right)
 	val target = if right then
@@ -64,7 +64,7 @@ def refPlay(ctx: ClueContext, right: Boolean = false): (Option[ClueInterp], RefS
 def refDiscard(ctx: ClueContext): (Some[ClueInterp], RefSieve) =
 	val ClueContext(prev, game, action) = ctx
 	val state = game.state
-	val clueTarget = action.target
+	val clueTarget = action.receiver
 	val hand = state.hands(clueTarget)
 
 	val focus = determineFocus(ctx, push = false)
@@ -139,7 +139,7 @@ def targetPlay(ctx: ClueContext, targetOrder: Int): (Option[ClueInterp], RefSiev
 def resolvePlay(ctx: ClueContext, targetOrder: Int, focusPoss: Seq[FocusPossibility], targetId: Option[Identity]): RefSieve =
 	val ClueContext(prev, game, action) = ctx
 	val state = game.state
-	val ClueAction(giver = giver, list = list, target = clueTarget, clue = _) = action
+	val ClueAction(giver, receiver, orders, _) = action
 	val matchedFps = focusPoss.filter(fp => targetId.exists(_.matches(fp.id)))
 
 	val initial = (game, Set[Int]())
@@ -169,7 +169,7 @@ def resolvePlay(ctx: ClueContext, targetOrder: Int, focusPoss: Seq[FocusPossibil
 				case fp if fp.connections.nonEmpty => WaitingConnection(
 					fp.connections,
 					giver,
-					clueTarget,
+					receiver,
 					g.state.turnCount,
 					targetOrder,
 					fp.id,
@@ -187,7 +187,7 @@ def resolvePlay(ctx: ClueContext, targetOrder: Int, focusPoss: Seq[FocusPossibil
 	.when(_ => !matchedFps.exists(_.isBluff)):
 		_.withMeta(targetOrder): m =>
 			m.copy(
-				focused = m.focused || list.contains(targetOrder),
+				focused = m.focused || orders.contains(targetOrder),
 				status = if prev.state.deck(targetOrder).clued then CardStatus.CalledToPlay else CardStatus.DragToPlay,
 				by = Some(action.giver))
 			.reason(game.state.turnCount)
@@ -196,10 +196,10 @@ def resolvePlay(ctx: ClueContext, targetOrder: Int, focusPoss: Seq[FocusPossibil
 def interpret2pLockedClue(ctx: ClueContext) =
 	val ClueContext(prev, game, action) = ctx
 	val state = game.state
-	val ClueAction(giver, target, list, clue) = action
+	val ClueAction(giver, receiver, orders, clue) = action
 
-	val lhPtd = state.hands(target).find(!game.isSaved(_))
-	val prevTrash = game.common.thinksTrash(game, target)
+	val lhPtd = state.hands(receiver).find(!game.isSaved(_))
+	val prevTrash = game.common.thinksTrash(game, receiver)
 
 	def writeLhPtd(g: RefSieve) =
 		lhPtd.fold(g): order =>
@@ -215,16 +215,16 @@ def interpret2pLockedClue(ctx: ClueContext) =
 		if prevTrash.nonEmpty then
 			Log.info(s"target had previous trash $prevTrash, rank stall")
 			game.withMove(ClueInterp.Stall)
-		else if list.exists(!prev.state.deck(_).clued) then
+		else if orders.exists(!prev.state.deck(_).clued) then
 			refDiscard(ctx)	match
 				case (Some(ClueInterp.Stall), _) => writeLhPtd(game).withMove(ClueInterp.Stall)
 				case (interp, newGame) => newGame.withMove(interp.get)
 		else
 			writeLhPtd(game).withMove(ClueInterp.Stall)
 	else
-		val slot1 = state.hands(target).head
+		val slot1 = state.hands(receiver).head
 
-		game.cond(_ => list.contains(slot1)) {
+		game.cond(_ => orders.contains(slot1)) {
 			_.withThought(slot1): t =>
 				val delayedPlays = game.common.hypoStacks.zipWithIndex.map((stack, suitIndex) => Identity(suitIndex, stack + 1)).filter(state.isUseful)
 				t.copy(inferred = t.inferred.intersect(delayedPlays))
@@ -238,7 +238,7 @@ def interpret2pLockedClue(ctx: ClueContext) =
 		} {
 			_.withMove(ClueInterp.Stall)
 		}
-		.cond(_.common.thinksTrash(game, target).nonEmpty) { g =>
+		.cond(_.common.thinksTrash(game, receiver).nonEmpty) { g =>
 			Log.info(s"target had previous trash $prevTrash, colour stall")
 			g
 		} {

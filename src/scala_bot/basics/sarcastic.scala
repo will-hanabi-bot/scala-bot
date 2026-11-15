@@ -18,8 +18,12 @@ def validTransfer(game: Game, id: Identity)(order: Int) =
 
 def interpretUsefulDc(game: Game, action: DiscardAction): DiscardResult =
 	val (common, state) = (game.common, game.state)
-	val DiscardAction(playerIndex, order, suitIndex, rank, _) = action
-	val id = Identity(suitIndex, rank)
+	val DiscardAction(playerIndex, order, _id, _) = action
+
+	if _id.isEmpty then
+		return DiscardResult.None
+
+	val id = _id.get
 	val gd = state.isPlayable(id)
 
 	Log.info("interpreting useful dc!")

@@ -70,7 +70,7 @@ case class HGroup(
 	catchup: Boolean = false,
 	notes: Map[Int, Note] = Map(),
 	moveHistory: Vector[Interp] = Vector.empty,
-	queuedCmds: List[(String, String)] = Nil,
+	queuedCmds: List[(String, ujson.Value)] = Nil,
 	nextInterp: Option[Interp] = None,
 	noRecurse: Boolean = false,
 	hypothetical: Boolean = false,
@@ -168,8 +168,8 @@ case class HGroup(
 		copy(xmeta = xmeta.updated(order, f(xmeta(order))))
 
 	/** Marks DDA if the the next player could be double discarding. */
-	def checkDDA(discarder: Int, id: Identity): HGroup =
-		if level < Level.Stalling || state.numPlayers == 2 || id.suitIndex == -1 || id.rank == -1 || state.isBasicTrash(id) then
+	def checkDDA(discarder: Int, id: Option[Identity]): HGroup =
+		if level < Level.Stalling || state.numPlayers == 2 || id.forall(state.isBasicTrash) then
 			if this.dda.isDefined then
 				return copy(dda = None)
 			else
@@ -178,12 +178,12 @@ case class HGroup(
 		val nextPlayerIndex = state.nextPlayerIndex(discarder)
 
 		val dda =
-			state.isCritical(id) &&
+			state.isCritical(id.get) &&
 			chop(nextPlayerIndex).exists: chop =>
-				this.common.thoughts(chop).possible.contains(id) &&
-				!visibleFind(state, this.common, id, infer = true).exists(this.isTouched)
+				this.common.thoughts(chop).possible.contains(id.get) &&
+				!visibleFind(state, this.common, id.get, infer = true).exists(this.isTouched)
 
-		if dda then copy(dda = Some(id)) else this
+		if dda then copy(dda = Some(id.get)) else this
 
 	def isCM(order: Int) =
 		meta(order).cm && !state.deck(order).clued
@@ -250,7 +250,7 @@ case class HGroup(
 			case Link.Promised(_, i, target) => target != focus && id.matches(i)
 		||
 		waiting.exists: wc =>
-			!wc.symmetric && !wc.ambiguousSelf && wc.target == giver &&
+			!wc.symmetric && !wc.ambiguousSelf && wc.receiver == giver &&
 			common.thoughts(wc.focus).inferred.contains(id) &&
 			wc.connections.exists: conn =>
 				xmeta(conn.order).fStatus.contains(FStatus.PossiblyOn(giver))
@@ -380,10 +380,10 @@ case class HGroup(
 			)
 
 	def determineFocus(prev: HGroup, action: ClueAction): FocusResult =
-		val ClueAction(giver, target, list, clue) = action
-		val hand = state.hands(target)
-		val chop = prev.chop(target)
-		val newlyClued = list.filter(!prev.state.deck(_).clued)
+		val ClueAction(giver, receiver, orders, clue) = action
+		val hand = state.hands(receiver)
+		val chop = prev.chop(receiver)
+		val newlyClued = orders.filter(!prev.state.deck(_).clued)
 
 		val stale1 =
 			prev.level >= Level.Context &&
@@ -391,10 +391,10 @@ case class HGroup(
 			newlyClued.length > 1 &&
 			newlyClued.forall(state.inStartingHand)
 
-		if chop.exists(list.contains) then
+		if chop.exists(orders.contains) then
 			if this.level >= Level.TrashMoves && isTrashClue(prev, this, action, chop.get) then
 				val tpFocus = hand.take(hand.indexOf(chop.get)).findLast: o =>
-					!list.contains(o) &&
+					!orders.contains(o) &&
 					!prev.state.deck(o).clued &&
 					(prev.meta(o).status == CardStatus.None || prev.meta(o).status == CardStatus.PermissionToDiscard)
 
@@ -411,8 +411,8 @@ case class HGroup(
 			state.variant.pinkish &&
 			reclue &&
 			clue.value <= hand.length &&
-			list.contains(hand(clue.value - 1)) &&
-			List(list.max, hand(clue.value - 1)).forall(this.knownAs(_, PINKISH))
+			orders.contains(hand(clue.value - 1)) &&
+			List(orders.max, hand(clue.value - 1)).forall(this.knownAs(_, PINKISH))
 
 		if pinkChoiceTempo then
 			return FocusResult(hand(clue.value - 1), positional = Some(Positional.Pink))
@@ -422,7 +422,7 @@ case class HGroup(
 			reclue
 
 		if brownTempo then
-			val sortedBrowns = list.filter(o => prev.knownAs(o, "Brown".r.unanchored)).sorted
+			val sortedBrowns = orders.filter(o => prev.knownAs(o, "Brown".r.unanchored)).sorted
 
 			if sortedBrowns.nonEmpty then
 				val focus =
@@ -456,7 +456,7 @@ case class HGroup(
 			else
 				return FocusResult(next1)
 
-		val muddyCards = list.filter: o =>
+		val muddyCards = orders.filter: o =>
 			val variant = state.variant
 
 			// All possible ids are rainbowish
@@ -478,7 +478,7 @@ case class HGroup(
 			(state.variant.muddy || state.variant.suits.exists(s => s.suitType.pinkish && s.suitType.rainbowish) || state.variant.rainbowS) &&
 			reclue &&
 			// Mud clues should only work if the leftmost (non-kt) card is muddy.
-			muddyCards.contains(list.maxIf(o => !prev.common.orderKt(prev, o), -1))
+			muddyCards.contains(orders.maxIf(o => !prev.common.orderKt(prev, o), -1))
 
 		if mudClue then
 			val coloursAvailable = state.variant.colourableSuits.length
@@ -498,7 +498,7 @@ case class HGroup(
 			FocusResult(pinkStall5.get)
 
 		else
-			val sortedList = list.sortBy(o => -o)
+			val sortedList = orders.sortBy(o => -o)
 			val focus =
 				sortedList.find(o => !prev.state.deck(o).clued && (prev.meta(o).status == CardStatus.None || prev.meta(o).status == CardStatus.PermissionToDiscard))
 					.orElse(sortedList.find(prev.isCM))
@@ -515,8 +515,8 @@ case class HGroup(
 			return None
 
 		val allClues = for
-			target <- (0 until state.numPlayers).view if target != giver
-			clue   <- state.allValidClues(target)
+			receiver <- (0 until state.numPlayers).view if receiver != giver
+			clue   <- state.allValidClues(receiver)
 		yield
 			clue
 
@@ -537,7 +537,7 @@ case class HGroup(
 							giver == state.ourPlayerIndex &&	// we can only expect ourselves to give a 2 save
 							focusId.rank == 2 &&
 							visibleFind(state, this.players(giver), focusId, infer = true, excludeOrder = focus).isEmpty &&
-							dupeResponsibility(this, focusId, action.target).contains(giver)
+							dupeResponsibility(this, focusId, action.receiver).contains(giver)
 						}
 
 					case Some(ClueInterp.Stall) =>
@@ -558,8 +558,8 @@ case class HGroup(
 			return None
 
 		val allClues = for
-			target <- (0 until state.numPlayers).view if target != giver && target != state.lastPlayerIndex(giver)
-			clue   <- state.allValidClues(target)
+			receiver <- (0 until state.numPlayers).view if receiver != giver && receiver != state.lastPlayerIndex(giver)
+			clue   <- state.allValidClues(receiver)
 		yield
 			clue
 
@@ -580,7 +580,7 @@ case class HGroup(
 							giver == state.ourPlayerIndex &&	// we can only expect ourselves to give a 2 save
 							focusId.rank == 2 &&
 							visibleFind(state, this.players(giver), focusId, infer = true, excludeOrder = focus).isEmpty &&
-							dupeResponsibility(this, focusId, action.target).contains(giver)
+							dupeResponsibility(this, focusId, action.receiver).contains(giver)
 						}
 
 					case Some(ClueInterp.Stall) =>
@@ -621,16 +621,16 @@ case class HGroup(
 			wc != containingWc &&
 			!wc.symmetric && !wc.ambiguousSelf &&
 			wc.focus == containingWc.focus &&
-			wc.target == playerIndex &&
+			wc.receiver == playerIndex &&
 			wc.currConn.matchesP:
 				case f: FinesseConn => f.order != order && f.reacting != state.holderOf(wc.focus)
 
 	def reinterpPlay(prev: HGroup, action: PlayAction | DiscardAction): Option[HGroup] =
-		val (order, suitIndex, rank) = action match
-			case PlayAction(playerIndex, order, suitIndex, rank) => (order, suitIndex, rank)
-			case DiscardAction(playerIndex, order, suitIndex, rank, _) => (order, suitIndex, rank)
+		val (order, id) = action match
+			case PlayAction(playerIndex, order, id) => (order, id)
+			case DiscardAction(playerIndex, order, id, _) => (order, id)
 
-		if suitIndex == -1 || rank == -1 then
+		if id.isEmpty then
 			return None
 
 		val needsReplay =
@@ -639,7 +639,7 @@ case class HGroup(
 			future(order).length > 1
 
 		Option.when(needsReplay) {
-			copy(future = future.updated(order, IdentitySet.single(Identity(suitIndex, rank))))
+			copy(future = future.updated(order, IdentitySet.single(id.get)))
 				.replay(state.deck(order).turnDrawn)
 				.toOption
 		}.flatten
@@ -669,9 +669,9 @@ case class HGroup(
 		prev.waiting.find: wc =>
 			!wc.symmetric && !wc.ambiguousSelf &&
 			!action.matchesP:
-				case PlayAction(playerIndex, order, suitIndex, rank) =>
+				case PlayAction(playerIndex, order, id) =>
 					order == wc.currConn.order ||
-					(suitIndex != -1 && rank != -1 && wc.currConn.ids.length == 1 && wc.currConn.ids.head.matches(Identity(suitIndex, rank)))
+					(id.exists(wc.currConn.ids.length == 1 && wc.currConn.ids.head.matches(_)))
 			&&
 			!this.waiting.exists(w => w.connections.forall(wc.connections.contains) && w.inference == wc.inference && w.turn == wc.turn)
 
@@ -812,14 +812,16 @@ object HGroup:
 				g.withMove(ClueInterp.Mistake, overwrite = true)
 
 		def interpretDiscard(prev: HGroup, game: HGroup, action: DiscardAction): HGroup =
-			val DiscardAction(playerIndex, order, suitIndex, rank, failed) = action
+			val DiscardAction(playerIndex, order, id, failed) = action
+			val state = game.state
 
 			val updatedGame = game.refreshUncertain.elim()
+			val inverted = id.exists(state.isInverted)
 
 			val reinterp = failed ||
-				prev.common.thoughts(order).possibilities.forall(prev.state.isInverted) ||
+				prev.common.thoughts(order).possibilities.forall(state.isInverted) ||
 				// An orange card discarded where a gentleman's discard promised another card: it was a layer
-				(prev.meta(order).status == CardStatus.GentlemansDiscard && suitIndex != -1 && rank != -1 && prev.state.isInverted(Identity(suitIndex, rank)))
+				(prev.meta(order).status == CardStatus.GentlemansDiscard && inverted)
 			val reinterpGame = if reinterp then updatedGame.reinterpPlay(prev, action) else None
 
 			if reinterpGame.isDefined then
@@ -835,15 +837,15 @@ object HGroup:
 			.orElse(interpretSdcm(ctx))
 			.orElse(interpretPosDc(ctx))
 			.getOrElse:
-				refreshedGame.when(g => !failed ^ g.state.isInverted(Identity(suitIndex, rank))): g =>
+				refreshedGame.when(g => id.exists(i => !failed ^ g.state.isInverted(i))): g =>
 					g.writeExtraCMs(prev, playerIndex, order)
 				.copy(dcStatus = DcStatus.None)
-				.checkDDA(playerIndex, Identity(suitIndex, rank))
+				.checkDDA(playerIndex, id)
 				.withMove(DiscardInterp.None)
 			.when(_.inEarlyGame): g =>
 				// Bombing an inverted card on chop ends early game
-				val endEarlyGame = (!failed || (prev.chop(playerIndex).contains(order) && g.state.isInverted(Identity(suitIndex, rank)))) &&
-					!game.state.deck(order).clued && {
+				val endEarlyGame = (!failed || (prev.chop(playerIndex).contains(order) && inverted)) &&
+					!state.deck(order).clued && {
 						game.meta(order).status == CardStatus.None ||
 						game.meta(order).status == CardStatus.PermissionToDiscard
 					}
@@ -854,7 +856,7 @@ object HGroup:
 					prev.state.canClue
 
 				// Whether cluing 1 to the discarder was blocked by this card
-				val blocked = rank == 1 || game.state.variant.suits.lift(suitIndex).exists(_.suitType.pinkish)
+				val blocked = id.exists(i => i.rank == 1 || state.variant.suits(i.suitIndex).suitType.pinkish)
 
 				g.when(_ => writeStaleness): g =>
 					g.state.hands.zipWithIndex.foldLeft(g) { case (acc, (hand, index)) =>
@@ -869,8 +871,8 @@ object HGroup:
 			.elim()
 
 		def interpretPlay(prev: HGroup, game: HGroup, action: PlayAction): HGroup =
-			val PlayAction(playerIndex, order, suitIndex, rank) = action
-			val isInverted = game.state.variant.suits.lift(suitIndex).exists(_.suitType.inverted)
+			val PlayAction(playerIndex, order, id) = action
+			val isInverted = id.exists(i => game.state.variant.suits(i.suitIndex).suitType.inverted)
 
 			val updatedGame = game.refreshUncertain
 
@@ -886,7 +888,7 @@ object HGroup:
 					case None =>
 						pre.resetImportant(playerIndex).pipe: g =>
 							if isInverted && prev.chop(playerIndex).contains(order) then
-								val ctx = DiscardContext(prev, g, DiscardAction(playerIndex, order, suitIndex, rank, failed = false))
+								val ctx = DiscardContext(prev, g, DiscardAction(playerIndex, order, id, failed = false))
 
 								interpretSdcm(ctx)
 								.orElse(interpretPosDc(ctx))
@@ -986,8 +988,8 @@ object HGroup:
 						else
 							val allClues =
 								for
-									target <- (0 until state.numPlayers) if state.canClue && target != state.ourPlayerIndex
-									clue   <- state.allValidClues(target)
+									receiver <- (0 until state.numPlayers) if state.canClue && receiver != state.ourPlayerIndex
+									clue     <- state.allValidClues(receiver)
 								yield
 									val perform = PerformAction.fromClue(clue)
 									val action = perform.toAction(state, state.ourPlayerIndex)
@@ -995,7 +997,7 @@ object HGroup:
 									(perform, action, value)
 
 							val allPlays = playableOrders.map: o =>
-								val action = PlayAction(state.ourPlayerIndex, o, me.thoughts(o).id(infer = true, partial = true))
+								val action = PlayAction(state.ourPlayerIndex, o, me.thoughts(o).id(infer = true))
 								val value = evalAction(game, action)
 								(PerformAction.tryPlay(game, o), action, value)
 
@@ -1039,7 +1041,7 @@ object HGroup:
 								.when(_ => !cantDiscard):
 									_ ++ allDiscards
 								.when(_ => canDiscardChop): as =>
-									val action = DiscardAction(state.ourPlayerIndex, chop.get, -1, -1, false)
+									val action = DiscardAction(state.ourPlayerIndex, chop.get, None, false)
 									val value = evalAction(game, action)
 									as :+ (PerformAction.tryDiscard(game, chop.get), action, value)
 
@@ -1107,8 +1109,8 @@ object HGroup:
 			Logger.setLevel(LogLevel.Off)
 
 			def clueValue(clue: Clue): Double =
-				val list = state.clueTouched(state.hands(clue.target), clue)
-				val action = ClueAction(giver, clue.target, list, clue.base)
+				val orders = state.clueTouched(state.hands(clue.receiver), clue)
+				val action = ClueAction(giver, clue.receiver, orders, clue.base)
 
 				Log.highlight(Console.GREEN, s"===== Predicting value for ${clue.fmt(state)} =====")
 				val hypoGame = game.simulate(action)
@@ -1131,8 +1133,8 @@ object HGroup:
 				.filter(_ != giver)
 				.flatMap(state.allValidClues)
 				.partition: clue =>
-					val list = state.clueTouched(state.hands(clue.target), clue)
-					list.exists: o =>
+					val orders = state.clueTouched(state.hands(clue.receiver), clue)
+					orders.exists: o =>
 						state.deck(o).id().exists(state.isUseful)
 				.pipe: (useful, useless) =>
 					if useful.isEmpty then

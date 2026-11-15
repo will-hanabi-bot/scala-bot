@@ -6,14 +6,14 @@ import scala_bot.logger.Log
 
 def getResult(game: Reactor, hypo: Reactor, action: ClueAction): Double =
 	val (common, state) = (game.common, game.state)
-	val ClueAction(giver, target, list, clue) = action
+	val ClueAction(giver, receiver, orders, clue) = action
 
-	val (newTouched, fill, elim) = elimResult(game, hypo, hypo.state.hands(target), list)
+	val (newTouched, fill, elim) = elimResult(game, hypo, hypo.state.hands(receiver), orders)
 	val (badTouch, trash, _) = badTouchResult(game, hypo, action)
 	val (_, playables) = playablesResult(game, hypo)
 
-	val revealedTrash = hypo.common.thinksTrash(hypo, target).count: o =>
-		hypo.state.deck(o).clued && !common.thinksTrash(game, target).contains(o)
+	val revealedTrash = hypo.common.thinksTrash(hypo, receiver).count: o =>
+		hypo.state.deck(o).clued && !common.thinksTrash(game, receiver).contains(o)
 
 	val newPlayables = state.heldOrders.filter: o =>
 		hypo.gainedStatus(game, o, CardStatus.CalledToPlay) ||
@@ -25,18 +25,18 @@ def getResult(game: Reactor, hypo: Reactor, action: ClueAction): Double =
 
 	badPlayable match
 		case Some(badPlay) =>
-			Log.warn(s"clue ${clue.fmt(state, target)} results in ${state.logId(badPlay)} ${badPlay} looking playable! ${hypo.me.hypoPlays.fmt}")
+			Log.warn(s"clue ${clue.fmt(state, receiver)} results in ${state.logId(badPlay)} ${badPlay} looking playable! ${hypo.me.hypoPlays.fmt}")
 			-100
 		case None =>
 			hypo.lastMove match
 				case Some(ClueInterp.Play) if playables.isEmpty && !game.inEndgame =>
-					Log.warn(s"clue ${clue.fmt(state, target)} looks like ref play but gets no playables!")
+					Log.warn(s"clue ${clue.fmt(state, receiver)} looks like ref play but gets no playables!")
 					-100
 				case Some(ClueInterp.Reveal) if playables.isEmpty && trash.nonEmpty && trash.forall(state.deck(_).clued) =>
-					Log.warn(s"clue ${clue.fmt(state, target)} only reveals new trash but isn't a trash push!")
+					Log.warn(s"clue ${clue.fmt(state, receiver)} only reveals new trash but isn't a trash push!")
 					-100
 				case Some(i) if i != ClueInterp.Reactive && badTouch.nonEmpty && newTouched.forall(badTouch.contains) && playables.isEmpty =>
-					Log.warn(s"clue ${clue.fmt(state, target)} only bad touches and gets no playables! ${common.hypoPlays}")
+					Log.warn(s"clue ${clue.fmt(state, receiver)} only bad touches and gets no playables! ${common.hypoPlays}")
 					-100
 				case _ =>
 					// Previously-unclued playables whose copies are already touched
@@ -114,7 +114,7 @@ def advance(orig: Reactor, game: Reactor, offset: Int): Double =
 
 		val playActions = playables.map: order =>
 			val (id, action) = game.me.thoughts(order).id(infer = true) match
-				case None =>     (None,     PlayAction(playerIndex, order, -1, -1))
+				case None =>     (None,     PlayAction(playerIndex, order, None))
 				case Some(id) => (Some(id), game.players(playerIndex).tryPlay(game, order, id))
 
 			Log.info(s"${indent(offset)}${state.names(playerIndex)} ${Action.gerund(action)} ${state.logId(id)}")
@@ -216,7 +216,7 @@ def _evalAction(game: Reactor, action: Action): Double =
 		case Some(ClueInterp.Mistake) if action.isInstanceOf[ClueAction] => true
 		case Some(DiscardInterp.Mistake) if action.isInstanceOf[DiscardAction] => true
 
-	def evalDc(order: Int, suitIndex: Int, rank: Int) =
+	def evalDc(order: Int, id: Option[Identity]) =
 		val trash = game.me.orderKt(game, order) || game.meta(order).status == CardStatus.CalledToDiscard
 		val chop = game.chop(state.holderOf(order))
 
@@ -232,7 +232,7 @@ def _evalAction(game: Reactor, action: Action): Double =
 				-0.25
 			else
 				-1.5
-		else if (suitIndex == -1 || rank == -1) then
+		else if id.isEmpty then
 			-1.5		// discarding unknown doesn't incur bdr loss, so this should be punishing
 		else
 			-0.5
@@ -254,29 +254,27 @@ def _evalAction(game: Reactor, action: Action): Double =
 			Log.info(f"${action.fmt(state)}%s: $best%.2f (${hypoGame.lastMove.get}%s)")
 			best
 
-		case PlayAction(_, order, suitIndex, rank) =>
-			val unknownDupe = !game.inEndgame &&
-				visibleFind(state, game.me, Identity(suitIndex, rank), excludeOrder = order).exists: o =>
+		case PlayAction(_, order, id) =>
+			def unknownDupe(id: Identity) =
+				!game.inEndgame &&
+				visibleFind(state, game.me, id, excludeOrder = order).exists: o =>
 					game.isTouched(o) && !hypoGame.common.orderTrash(hypoGame, o)
 
-			val value =
-				if unknownDupe then
-					-0.25
-				else if suitIndex == -1 || rank == -1 then
-					1.5
-				else
-					0.02 * (5 - rank)
+			val value = id match
+				case None => 1.5
+				case Some(i) if unknownDupe(i) => -0.25
+				case Some(i) => 0.02 * (5 - i.rank)
 
 			val best = value + advance(game, hypoGame, 1)
 			Log.info(f"${action.fmt(state)}%s: $best%.2f (${hypoGame.lastMove.get}%s)")
 			best
 
-		case DiscardAction(playerIndex, order, suitIndex, rank, failed) if suitIndex == -1 || rank == -1 =>
+		case DiscardAction(playerIndex, order, id, failed) if id.isEmpty =>
 			val thought = game.me.thoughts(order)
 			val poss = thought.infoLock.getOrElse(thought.possibilities)
 
 			if !state.variant.inverted || poss.length > 4 || game.meta(order).trash then
-				val best = evalDc(order, suitIndex, rank) + advance(game, hypoGame, 1)
+				val best = evalDc(order, id) + advance(game, hypoGame, 1)
 				Log.info(f"${action.fmt(state)}%s: $best%.2f (${hypoGame.lastMove.get}%s)")
 				best
 			else
@@ -284,7 +282,7 @@ def _evalAction(game: Reactor, action: Action): Double =
 
 				poss.toList.foldLeftOpt(0.0): (value, i) =>
 					Log.highlight(Console.GREEN, s"discarding ${state.logId(i)}")
-					val hypoGame = game.simulate(DiscardAction(playerIndex, order, i.suitIndex, i.rank, failed))
+					val hypoGame = game.simulate(DiscardAction(playerIndex, order, Some(i), failed))
 
 					if hypoGame.lastMove == Some(DiscardInterp.Mistake) then
 						Left(-100.0)
@@ -295,8 +293,8 @@ def _evalAction(game: Reactor, action: Action): Double =
 				.when(_ != -100):
 					_ / poss.length
 
-		case DiscardAction(_, order, suitIndex, rank, _) =>
-			val best = evalDc(order, suitIndex, rank) + advance(game, hypoGame, 1)
+		case DiscardAction(_, order, id, _) =>
+			val best = evalDc(order, id) + advance(game, hypoGame, 1)
 			Log.info(f"${action.fmt(state)}%s: $best%.2f (${hypoGame.lastMove.get}%s)")
 			best
 

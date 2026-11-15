@@ -27,24 +27,13 @@ object GameData:
 		parse(ujson.read(fromFile(file).mkString))
 
 	def parse(data: ujson.Value) =
-		val players = data("players").arr.map(_.str).toVector
+		val players = data("playerNames").arr.map(_.str).toVector
 		val deck = data("deck").arr
 			.map(id => Identity(id("suitIndex").num.toInt, id("rank").num.toInt))
 			.toVector
 
-		val actions = data("actions").arr.map(PerformAction.fromJSON).toVector
-
-		val opts = data.obj.lift("options").map(_.objOpt).flatten
-		val variant = opts.map(_.lift("variant").map(_.str)).flatten
-		val deckPlays = opts.map(_.lift("deckPlays").map(_.bool)).flatten
-		val emptyClues = opts.map(_.lift("emptyClues").map(_.bool)).flatten
-
-		val options = TableOptions(
-			players.length,
-			variantName = variant.getOrElse("No Variant"),
-			deckPlays = deckPlays.getOrElse(false),
-			emptyClues = emptyClues.getOrElse(false)
-		)
+		val actions = data.obj.get("actions").fold(Vector.empty)(_.arr.map(PerformAction.fromJSON).toVector)
+		val options = data.obj.get("options").fold(TableOptions())(upickle.read[TableOptions](_))
 
 		GameData(players, deck, actions, options)
 
@@ -96,8 +85,7 @@ def processGame[G <: Game](game: G, data: GameData, index: Int)(using ops: GameO
 					acc.handleAction(DrawAction(
 						playerIndex,
 						order,
-						if playerIndex == index then -1 else deck(order).suitIndex,
-						if playerIndex == index then -1 else deck(order).rank
+						if playerIndex == index then None else Some(deck(order))
 					))
 		.pipe:
 			actions.foldLeft(_): (acc, perform) =>
@@ -110,12 +98,11 @@ def processGame[G <: Game](game: G, data: GameData, index: Int)(using ops: GameO
 								a.handleAction(DrawAction(
 									playerIndex,
 									order,
-									if playerIndex == index then -1 else deck(order).suitIndex,
-									if playerIndex == index then -1 else deck(order).rank
+									if playerIndex == index then None else Some(deck(order))
 								))
 							case _ => a
 					.when(p => perform.isInstanceOf[PerformAction.Play] && p.state.strikes == 3):
-						_.handleAction(GameOverAction(0, playerIndex))
+						_.handleAction(GameOverAction())
 					.pipe: g =>
 						val nextPlayerIndex = g.state.nextPlayerIndex(g.state.currentPlayerIndex)
 						g.handleAction(TurnAction(g.state.turnCount, nextPlayerIndex))

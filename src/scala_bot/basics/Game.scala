@@ -54,7 +54,7 @@ case class GameUpdates(
 	notes: Option[Map[Int, Note]] = None,
 	lastActions: Option[Vector[Option[Action]]] = None,
 	moveHistory: Option[Vector[Interp]] = None,
-	queuedCmds: Option[List[(String, String)]] = None,
+	queuedCmds: Option[List[(String, ujson.Value)]] = None,
 	nextInterp: Option[Option[Interp]] = None,
 	rewindDepth: Option[Int] = None,
 	inProgress: Option[Boolean] = None,
@@ -95,7 +95,7 @@ trait Game:
 	/** The interpretation of the most recent move, if it exists. */
 	def moveHistory: Vector[Interp]
 	/** Commands that are queued to be sent to hanab.live (e.g. to play a specific card). */
-	def queuedCmds: List[(String, String)]
+	def queuedCmds: List[(String, ujson.Value)]
 	/** What the next clue should be interpreted as. Used when rewinding after a particular interpretation is demonstrated. */
 	def nextInterp: Option[Interp]
 	/** Whether to disallow recursing into hypothetical states, like seeing if a stall was available. */
@@ -207,7 +207,7 @@ extension[G <: Game](game: G)
 
 	/** Writes the identity on the given order in [[State.deck]] and [[Game.deckIds]]. */
 	def withId(order: Int, id: Identity)(using ops: GameOps[G]): G =
-		withCard(order)(c => c.copy(suitIndex = id.suitIndex, rank = id.rank))
+		withCard(order)(_.copy(identity = Some(id)))
 			.pipe(g => ops.copyWith(g, GameUpdates(deckIds = Some(g.deckIds.updated(order, Some(id))))))
 
 	def withCatchup(f: G => G)(using ops: GameOps[G]) =
@@ -256,11 +256,11 @@ extension[G <: Game](game: G)
 				ops.interpretPlay(game, newGame.onPlay(play), play).pipe: g =>
 					ops.copyWith(g, GameUpdates(lastActions = Some(g.lastActions.updated(play.playerIndex, Some(play)))))
 
-			case draw @ DrawAction(playerIndex, order, suitIndex, rank) =>
+			case draw @ DrawAction(playerIndex, order, id) =>
 				newGame.onDraw(draw)
 					.when(g => g.state.turnCount == 0 && g.state.hands.forall(_.length == HAND_SIZE(state.numPlayers)))
 						(_.withState(_.copy(turnCount = 1)))
-					.when(_ => suitIndex != -1 && rank != -1):
+					.when(_ => id.isDefined):
 						_.elim()
 
 			case _: GameOverAction =>
@@ -277,8 +277,6 @@ extension[G <: Game](game: G)
 
 			case InterpAction(interp) =>
 				ops.copyWith(newGame, GameUpdates(nextInterp = Some(Some(interp))))
-
-			case _ => game
 
 	inline def me = game.players(game.state.ourPlayerIndex)
 
@@ -363,10 +361,7 @@ extension[G <: Game](game: G)
 			.handleAction(action)
 			.when(action.requiresDraw && _.state.cardsLeft > 0): g =>
 				val order = g.state.nextCardOrder
-
-				val action = g.deckIds.lift(order).flatten.orElse(draw) match
-					case Some(id) => DrawAction(playerIndex, order, id.suitIndex, id.rank)
-					case None     => DrawAction(playerIndex, order, -1, -1)
+				val action = DrawAction(playerIndex, order, g.deckIds.lift(order).flatten.orElse(draw))
 
 				g.handleAction(action)
 			.pipe: g =>
@@ -408,7 +403,7 @@ extension[G <: Game](game: G)
 			.pipe:
 				state.actionList.take(turn).flatten.foldLeft(_): (acc, action) =>
 					action match
-						case DrawAction(playerIndex, order, _, _)
+						case DrawAction(playerIndex, order, _)
 							if acc.state.hands(playerIndex).contains(order) => acc
 						case _ =>
 							acc.handleAction(action)
@@ -426,8 +421,8 @@ extension[G <: Game](game: G)
 			state = Some(newGame.state.copy(
 				deck = newGame.state.deck.map: c =>
 					if c.id().nonEmpty then c else
-						game.deckIds(c.order).fold(c): id =>
-							c.copy(suitIndex = id.suitIndex, rank = id.rank))),
+						c.copy(identity = game.deckIds(c.order))
+			)),
 			rewindDepth = Some(game.rewindDepth))))
 
 	def replay(turn: Int)(using ops: GameOps[G]): Either[String, G] =
@@ -450,7 +445,7 @@ extension[G <: Game](game: G)
 			.pipe:
 				state.actionList.flatten.foldLeft(_): (acc, action) =>
 					action match
-						case DrawAction(playerIndex, order, _, _)
+						case DrawAction(playerIndex, order, _)
 							if acc.state.hands(playerIndex).contains(order) => acc
 						case _ =>
 							if acc.state.turnCount >= turn - 1 then
@@ -469,8 +464,8 @@ extension[G <: Game](game: G)
 			state = Some(newGame.state.copy(
 				deck = newGame.state.deck.map: c =>
 					if c.id().nonEmpty then c else
-						game.deckIds(c.order).fold(c): id =>
-							c.copy(suitIndex = id.suitIndex, rank = id.rank))),
+						c.copy(identity = game.deckIds(c.order))
+			)),
 			rewindDepth = Some(game.rewindDepth))))
 
 	def navigate(turn: Int)(using ops: GameOps[G], runtime: IORuntime) =
@@ -524,13 +519,12 @@ extension[G <: Game](game: G)
 					case _: InterpAction =>
 						(g, comments)
 
-					case DrawAction(playerIndex, order, suitIndex, rank) =>
+					case DrawAction(playerIndex, order, _) =>
 						val action =
 							if playerIndex != index then
-								val id = game.deckIds(order).get
-								DrawAction(playerIndex, order, id.suitIndex, id.rank)
+								DrawAction(playerIndex, order, game.deckIds(order))
 							else
-								DrawAction(playerIndex, order, -1, -1)
+								DrawAction(playerIndex, order, None)
 						(g.handleAction(action), comments)
 
 					case a if a.isPlayerAction && a.playerIndex == index =>
@@ -604,7 +598,7 @@ extension[G <: Game](game: G)
 
 	def updateNotes()(using ops: GameOps[G]): G =
 		val (state, notes) = (game.state, game.notes)
-		val (cmds, newNotes) = game.state.heldOrders.foldLeft((List.empty[(String, String)], notes)): (acc, order) =>
+		val (cmds, newNotes) = game.state.heldOrders.foldLeft((List.empty[(String, ujson.Value)], notes)): (acc, order) =>
 			val (cmds, newNotes) = acc
 			val card = state.deck(order)
 			val note = getNote(order)
@@ -631,7 +625,7 @@ extension[G <: Game](game: G)
 
 					val newCmds =
 						if !game.catchup && game.inProgress then
-							("note", ujson.Obj("tableID" -> game.tableID, "order" -> order, "note" -> full).toString) +: cmds
+							("note", ujson.Obj("tableId" -> game.tableID, "order" -> order, "text" -> full)) +: cmds
 						else
 							cmds
 
@@ -647,7 +641,7 @@ extension[G <: Game](game: G)
 		state.clueTokens == 1 &&
 		game.lastActions(state.lastPlayerIndex(playerIndex)).existsM:
 			case _: DiscardAction => true
-			case p: PlayAction => p.rank == 5
+			case p: PlayAction => p.identity.exists(_.rank == 5)
 
 	/** Returns true when the card is clued and is orange by empathy. */
 	def knownInverted(order: Int) =
