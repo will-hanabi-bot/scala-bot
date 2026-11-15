@@ -137,10 +137,16 @@ def assignConns(game: HGroup, action: ClueAction, fps: Seq[FocusPossibility], fo
 				if fStatus.nonEmpty then
 					Log.highlight(Console.GREEN, s"setting finesse status to $fStatus on ${conn.order}! ${finesseIds.fmt(state)}")
 
+				val newFStatus =
+					if (conn.isInstanceOf[FinesseConn] || conn.isInstanceOf[PromptConn]) && !maybeFinessed then
+						Nil
+					else
+						(g.xmeta(conn.order).fStatus ++ fStatus).distinct
+
 				g.copy(
 					xmeta = g.xmeta.updated(conn.order, g.xmeta(conn.order).copy(
 						idUncertain = idUncertain,
-						fStatus = (g.xmeta(conn.order).fStatus ++ fStatus).distinct,
+						fStatus = newFStatus,
 						finesseIds = Some(finesseIds))))
 			.pipe: g =>
 				conn match

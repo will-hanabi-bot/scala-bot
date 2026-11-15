@@ -132,6 +132,9 @@ trait Game:
 	/** Whether the convention considers rank-clued cards to be !inverted when determining playability. */
 	def assumeNotInverted: Boolean = false
 
+	/** Whether a card's play status is definite rather than dependent on an ambiguous clue. */
+	def isDefinite(@annotation.unused order: Int): Boolean = true
+
 trait GameOps[G <: Game]:
 	/** Returns a copy of the game state, but restarted from the beginning.
 	  * @param game     The current game state.

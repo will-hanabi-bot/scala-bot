@@ -31,7 +31,8 @@ def validBluff(game: HGroup, action: ClueAction, blind: Identity, reacting: Int,
 
 	val interferes = state.hands(reacting).find: o =>
 		// game.players(reacting).thoughts(o).possible.contains(truth) &&	// any f/gd should block a bluff
-		(game.isBlindPlaying(o) || game.meta(o).status == CardStatus.GentlemansDiscard)
+		(game.isBlindPlaying(o) && (giver == state.ourPlayerIndex || game.isDefinite(o) || game.xmeta(o).fStatus.contains(FStatus.PossiblyOn(giver)))) ||
+		game.meta(o).status == CardStatus.GentlemansDiscard
 
 	game.level >= Level.Bluffs &&
 	state.nextPlayerIndex(giver) == reacting &&
