@@ -140,6 +140,14 @@ case class HGroup(
 					val dependentConns = waiting.filter(w => !w.symmetric && w.connections.exists(_.order == o))
 					dependentConns.nonEmpty && dependentConns.forall(this.potentialClandestineWc(playerIndex, o, _).isDefined)
 
+				val knownSelfHesitation =
+					val selfConns = waiting.filter(w => !w.symmetric && !w.selfPassback && w.currConn.order == o && w.currConn.reacting == w.receiver)
+					selfConns.nonEmpty && selfConns.forall: w1 =>
+						waiting.exists: w2 =>
+							w2.symmetric && !w2.ambiguousSelf &&
+							w2.focus == w1.focus && w2.turn == w1.turn &&
+							inBetween(state.numPlayers, w2.currConn.reacting, state.nextPlayerIndex(w1.receiver), w1.giver)
+
 				// ((assume && !xmeta(o).fStatus.contains(FStatus.PossiblyOn(state.ourPlayerIndex))) || isDefinite(o)) &&
 				(assume || isDefinite(o)) &&
 				!possibleFocusDupe &&
@@ -147,7 +155,7 @@ case class HGroup(
 				unrevealedHidden.isEmpty &&
 				!unordered1 &&
 				!ambiguous1 &&
-				(player.orderKp(this, o) || !potentialClandestine)
+				(player.orderKp(this, o) || (!potentialClandestine && !knownSelfHesitation))
 
 	override def validArr(id: Identity, order: Int): Boolean =
 		val playables = this.me.thinksPlayables(this, state.ourPlayerIndex)
@@ -192,6 +200,18 @@ case class HGroup(
 		xmeta(order).fStatus.forall: f =>
 			f != FStatus.PossiblyAmbiguous(state.ourPlayerIndex) &&
 			f != FStatus.PossiblyOn(state.ourPlayerIndex)
+		&&
+		!waiting.exists: wc =>
+			wc.symmetric &&
+			wc.currConn.reacting != wc.receiver && (
+				(wc.focus == order && !state.isPlayable(wc.inference)) ||
+				(!common.orderKp(this, order) && waiting.exists: wc1 =>
+					!wc1.symmetric &&
+					wc1.focus == wc.focus &&
+					wc1.turn == wc.turn &&
+					wc1.currConn.order == order &&
+					wc1.currConn.reacting == wc1.receiver)
+			)
 
 	def chop(playerIndex: Int) =
 		state.hands(playerIndex).findLast: o =>
