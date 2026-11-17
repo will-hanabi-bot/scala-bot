@@ -541,8 +541,10 @@ def connect(ctx: ClueContext, id: Identity, looksDirect: Boolean, thinksStall: F
 
 	// Log.highlight(Console.MAGENTA, s"trying to connect ${state.logId(id)}${if (looksDirect) " (looks direct)" else ""} $findOwn")
 
+	val targetRank = if forTrashFinesse then id.rank + 1 else id.rank
+
 	def loop(hypo: HGroup, nextRank: Int, connections: List[Connection], connCtx: ConnectContext, opts: ConnectOpts): List[(Either[List[Connection], List[Connection]], Boolean)] =
-		if nextRank >= id.rank then
+		if nextRank >= targetRank then
 			return List((Right(connections), opts.bluff))
 
 		val nextId = Identity(id.suitIndex, nextRank)
@@ -828,8 +830,8 @@ def connectTrashFinesses(ctx: ClueContext, looksDirect: Boolean, thinksStall: Fa
 
 	val targetIds = (0 until state.variant.suits.length).toList.flatMap: suitIndex =>
 		val rank = if clue.kind == ClueKind.Rank then clue.value else state.playStacks(suitIndex) + 1
-		Option.when(state.playStacks(suitIndex) < rank && state.variant.idTouched(Identity(suitIndex, rank), clue)):
-			Identity(suitIndex, rank + 1)
+		Option.when(rank <= state.maxRanks(suitIndex) && state.playStacks(suitIndex) < rank && state.variant.idTouched(Identity(suitIndex, rank), clue)):
+			Identity(suitIndex, rank)
 
 	if findOwn.isEmpty && !preferOwn then
 		targetIds.flatMap:

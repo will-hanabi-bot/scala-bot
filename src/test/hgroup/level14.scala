@@ -1071,3 +1071,19 @@ class TrashFinesse extends munit.FunSuite:
 		hasStatus(game, Alice, 3, CardStatus.None)
 		hasStatus(game, Alice, 4, CardStatus.None)
 		hasInfs(game, None, Bob, 3, Vector("g2", "g3"))
+
+	test("handles colour clues when the 6th suit is completed"):
+		val game = setup(HGroup.atLevel(14), Vector(
+			Vector("xx", "xx", "xx", "xx"),
+			Vector("r1", "y3", "g3", "b3"),
+			Vector("r2", "y4", "g4", "b4"),
+			Vector("y1", "p3", "p4", "b3")
+		),
+			variant = Variant(17, "Rainbow (6 Suits)", Vector("Red", "Yellow", "Green", "Blue", "Purple", "Rainbow"), shorts = Some(Vector('r', 'y', 'g', 'b', 'p', 'm'))),
+			starting = Bob,
+			playStacks = Some(Vector(0, 0, 0, 0, 0, 5))
+		)
+		.pipe(takeTurn("Bob clues red to Cathy"))
+
+		hasStatus(game, Donald, 1, CardStatus.None)
+		hasInfs(game, None, Cathy, 1, Vector("r1", "r2"))
