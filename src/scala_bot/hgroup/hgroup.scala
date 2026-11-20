@@ -188,7 +188,7 @@ case class HGroup(
 	def isCM(order: Int) =
 		meta(order).cm && !state.deck(order).clued
 
-	def isDefinite(order: Int) =
+	override def isDefinite(order: Int) =
 		xmeta(order).fStatus.forall: f =>
 			f != FStatus.PossiblyAmbiguous(state.ourPlayerIndex) &&
 			f != FStatus.PossiblyOn(state.ourPlayerIndex)

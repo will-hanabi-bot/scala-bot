@@ -516,6 +516,12 @@ def resolvePlayed(game: HGroup, wc: WaitingConnection, play: Int): UpdateResult 
 			)
 		)
 
+	lazy val overwrittenFinesse = game.waiting.exists: w =>
+		w.turn > wc.turn &&
+		!w.symmetric && !w.ambiguousSelf &&
+		w.currConn.matchesP:
+			case f: FinesseConn => f.order == wc.currConn.order
+
 	if missedReaction then
 		if wc.currConn.isInstanceOf[FinesseConn] && stompedFinesse then
 			Log.info(s"connecting card was stomped on, not confirming finesse")
@@ -523,6 +529,9 @@ def resolvePlayed(game: HGroup, wc: WaitingConnection, play: Int): UpdateResult 
 			if nextIndex.exists(wc.connections(_).reacting == wc.currConn.reacting) then
 				Log.info(s"connection requires a self blind play, removing due to occam's razor")
 				return UpdateResult.Remove
+
+		else if wc.currConn.isInstanceOf[FinesseConn] && overwrittenFinesse then
+			Log.info(s"connecting card was overwritten, not confirming finesse")
 
 		else if wc.currConn.isInstanceOf[PromptConn] || wc.currConn.isInstanceOf[FinesseConn] || game.level < Level.IntermediateFinesses then
 			return UpdateResult.Demonstrated(nextIndex)
