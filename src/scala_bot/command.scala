@@ -76,7 +76,6 @@ case class Spectator(
 enum TablePhase:
 	case Pregame
 	case Playing
-	/** @param gameId The game that the replay shows. Absent when the game is not saved, such as an imported one. */
 	case SharedReplay(gameId: Option[Int])
 
 	def isSharedReplay = this match
@@ -153,7 +152,6 @@ case class LobbyUser(
 	bot: Boolean
 ) derives Reader
 
-/** The first message after connecting. It replaces the lists of online users and tables. */
 case class WelcomeMessage(
 	username: String,
 	users: List[LobbyUser],
@@ -163,7 +161,6 @@ case class WelcomeMessage(
 
 case class PregamePlayer(userId: Int) derives Reader
 
-/** A pregame's state, sent to the people at the table whenever it changes. */
 case class PregameMessage(
 	tableId: Int,
 	players: Vector[PregamePlayer]
@@ -194,7 +191,6 @@ case class SessionState(
 	info: Option[SelfData] = None,
 	tableID: Option[Int] = None,
 	tables: Map[Int, Table] = Map(),
-	/** The user IDs of the seated players at each pregame table, which tableStart must repeat. */
 	pregamePlayerIds: Map[Int, Vector[Int]] = Map(),
 	bots: Set[String] = Set(),
 	gameStarted: Boolean = false,
@@ -308,7 +304,6 @@ case class BotClient(
 		frame.obj.get("reply").map(_.num.toInt) match
 			case Some(id) =>
 				frame.obj.get("error") match
-					// A request with an ID that fails gets a reply with an error, not a warning event.
 					case Some(err) => handleWarning(err("message").str)
 					case None =>
 						sessionRef.get.flatMap: session =>
@@ -468,11 +463,9 @@ case class BotClient(
 			case "warning" =>
 				handleWarning(data("message").str)
 
-			// Sent before the server closes the connection.
 			case "error" =>
 				IO.println(s"${Console.RED}error: ${data("message").str}${Console.RESET}")
 
-			// A welcome replaces the lists of online users and tables, also after a reconnect.
 			case "welcome" =>
 				val welcome = upickle.read[WelcomeMessage](data)
 
@@ -487,7 +480,6 @@ case class BotClient(
 
 			case _ => IO.unit
 
-	/** Passes a failure on to the user whose request caused it. */
 	def handleWarning(msg: String): IO[Unit] =
 		sessionRef.modify(s => (s.copy(lastRequester = None), s.lastRequester)).flatMap: who =>
 			who.traverse_(sendPM(_, msg))
@@ -568,7 +560,6 @@ case class BotClient(
 			sessionRef.get.flatMap: session =>
 				session.tableID match
 					case Some(id) =>
-						// The server ignores a start unless it names the players who are seated.
 						val playerIds = session.pregamePlayerIds.getOrElse(id, Vector())
 						sessionRef.update(_.copy(lastRequester = Some(who))) *>
 						sendCmd("tableStart", ujson.Obj("tableId" -> id, "intendedPlayerIds" -> playerIds))
