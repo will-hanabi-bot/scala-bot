@@ -76,7 +76,11 @@ case class Spectator(
 enum TablePhase:
 	case Pregame
 	case Playing
-	case SharedReplay(gameId: Int)
+	case SharedReplay(gameId: Option[Int])
+
+	def isSharedReplay = this match
+		case SharedReplay(_) => true
+		case _ => false
 
 object TablePhase:
 	given Reader[TablePhase] = reader[ujson.Value].map: json =>
@@ -86,7 +90,7 @@ object TablePhase:
 			case "pregame" => TablePhase.Pregame
 			case "playing" => TablePhase.Playing
 			case "sharedReplay" =>
-				val gameId = obj("gameId").num.toInt
+				val gameId = obj.get("gameId").map(_.num.toInt)
 				TablePhase.SharedReplay(gameId)
 
 case class Table(
@@ -143,6 +147,25 @@ case class InitMessage(
 
 case class SelfData(username: String) derives Reader
 
+case class LobbyUser(
+	username: String,
+	bot: Boolean
+) derives Reader
+
+case class WelcomeMessage(
+	username: String,
+	users: List[LobbyUser],
+	tables: List[Table],
+	playingAtTables: List[Int]
+) derives Reader
+
+case class PregamePlayer(userId: Int) derives Reader
+
+case class PregameMessage(
+	tableId: Int,
+	players: Vector[PregamePlayer]
+) derives Reader
+
 case class PlayerNotes(
 	username: String,
 	notes: Vector[String]
@@ -168,6 +191,7 @@ case class SessionState(
 	info: Option[SelfData] = None,
 	tableID: Option[Int] = None,
 	tables: Map[Int, Table] = Map(),
+	pregamePlayerIds: Map[Int, Vector[Int]] = Map(),
 	bots: Set[String] = Set(),
 	gameStarted: Boolean = false,
 	lastRequester: Option[String] = None,
@@ -280,7 +304,7 @@ case class BotClient(
 		frame.obj.get("reply").map(_.num.toInt) match
 			case Some(id) =>
 				frame.obj.get("error") match
-					case Some(err) => IO.println(s"reply error: ${err("message")}")
+					case Some(err) => handleWarning(err("message").str)
 					case None =>
 						sessionRef.get.flatMap: session =>
 							session.lastInitIds match
@@ -388,7 +412,18 @@ case class BotClient(
 				sessionRef.update(_.copy(gameStarted = false))
 
 			case "tableLeft" =>
-				sessionRef.update(_.copy(tableID = None, gameStarted = false))
+				val id = data("tableId").num.toInt
+				sessionRef.update(s => s.copy(
+					tableID = None,
+					gameStarted = false,
+					pregamePlayerIds = s.pregamePlayerIds - id
+				))
+
+			case "pregame" =>
+				val pregame = upickle.read[PregameMessage](data)
+				sessionRef.update(s => s.copy(
+					pregamePlayerIds = s.pregamePlayerIds + (pregame.tableId -> pregame.players.map(_.userId))
+				))
 
 			case "table" =>
 				val table = upickle.read[Table](data)
@@ -397,7 +432,7 @@ case class BotClient(
 					IO.whenA(session.tableID.contains(table.id) && !session.gameStarted):
 						configRef.get.flatMap: config =>
 							if config.leaveReplayIfOnlyBots &&
-								table.phase == TablePhase.SharedReplay &&
+								table.phase.isSharedReplay &&
 								table.spectators.forall(s => session.bots.contains(s.username)) then
 								Log.info("Leaving game. Only bots left spectating.")
 								leaveRoom()
@@ -415,46 +450,41 @@ case class BotClient(
 
 			case "tableRemoved" =>
 				val id = data("tableId").num.toInt
-				sessionRef.update(s => s.copy(tables = s.tables - id))
-
-			case "tableList" =>
-				val list = upickle.read[List[Table]](data("tables"))
-
-				sessionRef.updateAndGet: s =>
-					val updatedTables = s.tables ++ list.map(t => t.id -> t)
-					s.copy(tables = updatedTables)
-				.flatMap: session =>
-					val myTable = session.info.flatMap: self =>
-						session.tables.values.find(t => t.playerNames.contains(self.username) && t.phase == TablePhase.Playing)
-
-					myTable.traverse_ : t =>
-						Log.info(s"automatically reattending table with id ${t.id}")
-						sendCmd("tableReattend", ujson.Obj("tableId" -> t.id))
+				sessionRef.update(s => s.copy(
+					tables = s.tables - id,
+					pregamePlayerIds = s.pregamePlayerIds - id
+				))
 
 			case "user" =>
-				val bot = data("bot").bool
-				IO.whenA(bot):
-					sessionRef.update(s => s.copy(bots = s.bots + data("username").str))
-
-			case "userList" =>
-				val users = data("users").arr.toList
-				users.traverse_ : obj =>
-					val bot = obj("bot").bool
-					IO.whenA(bot):
-						sessionRef.update(s => s.copy(bots = s.bots + obj("username").str))
+				val user = upickle.read[LobbyUser](data)
+				IO.whenA(user.bot):
+					sessionRef.update(s => s.copy(bots = s.bots + user.username))
 
 			case "warning" =>
-				val msg = data("message").str
+				handleWarning(data("message").str)
 
-				sessionRef.modify(s => (s.copy(lastRequester = None), s.lastRequester)).flatMap: who =>
-					who.traverse_(sendPM(_, msg))
-				*>
-				IO { println(s"warn: $msg") }
+			case "error" =>
+				IO.println(s"${Console.RED}error: ${data("message").str}${Console.RESET}")
 
 			case "welcome" =>
-				sessionRef.update(_.copy(info = Some(upickle.read[SelfData](data))))
+				val welcome = upickle.read[WelcomeMessage](data)
+
+				sessionRef.update(_.copy(
+					info = Some(SelfData(welcome.username)),
+					tables = welcome.tables.map(t => t.id -> t).toMap,
+					bots = welcome.users.filter(_.bot).map(_.username).toSet
+				)) *>
+				welcome.playingAtTables.headOption.traverse_ : id =>
+					Log.info(s"automatically reattending table with id $id")
+					sendCmd("tableReattend", ujson.Obj("tableId" -> id))
 
 			case _ => IO.unit
+
+	def handleWarning(msg: String): IO[Unit] =
+		sessionRef.modify(s => (s.copy(lastRequester = None), s.lastRequester)).flatMap: who =>
+			who.traverse_(sendPM(_, msg))
+		*>
+		IO { println(s"warn: $msg") }
 
 	def leaveRoom(): IO[Unit] =
 		sessionRef.getAndUpdate:
@@ -499,7 +529,7 @@ case class BotClient(
 		if msg.startsWith("/join") then
 			sessionRef.get.flatMap: session =>
 				val table = session.tables.values.filter: t =>
-					(t.playerNames.contains(who) && t.phase != TablePhase.SharedReplay) ||
+					(t.playerNames.contains(who) && !t.phase.isSharedReplay) ||
 					t.spectators.exists(_.username == who)
 				.maxByOption(_.id)
 
@@ -530,8 +560,9 @@ case class BotClient(
 			sessionRef.get.flatMap: session =>
 				session.tableID match
 					case Some(id) =>
+						val playerIds = session.pregamePlayerIds.getOrElse(id, Vector())
 						sessionRef.update(_.copy(lastRequester = Some(who))) *>
-						sendCmd("tableStart", ujson.Obj("tableId" -> id))
+						sendCmd("tableStart", ujson.Obj("tableId" -> id, "intendedPlayerIds" -> playerIds))
 					case None =>
 						sendPM(who, "Cannot start table, as the bot is not in a table.")
 
