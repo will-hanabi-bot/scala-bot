@@ -319,8 +319,24 @@ class TrashFinesse extends munit.FunSuite:
 		)
 		.pipe(takeTurn("Alice clues 1 to Cathy"))
 
-		// Bob's slot 1 should be blind played.
-		assert(game.isBlindPlaying(game.state.hands(Bob.ordinal)(0)))
+		// Bob's slot 1 should be finessed.
+		hasStatus(game, Bob, 1, CardStatus.Finessed)
+		// Cathy's slots 4 and 5 should be chop moved.
+		hasStatus(game, Cathy, 4, CardStatus.ChopMoved)
+		hasStatus(game, Cathy, 5, CardStatus.ChopMoved)
+
+	test("will interpret a rank trash bluff"):
+		val game = setup(HGroup.atLevel(14), Vector(
+			Vector("xx", "xx", "xx", "xx", "xx"),
+			Vector("y2", "p3", "b4", "g4", "g1"),
+			Vector("y5", "g2", "g1", "p2", "b3")
+		),
+			playStacks = Some(Vector(0, 1, 2, 0, 0))
+		)
+		.pipe(takeTurn("Alice clues 1 to Cathy"))
+
+		// Bob's slot 1 should be bluffed.
+		hasStatus(game, Bob, 1, CardStatus.Bluffed)
 		// Cathy's slots 4 and 5 should be chop moved.
 		hasStatus(game, Cathy, 4, CardStatus.ChopMoved)
 		hasStatus(game, Cathy, 5, CardStatus.ChopMoved)

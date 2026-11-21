@@ -702,7 +702,7 @@ def connect(ctx: ClueContext, id: Identity, looksDirect: Boolean, thinksStall: F
 				List.empty
 
 		case (Right(conns), _) if forTrashFinesse =>
-			findTrashFinesses(ctx, conns, id, ambiguous = preferOwn)
+			findTrashFinesses(ctx, conns, ambiguous = preferOwn)
 
 		case (Right(conns), _) =>
 			val symmetric = !state.deck(focus).matches(id, assume = receiver == state.ourPlayerIndex) ||
@@ -730,7 +730,7 @@ def symmetricConns(state: State, conns: Seq[Connection]): Boolean =
 		case conn =>
 			state.deck(conn.order).id().exists(!conn.ids.contains(_))
 
-def findTrashFinesses(ctx: ClueContext, connections: List[Connection], nextId: Identity, ambiguous: Boolean = false): List[FocusPossibility] =
+def findTrashFinesses(ctx: ClueContext, connections: List[Connection], ambiguous: Boolean = false): List[FocusPossibility] =
 	val ClueContext(prev, game, action, _) = ctx
 	val (common, state) = (game.common, game.state)
 	val ClueAction(giver, receiver, _, _) = action
@@ -754,14 +754,12 @@ def findTrashFinesses(ctx: ClueContext, connections: List[Connection], nextId: I
 		lastPlayer = connections(ci).reacting
 		ci += 1
 
-	val isMismatchBluff = connections.head.isBluff && !connections.head.ids.forall(_.suitIndex == nextId.suitIndex)
-
 	// If there are plays before the target, check if the play would prove it trash.
 	val playablesRemaining =
 		val base = focusThoughts.possible.filter(!state.isBasicTrash(_))
 		if ci == 0 then
 			base
-		else if isMismatchBluff then
+		else if connections.head.isBluff then
 			// If we have a bluff connection, we can only eliminate immediate playables or connecting matching ranks.
 			base.filter: id =>
 				!state.isPlayable(id) &&
@@ -772,12 +770,7 @@ def findTrashFinesses(ctx: ClueContext, connections: List[Connection], nextId: I
 				!connections(ci - 1).ids.forall(cid => cid.suitIndex != id.suitIndex || cid.rank >= id.rank)
 
 	val noConnectingPlay = playablesRemaining.isEmpty
-
-	val tfConnections = finalizeConns(connections, givenByUs = giver == state.ourPlayerIndex) match
-		case (f: FinesseConn) :: tail if !isMismatchBluff && f.isPossiblyBluff =>
-			f.copy(fKind = FinesseKind.True) :: tail
-		case finalized =>
-			finalized
+	val tfConnections = finalizeConns(connections, givenByUs = giver == state.ourPlayerIndex)
 
 	def trashWithReverse(revConns: List[Connection]) =
 		val revFinesses = revConns.collect { case f: FinesseConn => f }
@@ -834,8 +827,18 @@ def connectTrashFinesses(ctx: ClueContext, looksDirect: Boolean, thinksStall: Fa
 			Identity(suitIndex, rank)
 
 	if findOwn.isEmpty && !preferOwn then
-		targetIds.flatMap:
-			connect(ctx, _, looksDirect, thinksStall, forTrashFinesse = true)
+		val bob = state.nextPlayerIndex(giver)
+		val bobMatchesTarget = game.findFinesse(bob, FastBitSet.single(focus), state.heldOrders.filter(prev.provingTrash(_, giver)))
+			.flatMap(state.deck(_).id())
+			.exists(targetIds.contains)
+		var foundBluff = false
+
+		targetIds.flatMap: id =>
+			val fps = connect(ctx, id, looksDirect, thinksStall, assumeTruth = bobMatchesTarget || foundBluff, forTrashFinesse = true)
+			if fps.exists(_.isBluff) then foundBluff = true
+			fps
+		.filterNot: fp =>
+			foundBluff && fp.connections.headOption.exists(c => c.reacting == bob && c.hidden)
 	else if giver != state.ourPlayerIndex && receiver != state.ourPlayerIndex && state.deck(focus).id().exists(state.isBasicTrash) && common.thoughts(focus).possible.exists(!state.isBasicTrash(_)) then
 		game.findFinesse(state.ourPlayerIndex) match
 			case None => Nil
