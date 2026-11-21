@@ -3,7 +3,7 @@ package tests.hgroup.level13
 import cats.effect.unsafe.implicits.global
 
 import scala_bot.basics._
-import scala_bot.test.{hasInfs, hasStatus, Player, preClue, setup, takeTurn, TestVariant}, Player._
+import scala_bot.test.{hasInfs, hasStatus, Player, setup, takeTurn, TestVariant}, Player._
 import scala_bot.hgroup.HGroup
 
 import scala_bot.utils.{pipe, tap}
@@ -395,55 +395,3 @@ class General extends munit.FunSuite:
 		hasStatus(game, Cathy, 2, CardStatus.Finessed)
 		hasInfs(game, None, Cathy, 2, Vector("r2"))
 		hasInfs(game, None, Alice, 1, Vector("r2", "r3"))
-
-class Ambiguity extends munit.FunSuite:
-	override def beforeAll() = Logger.setLevel(LogLevel.Off)
-
-	// From https://hanab.live/shared-replay/2066348#25
-	test("understands older possible finesse replaced by known bluff"):
-		val game = setup(HGroup.atLevel(13), Vector(
-			Vector("xx", "xx", "xx", "xx"),
-			Vector("b5", "r2", "p4", "y2"),
-			Vector("g3", "t5", "g5", "b1"),
-			Vector("t3", "b2", "y4", "y3")
-		),
-			playStacks = Some(Vector(1, 2, 4, 4, 0, 1)),
-			discarded = Vector("g1", "b1", "t4"),
-			variant = TestVariant.NoVar6,
-			init =
-				preClue[HGroup](Cathy, 4, Seq("1")) andThen
-				preClue[HGroup](Donald, 3, Seq("yellow")) andThen
-				preClue[HGroup](Donald, 4, Seq("3")) andThen
-				preClue[HGroup](Donald, 4, Seq("yellow"))
-		)
-		.pipe(takeTurn("Alice clues teal to Cathy"))
-		.pipe(takeTurn("Bob plays b5", "r3"))
-		.pipe(takeTurn("Cathy clues 3 to Bob"))
-		.pipe(takeTurn("Donald plays y3", "t2"))
-		.pipe(takeTurn("Alice discards t1 (slot 4)"))
-		.pipe(takeTurn("Bob plays r2", "y1"))
-		.pipe(takeTurn("Cathy clues teal to Alice (slot 4)"))
-		.tap: g =>
-			// This could be t2 (play), t3 (finesse), or t4 (save).
-			hasInfs(g, None, Alice, 4, Vector("t2", "t3", "t4"))
-		.pipe(takeTurn("Donald clues 2 to Alice (slot 3)"))
-		.tap: g =>
-			// Donald is saving the 2, may be delaying teal finesse.
-			hasInfs(g, None, Alice, 4, Vector("t3", "t4"))
-		.pipe(takeTurn("Alice discards g1 (slot 2)"))
-		.pipe(takeTurn("Bob plays r3", "p4"))
-		.pipe(takeTurn("Cathy clues purple to Alice (slot 3)"))
-		.tap: g =>
-			hasStatus(g, Donald, 1, CardStatus.Bluffed)
-			assert(g.isDefinite(g.state.hands(Donald.ordinal)(0)))
-		.pipe(takeTurn("Donald plays t2", "p2"))
-		.tap: g =>
-			hasInfs(g, None, Alice, 4, Vector("t3", "t4"))
-		.pipe(takeTurn("Alice discards p2 (slot 3)"))
-		.pipe(takeTurn("Bob clues green to Cathy"))
-		.pipe(takeTurn("Cathy plays g5", "t1"))
-		.pipe(takeTurn("Donald plays t3", "p1"))
-
-		// We should assume the bluff played the t2, not the finesse,
-		// and that since Donald knew to play the t3 we must have t4.
-		hasInfs(game, None, Alice, 4, Vector("t4"))

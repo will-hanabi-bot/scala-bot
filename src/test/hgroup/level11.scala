@@ -352,3 +352,41 @@ class GuidePrinciple extends munit.FunSuite:
 
 		hasInfs(game, None, Alice, 2, Vector("r1"))
 		hasStatus(game, Donald, 1, CardStatus.Finessed)
+
+class Ambiguity extends munit.FunSuite:
+	override def beforeAll() = Logger.setLevel(LogLevel.Off)
+
+	// Adapted from https://hanab.live/shared-replay/2066348#25
+	test("understands older ambiguous finesse replaced by bluff"):
+		val game = setup(HGroup.atLevel(11), Vector(
+			Vector("xx", "xx", "xx", "xx"),
+			Vector("b5", "r2", "p4", "b4"),
+			Vector("b4", "r5", "p5", "g5"),
+			Vector("r1", "y4", "r3", "y3")
+		),
+			starting = Cathy,
+			playStacks = Some(Vector(0, 0, 0, 1, 0)),
+			discarded = Vector("r4", "b3"),
+			init = _.copy(inEarlyGame = false)
+		)
+		.pipe(takeTurn("Cathy clues red to Alice (slot 4)"))
+		.tap: g =>
+			// This could be r1 (play), r2 (finesse), or r4 (save).
+			hasInfs(g, None, Alice, 4, Vector("r1", "r2", "r4"))
+		.pipe(takeTurn("Donald clues blue to Alice (slot 3)"))
+		.tap: g =>
+			// Donald could be playing b2 or saving b3 possibly having to delay finesse
+			hasInfs(g, None, Alice, 3, Vector("b2", "b3"))
+			hasInfs(g, None, Alice, 4, Vector("r1", "r2", "r4"))
+			hasStatus(g, Donald, 1, CardStatus.Finessed)
+		.pipe(takeTurn("Alice discards g1 (slot 2)"))
+		.pipe(takeTurn("Bob clues 5 to Cathy"))
+		.pipe(takeTurn("Cathy clues 3 to Alice (slot 3)"))
+		.tap: g =>
+			hasStatus(g, Donald, 1, CardStatus.Bluffed)
+		.pipe(takeTurn("Donald plays r1", "p2"))
+
+		// The play should be recognized as a bluff, making
+		// only the save possible as Cathy would not bluff
+		// Donald for r1 duped in our hand).
+		hasInfs(game, None, Alice, 4, Vector("r4"))
