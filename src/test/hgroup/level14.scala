@@ -1120,3 +1120,40 @@ class TrashFinesse extends munit.FunSuite:
 
 		hasStatus(game, Donald, 1, CardStatus.None)
 		hasInfs(game, None, Cathy, 1, Vector("r1", "r2"))
+
+	test("does not search for trash finesses on a 5 save without trash possibilities"):
+		val game = setup(HGroup.atLevel(14), Vector(
+			Vector("xx", "xx", "xx", "xx", "xx"),
+			Vector("y1", "g2", "b3", "p3", "y4"),
+			Vector("r5", "p3", "b4", "g4", "b3")
+		),
+			starting = Bob,
+			playStacks = Some(Vector(4, 0, 5, 0, 0))
+		)
+		.pipe(takeTurn("Bob clues 5 to Alice (slot 5)"))
+
+		hasStatus(game, Cathy, 1, CardStatus.None)
+		hasInfs(game, None, Alice, 5, Vector("r5", "y5", "b5", "p5"))
+
+	test("considers a trash finesse on a chop 5 clue when a trash 5 is possible"):
+		val base = setup(HGroup.atLevel(14), Vector(
+			Vector("xx", "xx", "xx", "xx", "xx"),
+			Vector("y1", "g2", "b3", "p3", "y4"),
+			Vector("r5", "p3", "b4", "g4", "b3")
+		),
+			starting = Bob,
+			playStacks = Some(Vector(4, 0, 0, 0, 0)),
+			discarded = Vector("g3", "g3")
+		)
+		.pipe(takeTurn("Bob clues 5 to Alice (slot 5)"))
+
+		hasStatus(base, Cathy, 1, CardStatus.Finessed)
+
+		// If Cathy blind-plays r5, Alice learns her 5 is dead trash g5.
+		val played = takeTurn("Cathy plays r5", "r1")(base)
+		hasInfs(played, None, Alice, 5, Vector("g5"))
+
+		// If Cathy discards instead, Alice treats slot 5 as a saved/playable 5.
+		val discarded = takeTurn("Cathy discards b3", "r1")(base)
+		hasInfs(discarded, None, Alice, 5, Vector("r5", "y5", "b5", "p5"))
+		assert(!discarded.meta(discarded.state.hands(Alice.ordinal)(4)).trash)

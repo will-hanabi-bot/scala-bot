@@ -812,19 +812,31 @@ def findTrashFinesses(ctx: ClueContext, connections: List[Connection], ambiguous
 	possibleTrash.toList.map: id =>
 		FocusPossibility(id, tfConnections, ClueInterp.Play, symmetric = symmetric, ambiguous = ambiguous, trashFinesse = true, needsBlindPlay = !validReverse)
 
-def connectTrashFinesses(ctx: ClueContext, looksDirect: Boolean, thinksStall: FastBitSet, findOwn: Option[Int] = None, preferOwn: Boolean = false): List[FocusPossibility] =
+def connectTrashFinesses(ctx: ClueContext, looksDirect: Boolean, thinksStall: FastBitSet, savePoss: Seq[FocusPossibility] = Nil, findOwn: Option[Int] = None, preferOwn: Boolean = false): List[FocusPossibility] =
 	val ClueContext(prev, game, action, _) = ctx
 	val (common, state) = (game.common, game.state)
 	val ClueAction(giver, receiver, _, clue) = action
 	val FocusResult(focus, _, positional) = ctx.focusResult
 
-	if game.level < Level.TrashMoves || positional.contains(Positional.TrashPush) || isTrashClue(prev, game, action, focus) then
+	if game.level < Level.TrashMoves ||
+		positional.contains(Positional.TrashPush) ||
+		isTrashClue(prev, game, action, focus) ||
+		(savePoss.nonEmpty && !common.thoughts(focus).possible.exists(state.isBasicTrash))
+	then
 		return Nil
 
 	val targetIds = (0 until state.variant.suits.length).toList.flatMap: suitIndex =>
 		val rank = if clue.kind == ClueKind.Rank then clue.value else state.playStacks(suitIndex) + 1
-		Option.when(rank <= state.maxRanks(suitIndex) && state.playStacks(suitIndex) < rank && state.variant.idTouched(Identity(suitIndex, rank), clue)):
+		Option.when(
+			rank <= state.maxRanks(suitIndex) &&
+			state.playStacks(suitIndex) < rank &&
+			state.variant.idTouched(Identity(suitIndex, rank), clue) &&
+			!savePoss.exists(_.id == Identity(suitIndex, rank))
+		):
 			Identity(suitIndex, rank)
+
+	if targetIds.isEmpty then
+		return Nil
 
 	if findOwn.isEmpty && !preferOwn then
 		val bob = state.nextPlayerIndex(giver)

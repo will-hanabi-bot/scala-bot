@@ -230,7 +230,7 @@ def interpNormalClue(ctx: ClueContext, symmetricInterp: SymmetricInterp, thinksS
 			connect(ctx, _, initialLooksDirect, thinksStall)
 
 	val hasNormalBluff = normalFocusPoss.exists(_.isBluff)
-	val rawTrashFocusPoss = connectTrashFinesses(ctx, initialLooksDirect, thinksStall).filterNot: fp =>
+	val rawTrashFocusPoss = connectTrashFinesses(ctx, initialLooksDirect, thinksStall, savePoss = savePoss).filterNot: fp =>
 		hasNormalBluff && fp.connections.headOption.exists(c => c.isInstanceOf[FinesseConn] && c.reacting == state.nextPlayerIndex(giver))
 
 	val considerTrash = rawTrashFocusPoss.nonEmpty && (
@@ -292,7 +292,7 @@ def interpNormalClue(ctx: ClueContext, symmetricInterp: SymmetricInterp, thinksS
 				.flatMap:
 					connect(ctx, _, looksDirect, thinksStall, findOwn = Some(state.ourPlayerIndex))
 
-			val trashOwnFps = connectTrashFinesses(ctx, looksDirect, thinksStall, findOwn = Some(state.ourPlayerIndex))
+			val trashOwnFps = connectTrashFinesses(ctx, looksDirect, thinksStall, savePoss = savePoss, findOwn = Some(state.ourPlayerIndex))
 			val ownFps = normalOwnFps ++ trashOwnFps
 
 			val filtered = filterFps(ctx, simplest ++ ownFps)
