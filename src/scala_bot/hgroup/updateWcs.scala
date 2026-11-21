@@ -242,7 +242,19 @@ def refreshWCs(prev: HGroup, game: HGroup, action: Action, beforeClueInterp: Boo
 			if disambiguatedWcs.contains(w) then w.copy(ambiguousSelf = false) else w
 		.toList
 
-		accGame.copy(waiting = newWcs)
+		accGame.state.heldOrders.foldLeft(accGame): (g, o) =>
+			if !g.xmeta(o).fStatus.exists(_.isInstanceOf[FStatus.ProvingTrashTo]) then g else
+				g.withXMeta(o): x =>
+					x.copy(fStatus = x.fStatus.filter:
+						case FStatus.ProvingTrashTo(to) =>
+							newWcs.exists: w =>
+								!w.symmetric && !w.ambiguousSelf &&
+								w.trashFinesse && w.needsBlindPlay &&
+								w.receiver == to &&
+								w.connections.exists(_.order == o)
+						case _ => true
+					)
+		.copy(waiting = newWcs)
 	.when(_ => elim):
 		_.elim(except = hypo, skipHypoStacks = hypo.isDefined)
 

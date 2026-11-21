@@ -44,6 +44,8 @@ enum FStatus:
 	case PossiblyAmbiguous(to: Int)
 	/** The card may or may not be playing, according to the player. */
 	case PossiblyOn(to: Int)
+	/** The card must blind play to prove an unconfirmed *Trash Finesse* to the player. */
+	case ProvingTrashTo(to: Int)
 
 case class XConvData(
 	/** This card may be a different identity than expected (e.g. if it ended up being *Layered*). */
@@ -192,6 +194,10 @@ case class HGroup(
 		xmeta(order).fStatus.forall: f =>
 			f != FStatus.PossiblyAmbiguous(state.ourPlayerIndex) &&
 			f != FStatus.PossiblyOn(state.ourPlayerIndex)
+
+	def provingTrash(order: Int, giver: Int, observer: Option[Int] = None) =
+		xmeta(order).fStatus.existsM:
+			case FStatus.ProvingTrashTo(to) => to != giver && !observer.contains(to)
 
 	def chop(playerIndex: Int) =
 		state.hands(playerIndex).findLast: o =>

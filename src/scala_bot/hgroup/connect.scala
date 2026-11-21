@@ -305,6 +305,7 @@ def findUnknownConnecting(ctx: ClueContext, reacting: Int, id: Identity, connect
 
 					// Log.info(s"trying to insert ${state.logId(id)} at $replacement with prev hand $prevHand, shifting $insertOrders ${possibleIds.fmt(state)}")
 
+					!ignore.contains(replacement) &&
 					validOrder(replacement) &&
 					possibleIds.contains(id) &&
 					insertable(game.withState(s => s.copy(hands = s.hands.updated(reacting, prevHand.tail))), insertOrders)
@@ -672,7 +673,7 @@ def connect(ctx: ClueContext, id: Identity, looksDirect: Boolean, thinksStall: F
 		else
 			FastBitSet.empty
 
-	val unconfirmedTrash = state.heldOrders.filter(unconfirmedTrashPlay(prev, giver, _, findOwn))
+	val unconfirmedTrash = state.heldOrders.filter(prev.provingTrash(_, giver, findOwn))
 	val actualAssumeTruth = assumeTruth || isTrashPush
 	val initialConnCtx = ConnectContext(looksDirect = looksDirect, thinksStall = thinksStall, connected = FastBitSet.single(focus), ignore = ignore.union(unconfirmedTrash))
 	val initialOpts = ConnectOpts(
@@ -694,14 +695,11 @@ def connect(ctx: ClueContext, id: Identity, looksDirect: Boolean, thinksStall: F
 
 			if truthConns.nonEmpty then
 				truthConns
-			else if conns.existsM { case c: KnownConn => !unconfirmedTrashPlay(prev, giver, c.order, findOwn) } then
-				val newIgnore = ignore.incl(conns.collectFirst { case c: KnownConn if !unconfirmedTrashPlay(prev, giver, c.order, findOwn) => c.order }.get)
+			else if conns.existsM { case _: KnownConn => true } then
+				val newIgnore = ignore.incl(conns.collectFirst { case c: KnownConn => c.order }.get)
 				connect(ctx, id, looksDirect, thinksStall, ignoreKnown = newIgnore, findOwn = findOwn, assumeTruth = actualAssumeTruth, preferOwn = preferOwn, forTrashFinesse = forTrashFinesse, immediate = immediate)
 			else
 				List.empty
-
-		case (Right(conns), _) if conns.exists(c => unconfirmedTrashPlay(prev, giver, c.order, findOwn)) =>
-			List.empty
 
 		case (Right(conns), _) if forTrashFinesse =>
 			findTrashFinesses(ctx, conns, id, ambiguous = preferOwn)
@@ -712,37 +710,12 @@ def connect(ctx: ClueContext, id: Identity, looksDirect: Boolean, thinksStall: F
 				// Newly touching a visible dupe
 				(!prev.isTouched(focus) && visibleFind(state, prev.players(giver), id, infer = true, excludeOrder = focus).exists(prev.isTouched)) ||
 				symmetricConns(state, conns) ||
-				conns.exists(c => unconfirmedTrashPlay(prev, giver, c.order))
+				conns.exists(c => prev.provingTrash(c.order, giver))
 
 			val finalizedConns = finalizeConns(conns, givenByUs = giver == state.ourPlayerIndex)
 
 			Log.info(s"found connections: ${state.logConns(finalizedConns, id)}${if symmetric then " (symmetric)" else ""}${if preferOwn then " (ambiguous)" else ""}")
 			Some(FocusPossibility(id, finalizedConns, ClueInterp.Play, symmetric, ambiguous = preferOwn))
-
-/** Returns true if the given order is currently expected to blind play to prove an unconfirmed Trash Finesse. */
-def unconfirmedTrashPlay(prev: HGroup, giver: Int, order: Int, observer: Option[Int] = None): Boolean =
-	val state = prev.state
-	prev.waiting.exists: wc =>
-		!wc.symmetric && !wc.ambiguousSelf &&
-		wc.trashFinesse && wc.needsBlindPlay &&
-		wc.receiver != state.ourPlayerIndex &&
-		wc.receiver != giver &&
-		!observer.contains(wc.receiver) &&
-		{
-			var lastPlayer = giver
-			var found = false
-			var ci = 0
-			while ci < wc.connections.length && !found &&
-				((ci > 0 && wc.connections(ci - 1).hidden && wc.connections(ci).reacting == lastPlayer) ||
-					inBetween(state.numPlayers, wc.connections(ci).reacting, state.nextPlayerIndex(lastPlayer), wc.receiver))
-			do
-				wc.connections(ci) match
-					case f: FinesseConn if f.order == order => found = true
-					case _ => ()
-				lastPlayer = wc.connections(ci).reacting
-				ci += 1
-			found
-		}
 
 def symmetricConns(state: State, conns: Seq[Connection]): Boolean =
 	conns.exists:

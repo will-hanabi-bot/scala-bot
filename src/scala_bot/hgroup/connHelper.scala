@@ -27,6 +27,23 @@ def assignConns(game: HGroup, action: ClueAction, fps: Seq[FocusPossibility], fo
 	val shifted = scala.collection.mutable.Set.empty[Int]
 
 	toAssign.foldLeft(game): (a, fp) =>
+		val trashProofOrders =
+			if !fp.trashFinesse || !fp.needsBlindPlay || receiver == state.ourPlayerIndex then
+				FastBitSet.empty
+			else
+				val (_, orders) = fp.connections.zipWithIndex.foldLeftOpt((giver, FastBitSet.empty)):
+					case ((lastPlayer, acc), (conn, i)) =>
+						val valid = (i > 0 && fp.connections(i - 1).hidden && conn.reacting == lastPlayer) ||
+							inBetween(state.numPlayers, conn.reacting, state.nextPlayerIndex(lastPlayer), receiver)
+						if !valid then
+							Left((lastPlayer, acc))
+						else
+							val nextAcc = conn match
+								case f: FinesseConn => acc.incl(f.order)
+								case _ => acc
+							Right((conn.reacting, nextAcc))
+				orders
+
 		val connsToAssign = fp.connections.filter:
 			case p: PlayableConn if fp.isBluff && !mustBluffPlayables.contains(p.order) => false
 			case _ => true
@@ -121,7 +138,7 @@ def assignConns(game: HGroup, action: ClueAction, fps: Seq[FocusPossibility], fo
 						(clue.kind == ClueKind.Colour && conn.ids.forall(!g.me.thoughts(focus).possible.contains(_)) && !conn.matchesP { case f: FinesseConn => f.isBluff })
 					)
 
-				val fStatus =
+				val baseFStatus =
 					if !maybeFinessed then
 						Nil
 					else if receiver == state.ourPlayerIndex then
@@ -133,6 +150,12 @@ def assignConns(game: HGroup, action: ClueAction, fps: Seq[FocusPossibility], fo
 							Option.when(conn.reacting != receiver)
 								(FStatus.PossiblyOn(receiver))
 						).flatten
+
+				val fStatus =
+					if trashProofOrders.contains(conn.order) then
+						baseFStatus :+ FStatus.ProvingTrashTo(receiver)
+					else
+						baseFStatus
 
 				if fStatus.nonEmpty then
 					Log.highlight(Console.GREEN, s"setting finesse status to $fStatus on ${conn.order}! ${finesseIds.fmt(state)}")
