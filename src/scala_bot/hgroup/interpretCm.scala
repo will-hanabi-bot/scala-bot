@@ -4,34 +4,55 @@ import scala_bot.basics._
 import scala_bot.utils._
 import scala_bot.logger.Log
 
-/**
-  * Checks whether a Trash Chop Move was performed.
-  * Returns the orders of any chop moved cards.
- */
-def interpretTcm(ctx: ClueContext, log: Boolean = true): Option[Seq[Int]] =
-	val ClueContext(prev, game, action, _) = ctx
+def isTrashClue(prev: HGroup, game: HGroup, action: ClueAction, focus: Int): Boolean =
 	val (common, state) = (game.common, game.state)
-
-	val ClueAction(_, receiver, orders, clue) = action
-	val focus = ctx.focusResult.focus
+	val ClueAction(giver, receiver, orders, clue) = action
 	val thought = common.thoughts(focus)
 
-	val promisedIds = if clue.kind == ClueKind.Rank then
-		thought.possible.filter(_.rank == clue.value)
-	else
-		thought.possible
+	val promisedIds = thought.possible.filter: id =>
+		state.variant.idTouched(id, clue) &&
+		(clue.kind != ClueKind.Rank || id.rank == clue.value)
 
-	val tcm =
-		!prev.state.deck(focus).clued &&
-		promisedIds.forall: id =>
+	val usefulIds = promisedIds.filter: id =>
+		!(
 			state.isBasicTrash(id) ||
 			visibleFind(state, common, id, excludeOrder = focus).nonEmpty ||
 			// If we allow inferring, the card must have been clued before this clue
 			visibleFind(state, common, id, infer = true, excludeOrder = focus, cond = (_, o) => prev.isTouched(o) && game.me.thoughts(o).matches(id, assume = true)).nonEmpty ||
 			// Only touching 1 new card and stale
 			(game.level >= Level.Context && orders.count(!prev.state.deck(_).clued) == 1 && game.meta(focus).staleIds.contains(id))
-		&&
-		!ctx.common.orderKp(game, focus)
+		)
+
+	if usefulIds.isEmpty then
+		!prev.common.orderKp(game, focus)
+	else
+		game.level >= Level.TrashMoves &&
+		usefulIds.length == 1 &&
+		state.isCritical(usefulIds.head) && (
+			!game.players(receiver).thoughts(focus).possible.contains(usefulIds.head) || (
+				giver != state.ourPlayerIndex &&
+				receiver != state.ourPlayerIndex &&
+				state.ourHand.exists(o => game.me.thoughts(o).possible.contains(usefulIds.head))
+			)
+		)
+
+/**
+  * Checks whether a Trash Chop Move was performed.
+  * Returns the orders of any chop moved cards.
+ */
+def interpretTcm(ctx: ClueContext, log: Boolean = true, assume: Boolean = false): Option[Seq[Int]] =
+	val ClueContext(prev, game, action, _) = ctx
+	val state = game.state
+
+	val ClueAction(_, receiver, orders, _) = action
+	val focus = ctx.focusResult.focus
+
+	if ctx.focusResult.positional.contains(Positional.TrashPush) then
+		return None
+
+	val tcm =
+		!prev.state.deck(focus).clued &&
+		(assume || isTrashClue(prev, game, action, focus))
 
 	if !tcm then
 		return None

@@ -27,6 +27,23 @@ def assignConns(game: HGroup, action: ClueAction, fps: Seq[FocusPossibility], fo
 	val shifted = scala.collection.mutable.Set.empty[Int]
 
 	toAssign.foldLeft(game): (a, fp) =>
+		val trashProofOrders =
+			if !fp.trashFinesse || !fp.needsBlindPlay || receiver == state.ourPlayerIndex then
+				FastBitSet.empty
+			else
+				val (_, orders) = fp.connections.zipWithIndex.foldLeftOpt((giver, FastBitSet.empty)):
+					case ((lastPlayer, acc), (conn, i)) =>
+						val valid = (i > 0 && fp.connections(i - 1).hidden && conn.reacting == lastPlayer) ||
+							inBetween(state.numPlayers, conn.reacting, state.nextPlayerIndex(lastPlayer), receiver)
+						if !valid then
+							Left((lastPlayer, acc))
+						else
+							val nextAcc = conn match
+								case f: FinesseConn => acc.incl(f.order)
+								case _ => acc
+							Right((conn.reacting, nextAcc))
+				orders
+
 		val connsToAssign = fp.connections.filter:
 			case p: PlayableConn if fp.isBluff && !mustBluffPlayables.contains(p.order) => false
 			case _ => true
@@ -121,7 +138,7 @@ def assignConns(game: HGroup, action: ClueAction, fps: Seq[FocusPossibility], fo
 						(clue.kind == ClueKind.Colour && conn.ids.forall(!g.me.thoughts(focus).possible.contains(_)) && !conn.matchesP { case f: FinesseConn => f.isBluff })
 					)
 
-				val fStatus =
+				val baseFStatus =
 					if !maybeFinessed then
 						Nil
 					else if receiver == state.ourPlayerIndex then
@@ -133,6 +150,12 @@ def assignConns(game: HGroup, action: ClueAction, fps: Seq[FocusPossibility], fo
 							Option.when(conn.reacting != receiver)
 								(FStatus.PossiblyOn(receiver))
 						).flatten
+
+				val fStatus =
+					if trashProofOrders.contains(conn.order) then
+						baseFStatus :+ FStatus.ProvingTrashTo(receiver)
+					else
+						baseFStatus
 
 				if fStatus.nonEmpty then
 					Log.highlight(Console.GREEN, s"setting finesse status to $fStatus on ${conn.order}! ${finesseIds.fmt(state)}")
@@ -309,7 +332,7 @@ def resolveClue(ctx: ClueContext, fps: Seq[FocusPossibility], symmetricInterp: S
 			val poss = game.me.thoughts(focus).id().toList
 				.when(_.isEmpty)(_ => game.me.thoughts(focus).inferred.toList)
 
-			poss.filter: inf =>
+			val normalAmbiguous = poss.filter: inf =>
 				!game.invalidFocus(giver, clue, inf, ctx.focusResult) &&
 				!(fps ++ ambiguousOwn).exists: fp =>
 					fp.id == inf && {
@@ -317,12 +340,21 @@ def resolveClue(ctx: ClueContext, fps: Seq[FocusPossibility], symmetricInterp: S
 							case c: KnownConn => !game.xmeta(c.order).fStatus.contains(FStatus.PossiblyOn(state.ourPlayerIndex))
 							case _: PlayableConn => true
 						) ||
-						fp.connections.forall(_.reacting == state.ourPlayerIndex)
+						(fp.connections.nonEmpty && fp.connections.forall(_.reacting == state.ourPlayerIndex))
 					}
 			.flatMap:
 				connect(ctx, _, looksDirect, thinksStall = FastBitSet.empty, preferOwn = true, assumeTruth = true)		// An ambiguous connection is always delayed (can't be a bluff)
 			.filter: fp =>
 				!(fps ++ ambiguousOwn).exists(_.connections == fp.connections)
+
+			val trashAmbiguous =
+				if fps.exists(fp => fp.connections.nonEmpty && fp.connections.forall(_.reacting == state.ourPlayerIndex)) then
+					Nil
+				else
+					connectTrashFinesses(ctx, looksDirect, thinksStall = FastBitSet.empty, preferOwn = true).filter: fp =>
+						!(fps ++ ambiguousOwn).exists(_.connections == fp.connections)
+
+			normalAmbiguous ++ trashAmbiguous
 
 		// occamsRazor(ctx, ambiguousFps, receiver)
 		ambiguousFps
@@ -345,7 +377,8 @@ def resolveClue(ctx: ClueContext, fps: Seq[FocusPossibility], symmetricInterp: S
 
 	val trueFp = simplestFps.find(fp => state.deck(focus).matches(fp.id))
 
-	lazy val stompedWc = !game.inEndgame && game.waiting.exists: wc =>
+	lazy val stompedWc = game.waiting.exists: wc =>
+		(!game.inEndgame || wc.needsBlindPlay) &&
 		!wc.symmetric && !wc.ambiguousSelf &&
 		wc.connections.exists: conn =>
 			conn.order == focus ||
@@ -422,8 +455,11 @@ def resolveClue(ctx: ClueContext, fps: Seq[FocusPossibility], symmetricInterp: S
 		game.dcStatus == DcStatus.Scream &&
 		state.numPlayers > 2
 
+	val trashFps = simplestFps.filter(_.trashFinesse)
+	val trashPush = interp == ClueInterp.Play && positional.contains(Positional.TrashPush)
+
 	game.withThought(focus): t =>
-		val newInferred = t.inferred.intersect(simplestFps.map(_.id))
+		val newInferred = t.inferred.union(trashFps.map(_.id)).intersect(simplestFps.map(_.id))
 			// If a non-finesse connection exists, the focus can't be a copy of it
 			.filter: i =>
 				!fps.filterNot(_.symmetric).flatMap(_.connections).existsM:
@@ -432,6 +468,19 @@ def resolveClue(ctx: ClueContext, fps: Seq[FocusPossibility], symmetricInterp: S
 					case c: PromptConn   => c.id == i
 		Log.highlight(Console.CYAN, s"final infs [${newInferred.fmt(state)}] $focus")
 		t.copy(inferred = newInferred, infoLock = newInferred.toOpt)
+
+	.when(_ => trashFps.nonEmpty || trashPush): g =>
+		action.orders.foldLeft(g): (acc, o) =>
+			if prev.state.deck(o).clued then acc else
+				acc.withMeta(o)(_.copy(trash = true))
+					.when(_ => o != focus):
+						_.withThought(o)(t => t.copy(inferred = t.possible.intersect(state.trashSet)))
+		.when(_ => trashFps.nonEmpty): g2 =>
+			val tcmOrders = interpretTcm(ctx, log = true, assume = true).getOrElse(Nil)
+			tcmOrders.foldLeft(performCM(g2, tcmOrders))(_.withMeta(_)(_.reason(state.turnCount)))
+		.when(_ => trashPush):
+			_.withMeta(focus)(_.copy(status = CardStatus.Finessed).reason(state.turnCount))
+				.withXMeta(focus)(x => x.copy(turnFinessed = x.turnFinessed.orElse(Some(state.turnCount))))
 
 	.pipe:
 		assignConns(_, action, fpsToWrite, focus, ambiguousOwn ++ ambiguousFps)
@@ -489,7 +538,7 @@ def resolveClue(ctx: ClueContext, fps: Seq[FocusPossibility], symmetricInterp: S
 	.pipe: g =>
 		def requiresWc(fp: FocusPossibility) =
 			fp.connections.existsM:
-				case c: KnownConn => game.isBlindPlaying(c.order)
+				case c: KnownConn => game.isBlindPlaying(c.order) || positional.contains(Positional.TrashPush)
 				case _: PlayableConn => true
 				case _: PromptConn => true
 				case _: FinesseConn => true
@@ -508,6 +557,8 @@ def resolveClue(ctx: ClueContext, fps: Seq[FocusPossibility], symmetricInterp: S
 				fp.id,
 				symmetric = fp.symmetric,
 				ambiguousSelf = !simplestFps.contains(fp) || fp.complicated,	// If it's too complicated, it could be an ambiguous connection
+				trashFinesse = fp.trashFinesse,
+				needsBlindPlay = fp.needsBlindPlay
 			)
 
 		val ambiguousWcs = (ambiguousOwn ++ ambiguousFps).collect:
@@ -518,7 +569,9 @@ def resolveClue(ctx: ClueContext, fps: Seq[FocusPossibility], symmetricInterp: S
 				state.turnCount,
 				focus,
 				fp.id,
-				ambiguousSelf = true
+				ambiguousSelf = true,
+				trashFinesse = fp.trashFinesse,
+				needsBlindPlay = fp.needsBlindPlay
 			)
 
 		g.copy(

@@ -42,7 +42,14 @@ def stompedWc(prev: HGroup, game: HGroup, action: Action, wc: WaitingConnection)
 
 			wc.connections.exists: conn =>
 				!(conn.hidden && conn.reacting == giver) &&		// Allow a hidden player to stomp, since they don't know
-				conn.ids.forall(game.state.deck(focus).id().contains)
+				(conn.ids.forall(game.state.deck(focus).id().contains) || (
+					wc.trashFinesse && wc.needsBlindPlay &&
+					game.waiting.exists: w =>
+						w.turn == game.state.turnCount &&
+						!w.symmetric &&
+						w.connections.existsM:
+							case f: FinesseConn => f.order == conn.order
+				))
 
 def unplayableAlt(game: HGroup, action: Action, wc: WaitingConnection) =
 	val (order, reacting) = (wc.currConn.order, wc.currConn.reacting)
@@ -125,7 +132,7 @@ def refreshWCs(prev: HGroup, game: HGroup, action: Action, beforeClueInterp: Boo
 				if hypo.isDefined then struct else
 					struct.copy(
 						toRemove = struct.toRemove :++ PromptConn(-1, wc.focus, wc.inference) +: (if wc.symmetric || wc.ambiguousSelf then Nil else conns),
-						remFocuses = struct.remFocuses + wc.focus,
+						remFocuses = struct.remFocuses + wc.focus
 					)
 			case UpdateResult.Complete => struct
 	}
@@ -202,27 +209,52 @@ def refreshWCs(prev: HGroup, game: HGroup, action: Action, beforeClueInterp: Boo
 			val (currGame, disambiguatedWcs) = acc
 			val sameFocusWcs = retainWCs.filter(_.focus == focus)
 
-			if sameFocusWcs.nonEmpty && sameFocusWcs.forall(wc => wc.symmetric || wc.ambiguousSelf) then
-				val turn = sameFocusWcs.head.turn
-				val action = currGame.state.actionList(turn).collectFirst { case a: ClueAction => a }.get
+			val (g2, newDisambiguated) =
+				if sameFocusWcs.nonEmpty && sameFocusWcs.forall(wc => wc.symmetric || wc.ambiguousSelf) then
+					val turn = sameFocusWcs.head.turn
+					val action = currGame.state.actionList(turn).collectFirst { case a: ClueAction => a }.get
 
-				// TODO: Only write the next-simplest connections, not all of them?
-				val ambiguousWcs = sameFocusWcs.filter(_.ambiguousSelf)
+					// TODO: Only write the next-simplest connections, not all of them?
+					val ambiguousWcs = sameFocusWcs.filter(_.ambiguousSelf)
 
-				Log.error(s"assigning previously-ambiguous connections on $focus to ${ambiguousWcs.map(w => g.state.logId(w.inference))}")
-				assignConns(currGame, action, ambiguousWcs.map(wc => FocusPossibility(wc.inference, wc.connections, ClueInterp.Play, symmetric = wc.symmetric)), focus, retroactive = true)
-					.withThought(focus): t =>
-						t.copy(inferred = t.possible.intersect(ambiguousWcs.map(_.inference)))
-				.pipe: g2 =>
-					(g2, disambiguatedWcs ++ ambiguousWcs)
-			else
-				acc
+					Log.error(s"assigning previously-ambiguous connections on $focus to ${ambiguousWcs.map(w => g.state.logId(w.inference))}")
+					val assigned = assignConns(currGame, action, ambiguousWcs.map(wc => FocusPossibility(wc.inference, wc.connections, ClueInterp.Play, symmetric = wc.symmetric, trashFinesse = wc.trashFinesse, needsBlindPlay = wc.needsBlindPlay)), focus, retroactive = true)
+						.withThought(focus): t =>
+							t.copy(inferred = t.possible.intersect(ambiguousWcs.map(_.inference)))
+					(assigned, disambiguatedWcs ++ ambiguousWcs)
+				else
+					acc
+
+			val g3 = game.waiting.find(w => w.focus == focus && w.trashFinesse) match
+				case Some(wc) if !sameFocusWcs.exists(w => w.trashFinesse && (!w.symmetric || w.receiver == game.state.ourPlayerIndex)) =>
+					val base = g2.withMeta(focus)(_.copy(trash = false))
+						.withThought(focus)(t => t.copy(infoLock = t.inferred.toOpt))
+					game.state.hands(wc.receiver).foldLeft(base): (a, o) =>
+						if a.meta(o).cm && a.meta(o).reasoning.headOption.contains(wc.turn) then
+							a.withMeta(o)(_.copy(status = CardStatus.None))
+						else
+							a
+				case _ => g2
+
+			(g3, newDisambiguated)
 
 		val newWcs = retainWCs.map: w =>
 			if disambiguatedWcs.contains(w) then w.copy(ambiguousSelf = false) else w
 		.toList
 
-		accGame.copy(waiting = newWcs)
+		accGame.state.heldOrders.foldLeft(accGame): (g, o) =>
+			if !g.xmeta(o).fStatus.exists(_.isInstanceOf[FStatus.ProvingTrashTo]) then g else
+				g.withXMeta(o): x =>
+					x.copy(fStatus = x.fStatus.filter:
+						case FStatus.ProvingTrashTo(to) =>
+							newWcs.exists: w =>
+								!w.symmetric && !w.ambiguousSelf &&
+								w.trashFinesse && w.needsBlindPlay &&
+								w.receiver == to &&
+								w.connections.exists(_.order == o)
+						case _ => true
+					)
+		.copy(waiting = newWcs)
 	.when(_ => elim):
 		_.elim(except = hypo, skipHypoStacks = hypo.isDefined)
 
@@ -247,6 +279,7 @@ def updateWc(prev: HGroup, game: HGroup, action: Action, wc: WaitingConnection, 
 			game.common.thoughts(conn.order).possible.intersect(conn.ids).isEmpty
 
 	lazy val impossibleFocus = wc.connections.headOption.forall(!_.isInstanceOf[PositionalConn]) &&
+		!(wc.trashFinesse && !state.hands(wc.receiver).contains(wc.focus)) &&
 		!game.common.thoughts(wc.focus).possible.contains(wc.inference)
 
 	if !prev.state.hands(reacting).contains(wc.currConn.order) then
@@ -376,7 +409,8 @@ def resolveRetained(prev: HGroup, game: HGroup, action: Action, wc: WaitingConne
 
 	val missedReaction = newFinesseQueued.isDefined ||
 		wc.currConn.matchesP:
-			case c: KnownConn => game.isBlindPlaying(c.order)
+			case c: KnownConn => game.isBlindPlaying(c.order) || (!state.deck(wc.focus).clued && prev.isBlindPlaying(wc.focus))
+			case _: PlayableConn => !state.deck(wc.focus).clued && prev.isBlindPlaying(wc.focus)
 			case _: FinesseConn => true
 			case _: PromptConn => game.lastActions(reacting).matchesP:
 				case Some(_: ClueAction) => game.lastMove == Some(ClueInterp.Stall)

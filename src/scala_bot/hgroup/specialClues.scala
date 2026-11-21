@@ -31,7 +31,8 @@ def validBluff(game: HGroup, action: ClueAction, blind: Identity, reacting: Int,
 
 	val interferes = state.hands(reacting).find: o =>
 		// game.players(reacting).thoughts(o).possible.contains(truth) &&	// any f/gd should block a bluff
-		(game.isBlindPlaying(o) || game.meta(o).status == CardStatus.GentlemansDiscard)
+		((game.isBlindPlaying(o) && !(giver != state.ourPlayerIndex && game.xmeta(o).fStatus.contains(FStatus.PossiblyOn(state.ourPlayerIndex)))) ||
+			game.meta(o).status == CardStatus.GentlemansDiscard)
 
 	game.level >= Level.Bluffs &&
 	state.nextPlayerIndex(giver) == reacting &&
@@ -255,7 +256,7 @@ def interpSpecialClue(ctx: ClueContext): SpecialClueResult =
 						game.state.isBasicTrash(Identity(suitIndex, clue.value))
 				)
 			.withMove:
-				if giver == state.ourPlayerIndex && !game.me.isTrash(game, state.deck(focus).id().get, focus) then
+				if giver == state.ourPlayerIndex && !state.deck(focus).id().exists(game.me.isTrash(game, _, focus)) then
 					ClueInterp.Mistake
 				else
 					ClueInterp.Fix
