@@ -289,6 +289,23 @@ class TrashPush extends munit.FunSuite:
 		// Alice should play the connecting card.
 		assertEquals(game.takeAction.unsafeRunSync(), PerformAction.Play(game.state.hands(Alice.ordinal)(3)))
 
+	test("skips hidden layers to find a non-deferred trash push connection"):
+		val game = setup(HGroup.atLevel(14), Vector(
+			Vector("xx", "xx", "xx", "xx"),
+			Vector("r1", "g1", "p1", "y4"),
+			Vector("y2", "y4", "b4", "r1"),
+			Vector("b2", "y2", "b4", "g1")
+		),
+			playStacks = Some(Vector(5, 1, 5, 1, 5)),
+			starting = Bob
+		)
+		.pipe(takeTurn("Bob clues 1 to Alice (slot 4)"))
+
+		// Donald's y2 is behind a hidden b2 layer (too slow), so Cathy's slot 1 y2 connects for y3 instead.
+		hasStatus(game, Cathy, 1, CardStatus.Finessed)
+		hasStatus(game, Alice, 3, CardStatus.Finessed)
+		hasInfs(game, None, Alice, 3, Vector("y3", "b2", "b3"))
+
 class TrashFinesse extends munit.FunSuite:
 	override def beforeAll() = Logger.setLevel(LogLevel.Off)
 
