@@ -1,7 +1,7 @@
 package tests.hgroup.level5
 
 import scala_bot.basics._
-import scala_bot.test.{hasInfs, hasStatus, Player, setup, takeTurn, TestVariant}, Player._
+import scala_bot.test.{hasInfs, hasStatus, Player, preClue, setup, takeTurn, TestVariant}, Player._
 import scala_bot.hgroup.{FStatus, HGroup}
 
 import scala_bot.utils.{pipe, tap}
@@ -423,3 +423,259 @@ class General extends munit.FunSuite:
 		// Alice should not assume she is finessed for y1.
 		hasStatus(game, Alice, 2, CardStatus.None)
 		assertEquals(game.common.thinksPlayables(game, Alice.ordinal), Vector.empty)
+
+class Ambiguity extends munit.FunSuite:
+	override def beforeAll() = Logger.setLevel(LogLevel.Off)
+
+	// https://hanab.live/shared-replay/2068582#8
+	test("understands hesitation stalling early game"):
+		val game = setup(HGroup.atLevel(5), Vector(
+			Vector("xx", "xx", "xx", "xx"),
+			Vector("r1", "r4", "y5", "b3"),
+			Vector("y2", "g4", "r3", "p2"),
+			Vector("g2", "b4", "b3", "b5")
+		),
+			starting = Bob
+		)
+		.pipe(takeTurn("Bob clues 1 to Alice (slot 1,3)"))
+		.pipe(takeTurn("Cathy clues 5 to Donald"))
+		.pipe(takeTurn("Donald clues purple to Cathy"))
+		.pipe(takeTurn("Alice plays g1 (slot 3)"))
+		.pipe(takeTurn("Bob clues green to Donald"))
+		.pipe(takeTurn("Cathy clues red to Bob"))
+		.pipe(takeTurn("Donald clues 5 to Bob"))
+
+		// Donald couldn't see anything else to do.
+		// This should be treated as an early 5 save,
+		// nothing else.
+		hasInfs(game, None, Bob, 3, Vector("y5", "g5", "b5", "p5"))
+		hasStatus(game, Bob, 4, CardStatus.None)
+		hasStatus(game, Alice, 1, CardStatus.None)
+
+		// Once Alice plays p1 instead of slot 1, Donald knows g2 is playable and can no longer hesitation stall.
+		val afterAlice = game.pipe(takeTurn("Alice plays p1 (slot 2)"))
+		assert(afterAlice.isDefinite(afterAlice.state.hands(Donald.ordinal)(0)))
+
+	test("understands self-finesse hesitation stalling early game"):
+		val game = setup(HGroup.atLevel(5), Vector(
+			Vector("xx", "xx", "xx", "xx", "xx"),
+			Vector("g4", "p4", "y5", "r3", "g4"),
+			Vector("p2", "p1", "b3", "y3", "b4")
+		),
+			starting = Bob
+		)
+		.pipe(takeTurn("Bob clues 2 to Cathy"))
+		.tap: g =>
+			hasStatus(g, Cathy, 2, CardStatus.Finessed)
+		.pipe(takeTurn("Cathy clues 5 to Bob"))
+
+		// Cathy may see a 1 on Alice's finesse position, so she hesitates and gives a 5 Stall.
+		assertEquals(game.lastMove, Some(ClueInterp.Stall))
+		hasInfs(game, None, Bob, 3, Vector("r5", "y5", "g5", "b5", "p5"))
+		hasStatus(game, Alice, 1, CardStatus.None)
+		hasStatus(game, Cathy, 2, CardStatus.Finessed)
+
+	test("does not allow hesitation stalling when all copies of the connecting card are visible"):
+		val game = setup(HGroup.atLevel(5), Vector(
+			Vector("xx", "xx", "xx", "xx"),
+			Vector("r1", "r4", "y5", "b3"),
+			Vector("y2", "g4", "r3", "p2"),
+			Vector("g2", "b4", "b3", "b5")
+		),
+			starting = Bob,
+			discarded = Vector("g2")
+		)
+		.pipe(takeTurn("Bob clues 1 to Alice (slot 1,3)"))
+		.pipe(takeTurn("Cathy clues 5 to Donald"))
+		.pipe(takeTurn("Donald clues purple to Cathy"))
+		.pipe(takeTurn("Alice plays g1 (slot 3)"))
+		.pipe(takeTurn("Bob clues green to Donald"))
+		.pipe(takeTurn("Cathy clues red to Bob"))
+		.pipe(takeTurn("Donald clues 5 to Bob"))
+
+		// Since the other g2 is discarded, Alice cannot hold g2, so Donald knows g2 is playable and is not stalling.
+		assert(game.lastMove != Some(ClueInterp.Stall))
+
+	test("understands known hesitation stalling early game when another player visibly holds a connecting card"):
+		val game = setup(HGroup.atLevel(5), Vector(
+			Vector("xx", "xx", "xx", "xx"),
+			Vector("g2", "r4", "y5", "b3"),
+			Vector("y2", "g4", "r3", "p4"),
+			Vector("g2", "b4", "b3", "p3")
+		),
+			starting = Cathy,
+			playStacks = Some(Vector(0, 0, 1, 0, 0))
+		)
+		.pipe(takeTurn("Cathy clues green to Donald"))
+		.tap: g =>
+			// Donald sees Bob's g2 on finesse position, so Donald must entertain [g2, g3] and won't play yet.
+			hasInfs(g, None, Donald, 1, Vector("g2", "g3"))
+			assertEquals(g.common.thinksPlayables(g, Donald.ordinal), Vector.empty)
+		.pipe(takeTurn("Donald clues 5 to Bob"))
+
+		assertEquals(game.lastMove, Some(ClueInterp.Stall))
+		hasInfs(game, None, Bob, 3, Vector("r5", "y5", "g5", "b5", "p5"))
+		hasStatus(game, Alice, 1, CardStatus.None)
+		hasStatus(game, Bob, 1, CardStatus.None)
+
+		// Once Bob doesn't play g2, Donald knows his green card is g2.
+		val afterBob = game
+			.pipe(takeTurn("Alice clues 4 to Cathy"))
+			.pipe(takeTurn("Bob discards b3", "r1"))
+		hasInfs(afterBob, None, Donald, 1, Vector("g2"))
+
+	test("understands known hesitation stalling early game on a self-finesse"):
+		val game = setup(HGroup.atLevel(5), Vector(
+			Vector("xx", "xx", "xx", "xx"),
+			Vector("r4", "y4", "y5", "g4"),
+			Vector("p2", "p1", "b3", "y3"),
+			Vector("r1", "b4", "g4", "r4")
+		),
+			starting = Bob
+		)
+		.pipe(takeTurn("Bob clues 2 to Cathy"))
+		.tap: g =>
+			// We know Cathy is self-finessed for p1 -> p2, but we also know Cathy sees Donald's r1 -> r2 and will hesitate.
+			hasStatus(g, Cathy, 2, CardStatus.Finessed)
+			assertEquals(g.common.thinksPlayables(g, Cathy.ordinal), Vector.empty)
+		.pipe(takeTurn("Cathy clues 5 to Bob"))
+
+		assertEquals(game.lastMove, Some(ClueInterp.Stall))
+		hasInfs(game, None, Bob, 3, Vector("r5", "y5", "g5", "b5", "p5"))
+		hasStatus(game, Cathy, 2, CardStatus.Finessed)
+
+		// Once Donald doesn't play r1, Cathy knows to play p1.
+		val afterDonald = game.pipe(takeTurn("Donald clues 4 to Bob"))
+		assertEquals(afterDonald.common.thinksPlayables(afterDonald, Cathy.ordinal), Vector(afterDonald.state.hands(Cathy.ordinal)(1)))
+
+	test("understands known hesitation stalling early game on a self-prompt"):
+		val game = setup(HGroup.atLevel(5), Vector(
+			Vector("xx", "xx", "xx", "xx"),
+			Vector("r4", "y4", "y5", "g4"),
+			Vector("p3", "p2", "b4", "y4"),
+			Vector("r2", "b4", "g4", "r4")
+		),
+			starting = Bob,
+			playStacks = Some(Vector(1, 0, 0, 0, 1)),
+			init = preClue(Cathy, 2, Seq("2"))
+		)
+		.pipe(takeTurn("Bob clues 3 to Cathy"))
+		.tap: g =>
+			// Cathy's p2 is prompted, but Cathy sees Donald's r2 -> r3 and will hesitate.
+			assertEquals(g.common.thinksPlayables(g, Cathy.ordinal), Vector.empty)
+		.pipe(takeTurn("Cathy clues 5 to Bob"))
+
+		assertEquals(game.lastMove, Some(ClueInterp.Stall))
+		hasInfs(game, None, Bob, 3, Vector("r5", "y5", "g5", "b5", "p5"))
+		hasInfs(game, None, Cathy, 2, Vector("p2"))
+
+		// Once Donald doesn't play r2, Cathy knows to play p2.
+		val afterDonald = game.pipe(takeTurn("Donald clues 1 to Alice (slot 4)"))
+		assertEquals(afterDonald.common.thinksPlayables(afterDonald, Cathy.ordinal), Vector(afterDonald.state.hands(Cathy.ordinal)(1)))
+
+	test("does not allow hesitation stalling when our finesse position has negative info"):
+		val game = setup(HGroup.atLevel(5), Vector(
+			Vector("xx", "xx", "xx", "xx"),
+			Vector("r4", "g1", "y5", "b3"),
+			Vector("g4", "y4", "r3", "p3"),
+			Vector("g2", "b4", "b3", "p4")
+		),
+			starting = Bob,
+			discarded = Vector("g3")
+		)
+		.pipe(takeTurn("Bob clues green to Alice (slot 4)"))	// critical g3 save (info-locked on g3); slots 1-3 get negative green
+		.pipe(takeTurn("Cathy clues 1 to Bob"))
+		.pipe(takeTurn("Donald clues 4 to Cathy"))
+		.pipe(takeTurn("Alice clues 4 to Donald"))
+		.pipe(takeTurn("Bob plays g1", "r1"))
+		.pipe(takeTurn("Cathy clues green to Donald"))
+		.tap: g =>
+			assert(g.isDefinite(g.state.hands(Donald.ordinal)(0)))
+		.pipe(takeTurn("Donald clues 5 to Bob"))
+
+		// Alice's finesse position has negative green (and slot 4 is info-locked on g3), so Donald cannot hesitate.
+		assert(game.lastMove != Some(ClueInterp.Stall))
+
+	test("does not allow hesitation stalling when all our cards are clued and cannot prompt"):
+		val game = setup(HGroup.atLevel(5), Vector(
+			Vector("xx", "xx", "xx", "xx"),
+			Vector("r1", "r4", "y5", "b3"),
+			Vector("y2", "g4", "r3", "p3"),
+			Vector("g2", "b4", "b3", "p4")
+		),
+			starting = Bob,
+			playStacks = Some(Vector(0, 0, 1, 0, 0))
+		)
+		.pipe(takeTurn("Bob clues 5 to Alice (slots 1,2,3,4)"))
+		.pipe(takeTurn("Cathy clues green to Donald"))
+		.tap: g =>
+			assert(g.isDefinite(g.state.hands(Donald.ordinal)(0)))
+		.pipe(takeTurn("Donald clues 5 to Bob"))
+
+		assert(game.lastMove != Some(ClueInterp.Stall))
+
+	test("handles clued cards in our hand that would prompt"):
+		val canPrompt = setup(HGroup.atLevel(5), Vector(
+			Vector("xx", "xx", "xx", "xx"),
+			Vector("r4", "g1", "y5", "b3"),
+			Vector("y2", "b3", "y3", "p3"),
+			Vector("r3", "b4", "g4", "p4")
+		),
+			starting = Bob,
+			playStacks = Some(Vector(2, 0, 0, 0, 0))
+		)
+		.pipe(takeTurn("Bob clues 2 to Alice (slot 4)"))		// 2 save; could prompt as g2 once g1 plays
+		.pipe(takeTurn("Cathy clues 5 to Alice (slots 1,2,3)"))	// all of Alice's cards are now clued
+		.pipe(takeTurn("Donald clues 1 to Bob"))
+		.pipe(takeTurn("Alice clues 4 to Donald"))
+		.pipe(takeTurn("Bob plays g1", "r1"))
+		.pipe(takeTurn("Cathy clues 3 to Donald"))
+		.tap: g =>
+			assert(!g.isDefinite(g.state.hands(Donald.ordinal)(0)))
+		.pipe(takeTurn("Donald clues 5 to Bob"))
+
+		// Even with no unclued finesse position, Alice's clued 2 could prompt as g2 -> g3, so Donald may hesitate.
+		assertEquals(canPrompt.lastMove, Some(ClueInterp.Stall))
+
+		val focusDupePromptBlocksFinesse = setup(HGroup.atLevel(5), Vector(
+			Vector("xx", "xx", "xx", "xx"),
+			Vector("r1", "r4", "y5", "b3"),
+			Vector("y2", "g4", "r3", "p3"),
+			Vector("g2", "b4", "b3", "p4")
+		),
+			starting = Bob,
+			playStacks = Some(Vector(0, 0, 1, 0, 0))
+		)
+		.pipe(takeTurn("Bob clues 2 to Alice (slot 4)"))		// 2 save; Alice's slot 1 remains unclued
+		.pipe(takeTurn("Cathy clues 4 to Donald"))
+		.pipe(takeTurn("Donald clues red to Bob"))
+		.pipe(takeTurn("Alice clues 3 to Cathy"))
+		.pipe(takeTurn("Bob clues green to Donald"))			// Donald's focus is g2, so Alice's clued 2 cannot be g2 and blocks finessing slot 1
+		.tap: g =>
+			assert(g.isDefinite(g.state.hands(Donald.ordinal)(0)))
+		.pipe(takeTurn("Cathy clues 4 to Bob"))
+		.pipe(takeTurn("Donald clues 5 to Bob"))
+
+		assert(focusDupePromptBlocksFinesse.lastMove != Some(ClueInterp.Stall))
+
+		val badPromptBlocksFinesse = setup(HGroup.atLevel(5), Vector(
+			Vector("xx", "xx", "xx", "xx"),
+			Vector("r4", "y1", "y5", "p3"),
+			Vector("r4", "y3", "p1", "p4"),
+			Vector("r3", "y2", "y4", "p4")
+		),
+			starting = Bob,
+			playStacks = Some(Vector(2, 0, 5, 5, 0)),
+			discarded = Vector("y2", "p1", "p1")
+		)
+		.pipe(takeTurn("Bob clues 2 to Alice (slot 4)"))		// 2 save: common thinks [y2, p2], but Alice sees both y2s so knows slot 4 is p2!
+		.pipe(takeTurn("Cathy clues 1 to Bob"))
+		.pipe(takeTurn("Donald clues 4 to Cathy"))
+		.pipe(takeTurn("Alice clues 4 to Donald"))
+		.pipe(takeTurn("Bob plays y1", "r1"))
+		.pipe(takeTurn("Cathy clues 3 to Donald"))				// r3 direct; y3 would prompt Alice's slot 4 as y2, which Alice knows fails (blocking slot 1 finesse)!
+		.tap: g =>
+			assert(g.isDefinite(g.state.hands(Donald.ordinal)(0)))
+		.pipe(takeTurn("Donald clues 5 to Bob"))
+
+		assert(badPromptBlocksFinesse.lastMove != Some(ClueInterp.Stall))

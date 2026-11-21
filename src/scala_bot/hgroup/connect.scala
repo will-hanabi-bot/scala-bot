@@ -67,10 +67,11 @@ def findKnownConn(ctx: ClueContext, id: Identity, finalId: Identity, ignore: Fas
 		val validKnown =
 			!ignore.contains(o) &&
 			game.state.deck(o).matches(id, assume = !game.common.thoughts(o).reset) &&
+			game.me.thoughts(o).possible.contains(id) &&
 			(common.thoughts(o).matches(id, infer = true) || asymmetricKnown) &&
 			!game.meta(o).hidden &&
 			!game.xmeta(o).fStatus.contains(FStatus.PossiblyOn(giver)) &&
-			(game.assumePlays || !game.xmeta(o).fStatus.contains(FStatus.PossiblyOn(state.ourPlayerIndex))) &&
+			(game.assumePlays || game.isDefinite(o)) &&
 			!common.isLinked(state, o)
 
 		Option.when(validKnown)(KnownConn(state.holderOf(o), o, id))
@@ -99,7 +100,7 @@ def findKnownConn(ctx: ClueContext, id: Identity, finalId: Identity, ignore: Fas
 		!ignore.contains(order) &&
 		common.thoughts(order).inferred.contains(id) &&
 		!game.xmeta(order).fStatus.contains(FStatus.PossiblyOn(giver)) &&
-		(game.assumePlays || !game.xmeta(order).fStatus.contains(FStatus.PossiblyOn(state.ourPlayerIndex))) && {
+		(game.assumePlays || game.isDefinite(order)) && {
 			common.orderKp(game, order, excludeTrash = true) || {
 				// Mimic common.orderPlayable, except we can also try playing previously-known unrelated plays
 				!game.meta(order).trash &&
@@ -126,7 +127,9 @@ def findKnownConn(ctx: ClueContext, id: Identity, finalId: Identity, ignore: Fas
 			val playables = hand.filter(validPlayable(playerIndex, _))
 			val playableOrder =
 				playables.filter: p =>
-					state.deck(p).matches(id, assume = game.allowFindOwn && findOwn) && game.isTouched(p)
+					state.deck(p).matches(id, assume = game.allowFindOwn && findOwn) &&
+					game.me.thoughts(p).possible.contains(id) &&
+					game.isTouched(p)
 				.minByOption: p =>
 					// Prefer playing the option with the most info first
 					val thought = game.common.thoughts(p)
@@ -145,7 +148,8 @@ def findKnownConn(ctx: ClueContext, id: Identity, finalId: Identity, ignore: Fas
 			state.deck(o).clued &&
 			common.playLinks.exists(_.target == o) &&
 			common.thoughts(o).inferred.contains(id) &&
-			state.deck(o).matches(id, assume = game.allowFindOwn && findOwn)
+			state.deck(o).matches(id, assume = game.allowFindOwn && findOwn) &&
+			game.me.thoughts(o).possible.contains(id)
 
 		Option.when(play):
 			PlayableConn(playerIndex, o, id, linked = List(o))
@@ -197,15 +201,27 @@ def findUnknownConnecting(ctx: ClueContext, reacting: Int, id: Identity, connect
 		return matched.map: order =>
 			PlayableConn(reacting, order, id, linked = clued.toList)
 
+	val cluedDupe = state.hands.zipWithIndex.exists: (hand, i) =>
+		i != giver && hand.exists(o => prev.state.deck(o).clued && state.deck(o).matches(id))
+
+	val ownDupe = reacting == state.ourPlayerIndex &&
+		(state.deck(ctx.focusResult.focus).id().contains(id) || cluedDupe)
+
 	def tryPrompt(order: Int) =
-		opts.findOwn.map(game.players(_).thoughts(order).id()).getOrElse(state.deck(order).id()) match
+		opts.findOwn.fold(state.deck(order).id()) { own =>
+			val thought = game.players(own).thoughts(order)
+			thought.id(infer = !thought.reset)
+		} match
 			case None =>
-				Option.when(opts.findOwn.exists(game.players(_).thoughts(order).possible.contains(id)))
-					(PromptConn(reacting, order, id))
+				val validOwn = !ownDupe && opts.findOwn.exists: own =>
+					val thought = game.players(own).thoughts(order)
+					(if thought.reset then thought.possible else thought.possibilities).contains(id)
+
+				Option.when(validOwn)(PromptConn(reacting, order, id))
 
 			case Some(promptId) =>
 				if promptId == id then
-					Some(PromptConn(reacting, order, id))
+					Option.when(!ownDupe)(PromptConn(reacting, order, id))
 
 				else if level >= Level.IntermediateFinesses && state.isPlayable(promptId) then
 					if game.common.orderPlayable(game, order, excludeTrash = true) then
@@ -247,9 +263,6 @@ def findUnknownConnecting(ctx: ClueContext, reacting: Int, id: Identity, connect
 
 		if pinkPromptConn.isDefined then
 			return pinkPromptConn
-
-	val cluedDupe = state.hands.zipWithIndex.exists: (hand, i) =>
-		i != giver && hand.exists(o => prev.state.deck(o).clued && state.deck(o).matches(id))
 
 	if cluedDupe then
 		// Log.warn(s"disallowed finesse, ${state.logId(id)} already clued")
@@ -364,12 +377,25 @@ def findUnknownConnecting(ctx: ClueContext, reacting: Int, id: Identity, connect
 				if finesseIds.exists(!_.contains(id)) then
 					Some(FinesseConn(reacting, finesse.get, thought.inferred.toList, FinesseKind.Hidden))
 				else
-					val bluffableIds = thought.inferred.filter: i =>
-						state.isPlayable(i) &&
-						validBluff(game, action, i, reacting, connected)
+					val bluffableIds =
+						if opts.assumeTruth then
+							IdentitySet.empty
+						else
+							thought.inferred.filter: i =>
+								state.isPlayable(i) &&
+								validBluff(game, action, i, reacting, connected)
+
+					val hiddenLayer =
+						game.meta(finesse.get).status == CardStatus.Finessed || (
+							!opts.noLayer &&
+							level >= Level.IntermediateFinesses &&
+							!state.isInverted(id) &&
+							thought.id(infer = true).exists(i => i != id && state.isPlayable(i) && !state.isInverted(i))
+						)
 
 					val trueFinesse = thought.infoLock.getOrElse(thought.possible).contains(id) &&
-						thought.matches(id, assume = true)
+						thought.matches(id, assume = true) &&
+						(thought.possibilities.contains(id) || hiddenLayer)
 
 					Option.when(trueFinesse || bluffableIds.nonEmpty):
 						val certain = state.hands(giver).exists: o =>
@@ -382,7 +408,7 @@ def findUnknownConnecting(ctx: ClueContext, reacting: Int, id: Identity, connect
 								FinesseKind.Bluff
 							else if certain then
 								FinesseKind.Certain
-							else if !thought.inferred.contains(id) then
+							else if !thought.possibilities.contains(id) then
 								FinesseKind.Hidden
 							else
 								FinesseKind.True

@@ -115,11 +115,12 @@ def refreshWCs(prev: HGroup, game: HGroup, action: Action, beforeClueInterp: Boo
 
 			case UpdateResult.Demonstrated(nextIndex, skipped) =>
 				val isBluff = wc.currConn.matchesP { case f: FinesseConn if f.isBluff => true }
+				val ownSymmetric = wc.symmetric && wc.ambiguousSelf && wc.receiver != game.state.ourPlayerIndex
 
 				struct.copy(
 					wcs = if isBluff then struct.wcs else nextIndex.fold(struct.wcs)(i => struct.wcs :+ wc.copy(connections = conns.drop(i))),
 					toRemove = struct.toRemove :++ (if !skipped then struct.toRemove else nextIndex.fold(conns)(conns.take)),
-					demos = struct.demos :+ nextIndex.fold(wc)(i => wc.copy(connections = conns.drop(i)))
+					demos = if ownSymmetric then struct.demos else struct.demos :+ nextIndex.fold(wc)(i => wc.copy(connections = conns.drop(i)))
 				)
 			case UpdateResult.Remove =>
 				if hypo.isDefined then struct else
@@ -135,7 +136,7 @@ def refreshWCs(prev: HGroup, game: HGroup, action: Action, beforeClueInterp: Boo
 		acc + (order -> (acc.getOrElse(order, IdentitySet.empty).union(wc.inference)))
 
 	val (retainWCs, nonDemoedWCs) = newWCs.partition: wc =>
-		demoIds.get(wc.focus).isEmpty || demos.contains(wc)
+		(wc.symmetric && wc.ambiguousSelf && wc.receiver != game.state.ourPlayerIndex) || demoIds.get(wc.focus).isEmpty || demos.contains(wc)
 		// demoIds.get(wc.focus).forall(_.contains(wc.inference))
 
 	demoIds.foldLeft(newGame) { case (acc, (order, ids)) =>
@@ -201,13 +202,13 @@ def refreshWCs(prev: HGroup, game: HGroup, action: Action, beforeClueInterp: Boo
 		val (accGame, disambiguatedWcs) = remFocuses.foldLeft((g, List.empty[WaitingConnection])): (acc, focus) =>
 			val (currGame, disambiguatedWcs) = acc
 			val sameFocusWcs = retainWCs.filter(_.focus == focus)
+			val ambiguousWcs = sameFocusWcs.filter(wc => wc.ambiguousSelf && !(wc.symmetric && wc.receiver != currGame.state.ourPlayerIndex))
 
-			if sameFocusWcs.nonEmpty && sameFocusWcs.forall(wc => wc.symmetric || wc.ambiguousSelf) then
+			if ambiguousWcs.nonEmpty && sameFocusWcs.forall(wc => wc.symmetric || wc.ambiguousSelf) then
 				val turn = sameFocusWcs.head.turn
 				val action = currGame.state.actionList(turn).collectFirst { case a: ClueAction => a }.get
 
 				// TODO: Only write the next-simplest connections, not all of them?
-				val ambiguousWcs = sameFocusWcs.filter(_.ambiguousSelf)
 
 				Log.error(s"assigning previously-ambiguous connections on $focus to ${ambiguousWcs.map(w => g.state.logId(w.inference))}")
 				assignConns(currGame, action, ambiguousWcs.map(wc => FocusPossibility(wc.inference, wc.connections, ClueInterp.Play, symmetric = wc.symmetric)), focus, retroactive = true)
@@ -267,7 +268,7 @@ def updateWc(prev: HGroup, game: HGroup, action: Action, wc: WaitingConnection, 
 		Log.warn(s"connection was clued directly, cancelling")
 		UpdateResult.Remove
 
-	else if (wc.ambiguousSelf && wc.currConn.reacting == state.ourPlayerIndex) || beforeClueInterp then
+	else if (!(wc.symmetric && wc.receiver != state.ourPlayerIndex) && wc.ambiguousSelf && wc.currConn.reacting == state.ourPlayerIndex) || beforeClueInterp then
 		UpdateResult.Keep
 
 	else if otherPlay(game, action, wc) then
@@ -460,17 +461,24 @@ def resolveRetained(prev: HGroup, game: HGroup, action: Action, wc: WaitingConne
 		return UpdateResult.AmbiguousPassback
 
 	val allowableHesitation = if reacting != wc.receiver || wc.currConn.isBluff then None else
-		// Find all waiting connections using this order OR self-identities, and merge their possible identities
-		val linkedIds = (for
-			w     <- game.waiting if w != wc && w.focus == wc.focus
-			conns <- w.connections if conns.order == connOrder || conns.reacting == w.receiver
-		yield
-			conns.ids
-		).flatten
+		val futurePlayers = playersUntil(state.numPlayers, state.nextPlayerIndex(reacting), wc.giver).toList
 
-		playersUntil(state.numPlayers, state.nextPlayerIndex(reacting), wc.giver).find: playerIndex =>
-			game.findFinesse(playerIndex).exists: finesse =>
-				linkedIds.exists(game.common.thoughts(finesse).inferred.contains)
+		val directHesitation = futurePlayers.find: playerIndex =>
+			game.waiting.exists: w =>
+				w != wc && w.focus == wc.focus && w.currConn.reacting == playerIndex
+
+		directHesitation.orElse:
+			// Find all waiting connections using this order OR self-identities, and merge their possible identities
+			val linkedIds = (for
+				w     <- game.waiting if w != wc && w.focus == wc.focus
+				conns <- w.connections if conns.order == connOrder || conns.reacting == w.receiver
+			yield
+				conns.ids
+			).flatten
+
+			futurePlayers.find: playerIndex =>
+				game.findFinesse(playerIndex).exists: finesse =>
+					linkedIds.exists(game.common.thoughts(finesse).inferred.contains)
 
 	if allowableHesitation.isDefined then
 		Log.highlight(Console.CYAN, s"${state.names(reacting)} didn't play but allowable hesitation on ${state.names(allowableHesitation.get)}")
