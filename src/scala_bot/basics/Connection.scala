@@ -119,7 +119,7 @@ case class PositionalConn(
   * @define ambiguousDesc Whether this involves us when we see another possibility not involving us.
   */
 case class FocusPossibility(
-	id: Identity,
+	ids: IdentitySet,
 	connections: List[Connection],
 	interp: Interp,
 	/** $symmetricDesc */
@@ -158,8 +158,8 @@ case class WaitingConnection(
 	turn: Int,
 	/** The order of the card focused. */
 	focus: Int,
-	/** The identity of the focused card if true. */
-	inference: Identity,
+	/** The identities of the focused card if true. */
+	inferences: IdentitySet,
 	/** Whether this involved an *Ambiguous Passback*. */
 	ambiguousPassback: Boolean = false,
 	/** Whether this involved a *Self-Passback* (where the receiver has a self-connection but hesitated for someone else). */

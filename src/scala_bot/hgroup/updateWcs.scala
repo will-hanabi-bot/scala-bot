@@ -131,7 +131,7 @@ def refreshWCs(prev: HGroup, game: HGroup, action: Action, beforeClueInterp: Boo
 			case UpdateResult.Remove =>
 				if hypo.isDefined then struct else
 					struct.copy(
-						toRemove = struct.toRemove :++ PromptConn(-1, wc.focus, wc.inference) +: (if wc.symmetric || wc.ambiguousSelf then Nil else conns),
+						toRemove = struct.toRemove :++ wc.inferences.toList.map(PromptConn(-1, wc.focus, _)) :++ (if wc.symmetric || wc.ambiguousSelf then Nil else conns),
 						remFocuses = struct.remFocuses + wc.focus
 					)
 			case UpdateResult.Complete => struct
@@ -139,11 +139,11 @@ def refreshWCs(prev: HGroup, game: HGroup, action: Action, beforeClueInterp: Boo
 
 	val demoIds = demos.foldLeft(Map.empty[Int, IdentitySet]): (acc, wc) =>
 		val order = wc.focus
-		acc + (order -> (acc.getOrElse(order, IdentitySet.empty).union(wc.inference)))
+		acc + (order -> (acc.getOrElse(order, IdentitySet.empty).union(wc.inferences)))
 
 	val (retainWCs, nonDemoedWCs) = newWCs.partition: wc =>
 		demoIds.get(wc.focus).isEmpty || demos.contains(wc)
-		// demoIds.get(wc.focus).forall(_.contains(wc.inference))
+		// demoIds.get(wc.focus).forall(_.intersect(wc.inferences).nonEmpty)
 
 	demoIds.foldLeft(newGame) { case (acc, (order, ids)) =>
 		acc.withThought(order): t =>
@@ -197,7 +197,7 @@ def refreshWCs(prev: HGroup, game: HGroup, action: Action, beforeClueInterp: Boo
 					case _ => acc
 				case _ =>
 					val shared = !conn.matchesP { case f: FinesseConn => f.isBluff } && retainWCs.exists: wc =>
-						(wc.focus == conn.order && conn.ids.forall(_ == wc.inference)) ||
+						(wc.focus == conn.order && conn.ids.forall(wc.inferences.contains)) ||
 						(wc.connections.exists(c => c.order == conn.order && c.ids.length == conn.ids.length && c.ids.forall(conn.ids.contains)))
 
 					if shared || conn.isInstanceOf[KnownConn] || conn.isInstanceOf[PlayableConn] then
@@ -217,10 +217,10 @@ def refreshWCs(prev: HGroup, game: HGroup, action: Action, beforeClueInterp: Boo
 					// TODO: Only write the next-simplest connections, not all of them?
 					val ambiguousWcs = sameFocusWcs.filter(_.ambiguousSelf)
 
-					Log.error(s"assigning previously-ambiguous connections on $focus to ${ambiguousWcs.map(w => g.state.logId(w.inference))}")
-					val assigned = assignConns(currGame, action, ambiguousWcs.map(wc => FocusPossibility(wc.inference, wc.connections, ClueInterp.Play, symmetric = wc.symmetric, trashFinesse = wc.trashFinesse, needsBlindPlay = wc.needsBlindPlay)), focus, retroactive = true)
+					Log.error(s"assigning previously-ambiguous connections on $focus to ${ambiguousWcs.map(w => s"[${w.inferences.fmt(g.state)}]")}")
+					val assigned = assignConns(currGame, action, ambiguousWcs.map(wc => FocusPossibility(wc.inferences, wc.connections, ClueInterp.Play, symmetric = wc.symmetric, trashFinesse = wc.trashFinesse, needsBlindPlay = wc.needsBlindPlay)), focus, retroactive = true)
 						.withThought(focus): t =>
-							t.copy(inferred = t.possible.intersect(ambiguousWcs.map(_.inference)))
+							t.copy(inferred = t.possible.intersect(ambiguousWcs.foldLeft(IdentitySet.empty)((a, wc) => a.union(wc.inferences))))
 					(assigned, disambiguatedWcs ++ ambiguousWcs)
 				else
 					acc
@@ -266,7 +266,7 @@ def updateWc(prev: HGroup, game: HGroup, action: Action, wc: WaitingConnection, 
 	val reacting = wc.currConn.reacting
 
 	if !beforeClueInterp then
-		Log.info(s"waiting for connecting ${wc.currConn.ids.map(state.logId).mkString(",")} (${wc.currConn.order}) ${wc.currConn.kind} for ${state.logId(wc.inference)} (${wc.focus})${if wc.symmetric then " (symmetric)" else ""}${if wc.ambiguousSelf then " (ambiguous self)" else ""}")
+		Log.info(s"waiting for connecting ${wc.currConn.ids.map(state.logId).mkString(",")} (${wc.currConn.order}) ${wc.currConn.kind} for [${wc.inferences.fmt(state)}] (${wc.focus})${if wc.symmetric then " (symmetric)" else ""}${if wc.ambiguousSelf then " (ambiguous self)" else ""}")
 
 	val impossibleConn = wc.connections.find:
 		case p: PlayableConn if p.linked.nonEmpty =>	// For playable conns, all linked cards must be impossible
@@ -280,11 +280,12 @@ def updateWc(prev: HGroup, game: HGroup, action: Action, wc: WaitingConnection, 
 
 	lazy val impossibleFocus = wc.connections.headOption.forall(!_.isInstanceOf[PositionalConn]) &&
 		!(wc.trashFinesse && !state.hands(wc.receiver).contains(wc.focus)) &&
-		!game.common.thoughts(wc.focus).possible.contains(wc.inference)
+		wc.inferences.nonEmpty &&
+		game.common.thoughts(wc.focus).possible.intersect(wc.inferences).isEmpty
 
 	if !prev.state.hands(reacting).contains(wc.currConn.order) then
 		// Extra wc that wasn't removed
-		Log.warn(s"removing extra wc ${state.logId(wc.inference)} (${wc.currConn.order}) ${prev.state.hands(reacting)} ${state.names(reacting)}")
+		Log.warn(s"removing extra wc [${wc.inferences.fmt(state)}] (${wc.currConn.order}) ${prev.state.hands(reacting)} ${state.names(reacting)}")
 		UpdateResult.Remove
 
 	else if impossibleConn.isDefined then
@@ -293,7 +294,7 @@ def updateWc(prev: HGroup, game: HGroup, action: Action, wc: WaitingConnection, 
 		UpdateResult.Remove
 
 	else if impossibleFocus then
-		Log.warn(s"connection depends on focus ${wc.focus} having id ${state.logId(wc.inference)}, removing")
+		Log.warn(s"connection depends on focus ${wc.focus} having ids [${wc.inferences.fmt(state)}], removing")
 		UpdateResult.Remove
 
 	else if stompedWc(prev, game, action, wc) then
@@ -388,7 +389,7 @@ def resolveRetained(prev: HGroup, game: HGroup, action: Action, wc: WaitingConne
 				state.isUseful(i) && !prev.state.isPlayable(i)
 
 	if unplayableWcs.nonEmpty then
-		Log.info(s"$name didn't play into unplayable ${wc.currConn.kind}: ${unplayableWcs.map(w => s"${state.logId(w.inference)} ${w.connections.find(_.ids.exists(i => state.isUseful(i) && !prev.state.isPlayable(i))).map(_.ids.map(state.logId))}")}")
+		Log.info(s"$name didn't play into unplayable ${wc.currConn.kind}: ${unplayableWcs.map(w => s"[${w.inferences.fmt(state)}] ${w.connections.find(_.ids.exists(i => state.isUseful(i) && !prev.state.isPlayable(i))).map(_.ids.map(state.logId))}")}")
 		return UpdateResult.Keep
 
 	val hiddenWc = if wc.currConn.isBluff then None else game.waiting.find: wc =>
@@ -483,9 +484,10 @@ def resolveRetained(prev: HGroup, game: HGroup, action: Action, wc: WaitingConne
 				conn.reacting == wc.currConn.reacting
 
 			!f.bluff &&
+			!wc.trashFinesse &&
 			reacting != state.ourPlayerIndex &&		// can't pass back to ourselves
 			nonHiddenConns > 1 &&					// they need to play more than 1 card
-			nonHiddenConns == wc.inference.rank - state.playStacks(wc.inference.suitIndex) - 1 &&	// they have all required cards
+			wc.inferences.forall(inf => nonHiddenConns == inf.rank - state.playStacks(inf.suitIndex) - 1) &&	// they have all required cards
 			!f.ids.forall(state.isCritical) &&		// the id is not critical
 			!f.ambiguousPassback
 
@@ -513,7 +515,7 @@ def resolveRetained(prev: HGroup, game: HGroup, action: Action, wc: WaitingConne
 	game.potentialClandestineWc(reacting, connOrder, wc) match
 		case None => ()
 		case Some(otherWc) =>
-			Log.highlight(Console.CYAN, s"${state.names(reacting)} didn't play but potential clandestine finesse ${state.logConns(otherWc.connections, otherWc.inference)}")
+			Log.highlight(Console.CYAN, s"${state.names(reacting)} didn't play but potential clandestine finesse ${state.logConns(otherWc.connections, otherWc.inferences)}")
 			return UpdateResult.Keep
 
 	val cluedFinesse =
@@ -525,7 +527,7 @@ def resolveRetained(prev: HGroup, game: HGroup, action: Action, wc: WaitingConne
 		Log.highlight(Console.CYAN, s"${state.names(reacting)} didn't play but clued and known playable!")
 		return UpdateResult.Keep
 
-	Log.highlight(Console.CYAN, s"$name didn't react with a waiting connection, removing ${state.logId(wc.inference)}")
+	Log.highlight(Console.CYAN, s"$name didn't react with a waiting connection, removing [${wc.inferences.fmt(state)}]")
 	UpdateResult.Remove
 
 def resolvePlayed(game: HGroup, wc: WaitingConnection, play: Int): UpdateResult =

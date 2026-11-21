@@ -172,7 +172,7 @@ def transferWCs(ctx: DiscardContext, result: DiscardResult): HGroup =
 					val connIndex = wc.connections.indexWhere(_.order == order)
 
 					wc.when(_ => connIndex != -1): _ =>
-						Log.info(s"rewriting wc ${state.logConns(wc.connections, wc.inference)}")
+						Log.info(s"rewriting wc ${state.logConns(wc.connections, wc.inferences)}")
 						wc.copy(connections = wc.connections.updated(connIndex, KnownConn(
 							reacting = state.holderOf(sarcastic),
 							order = sarcastic,
@@ -185,7 +185,7 @@ def transferWCs(ctx: DiscardContext, result: DiscardResult): HGroup =
 					val connIndex = wc.connections.indexWhere(_.order == order)
 
 					wc.when(_ => connIndex != -1): _ =>
-						Log.info(s"rewriting wc ${state.logConns(wc.connections, wc.inference)}")
+						Log.info(s"rewriting wc ${state.logConns(wc.connections, wc.inferences)}")
 						val order =
 							if orders.exists(game.unknown1) then
 								game.next1(orders).get
@@ -205,7 +205,7 @@ def transferWCs(ctx: DiscardContext, result: DiscardResult): HGroup =
 					val connIndex = wc.connections.indexWhere(_.order == order)
 
 					wc.when(_ => connIndex != -1): _ =>
-						Log.info(s"rewriting wc ${state.logConns(wc.connections, wc.inference)}")
+						Log.info(s"rewriting wc ${state.logConns(wc.connections, wc.inferences)}")
 						wc.copy(connections = wc.connections.updated(connIndex, PlayableConn(
 							reacting = state.holderOf(orders.head),
 							order = orders.head,
@@ -564,7 +564,7 @@ def interpretPosDc(ctx: DiscardContext): Option[HGroup] =
 							receiver = targets.last._1,
 							turn = state.turnCount,
 							focus = focus,
-							inference = state.deck(focus).id().getOrElse(Identity(0, 1))
+							inferences = IdentitySet.from(state.deck(focus).id())
 						) +: g.waiting,
 						dcStatus = DcStatus.None,
 						dda = None

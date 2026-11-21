@@ -678,7 +678,7 @@ case class HGroup(
 					order == wc.currConn.order ||
 					(id.exists(wc.currConn.ids.length == 1 && wc.currConn.ids.head.matches(_)))
 			&&
-			!this.waiting.exists(w => w.connections.forall(wc.connections.contains) && w.inference == wc.inference && w.turn == wc.turn)
+			!this.waiting.exists(w => w.connections.forall(wc.connections.contains) && w.inferences == wc.inferences && w.turn == wc.turn)
 
 	def importantAction(playerIndex: Int) =
 		importantFinesse(playerIndex) || savedCtx(playerIndex).fold(false)(urgentSave)
@@ -784,7 +784,7 @@ object HGroup:
 
 				lostWc match
 					case Some(wc) =>
-						Log.warn(s"removed wc ${game.state.logConns(wc.connections, wc.inference)}! mistake")
+						Log.warn(s"removed wc ${game.state.logConns(wc.connections, wc.inferences)}! mistake")
 						pre.withMove(ClueInterp.Mistake)
 					case None =>
 						val interpreted = interpClue(ClueContext(prev, pre, action))
@@ -888,7 +888,7 @@ object HGroup:
 
 				lostWc match
 					case Some(wc) =>
-						Log.warn(s"removed wc ${game.state.logConns(wc.connections, wc.inference)}! mistake")
+						Log.warn(s"removed wc ${game.state.logConns(wc.connections, wc.inferences)}! mistake")
 						pre.withMove(PlayInterp.Mistake)
 					case None =>
 						pre.resetImportant(playerIndex).pipe: g =>
@@ -1098,10 +1098,10 @@ object HGroup:
 		override def cleanHypo(game: HGroup) =
 			game.waiting.foldLeft(game): (acc, wc) =>
 				if !wc.symmetric then acc else
-					revert(acc, wc.focus, List(wc.inference)).pipe: g =>
+					revert(acc, wc.focus, wc.inferences.toList).pipe: g =>
 						g.copy(
 							players = g.players.map:
-								_.withThought(wc.focus)(t => t.copy(inferred = t.inferred.difference(wc.inference)))
+								_.withThought(wc.focus)(t => t.copy(inferred = t.inferred.difference(wc.inferences)))
 						)
 
 		override def refreshAfterPlay(prev: HGroup, game: HGroup, action: PlayAction) =

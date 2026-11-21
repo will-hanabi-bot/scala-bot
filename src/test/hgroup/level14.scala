@@ -319,8 +319,9 @@ class TrashFinesse extends munit.FunSuite:
 		)
 		.pipe(takeTurn("Alice clues 1 to Cathy"))
 
-		// Bob's slot 1 should be finessed.
+		// Bob's slot 1 should be finessed with a single waiting connection for [y1, g1].
 		hasStatus(game, Bob, 1, CardStatus.Finessed)
+		assertEquals(game.waiting.length, 1)
 		// Cathy's slots 4 and 5 should be chop moved.
 		hasStatus(game, Cathy, 4, CardStatus.ChopMoved)
 		hasStatus(game, Cathy, 5, CardStatus.ChopMoved)
@@ -335,8 +336,9 @@ class TrashFinesse extends munit.FunSuite:
 		)
 		.pipe(takeTurn("Alice clues 1 to Cathy"))
 
-		// Bob's slot 1 should be bluffed.
+		// Bob's slot 1 should be bluffed with a single waiting connection for [y1, g1].
 		hasStatus(game, Bob, 1, CardStatus.Bluffed)
+		assertEquals(game.waiting.length, 1)
 		// Cathy's slots 4 and 5 should be chop moved.
 		hasStatus(game, Cathy, 4, CardStatus.ChopMoved)
 		hasStatus(game, Cathy, 5, CardStatus.ChopMoved)
@@ -713,10 +715,11 @@ class TrashFinesse extends munit.FunSuite:
 		)
 		.pipe(takeTurn("Cathy clues 1 to Bob"))
 		.tap: g =>
-			// Alice's slot 1 should be blind playing.
+			// Alice's slot 1 should be blind playing with a single waiting connection.
 			hasInfs(g, None, Alice, 1, Vector("r1", "y2", "g2", "b2", "p2"))
 			hasInfs(g, None, Bob, 4, Vector("r1", "y1", "g1", "b1", "p1"))
 			assert(g.isBlindPlaying(g.state.hands(Alice.ordinal)(0)))
+			assertEquals(g.waiting.count(_.trashFinesse), 1)
 
 			// Bob's slot 5 is chop moved.
 			hasStatus(g, Bob, 5, CardStatus.ChopMoved)
@@ -821,6 +824,7 @@ class TrashFinesse extends munit.FunSuite:
 
 		// Since Donald already has a blind play, this cannot be a trash bluff and Alice must play [y4,p4] as a trash finesse.
 		hasInfs(game, None, Alice, 1, Vector("y4", "p4"))
+		assertEquals(game.waiting.count(_.trashFinesse), 1)
 		hasStatus(game, Bob, 3, CardStatus.ChopMoved)
 		hasStatus(game, Bob, 4, CardStatus.ChopMoved)
 

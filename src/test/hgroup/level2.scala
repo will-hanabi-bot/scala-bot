@@ -121,8 +121,8 @@ class General extends munit.FunSuite:
 		.pipe(takeTurn("Cathy clues 3 to Bob"))
 
 		// There should be y2 -> y3 and g2 -> g3 waiting connections.
-		assert(game.waiting.exists(_.inference == Identity(Colour.Yellow.ordinal, 3)))
-		assert(game.waiting.exists(_.inference == Identity(Colour.Green.ordinal, 3)))
+		assert(game.waiting.exists(_.inferences.contains(Identity(Colour.Yellow.ordinal, 3))))
+		assert(game.waiting.exists(_.inferences.contains(Identity(Colour.Green.ordinal, 3))))
 
 	test("prefers not starting with self, even with known playables before"):
 		val game = setup(HGroup.atLevel(2), Vector(
@@ -176,8 +176,8 @@ class General extends munit.FunSuite:
 		.pipe(takeTurn("Cathy clues 4 to Bob"))
 
 		// There should be y2 -> y3 and g2 -> g3 -> g4 waiting connections.
-		assert(game.waiting.exists(_.inference == Identity(Colour.Yellow.ordinal, 4)))
-		assert(game.waiting.exists(_.inference == Identity(Colour.Green.ordinal, 4)))
+		assert(game.waiting.exists(_.inferences.contains(Identity(Colour.Yellow.ordinal, 4))))
+		assert(game.waiting.exists(_.inferences.contains(Identity(Colour.Green.ordinal, 4))))
 
 	test("connects when a card plays early"):
 		val game = setup(HGroup.atLevel(2), Vector(
