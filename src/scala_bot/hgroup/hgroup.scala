@@ -393,10 +393,9 @@ case class HGroup(
 
 		if chop.exists(orders.contains) then
 			if this.level >= Level.TrashMoves && isTrashClue(prev, this, action, chop.get) then
-				val tpFocus = hand.take(hand.indexOf(chop.get)).findLast: o =>
-					!orders.contains(o) &&
-					!prev.state.deck(o).clued &&
-					(prev.meta(o).status == CardStatus.None || prev.meta(o).status == CardStatus.PermissionToDiscard)
+				val cluedGame = orders.foldLeft(prev): (a, o) =>
+					a.withCard(o)(_.copy(clued = true))
+				val tpFocus = cluedGame.chop(receiver)
 
 				return tpFocus.fold(FocusResult(chop.get, chop = true)): focus =>
 					Log.highlight(Console.CYAN, s"trash push on ${state.logId(focus)} $focus")

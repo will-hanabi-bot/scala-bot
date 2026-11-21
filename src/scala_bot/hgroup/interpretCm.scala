@@ -13,7 +13,7 @@ def isTrashClue(prev: HGroup, game: HGroup, action: ClueAction, focus: Int): Boo
 		state.variant.idTouched(id, clue) &&
 		(clue.kind != ClueKind.Rank || id.rank == clue.value)
 
-	val playableIds = promisedIds.filter: id =>
+	val usefulIds = promisedIds.filter: id =>
 		!(
 			state.isBasicTrash(id) ||
 			visibleFind(state, common, id, excludeOrder = focus).nonEmpty ||
@@ -23,16 +23,16 @@ def isTrashClue(prev: HGroup, game: HGroup, action: ClueAction, focus: Int): Boo
 			(game.level >= Level.Context && orders.count(!prev.state.deck(_).clued) == 1 && game.meta(focus).staleIds.contains(id))
 		)
 
-	if playableIds.isEmpty then
+	if usefulIds.isEmpty then
 		!prev.common.orderKp(game, focus)
 	else
 		game.level >= Level.TrashMoves &&
-		playableIds.length == 1 &&
-		state.isCritical(playableIds.head) && (
-			!game.players(receiver).thoughts(focus).possible.contains(playableIds.head) || (
+		usefulIds.length == 1 &&
+		state.isCritical(usefulIds.head) && (
+			!game.players(receiver).thoughts(focus).possible.contains(usefulIds.head) || (
 				giver != state.ourPlayerIndex &&
 				receiver != state.ourPlayerIndex &&
-				state.ourHand.exists(o => game.me.thoughts(o).possible.contains(playableIds.head))
+				state.ourHand.exists(o => game.me.thoughts(o).possible.contains(usefulIds.head))
 			)
 		)
 
