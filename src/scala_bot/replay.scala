@@ -116,7 +116,9 @@ object replay extends IOApp:
 				consoleQ <- Queue.unbounded[IO, ConsoleCmd]
 				game = fetchGame(args)
 				gameRef  <- Ref.of[IO, Option[Game]](Some(game))
-				client = new BotClient(wsQueue, gameRef)(using runtime)
+				sessionRef <- Ref.of[IO, SessionState](SessionState())
+				configRef <- Ref.of[IO, ConfigState](ConfigState())
+				client = BotClient(wsQueue, gameRef, sessionRef, configRef)(using runtime)
 				console  <- spawnConsole(consoleQ, client, username = "bot-replay")
 				_ <- console.join
 			yield (ExitCode.Success)
