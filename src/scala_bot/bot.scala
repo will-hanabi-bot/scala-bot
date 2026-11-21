@@ -68,6 +68,8 @@ object main extends IOApp:
 		val password = env.lift(s"HANABI_PASSWORD$index")
 			.getOrElse(throw new IllegalStateException(s"Missing HANABI_USERNAME$index env variable!"))
 
+		val leaveReplayIfOnlyBots = env.getOrElse("HANABI_LEAVE_REPLAY_IF_ONLY_BOTS", "1") == "1"
+
 		def useWebSocket(ws: WebSocket[IO]): IO[Unit] =
 			def heartbeat: IO[Unit] =
 				(ws.send(WebSocketFrame.Ping(Array.emptyByteArray)) *> IO.sleep(30.seconds)).foreverM
@@ -111,7 +113,9 @@ object main extends IOApp:
 				wsQueue  <- Queue.unbounded[IO, String]
 				consoleQ <- Queue.unbounded[IO, ConsoleCmd]
 				gameRef  <- Ref.of[IO, Option[Game]](None)
-				client   = new BotClient(wsQueue, gameRef, BotConfig.fromEnv(env))(using runtime)
+				sessionRef <- Ref.of[IO, SessionState](SessionState())
+				configRef <- Ref.of[IO, ConfigState](ConfigState(leaveReplayIfOnlyBots = leaveReplayIfOnlyBots))
+				client   = BotClient(wsQueue, gameRef, sessionRef, configRef)(using runtime)
 				console  <- spawnConsole(consoleQ, client, username)
 				_        <- IO { Variant.init() }
 				_        <- (console.join, receive(client), senderLoop(wsQueue), heartbeat).parTupled
