@@ -385,9 +385,11 @@ def findUnknownConnecting(ctx: ClueContext, reacting: Int, id: Identity, connect
 					Option.when(!opts.noDefer):
 						FinesseConn(reacting, finesse.get, thought.inferred.toList, FinesseKind.Hidden)
 				else
-					val bluffableIds = thought.inferred.filter: i =>
-						state.isPlayable(i) &&
-						validBluff(game, action, i, reacting, connected)
+					val bluffableIds =
+						if opts.assumeTruth then IdentitySet.empty
+						else thought.inferred.filter: i =>
+							state.isPlayable(i) &&
+							validBluff(game, action, i, reacting, connected)
 
 					val trueFinesse = thought.infoLock.getOrElse(thought.possible).contains(id) &&
 						thought.matches(id, assume = true) &&
@@ -665,10 +667,9 @@ def connect(ctx: ClueContext, id: Identity, looksDirect: Boolean, thinksStall: F
 			ignoreKnown
 
 	val unconfirmedTrash = state.heldOrders.filter(prev.provingTrash(_, giver, findOwn))
-	val actualAssumeTruth = assumeTruth || isTrashPush
 	val initialConnCtx = ConnectContext(looksDirect = looksDirect, thinksStall = thinksStall, connected = FastBitSet.single(focus), ignore = ignore.union(unconfirmedTrash))
 	val initialOpts = ConnectOpts(
-		assumeTruth = actualAssumeTruth,
+		assumeTruth = assumeTruth || isTrashPush,
 		preferOwn = preferOwn,
 		isTrashPush = isTrashPush
 	)
@@ -676,7 +677,7 @@ def connect(ctx: ClueContext, id: Identity, looksDirect: Boolean, thinksStall: F
 	loop(game, state.playStacks(id.suitIndex) + 1, Nil, initialConnCtx, initialOpts).flatMap:
 		case (Left(conns), bluffed) =>
 			val truthConns =
-				if game.level >= Level.Bluffs && !actualAssumeTruth && bluffed then
+				if game.level >= Level.Bluffs && !assumeTruth && bluffed then
 					Log.highlight(Console.MAGENTA, "bluff connection failed, retrying true finesse")
 					connect(ctx, id, looksDirect, thinksStall, assumeTruth = true, findOwn = findOwn, ignoreKnown = ignore, preferOwn = preferOwn, forTrashFinesse = forTrashFinesse)
 				else
@@ -686,7 +687,7 @@ def connect(ctx: ClueContext, id: Identity, looksDirect: Boolean, thinksStall: F
 				truthConns
 			else if conns.existsM { case _: KnownConn => true } then
 				val newIgnore = ignore.incl(conns.collectFirst { case c: KnownConn => c.order }.get)
-				connect(ctx, id, looksDirect, thinksStall, ignoreKnown = newIgnore, findOwn = findOwn, assumeTruth = actualAssumeTruth, preferOwn = preferOwn, forTrashFinesse = forTrashFinesse)
+				connect(ctx, id, looksDirect, thinksStall, ignoreKnown = newIgnore, findOwn = findOwn, assumeTruth = assumeTruth, preferOwn = preferOwn, forTrashFinesse = forTrashFinesse)
 			else
 				List.empty
 
