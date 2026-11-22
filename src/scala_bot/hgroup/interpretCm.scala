@@ -16,7 +16,7 @@ def interpretTcm(ctx: ClueContext, log: Boolean = true): Option[Seq[Int]] =
 	val focus = ctx.focusResult.focus
 	val thought = common.thoughts(focus)
 
-	val promisedIds = if clue.kind == ClueKind.Rank then
+	val promisedIds = if clue.kind == ClueKind.Rank && !state.variant.deceptiveS then
 		thought.possible.filter(_.rank == clue.value)
 	else
 		thought.possible
@@ -252,7 +252,7 @@ def interpretTccm(ctx: ClueContext): Option[List[Int]] =
 		Log.info("receiver was locked, not tccm")
 		return None
 
-	if orders.exists(o => !prev.state.deck(o).clued && !common.orderTrash(game, o)) then
+	if orders.forall(!prev.state.deck(_).clued) || orders.exists(o => !prev.state.deck(o).clued && !common.orderTrash(game, o)) then
 		Log.info("touched at least 1 new card, not tccm")
 		return None
 

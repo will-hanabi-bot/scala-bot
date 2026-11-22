@@ -159,7 +159,7 @@ class ClandestineFinesses extends munit.FunSuite:
 		hasInfs(redF, None, Alice, 1, Vector("r2"))
 		hasStatus(redF, Alice, 1, CardStatus.Finessed)
 
-	test("doesn't wait for a potential finesse when known playable"):
+	test("doesn't wait for a potential finesse when known playable (focus)"):
 		val game = setup(HGroup.atLevel(5), Vector(
 			Vector("xx", "xx", "xx", "xx", "xx"),
 			Vector("y2", "r3", "y3", "g3", "b3"),
@@ -173,6 +173,22 @@ class ClandestineFinesses extends munit.FunSuite:
 
 		// Our 2 is definitely playable, even if Bob is finessing y2.
 		assertEquals(game.me.thinksPlayables(game, game.state.ourPlayerIndex), Vector(game.state.hands(Alice.ordinal)(3)))
+
+	test("doesn't wait for a potential finesse when known playable (non-focus)"):
+		val game = setup(HGroup.atLevel(5), Vector(
+			Vector("xx", "xx", "xx", "xx", "xx"),
+			Vector("y1", "r3", "y3", "g3", "b3"),
+			Vector("r4", "y4", "b4", "g4", "p4")
+		),
+			starting = Cathy,
+		)
+		.pipe(takeTurn("Cathy clues 1 to Alice (slots 2,4)"))
+		.pipe(takeTurn("Alice plays r1 (slot 4)"))
+		.pipe(takeTurn("Bob clues 5 to Alice (slot 5)"))
+		.pipe(takeTurn("Cathy clues 2 to Alice (slot 2)"))
+
+		// Our 1 is definitely playable, even if Cathy is finessing y1.
+		assertEquals(game.me.thinksPlayables(game, game.state.ourPlayerIndex), Vector(game.state.hands(Alice.ordinal)(2)))
 
 	test("understands a surreptitious finesse"):
 		val game = setup(HGroup.atLevel(5), Vector(

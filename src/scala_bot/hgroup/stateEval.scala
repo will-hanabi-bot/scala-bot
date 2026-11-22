@@ -31,7 +31,7 @@ def getResult(game: HGroup, hypo: HGroup, action: ClueAction, log: Boolean = tru
 		// 	playables.length
 		// else
 		if badTouch.nonEmpty then
-			-badTouch.size * 4
+			-badTouch.size * 2
 		else
 			2 * List(0.0, 0.125, 0.25, 0.35, 0.45, 0.55)(newTouched.length)
 
@@ -321,7 +321,9 @@ def _evalAction(game: HGroup, action: Action): Double =
 	val value = action match
 		case clueAction: ClueAction =>
 			val hypoGame = game.copy(allowFindOwn = false).simulate(action)
-			val clueValue = 0.2 * getResult(game, hypoGame, clueAction, log = false)
+			val clueValue =
+				val res = getResult(game, hypoGame, clueAction, log = false)
+				if res > 0 then 0.2 * res else res
 
 			if hypoGame.lastMove == Some(ClueInterp.Mistake) || clueValue == -100 then
 				-100.0
