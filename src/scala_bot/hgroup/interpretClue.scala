@@ -28,6 +28,8 @@ def evaluateCM(ctx: ClueContext, chopMoved: Seq[Int]): ClueInterp =
 			ClueInterp.Useless
 		else
 			ClueInterp.Mistake
+	else if chopMoved.forall(o => state.deck(o).id().exists(game.me.isTrash(game, _, o))) then
+		ClueInterp.Useless
 	else
 		ClueInterp.Discard
 
@@ -82,7 +84,13 @@ def unacceptableClue(prev: HGroup, game: HGroup, @annotation.unused action: Clue
 					!state.variant.suits(id.suitIndex).suitType.brownish &&
 					!card.clued
 
-			oldest5.map(g.chopDistance(playerIndex, _))
+			oldest5.filter: o =>
+				val ordersCloserToChop = state.hands(playerIndex).filter(o2 => o2 < o && o2 >= chop)
+
+				// Doesn't count as a 5 Stall if there is a card closer to chop that would be touched by 5
+				!ordersCloserToChop.exists: o2 =>
+					state.deck(o2).id().exists(state.variant.idTouched(_, BaseClue(ClueKind.Rank, 5)))
+			.map(g.chopDistance(playerIndex, _))
 
 	if giver == state.ourPlayerIndex && game.lastMove == Some(ClueInterp.Stall) && game.stallInterp == Some(StallInterp.Stall5) then
 		val dist5 = prev.chopDistance(receiver, orders.filter(o => !prev.state.deck(o).clued && prev.meta(o).status != CardStatus.ChopMoved).min)

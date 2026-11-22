@@ -549,7 +549,7 @@ def connect(ctx: ClueContext, id: Identity, looksDirect: Boolean, thinksStall: F
 			val known = findKnownConn(newCtx, nextId, id, connCtx.ignore.union(connCtx.connected), findOwn = true, preferOwn = preferOwn)
 
 			// See if we need to correct based on future information
-			val actualKnown = known match
+			known match
 				case Some(c @ PlayableConn(reacting, order, id, linked, hidden, _)) =>
 					if linked.forall(!game.future(_).contains(id)) then
 						val playableIds = game.future(order).intersect(state.playableSet)
@@ -560,10 +560,9 @@ def connect(ctx: ClueContext, id: Identity, looksDirect: Boolean, thinksStall: F
 							unknown.map(c.copy(id = playableIds.head) +: _)
 					else
 						Some(List(c))
-				case k => k.map(List(_))
-
-			actualKnown.orElse:
-				findSingleConn(newCtx, playerIndex, nextId, connCtx, opts.copy(findOwn = Some(playerIndex)))
+				case Some(conn) => Some(List(conn))
+				case None =>
+					findSingleConn(newCtx, playerIndex, nextId, connCtx, opts.copy(findOwn = Some(playerIndex)))
 
 		val possibleConns =
 			if preferOwn then
@@ -647,6 +646,11 @@ def connect(ctx: ClueContext, id: Identity, looksDirect: Boolean, thinksStall: F
 				List.empty
 
 		case (Right(conns), _) =>
+			def matchesIds(order: Int, ids: List[Identity]) =
+				state.deck(order).id() match
+					case Some(i) => ids.contains(i)
+					case None => ids.exists(game.future(order).contains)
+
 			val symmetric = !state.deck(focus).matches(id, assume = true) ||
 				!game.players(receiver).thoughts(focus).possible.contains(id) ||
 				// Newly touching a visible dupe
@@ -654,14 +658,14 @@ def connect(ctx: ClueContext, id: Identity, looksDirect: Boolean, thinksStall: F
 				conns.exists:
 					case conn: PlayableConn =>
 						if conn.linked.isEmpty then
-							state.deck(conn.order).id().exists(!conn.ids.contains(_))
+							!matchesIds(conn.order, conn.ids)
 						else
-							conn.linked.forall(state.deck(_).id().exists(!conn.ids.contains(_)))
+							conn.linked.forall(!matchesIds(_, conn.ids))
 					case conn: FinesseConn if conn.isBluff =>
 						// A bluff doesn't have to match the actual id
 						false
 					case conn =>
-						state.deck(conn.order).id().exists(!conn.ids.contains(_))
+						!matchesIds(conn.order, conn.ids)
 
 			val finalizedConns = finalizeConns(conns, givenByUs = giver == state.ourPlayerIndex)
 
