@@ -200,17 +200,19 @@ def interpNormalClue(ctx: ClueContext, symmetricInterp: SymmetricInterp, thinksS
 	val initialLooksDirect = common.thoughts(focus).id().isEmpty &&
 		(action.clue.kind == ClueKind.Colour || savePoss.nonEmpty || positional.isDefined)
 
+	def knownDupe(focusOrder: Int, inf: Identity) =
+		state.heldOrders.exists: o =>
+			o != focusOrder &&
+			prev.state.deck(o).clued &&
+			game.players(giver).thoughts(o).matches(inf, infer = true) && {			// giver knows about it, and
+				game.players(receiver).thoughts(o).matches(inf, infer = true) ||		// either target knows about it too, or
+				(state.ourHand.contains(o) && game.me.thoughts(o).matches(inf, infer = true))	// we know we have it in our hand
+			}
+
 	val focusPoss =
 		common.thoughts(focus).inferred.filter: inf =>
 			!prev.invalidFocus(giver, clue, inf, ctx.focusResult) &&
-			!state.heldOrders.exists: o =>
-				o != focus &&
-				prev.state.deck(o).clued &&
-				game.players(giver).thoughts(o).matches(inf, infer = true) && {			// giver knows about it, and
-					game.players(receiver).thoughts(o).matches(inf, infer = true) ||		// either target knows about it too, or
-					(state.ourHand.contains(o) && game.me.thoughts(o).matches(inf, infer = true))	// we know we have it in our hand
-				}
-			&&
+			!knownDupe(focus, inf) &&
 			!savePoss.exists(_.id == inf)
 		.flatMap:
 			connect(ctx, _, initialLooksDirect, thinksStall)
@@ -258,6 +260,7 @@ def interpNormalClue(ctx: ClueContext, symmetricInterp: SymmetricInterp, thinksS
 			val ownFps =
 				common.thoughts(focus).inferred.filter: inf =>
 					!game.invalidFocus(giver, clue, inf, ctx.focusResult) &&
+					!knownDupe(focus, inf) &&
 					!(savePoss.exists(_.id == inf) || simplest.exists(_.id == inf))
 				.flatMap:
 					connect(ctx, _, looksDirect, thinksStall, findOwn = Some(state.ourPlayerIndex))
@@ -284,14 +287,7 @@ def interpNormalClue(ctx: ClueContext, symmetricInterp: SymmetricInterp, thinksS
 
 					val focusPoss = common.thoughts(newFocus).inferred.filter: inf =>
 						!prev.invalidFocus(giver, clue, inf, newCtx.focusResult) &&
-						!state.heldOrders.exists: o =>
-							o != newFocus &&
-							prev.state.deck(o).clued &&
-							game.players(giver).thoughts(o).matches(inf, infer = true) && {			// giver knows about it, and
-								game.players(receiver).thoughts(o).matches(inf, infer = true) ||		// either target knows about it too, or
-								(state.ourHand.contains(o) && game.me.thoughts(o).matches(inf, infer = true))	// we know we have it in our hand
-							}
-						&&
+						!knownDupe(newFocus, inf) &&
 						!savePoss.exists(_.id == inf)
 					.flatMap:
 						connect(newCtx, _, looksDirect, thinksStall)
