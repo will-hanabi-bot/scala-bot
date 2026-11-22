@@ -589,7 +589,7 @@ def connect(ctx: ClueContext, id: Identity, looksDirect: Boolean, thinksStall: F
 			val known = findKnownConn(newCtx, nextId, id, stepConnCtx.ignore.union(stepConnCtx.connected), ownOpts)
 
 			// See if we need to correct based on future information
-			val actualKnown = known match
+			known match
 				case Some(c @ PlayableConn(reacting, order, id, linked, hidden, _)) =>
 					if linked.forall(!game.future(_).contains(id)) then
 						val playableIds = game.future(order).intersect(state.playableSet)
@@ -600,10 +600,9 @@ def connect(ctx: ClueContext, id: Identity, looksDirect: Boolean, thinksStall: F
 							unknown.map(c.copy(id = playableIds.head) +: _)
 					else
 						Some(List(c))
-				case k => k.map(List(_))
-
-			actualKnown.orElse:
-				findSingleConn(newCtx, playerIndex, nextId, stepConnCtx, ownOpts)
+				case Some(conn) => Some(List(conn))
+				case None =>
+					findSingleConn(newCtx, playerIndex, nextId, stepConnCtx, ownOpts)
 
 		val possibleConns =
 			if opts.preferOwn then
@@ -699,7 +698,7 @@ def connect(ctx: ClueContext, id: Identity, looksDirect: Boolean, thinksStall: F
 				!game.players(receiver).thoughts(focus).possible.contains(id) ||
 				// Newly touching a visible dupe
 				(!prev.isTouched(focus) && visibleFind(state, prev.players(giver), id, infer = true, excludeOrder = focus).exists(prev.isTouched)) ||
-				symmetricConns(state, conns) ||
+				symmetricConns(game, conns) ||
 				conns.exists(c => prev.provingTrash(c.order, giver))
 
 			val finalizedConns = finalizeConns(conns, givenByUs = giver == state.ourPlayerIndex)
@@ -707,18 +706,24 @@ def connect(ctx: ClueContext, id: Identity, looksDirect: Boolean, thinksStall: F
 			Log.info(s"found connections: ${state.logConns(finalizedConns, id)}${if symmetric then " (symmetric)" else ""}${if preferOwn then " (ambiguous)" else ""}")
 			Some(FocusPossibility(IdentitySet.single(id), finalizedConns, ClueInterp.Play, symmetric, ambiguous = preferOwn))
 
-def symmetricConns(state: State, conns: Seq[Connection]): Boolean =
+def symmetricConns(game: HGroup, conns: Seq[Connection]): Boolean =
+	val state = game.state
+	def matchesIds(order: Int, ids: List[Identity]) =
+		state.deck(order).id() match
+			case Some(i) => ids.contains(i)
+			case None => ids.exists(game.future(order).contains)
+
 	conns.exists:
 		case conn: PlayableConn =>
 			if conn.linked.isEmpty then
-				state.deck(conn.order).id().exists(!conn.ids.contains(_))
+				!matchesIds(conn.order, conn.ids)
 			else
-				conn.linked.forall(state.deck(_).id().exists(!conn.ids.contains(_)))
+				conn.linked.forall(!matchesIds(_, conn.ids))
 		case conn: FinesseConn if conn.isBluff =>
 			// A bluff doesn't have to match the actual id
 			false
 		case conn =>
-			state.deck(conn.order).id().exists(!conn.ids.contains(_))
+			!matchesIds(conn.order, conn.ids)
 
 def findTrashFinesses(ctx: ClueContext, connections: List[Connection], ambiguous: Boolean = false): List[FocusPossibility] =
 	val ClueContext(prev, game, action, _) = ctx
@@ -796,7 +801,7 @@ def findTrashFinesses(ctx: ClueContext, connections: List[Connection], ambiguous
 	if possibleTrash.isEmpty then
 		return Nil
 
-	val symmetric = !state.deck(focus).id().forall(possibleTrash.contains) || symmetricConns(state, tfConnections)
+	val symmetric = !state.deck(focus).id().forall(possibleTrash.contains) || symmetricConns(game, tfConnections)
 
 	Log.info(s"found possible trash finesse: ${state.logConns(tfConnections)} -> [${possibleTrash.fmt(state)}]${if symmetric then " (symmetric)" else ""}${if ambiguous then " (ambiguous)" else ""}")
 	List(FocusPossibility(possibleTrash, tfConnections, ClueInterp.Play, symmetric = symmetric, ambiguous = ambiguous, trashFinesse = true, needsBlindPlay = !validReverse))

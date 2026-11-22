@@ -11,7 +11,7 @@ def isTrashClue(prev: HGroup, game: HGroup, action: ClueAction, focus: Int): Boo
 
 	val promisedIds = thought.possible.filter: id =>
 		state.variant.idTouched(id, clue) &&
-		(clue.kind != ClueKind.Rank || id.rank == clue.value)
+		(clue.kind != ClueKind.Rank || state.variant.deceptiveS || id.rank == clue.value)
 
 	val usefulIds = promisedIds.filter: id =>
 		!(
@@ -273,7 +273,7 @@ def interpretTccm(ctx: ClueContext): Option[List[Int]] =
 		Log.info("receiver was locked, not tccm")
 		return None
 
-	if orders.exists(o => !prev.state.deck(o).clued && !common.orderTrash(game, o)) then
+	if orders.forall(!prev.state.deck(_).clued) || orders.exists(o => !prev.state.deck(o).clued && !common.orderTrash(game, o)) then
 		Log.info("touched at least 1 new card, not tccm")
 		return None
 
