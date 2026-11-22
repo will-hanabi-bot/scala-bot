@@ -4,16 +4,16 @@ import scala_bot.basics._
 import scala_bot.utils._
 import scala_bot.logger.Log
 
-def isTrashClue(prev: HGroup, game: HGroup, action: ClueAction, focus: Int): Boolean =
+def trashClueUsefulIds(prev: HGroup, game: HGroup, action: ClueAction, focus: Int): IdentitySet =
 	val (common, state) = (game.common, game.state)
-	val ClueAction(giver, receiver, orders, clue) = action
+	val ClueAction(_, _, orders, clue) = action
 	val thought = common.thoughts(focus)
 
 	val promisedIds = thought.possible.filter: id =>
 		state.variant.idTouched(id, clue) &&
 		(clue.kind != ClueKind.Rank || state.variant.deceptiveS || id.rank == clue.value)
 
-	val usefulIds = promisedIds.filter: id =>
+	promisedIds.filter: id =>
 		!(
 			state.isBasicTrash(id) ||
 			visibleFind(state, common, id, excludeOrder = focus).nonEmpty ||
@@ -22,6 +22,11 @@ def isTrashClue(prev: HGroup, game: HGroup, action: ClueAction, focus: Int): Boo
 			// Only touching 1 new card and stale
 			(game.level >= Level.Context && orders.count(!prev.state.deck(_).clued) == 1 && game.meta(focus).staleIds.contains(id))
 		)
+
+def isTrashClue(prev: HGroup, game: HGroup, action: ClueAction, focus: Int): Boolean =
+	val state = game.state
+	val ClueAction(giver, receiver, _, _) = action
+	val usefulIds = trashClueUsefulIds(prev, game, action, focus)
 
 	if usefulIds.isEmpty then
 		!prev.common.orderKp(game, focus)

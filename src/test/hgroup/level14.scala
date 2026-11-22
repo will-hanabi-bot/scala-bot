@@ -1161,3 +1161,24 @@ class TrashFinesse extends munit.FunSuite:
 		val discarded = takeTurn("Cathy discards b3", "r1")(base)
 		hasInfs(discarded, None, Alice, 5, Vector("r5", "y5", "b5", "p5"))
 		assert(!discarded.meta(discarded.state.hands(Alice.ordinal)(4)).trash)
+
+	// From robot2's perspective on https://hanab.live/shared-replay/2075519#35
+	test("recognizes that we can't use last copy as a trash finesse"):
+		val game = setup(HGroup.atLevel(14), Vector(
+			Vector("xx", "xx", "xx", "xx"),
+			Vector("y5", "y2", "r4", "p4"),
+			Vector("b4", "b3", "g2", "b3"),
+			Vector("p4", "g3", "g1", "r1")
+		),
+			playStacks = Some(Vector(3, 4, 4, 1, 3)),
+			discarded = Vector("r2", "r4", "g4", "b1", "p1", "p1", "p2")
+		)
+
+		// Alice is not allowed to trash finesse the y5 with the g2.
+		// Bob won't play due to trash touch elimination:
+		// https://hanabi.github.io/level-18#trash-touch-elimination-tte
+		// Instead, he will think he has a g5 making this a tcm.
+		// Cathy won't see the g5 and will assume it is g5.
+		val mistakeGame = takeTurn("Alice clues green to Cathy")(game)
+		hasInfs(mistakeGame, None, Cathy, 3, Vector("g5"))
+		assertEquals(mistakeGame.lastMove, Some(ClueInterp.Mistake))

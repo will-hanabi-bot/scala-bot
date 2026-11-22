@@ -812,9 +812,12 @@ def connectTrashFinesses(ctx: ClueContext, looksDirect: Boolean, thinksStall: Fa
 	val ClueAction(giver, receiver, _, clue) = action
 	val FocusResult(focus, _, positional) = ctx.focusResult
 
+	val usefulIds = trashClueUsefulIds(prev, game, action, focus)
+
 	if game.level < Level.TrashMoves ||
 		positional.contains(Positional.TrashPush) ||
 		isTrashClue(prev, game, action, focus) ||
+		(usefulIds.length == 1 && state.isCritical(usefulIds.head)) ||
 		(savePoss.nonEmpty && !common.thoughts(focus).possible.exists(state.isBasicTrash))
 	then
 		return Nil
