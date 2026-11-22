@@ -3,7 +3,7 @@ package tests.hgroup.level13
 import cats.effect.unsafe.implicits.global
 
 import scala_bot.basics._
-import scala_bot.test.{hasInfs, hasStatus, Player, setup, takeTurn, TestVariant}, Player._
+import scala_bot.test.{hasInfs, hasStatus, Player, preClue, setup, takeTurn, TestVariant}, Player._
 import scala_bot.hgroup.HGroup
 
 import scala_bot.utils.{pipe, tap}
@@ -395,3 +395,35 @@ class General extends munit.FunSuite:
 		hasStatus(game, Cathy, 2, CardStatus.Finessed)
 		hasInfs(game, None, Cathy, 2, Vector("r2"))
 		hasInfs(game, None, Alice, 1, Vector("r2", "r3"))
+
+class Ambiguity extends munit.FunSuite:
+	override def beforeAll() = Logger.setLevel(LogLevel.Off)
+
+	// From https://hanab.live/shared-replay/2066348#25
+	test("does not entertain finesse for a visibly clued duplicate when finding own"):
+		val game = setup(HGroup.atLevel(13), Vector(
+			Vector("xx", "xx", "xx", "xx"),
+			Vector("b5", "r2", "p4", "y2"),
+			Vector("g3", "t5", "g5", "b1"),
+			Vector("t3", "b2", "y4", "y3")
+		),
+			playStacks = Some(Vector(1, 2, 4, 4, 0, 1)),
+			discarded = Vector("g1", "b1", "t4"),
+			variant = TestVariant.NoVar6,
+			init =
+				preClue[HGroup](Cathy, 4, Seq("1")) andThen
+				preClue[HGroup](Donald, 3, Seq("yellow")) andThen
+				preClue[HGroup](Donald, 4, Seq("3")) andThen
+				preClue[HGroup](Donald, 4, Seq("yellow"))
+		)
+		.pipe(takeTurn("Alice clues teal to Donald"))
+		.pipe(takeTurn("Bob plays b5", "r3"))
+		.pipe(takeTurn("Cathy clues 3 to Bob"))
+		.pipe(takeTurn("Donald plays y3", "t2"))
+		.pipe(takeTurn("Alice discards t1 (slot 4)"))
+		.pipe(takeTurn("Bob plays r2", "y1"))
+		.pipe(takeTurn("Cathy clues teal to Alice (slot 4)"))
+
+		// Donald's t3 is already clued and visible to both Cathy and Alice, so t3 cannot be focused.
+		hasInfs(game, None, Alice, 4, Vector("t2", "t4"))
+		hasStatus(game, Donald, 1, CardStatus.None)

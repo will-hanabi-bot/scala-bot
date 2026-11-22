@@ -155,7 +155,7 @@ case class HGroup(
 				unrevealedHidden.isEmpty &&
 				!unordered1 &&
 				!ambiguous1 &&
-				(player.orderKp(this, o) || (!potentialClandestine && !knownSelfHesitation))
+				(player.orderKp(this, o, excludeTrash = true) || (!potentialClandestine && !knownSelfHesitation))
 
 	override def validArr(id: Identity, order: Int): Boolean =
 		val playables = this.me.thinksPlayables(this, state.ourPlayerIndex)
