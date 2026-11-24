@@ -1273,3 +1273,33 @@ class TrashFinesse extends munit.FunSuite:
 		val mistakeGame = takeTurn("Alice clues 4 to Donald")(game)
 		hasInfs(mistakeGame, None, Donald, 4, Vector("b4"))
 		assertEquals(mistakeGame.lastMove, Some(ClueInterp.Mistake))
+
+	// From robot1's perspective on https://hanab.live/shared-replay/2076112#20
+	test("prompts skip known trash from trash finesses"):
+		val game = setup(HGroup.atLevel(14), Vector(
+			Vector("xx", "xx", "xx", "xx"),
+			Vector("r3", "g1", "p4", "p4"),
+			Vector("r5", "p5", "p2", "y3"),
+			Vector("r4", "g5", "g4", "r2")
+		),
+			starting = Bob,
+			playStacks = Some(Vector(4, 1, 3, 0, 1)),
+			discarded = Vector("b3"),
+			clueTokens = 1,
+			init =
+				preClue[HGroup](Alice, 3, Seq("purple")) andThen
+				preClue[HGroup](Cathy, 2, Seq("purple")) andThen
+				fullyKnown[HGroup](Cathy, 3, "p2") andThen
+				fullyKnown[HGroup](Donald, 2, "g5") andThen
+				preClue[HGroup](Donald, 3, Seq("green"))
+		)
+		.pipe(takeTurn("Bob clues 1 to Alice (slots 1,4)"))
+		.pipe(takeTurn("Cathy plays r5", "b2"))
+		.pipe(takeTurn("Donald plays g4", "b5"))
+		.pipe(takeTurn("Alice discards y1 (slot 1)"))
+		.pipe(takeTurn("Bob clues blue to Cathy"))
+
+		// Since we know that our clued 1 is trash, we should not consider a prompt.
+		// This should finesse slot 1 as b1.
+		hasStatus(game, Alice, 1, CardStatus.Finessed)
+		hasInfs(game, None, Alice, 1, Vector("b1"))

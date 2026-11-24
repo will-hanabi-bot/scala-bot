@@ -511,14 +511,14 @@ extension (p: Player)
 
 					if revealed.nonEmpty then
 						acc
-					else if focused.size == 1 && ids.length == 1 then
-						Log.info(s"resolving unpromised link for ${state.logId(ids.head)} to ${focused.head} (${p.name})")
-						(player.elimLink(game, orders, focused.head, ids.head), sarcastics)
 					else
 						ids.find(i => orders.exists(!player.thoughts(_).inferred.contains(i))) match
 							case Some(lostInf) =>
 								Log.info(s"linked orders ${orders.fmt} lost inference ${state.logId(lostInf)}")
 								(player, sarcastics)
+							case None if focused.size == 1 && ids.length == 1 && player.thoughts(focused.head).inferred == ids =>
+								Log.info(s"resolving unpromised link for ${state.logId(ids.head)} to ${focused.head} (${p.name})")
+								(player.elimLink(game, orders, focused.head, ids.head), sarcastics)
 							case None =>
 								(player.copy(links = link +: player.links), sarcastics)
 		(sarcastics, newPlayer.findLinks(game))
