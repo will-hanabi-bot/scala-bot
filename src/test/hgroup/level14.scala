@@ -1116,7 +1116,7 @@ class TrashFinesse extends munit.FunSuite:
 			Vector("r2", "y4", "g4", "b4"),
 			Vector("y1", "p3", "p4", "b3")
 		),
-			variant = Variant(17, "Rainbow (6 Suits)", Vector("Red", "Yellow", "Green", "Blue", "Purple", "Rainbow"), shorts = Some(Vector('r', 'y', 'g', 'b', 'p', 'm'))),
+			variant = TestVariant.Rainbow6,
 			starting = Bob,
 			playStacks = Some(Vector(0, 0, 0, 0, 0, 5))
 		)
@@ -1181,4 +1181,39 @@ class TrashFinesse extends munit.FunSuite:
 		// Cathy won't see the g5 and will assume it is g5.
 		val mistakeGame = takeTurn("Alice clues green to Cathy")(game)
 		hasInfs(mistakeGame, None, Cathy, 3, Vector("g5"))
+		assertEquals(mistakeGame.lastMove, Some(ClueInterp.Mistake))
+
+	// From robot1's perspective on https://hanab.live/shared-replay/2076075#9
+	test("recognizes that trash finesses cannot be layered"):
+		val game = setup(HGroup.atLevel(14), Vector(
+			Vector("xx", "xx", "xx", "xx"),
+			Vector("r1", "p2", "r4", "g4"),
+			Vector("g5", "m5", "p1", "r1"),
+			Vector("y2", "r3", "y3", "p5")
+		),
+			playStacks = Some(Vector(0, 2, 0, 0, 1, 1)),
+			variant = TestVariant.Rainbow6
+		)
+		// Alice is not allowed to trash finesse the r1, p2 with the y2.
+		// 2 looks like it follows the r1 play, so it is not seen as
+		// a bluff and the finesse card may not be layered.
+		val mistakeGame = takeTurn("Alice clues 2 to Donald")(game)
+		hasInfs(mistakeGame, None, Donald, 1, Vector("r2", "p2", "m2"))
+		assertEquals(mistakeGame.lastMove, Some(ClueInterp.Mistake))
+
+	// From robot1's perspective on https://hanab.live/shared-replay/2076112#43
+	test("recognizes that trash finesses cannot be layered"):
+		val game = setup(HGroup.atLevel(14), Vector(
+			Vector("xx", "xx", "xx", "xx"),
+			Vector("y4", "r1", "b1", "r3"),
+			Vector("b4", "g1", "p1", "b2"),
+			Vector("b3", "b2", "b5", "r4")
+		),
+			playStacks = Some(Vector(5, 5, 5, 1, 5)),
+			discarded = Vector("r2", "y1", "y1", "g1", "b3", "p4")
+		)
+		// Alice is not allowed to trash finesse the b2,b3,b4, with the r4.
+		// The trash finessed id should be immediately playable.
+		val mistakeGame = takeTurn("Alice clues 4 to Donald")(game)
+		hasInfs(mistakeGame, None, Donald, 4, Vector("b4"))
 		assertEquals(mistakeGame.lastMove, Some(ClueInterp.Mistake))
