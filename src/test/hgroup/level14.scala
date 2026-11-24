@@ -306,6 +306,60 @@ class TrashPush extends munit.FunSuite:
 		hasStatus(game, Alice, 3, CardStatus.Finessed)
 		hasInfs(game, None, Alice, 3, Vector("y3", "b2", "b3"))
 
+	test("trash push does not mark clued cards trash"):
+		val game = setup(HGroup.atLevel(14), Vector(
+			Vector("xx", "xx", "xx", "xx", "xx"),
+			Vector("r1", "y3", "g2", "b2", "p2")
+		),
+			playStacks = Some(Vector(0, 2, 2, 2, 2))
+		)
+		.pipe(takeTurn("Alice clues red to Bob"))
+		.pipe(takeTurn("Bob plays r1", "r2"))
+		.pipe(takeTurn("Alice clues 2 to Bob"))
+
+		// Bob knows the focus (slot 5) is trash, so this is a trash push
+		hasStatus(game, Bob, 2, CardStatus.Finessed)
+		hasInfs(game, None, Bob, 2, Vector("y3", "g3", "b3", "p3"))
+
+		// A trash push does not promise that the clued cards are trash.
+		// Bob knows that the new 2 by good touch should be r2.
+		hasInfs(game, None, Bob, 1, Vector("r2"))
+
+	// From robot2's perspective on https://hanab.live/shared-replay/2076138#42
+	test("trash push does not clobber a finesse"):
+		val game = setup(HGroup.atLevel(14), Vector(
+			Vector("xx", "xx", "xx", "xx"),
+			Vector("m1", "r4", "p5", "g5"),
+			Vector("p1", "b4", "b3", "g4"),
+			Vector("r5", "y4", "p3", "m5")
+		),
+			starting = Bob,
+			playStacks = Some(Vector(2, 2, 3, 5, 1, 4)),
+			discarded = Vector("y1", "g1", "g2", "g4", "p3", "p4", "p1", "p2"),
+			clueTokens = 1,
+			variant = TestVariant.Rainbow6,
+			init =
+				preClue[HGroup](Bob, 3, Seq("5")) andThen
+				fullyKnown[HGroup](Bob, 4, "g5") andThen
+				preClue[HGroup](Cathy, 4, Seq("green")) andThen
+				preClue[HGroup](Donald, 2, Seq("yellow")) andThen
+				preClue[HGroup](Donald, 3, Seq("3")) andThen
+				preClue[HGroup](Donald, 4, Seq("yellow"))
+		)
+		.pipe(takeTurn("Bob clues purple to Donald"))
+		.pipe(takeTurn("Cathy plays g4", "r3"))
+		.pipe(takeTurn("Donald plays m5", "y3"))
+		.pipe(takeTurn("Alice plays y3 (slot 1)"))
+		.pipe(takeTurn("Bob clues 2 to Alice (slots 2,4)"))
+
+		// Alice still has p2 to complete the purple finesse.
+		hasStatus(game, Alice, 2, CardStatus.Finessed)
+		hasInfs(game, None, Alice, 2, Vector("p2"))
+
+		// Alice also has a trash pushed card on slot 3
+		hasStatus(game, Alice, 3, CardStatus.Finessed)
+		hasInfs(game, None, Alice, 3, Vector("r3", "r4", "y5"))
+
 class TrashFinesse extends munit.FunSuite:
 	override def beforeAll() = Logger.setLevel(LogLevel.Off)
 
