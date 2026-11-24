@@ -829,13 +829,13 @@ def connectTrashFinesses(ctx: ClueContext, looksDirect: Boolean, thinksStall: Fa
 
 	val targetIds = (0 until state.variant.suits.length).toList.flatMap: suitIndex =>
 		val rank = if clue.kind == ClueKind.Rank then clue.value else state.playStacks(suitIndex) + 1
+		val id = Identity(suitIndex, rank)
 		Option.when(
 			rank <= state.maxRanks(suitIndex) &&
-			state.playStacks(suitIndex) < rank &&
-			state.variant.idTouched(Identity(suitIndex, rank), clue) &&
-			!savePoss.exists(_.ids.contains(Identity(suitIndex, rank)))
-		):
-			Identity(suitIndex, rank)
+			state.playStacks(suitIndex) + 1 == rank &&
+			state.variant.idTouched(id, clue) &&
+			!savePoss.exists(_.ids.contains(id))
+		)(id)
 
 	if targetIds.isEmpty then
 		return Nil

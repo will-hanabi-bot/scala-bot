@@ -1202,7 +1202,7 @@ class TrashFinesse extends munit.FunSuite:
 		assertEquals(mistakeGame.lastMove, Some(ClueInterp.Mistake))
 
 	// From robot1's perspective on https://hanab.live/shared-replay/2076112#43
-	test("recognizes that trash finesses cannot be layered"):
+	test("recognizes that trash finesses must be immediately playable"):
 		val game = setup(HGroup.atLevel(14), Vector(
 			Vector("xx", "xx", "xx", "xx"),
 			Vector("y4", "r1", "b1", "r3"),
@@ -1210,7 +1210,9 @@ class TrashFinesse extends munit.FunSuite:
 			Vector("b3", "b2", "b5", "r4")
 		),
 			playStacks = Some(Vector(5, 5, 5, 1, 5)),
-			discarded = Vector("r2", "y1", "y1", "g1", "b3", "p4")
+			discarded = Vector("r2", "y1", "y1", "g1", "b3", "p4"),
+			init =
+				preClue[HGroup](Cathy, 4, Seq("blue"))
 		)
 		// Alice is not allowed to trash finesse the b2,b3,b4, with the r4.
 		// The trash finessed id should be immediately playable.
