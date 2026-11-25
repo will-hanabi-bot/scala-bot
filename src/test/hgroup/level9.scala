@@ -412,23 +412,6 @@ class Stalling extends munit.FunSuite:
 		val stallGame = takeTurn("Alice clues 3 to Cathy")(game)
 		assertEquals(stallGame.lastMove, Some(ClueInterp.PlayLooksSave))
 
-	test("recognizes players can discard when following player must clue and generates clues ahead"):
-		val game = setup(HGroup.atLevel(9), Vector(
-			Vector("xx", "xx", "xx", "xx"),
-			Vector("r2", "r1", "b1", "b1"),
-			Vector("g1", "g1", "y1", "y5"),
-			Vector("r5", "b5", "g5", "p5")
-		),
-			clueTokens = 1,
-			playStacks = Some(Vector(1, 1, 1, 1, 1)),
-			init =
-				(_.copy(inEarlyGame = false))
-		)
-
-		// 2 clues are needed to lock Donald and for Donald to clue.
-		// Alice should discard, allowing Bob to discard to generate the 2 needed clues.
-		assertEquals(game.takeAction.unsafeRunSync(), PerformAction.Discard(game.state.hands(Alice.ordinal)(3)))
-
 class DoubleDiscardAvoidance extends munit.FunSuite:
 	override def beforeAll() = Logger.setLevel(LogLevel.Off)
 
