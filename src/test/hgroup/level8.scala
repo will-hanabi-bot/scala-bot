@@ -455,3 +455,35 @@ class DistributionClues extends munit.FunSuite:
 
 		hasInfs(game, None, Alice, 1, Vector("b4"))
 		assertEquals(game.lastMove, Some(ClueInterp.Distribution))
+
+class SolvingEndGame extends munit.FunSuite:
+	override def beforeAll() = Logger.setLevel(LogLevel.Off)
+
+	test("stalls to enable more plays"):
+		val game = setup(HGroup.atLevel(8), Vector(
+			Vector("xx", "xx", "xx", "xx", "xx"), // b1 b1 r3 p1 p1
+			Vector("r1", "r1", "y1", "y4", "y5"),
+			Vector("y1", "g1", "g1", "g4", "g5")
+		),
+			playStacks = Some(Vector(2, 3, 3, 5, 5)),
+			discarded = Vector(
+				"r3", "r4", "r4", "r5",
+				"y2", "y3", "y4",
+				"g2", "g3", "g4",
+				"b2", "b3", "b4",
+				"p2", "p3", "p4"
+			),	// Missing: b1 b1 r3 p1 p1 r2
+			clueTokens = 2,
+			init = (game) => (
+				fullyKnown[HGroup](Alice, 3, "r3") andThen
+				fullyKnown[HGroup](Bob, 4, "y4") andThen
+				fullyKnown[HGroup](Bob, 5, "y5") andThen
+				fullyKnown[HGroup](Cathy, 4, "g4") andThen
+				fullyKnown[HGroup](Cathy, 5, "g5")
+				)(game).copy(inEarlyGame = false)
+		)
+
+		// There is only one card left to draw and both other players have 2 plays in hand.
+		// Alice should not play or discard.
+		val action = game.takeAction.unsafeRunSync();
+		assert(action.isClue)

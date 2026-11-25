@@ -95,7 +95,32 @@ case class EndgameSolver[G <: Game](
 	  */
 	def solve(game: G, onlyAction: Option[PerformAction] = None)(using ops: GameOps[G]): Either[String, (PerformAction, Frac)] =
 		val state = game.state
-		if state.score + 1 == state.maxScore then
+		val maxAchievable = state.maxScore.min(state.score + state.cardsLeft + state.endgameTurns.getOrElse(state.numPlayers))
+
+		if maxAchievable <= state.score then
+			return Left("already reached max achievable score")
+
+		val deadline = Instant.now().plus(timeout)
+
+		if onlyAction.isDefined then
+			solveForTarget(game, maxAchievable, deadline, onlyAction)
+		else
+			@annotation.tailrec
+			def loop(target: Int): Either[String, (PerformAction, Frac)] =
+				if target <= state.score || Instant.now().isAfter(deadline) then
+					Left("couldn't find any winning actions")
+				else
+					successRate = Map()
+					solveForTarget(game, target, deadline, onlyAction = None) match
+						case res @ Right(_) => res
+						case err @ Left(msg) if msg == "timeout" || msg.startsWith("couldn't find any ") && msg != "couldn't find any winning actions" => err
+						case Left(_) => loop(target - 1)
+
+			loop(maxAchievable)
+
+	private def solveForTarget(game: G, target: Int, deadline: Instant, onlyAction: Option[PerformAction])(using ops: GameOps[G]): Either[String, (PerformAction, Frac)] =
+		val state = game.state
+		if state.score + 1 >= target then
 			val playables = if game.goodTouch || game.state.endgameTurns.isDefined then
 				game.me.thinksPlayables(game, state.ourPlayerIndex, excludeTrash = true)
 			else
@@ -108,7 +133,6 @@ case class EndgameSolver[G <: Game](
 				return Right(PerformAction.tryPlay(game, winningPlay.get), Frac.one)
 
 		val start = Instant.now()
-		val deadline = Instant.now().plus(timeout)
 		val (remainingIds, ownIds) = findRemainingIds(game)
 
 		if remainingIds.count((id, v) => state.isUseful(id) && v == state.cardCount(id.toOrd)) > 3 then
@@ -129,7 +153,7 @@ case class EndgameSolver[G <: Game](
 		Log.info(s"unknown own $unknownOwn, cards left ${state.cardsLeft}")
 
 		if totalUnknown == 0 then
-			return winnable(assumedGame, state.ourPlayerIndex, remainingIds, deadline) match
+			return winnable(assumedGame, state.ourPlayerIndex, remainingIds, deadline, target = target) match
 				case Left(_) =>
 					Logger.setLevel(level)
 					Left("couldn't find a winning strategy")
@@ -222,9 +246,9 @@ case class EndgameSolver[G <: Game](
 					val order = unknownOwn(i)
 					hypo.withId(order, ids(i))
 
-				val actions = possibleActions(hypo, state.ourPlayerIndex, remaining, deadline)
+				val actions = possibleActions(hypo, state.ourPlayerIndex, remaining, deadline, target = target)
 					.when(_.isEmpty): _ =>
-						possibleActions(hypo, state.ourPlayerIndex, remaining, deadline, infer = true)
+						possibleActions(hypo, state.ourPlayerIndex, remaining, deadline, infer = true, target = target)
 
 				val gameArrs = genArrs(hypo, remaining, state.ourPlayerIndex, actions.forall(_._1.isClue))
 
@@ -236,7 +260,7 @@ case class EndgameSolver[G <: Game](
 					case None => Frac.zero
 					case Some(perform) =>
 						val (undrawn, drawn) = gameArrs
-						prob * actionWinrate(hypo, if perform._1.isClue then undrawn else drawn, perform, state.ourPlayerIndex, deadline)
+						prob * actionWinrate(hypo, if perform._1.isClue then undrawn else drawn, perform, state.ourPlayerIndex, deadline, target)
 
 			return Right((onlyAction.get, winrate))
 
@@ -256,7 +280,7 @@ case class EndgameSolver[G <: Game](
 		// Logger.setLevel(LogLevel.Off)
 
 		val initialActions =
-			val init = optimizeFull(firstHypo, firstArrs, firstActions, state.ourPlayerIndex, deadline, shortcut = hypos.length == 1)
+			val init = optimizeFull(firstHypo, firstArrs, firstActions, state.ourPlayerIndex, deadline, shortcut = hypos.length == 1, target = target)
 
 			// Apply probability of first arrangement
 			init.map(e => e._1 -> e._2 * firstProb) ++
@@ -289,7 +313,7 @@ case class EndgameSolver[G <: Game](
 						val hypoWinrate = validActions.find(_._1 == action).fold(Frac.zero): perform =>
 							val (undrawn, drawn) = gameArrs
 							Log.highlight(Console.MAGENTA, s"\narrangement ${hypo.state.ourHand.map(hypo.state.logId).mkString(",")} $prob")
-							prob * actionWinrate(hypo, if perform._1.isClue then undrawn else drawn, perform, state.ourPlayerIndex, deadline)
+							prob * actionWinrate(hypo, if perform._1.isClue then undrawn else drawn, perform, state.ourPlayerIndex, deadline, target)
 
 						inner(remHypos.tail, winrate + hypoWinrate, remProb - prob)
 
@@ -318,13 +342,13 @@ case class EndgameSolver[G <: Game](
 			Log.info(s"solved in ${start.until(Instant.now()).toMillis()}ms")
 			Right((bestPerform, bestWinrate))
 
-	def winnable(game: G, playerTurn: Int, remaining: RemainingMap, deadline: Instant, depth: Int = 0)(using ops: GameOps[G]): WinnableResult =
+	def winnable(game: G, playerTurn: Int, remaining: RemainingMap, deadline: Instant, depth: Int = 0, target: Int)(using ops: GameOps[G]): WinnableResult =
 		val state = game.state
 
 		if Instant.now().isAfter(deadline) then
 			return TIMEOUT
 
-		val trivialWin = triviallyWinnable(game, playerTurn)
+		val trivialWin = triviallyWinnable(game, playerTurn, target)
 
 		if trivialWin.isRight then
 			Log.info(s"${indent(depth)}trivially winnable!")
@@ -351,28 +375,30 @@ case class EndgameSolver[G <: Game](
 				state.heldOrders.difference(modified).foldLeft(cluelessState): (acc, order) =>
 					acc.copy(deck = acc.deck.updated(order, acc.deck(order).copy(identity = None)))
 
-		cluelessState.flatMap(this.cluelessWinnable(_, playerTurn, remaining, deadline, depth)) match
+		cluelessState.flatMap(this.cluelessWinnable(_, playerTurn, remaining, deadline, depth, target)) match
 			case Some(cluelessWin) =>
 				Log.info(s"${indent(depth)}clueless winnable!")
 
 				// Replace dummy action
 				if cluelessWin == PerformAction.Rank(0, 0) then
-					return Right((ops.findAllClues(game, playerTurn).take(1), Frac.one))
+					val clues = ops.findAllClues(game, playerTurn).take(1)
+					if clues.nonEmpty then
+						return Right((clues, Frac.one))
 				else
 					return Right((List(cluelessWin), Frac.one))
 			case _ => ()
 
-		val bottomDecked = remaining.nonEmpty && remaining.keys.forall(id => state.isCritical(id) && id.rank < state.maxRanks(id.suitIndex))
+		val bottomDecked = target == state.maxScore && remaining.nonEmpty && remaining.keys.forall(id => state.isCritical(id) && id.rank < state.maxRanks(id.suitIndex))
 
-		if bottomDecked || unwinnableState(state, playerTurn, remaining, depth) then
+		if bottomDecked || unwinnableState(state, playerTurn, remaining, depth, target) then
 			return UNWINNABLE
 
-		val performs = possibleActions(game, playerTurn, remaining, deadline, depth)
+		val performs = possibleActions(game, playerTurn, remaining, deadline, depth, target = target)
 
 		if performs.isEmpty then
 			return UNWINNABLE
 
-		if state.score + 1 == state.maxScore then
+		if state.score + 1 >= target then
 			val winningPlay = performs.find: (p, _) =>
 				p.matchesP:
 					case PerformAction.Play(order) => state.isPlayable(state.deck(order).id().get)
@@ -381,6 +407,7 @@ case class EndgameSolver[G <: Game](
 				return Right((winningPlay.map(_._1).toList, Frac.one))
 
 		val oneBDRLeft =
+			target == state.maxScore &&
 			state.score == state.maxScore - 2 &&
 			state.playStacks.zipWithIndex.count((stack, i) => stack == state.maxRanks(i)) == state.variant.suits.length - 1 &&
 			state.isCritical(state.playableSet.head)
@@ -402,17 +429,17 @@ case class EndgameSolver[G <: Game](
 		Log.highlight(Console.GREEN, s"${indent(depth)}actions: ${performs.map((p, _) => p.fmtObj(game, playerTurn)).mkString(", ")}")
 
 		val arrs = genArrs(game, remaining, playerTurn, clueOnly = false)
-		val result = optimize(game, arrs, performs, playerTurn, deadline, depth)
+		val result = optimize(game, arrs, performs, playerTurn, deadline, depth, target)
 		result
 
-	def possibleActions(game: G, playerTurn: Int, remaining: RemainingMap, deadline: Instant, depth: Int = 0, infer: Boolean = false)(using ops: GameOps[G]): Seq[(PerformAction, Seq[Identity])] =
+	def possibleActions(game: G, playerTurn: Int, remaining: RemainingMap, deadline: Instant, depth: Int = 0, infer: Boolean = false, target: Int)(using ops: GameOps[G]): Seq[(PerformAction, Seq[Identity])] =
 		boundary:
 			val state = game.state
 
 			def tryAction(perform: PerformAction, intended: Option[PerformAction] = None) =
 				val intendedPerform = intended.getOrElse(perform)
 
-				this.winnableIf(state, playerTurn, intendedPerform, remaining, deadline, depth) match
+				this.winnableIf(state, playerTurn, intendedPerform, remaining, deadline, depth, target) match
 					case SimpleResult.Unwinnable               => None
 					case SimpleResult.WinnableWithDraws(draws) => Some((perform, draws))
 					case SimpleResult.AlwaysWinnable           => Some((perform, Nil))
@@ -428,20 +455,20 @@ case class EndgameSolver[G <: Game](
 				return Seq(urgentAction.get)
 
 			val playables =
-				val plays =
-					if infer || game.goodTouch || state.endgameTurns.isDefined then
-						game.players(playerTurn).thinksPlayables(game, playerTurn, excludeTrash = true)
-					else
-						game.players(playerTurn).obviousPlayables(game, playerTurn)
+				if infer || game.goodTouch || state.endgameTurns.isDefined then
+					game.players(playerTurn).thinksPlayables(game, playerTurn, excludeTrash = true)
+				else
+					game.players(playerTurn).obviousPlayables(game, playerTurn)
 
+			val yoloActions =
 				val slot1 = state.hands(playerTurn)(0)
 				val poss = game.players(playerTurn).thoughts(slot1).possibilities
 
-				// Allow bombing slot 1 when no plays and a playable card could be in slot 1
-				if state.endgameTurns.isDefined && plays.isEmpty && poss.intersect(state.playableSet).nonEmpty then
-					Seq(slot1)
+				// Allow bombing slot 1 as a last resort when no plays and a playable card could be in slot 1
+				if state.endgameTurns.isDefined && playables.isEmpty && poss.intersect(state.playableSet).nonEmpty && state.deck(slot1).id().isDefined then
+					tryAction(PerformAction.tryPlay(game, slot1), intended = Some(PerformAction.Play(slot1))).toSeq
 				else
-					plays
+					Nil
 
 			val playActions = playables.map: order =>
 				if Instant.now.isAfter(deadline) then
@@ -462,7 +489,7 @@ case class EndgameSolver[G <: Game](
 
 			val clueWinnable = state.canClue &&
 				!tooManyClues &&
-				(this.winnableIf(state, playerTurn, defaultClue, remaining, deadline, depth) match
+				(this.winnableIf(state, playerTurn, defaultClue, remaining, deadline, depth, target) match
 					case SimpleResult.Unwinnable => false
 					case SimpleResult.AlwaysWinnable => true
 					case _ => throw new IllegalStateException(s"Shouldn't return WinnableWithDraws from giving a clue!"))
@@ -481,7 +508,8 @@ case class EndgameSolver[G <: Game](
 			if Instant.now.isAfter(deadline) then
 				break(Nil)
 
-			val ignoreDc = state.pace == 0 ||
+			val effPace = state.pace + (state.maxScore - target)
+			val ignoreDc = effPace == 0 ||
 				state.clueTokens == 8 ||
 				{
 					state.variant.name == "No Variant" && playables.exists: p =>
@@ -498,7 +526,7 @@ case class EndgameSolver[G <: Game](
 					val holdingCrit = state.hands(playerTurn).exists(o => state.isCritical(state.deck(o).id().get))
 
 					// Density of crits is too high, can't discard
-					holdingCrit && remaining.forall((id, _) => state.isCritical(id)) && state.clueTokens < state.numPlayers - 1
+					holdingCrit && remaining.nonEmpty && remaining.forall((id, _) => state.isCritical(id)) && state.clueTokens < state.numPlayers - 1
 				}
 
 			val dcActions = if ignoreDc then Nil else
@@ -522,13 +550,13 @@ case class EndgameSolver[G <: Game](
 			}
 
 			if depth == 0 && clueWinnable && ops.preferEndgameClue(game) then
-				clueActions.concat(playActions).concat(dcActions)
+				clueActions.concat(playActions).concat(dcActions).concat(yoloActions)
 			else if preferDc then
-				playActions.concat(dcActions).concat(clueActions)
+				playActions.concat(dcActions).concat(clueActions).concat(yoloActions)
 			else
-				playActions.concat(clueActions).concat(dcActions)
+				playActions.concat(clueActions).concat(dcActions).concat(yoloActions)
 
-	def actionWinrate(game: G, arrs: Seq[GameArr], action: (PerformAction, Seq[Identity]), playerTurn: Int, deadline: Instant)(using ops: GameOps[G]): Frac =
+	def actionWinrate(game: G, arrs: Seq[GameArr], action: (PerformAction, Seq[Identity]), playerTurn: Int, deadline: Instant, target: Int)(using ops: GameOps[G]): Frac =
 		if Instant.now.isAfter(deadline) then
 			return Frac.zero
 
@@ -542,7 +570,7 @@ case class EndgameSolver[G <: Game](
 			case GameArr(prob, remaining, drew) =>
 				val newGame = game.simulateAction(perform.toAction(game.state, playerTurn), drew)
 
-				if newGame.state.maxScore < game.state.maxScore then Frac.zero else
+				if newGame.state.maxScore < target then Frac.zero else
 					val newState = newGame.state
 					val (cardsLeft, endgameTurns) = (newState.cardsLeft, newState.endgameTurns)
 
@@ -552,7 +580,7 @@ case class EndgameSolver[G <: Game](
 						val hand = newState.hands(playerTurn)
 						Log.info(s"drawing ${newState.logId(drew)} (${hand(0)}) after ${perform.fmtObj(game, playerTurn)} ${hand.map(newState.logId).mkString(",")} cards left $cardsLeft endgame turns $endgameTurns")
 
-					winnable(newGame, nextPlayerIndex, remaining, deadline, 1) match
+					winnable(newGame, nextPlayerIndex, remaining, deadline, 1, target) match
 						case Left(msg) =>
 							Log.highlight(Console.YELLOW, s"} ${perform.fmtObj(game, playerTurn)} unwinnable ($msg)")
 							Frac.zero
@@ -561,12 +589,12 @@ case class EndgameSolver[G <: Game](
 							Log.highlight(Console.YELLOW, s"} ${performs.map(_.fmtObj(game, nextPlayerIndex)).mkString(", ")} prob $prob winrate $wr")
 							prob * wr
 
-	def optimizeFull(game: G, arrs: (Seq[GameArr], Seq[GameArr]), actions: Seq[(PerformAction, Seq[Identity])], playerTurn: Int, deadline: Instant, shortcut: Boolean)(using ops: GameOps[G]): Seq[(PerformAction, Frac)] =
+	def optimizeFull(game: G, arrs: (Seq[GameArr], Seq[GameArr]), actions: Seq[(PerformAction, Seq[Identity])], playerTurn: Int, deadline: Instant, shortcut: Boolean, target: Int)(using ops: GameOps[G]): Seq[(PerformAction, Frac)] =
 		boundary:
 			val (undrawn, drawn) = arrs
 
 			actions.map: (perform, winnableDraws) =>
-				val winrate = actionWinrate(game, if perform.isClue then undrawn else drawn, (perform, winnableDraws), playerTurn, deadline)
+				val winrate = actionWinrate(game, if perform.isClue then undrawn else drawn, (perform, winnableDraws), playerTurn, deadline, target)
 				if shortcut && winrate == Frac.one then
 					break(List((perform, winrate)))
 
@@ -574,7 +602,7 @@ case class EndgameSolver[G <: Game](
 			.toList
 			.sortBy(-_._2)
 
-	def optimize(game: G, arrs: (Seq[GameArr], Seq[GameArr]), actions: Seq[(PerformAction, Seq[Identity])], playerTurn: Int, deadline: Instant, depth: Int = 0)(using ops: GameOps[G]): WinnableResult =
+	def optimize(game: G, arrs: (Seq[GameArr], Seq[GameArr]), actions: Seq[(PerformAction, Seq[Identity])], playerTurn: Int, deadline: Instant, depth: Int = 0, target: Int)(using ops: GameOps[G]): WinnableResult =
 		boundary:
 			val (undrawn, drawn) = arrs
 			val nextPlayerIndex = game.state.nextPlayerIndex(playerTurn)
@@ -601,9 +629,9 @@ case class EndgameSolver[G <: Game](
 
 					val unwinnable =
 						drew.exists(!winnableDraws.contains(_)) ||
-						newGame.state.maxScore < game.state.maxScore ||
-						newGame.state.pace < 0 ||
-						(remaining.nonEmpty && remaining.keys.forall: id =>
+						newGame.state.maxScore < target ||
+						newGame.state.pace + (newGame.state.maxScore - target) < 0 ||
+						(target == newGame.state.maxScore && remaining.nonEmpty && remaining.keys.forall: id =>
 							newGame.state.isCritical(id) && id.rank < newGame.state.maxRanks(id.suitIndex))
 
 					if unwinnable then
@@ -619,7 +647,7 @@ case class EndgameSolver[G <: Game](
 							Log.info(s"${indent(depth)}drawing ${newState.logId(drew)} (${hand(0)}) after ${perform.fmtObj(game, playerTurn)} ${hand.map(newState.logId).mkString(",")} cards left $cardsLeft endgame turns $endgameTurns")
 
 						val colour = if depth == 0 then Console.YELLOW else Console.WHITE
-						winnable(newGame, nextPlayerIndex, remaining, deadline, depth + 1) match
+						winnable(newGame, nextPlayerIndex, remaining, deadline, depth + 1, target) match
 							case Left(msg) =>
 								Log.highlight(colour, s"${indent(depth)}} ${perform.fmtObj(game, playerTurn)} unwinnable ($msg)")
 								calcWinrate(arrs.tail, winrate, remProb)
@@ -650,7 +678,7 @@ case class EndgameSolver[G <: Game](
 
 				val cardsLeft = game.state.cardsLeft
 
-				if winrate == Frac.one || (bdrs.length == 1 && cardsLeft > 1 && winrate == Frac(cardsLeft - 1, cardsLeft)) then
+				if winrate == Frac.one || (target == game.state.maxScore && bdrs.length == 1 && cardsLeft > 1 && winrate == Frac(cardsLeft - 1, cardsLeft)) then
 					break(Right((List(perform), winrate)))
 
 				if winrate > bestWinrate then
