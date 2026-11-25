@@ -451,6 +451,25 @@ class DoubleDiscardAvoidance extends munit.FunSuite:
 		// Alice can't stall when not in DDA.
 		assertEquals(game.lastMove, Some(ClueInterp.Mistake))
 
+	test("will discard in dda if a clue is needed for locked player"):
+		val game = setup(HGroup.atLevel(9), Vector(
+			Vector("xx", "xx", "xx", "xx"),
+			Vector("r5", "y5", "g5", "b5"),
+			Vector("y1", "r1", "r1", "r2"),
+			Vector("y1", "g1", "g1", "r3")
+		),
+			playStacks = Some(Vector(1, 1, 1, 1, 1)),
+			starting = Cathy,
+			clueTokens = 1
+		)
+		.pipe(takeTurn("Cathy clues 5 to Bob"))
+		.pipe(takeTurn("Donald discards r3", "b3"))
+
+		// Alice is technically in DDA, but if Alice discards
+		// Bob won't have a clue and will for sure have to discard a critical.
+		// Assume that Cathy knew this line was safe and discard.
+		assertEquals(game.takeAction.unsafeRunSync(), PerformAction.Discard(game.state.hands(Alice.ordinal)(3)))
+
 	test("doesn't trigger dda from a sarcastic discard"):
 		val game = setup(HGroup.atLevel(9), Vector(
 			Vector("xx", "xx", "xx", "xx"),

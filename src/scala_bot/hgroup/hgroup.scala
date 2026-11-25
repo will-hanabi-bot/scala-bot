@@ -975,6 +975,9 @@ object HGroup:
 							Log.info(s"urgent bluffed play! ${urgent.get}")
 							PerformAction.tryPlay(game, urgent.get)
 						else
+							// Tracks whether any non-mistake clue has a lookahead outcome that preserves maxScore without striking out.
+							// Used to allow discarding chop in DDA when every clue is guaranteed to lose a critical card.
+							var clueAvoidsCritLoss = false
 							val allClues =
 								for
 									receiver <- (0 until state.numPlayers) if state.canClue && receiver != state.ourPlayerIndex
@@ -982,7 +985,10 @@ object HGroup:
 								yield
 									val perform = PerformAction.fromClue(clue)
 									val action = perform.toAction(state, state.ourPlayerIndex)
-									val value = evalAction(game, action)
+									val value = _evalAction(game, action, leaf =>
+										if leaf.state.maxScore == state.maxScore && leaf.state.strikes < 3 then
+											clueAvoidsCritLoss = true
+									)
 									(perform, action, value)
 
 							val allPlays = playableOrders.map: o =>
@@ -1006,11 +1012,16 @@ object HGroup:
 
 							val chop = game.chop(state.ourPlayerIndex)
 
+							val inDDA = chop.exists: c =>
+								game.dda.exists: id =>
+									game.me.thoughts(c).possible.contains(id) &&
+									visibleFind(state, game.me, id, infer = true).isEmpty
+
 							val canDiscardChop =
 								chop.isDefined &&
 								!cantDiscard &&
 								game.dcStatus == DcStatus.None &&
-								!game.dda.exists(id => game.me.thoughts(chop.get).possible.contains(id) && visibleFind(state, game.me, id, infer = true).isEmpty) &&
+								(!inDDA || !clueAvoidsCritLoss) &&
 								!me.thinksLocked(game, state.ourPlayerIndex) &&
 								{
 									((!state.canClue || allPlays.isEmpty) && noKtToDiscard) ||
