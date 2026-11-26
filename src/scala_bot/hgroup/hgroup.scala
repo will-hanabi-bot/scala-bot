@@ -975,9 +975,6 @@ object HGroup:
 							Log.info(s"urgent bluffed play! ${urgent.get}")
 							PerformAction.tryPlay(game, urgent.get)
 						else
-							// Tracks whether any non-mistake clue has a lookahead outcome that preserves maxScore without striking out.
-							// Used to allow discarding chop in DDA when every clue is guaranteed to lose a critical card.
-							var clueAvoidsCritLoss = false
 							val allClues =
 								for
 									receiver <- (0 until state.numPlayers) if state.canClue && receiver != state.ourPlayerIndex
@@ -985,10 +982,7 @@ object HGroup:
 								yield
 									val perform = PerformAction.fromClue(clue)
 									val action = perform.toAction(state, state.ourPlayerIndex)
-									val value = _evalAction(game, action, leaf =>
-										if leaf.state.maxScore == state.maxScore && leaf.state.strikes < 3 then
-											clueAvoidsCritLoss = true
-									)
+									val value = evalAction(game, action)
 									(perform, action, value)
 
 							val allPlays = playableOrders.map: o =>
@@ -1021,7 +1015,6 @@ object HGroup:
 								chop.isDefined &&
 								!cantDiscard &&
 								game.dcStatus == DcStatus.None &&
-								(!inDDA || !clueAvoidsCritLoss) &&
 								!me.thinksLocked(game, state.ourPlayerIndex) &&
 								{
 									((!state.canClue || allPlays.isEmpty) && noKtToDiscard) ||
@@ -1042,7 +1035,10 @@ object HGroup:
 									_ ++ allDiscards
 								.when(_ => canDiscardChop): as =>
 									val action = DiscardAction(state.ourPlayerIndex, chop.get, None, false)
-									val value = evalAction(game, action)
+									// Penalize discarding in DDA by 13: exceeds non-critical losses (e.g. -10 pace, -6 per 2)
+									// while staying below a critical loss (-15 - scoreLoss in evalState) so we still discard
+									// when every alternative loses a critical or is a mistake.
+									val value = evalAction(game, action) - (if inDDA then 13 else 0)
 									as :+ (PerformAction.tryDiscard(game, chop.get), action, value)
 
 							if allActions.isEmpty then

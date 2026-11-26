@@ -72,7 +72,7 @@ private def clueFilter(game: HGroup, giver: Int) =
 		state.deck(focus).id().forall: id =>
 			visibleFind(state, game.common, id, infer = true, excludeOrder = focus).isEmpty
 
-def _forceClue(orig: HGroup, game: HGroup, offset: Int, only: Option[Int] = None)(using onLeaf: HGroup => Unit): (Double, Boolean) =
+def _forceClue(orig: HGroup, game: HGroup, offset: Int, only: Option[Int] = None): (Double, Boolean) =
 	val state = game.state
 	val giver = (state.ourPlayerIndex + offset) % state.numPlayers
 
@@ -94,7 +94,7 @@ def _forceClue(orig: HGroup, game: HGroup, offset: Int, only: Option[Int] = None
 			(value = -100.0, goodClue = false)
 
 
-private def forceSdcm(orig: HGroup, game: HGroup, playerIndex: Int, order: Int, offset: Int, knownTrash: Boolean)(using onLeaf: HGroup => Unit): Double =
+private def forceSdcm(orig: HGroup, game: HGroup, playerIndex: Int, order: Int, offset: Int, knownTrash: Boolean): Double =
 	val state = game.state
 	val id = game.me.thoughts(order).id(infer = true)
 	val action =
@@ -107,7 +107,7 @@ private def forceSdcm(orig: HGroup, game: HGroup, playerIndex: Int, order: Int, 
 	val dcGame = game.simulate(action)
 	advance(orig, dcGame, offset + 1)
 
-def advance(orig: HGroup, game: HGroup, offset: Int)(using onLeaf: HGroup => Unit): Double =
+def advance(orig: HGroup, game: HGroup, offset: Int): Double =
 	val (state, common, meta) = (game.state, game.common, game.meta)
 	val playerIndex = (state.ourPlayerIndex + offset) % state.numPlayers
 	val player = game.players(playerIndex)
@@ -128,7 +128,6 @@ def advance(orig: HGroup, game: HGroup, offset: Int)(using onLeaf: HGroup => Uni
 
 	// Reduce lookahead in early game
 	if stopLookahead then
-		onLeaf(game)
 		evalGame(orig, game, offset)
 
 	else if allPlayables.nonEmpty then
@@ -315,8 +314,7 @@ def advance(orig: HGroup, game: HGroup, offset: Int)(using onLeaf: HGroup => Uni
 			Log.info(s"${indent(offset)}${state.names(playerIndex)} ${Action.gerund(action)} ${state.logId(id)}")
 			advance(orig, dcGame, offset + 1)
 
-def _evalAction(game: HGroup, action: Action, onLeaf: HGroup => Unit = _ => ()): Double =
-	given (HGroup => Unit) = onLeaf
+def _evalAction(game: HGroup, action: Action): Double =
 	Log.highlight(Console.GREEN, s"===== Predicting value for ${action.fmt(game.state)} =====")
 	val state = game.state
 
