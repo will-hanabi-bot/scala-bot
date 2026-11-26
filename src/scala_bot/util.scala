@@ -236,9 +236,10 @@ def visibleFind(
 			&&
 			cond(playerIndex, order)
 
-/** Returns all player indices between the start (inclusive) and end (exclusive) in play order. */
-def playersUntil(numPlayers: Int, start: Int, `end`: Int) =
-	Iterator.iterate(start)(i => (i + 1) % numPlayers).takeWhile(_ != `end`)
+/** Returns all player indices between the start (inclusive) and end (exclusive, or inclusive if `inclusive` is true) in play order. */
+def playersUntil(numPlayers: Int, start: Int, `end`: Int, inclusive: Boolean = false) =
+	val until = Iterator.iterate(start)(i => (i + 1) % numPlayers).takeWhile(_ != `end`)
+	if inclusive then until ++ Iterator.single(`end`) else until
 
 def inBetween(numPlayers: Int, playerIndex: Int, start: Int, `end`: Int) =
 	playersUntil(numPlayers, start, `end`).contains(playerIndex)
