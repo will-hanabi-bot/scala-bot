@@ -122,7 +122,7 @@ def refreshWCs(prev: HGroup, game: HGroup, action: Action, beforeClueInterp: Boo
 					demos = struct.demos :+ nextIndex.fold(wc)(i => wc.copy(connections = conns.drop(i)))
 				)
 			case UpdateResult.Remove =>
-				if hypo.isDefined then struct else
+				if hypo.isDefined || (wc.ambiguousSelf && game.common.saveLinks.exists(l => l.focus == wc.focus && l.id == wc.inference)) then struct else
 					struct.copy(
 						toRemove = struct.toRemove :++ PromptConn(-1, wc.focus, wc.inference) +: (if wc.symmetric || wc.ambiguousSelf then Nil else conns),
 						remFocuses = struct.remFocuses + wc.focus,
@@ -145,6 +145,8 @@ def refreshWCs(prev: HGroup, game: HGroup, action: Action, beforeClueInterp: Boo
 				inferred = newInferred,
 				infoLock = newInferred.toOpt
 			)
+		.when(_.common.saveLinks.exists(_.focus == order)): g =>
+			g.copy(common = g.common.copy(saveLinks = g.common.saveLinks.filterNot(_.focus == order)))
 		.when(_.xmeta(order).fStatus.nonEmpty):
 			_.withXMeta(order)(_.copy(fStatus = Nil))
 	}

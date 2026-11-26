@@ -180,19 +180,21 @@ def interpNormalClue(ctx: ClueContext, symmetricInterp: SymmetricInterp, thinksS
 
 	val FocusResult(focus, chop, positional) = ctx.focusResult
 
-	def validSave(inf: Identity) =
-		state.isUseful(inf) &&
-		visibleFind(state, common, inf, infer = true, excludeOrder = focus).isEmpty &&
-		(if clue.kind == ClueKind.Colour then
-			colourSave(prev, action, inf, focus)
-		else
-			rankSave(prev, action, inf, focus))
-
-	val savePoss = if !chop then Nil else
+	val saveInfo = if !chop then Nil else
 		for
-			inf <- common.thoughts(focus).inferred if validSave(inf)
+			inf <- common.thoughts(focus).inferred
+			commonRes = checkSave(ctx, inf, prev.common) if commonRes.isValid
+			realRes = checkSave(ctx, inf, prev.players(giver))
 		yield
-			FocusPossibility(inf, Nil, ClueInterp.Save, save = true)
+			val sym = !realRes.isValid || !state.deck(focus).matches(inf, assume = true)
+			val fp = FocusPossibility(inf, Nil, ClueInterp.Save, symmetric = sym, save = true)
+			val link = commonRes match
+				case SaveResult.Conditional(l) => Some(l)
+				case _ => None
+			(fp, link)
+
+	val savePoss = saveInfo.map(_._1)
+	val saveLinks = saveInfo.flatMap(_._2)
 
 	if savePoss.nonEmpty then
 		Log.info(s"found saves: [${savePoss.map(fp => state.logId(fp.id)).mkString(",")}]")
@@ -213,7 +215,7 @@ def interpNormalClue(ctx: ClueContext, symmetricInterp: SymmetricInterp, thinksS
 		common.thoughts(focus).inferred.filter: inf =>
 			!prev.invalidFocus(giver, clue, inf, ctx.focusResult) &&
 			!knownDupe(focus, inf) &&
-			!savePoss.exists(_.id == inf)
+			!savePoss.exists(fp => fp.id == inf && !fp.symmetric)
 		.flatMap:
 			connect(ctx, _, initialLooksDirect, thinksStall)
 
@@ -227,7 +229,7 @@ def interpNormalClue(ctx: ClueContext, symmetricInterp: SymmetricInterp, thinksS
 
 	val noSelf = !game.allowFindOwn ||
 		giver == state.ourPlayerIndex ||
-		simplest.exists(fp => state.deck(focus).matches(fp.id))
+		simplest.exists(fp => !fp.symmetric && state.deck(focus).matches(fp.id))
 
 	{
 		if noSelf then
@@ -261,7 +263,7 @@ def interpNormalClue(ctx: ClueContext, symmetricInterp: SymmetricInterp, thinksS
 				common.thoughts(focus).inferred.filter: inf =>
 					!game.invalidFocus(giver, clue, inf, ctx.focusResult) &&
 					!knownDupe(focus, inf) &&
-					!(savePoss.exists(_.id == inf) || simplest.exists(_.id == inf))
+					!(savePoss.exists(fp => fp.id == inf && !fp.symmetric) || simplest.exists(fp => fp.id == inf && !fp.symmetric))
 				.flatMap:
 					connect(ctx, _, looksDirect, thinksStall, findOwn = Some(state.ourPlayerIndex))
 
@@ -288,7 +290,7 @@ def interpNormalClue(ctx: ClueContext, symmetricInterp: SymmetricInterp, thinksS
 					val focusPoss = common.thoughts(newFocus).inferred.filter: inf =>
 						!prev.invalidFocus(giver, clue, inf, newCtx.focusResult) &&
 						!knownDupe(newFocus, inf) &&
-						!savePoss.exists(_.id == inf)
+						!savePoss.exists(fp => fp.id == inf && !fp.symmetric)
 					.flatMap:
 						connect(newCtx, _, looksDirect, thinksStall)
 
@@ -312,6 +314,22 @@ def interpNormalClue(ctx: ClueContext, symmetricInterp: SymmetricInterp, thinksS
 			else
 				resolveClue(ctx, simplestOwn, symmetricInterp, looksDirect, thinksStall, ambiguousOwn = if savePoss.nonEmpty then Nil else ownFps.filter(fp => filtered.contains(fp) && !simplestOwn.contains(fp) && !fp.symmetric))
 	}
+	.when(g => g.lastMove != Some(ClueInterp.Mistake) && saveLinks.nonEmpty): g =>
+		val activeLinks = saveLinks.filter(l => g.common.thoughts(focus).inferred.contains(l.id))
+		val condWcs =
+			if receiver != state.ourPlayerIndex then Nil else
+				activeLinks.map(_.id).distinct.filter: inf =>
+					!prev.invalidFocus(giver, clue, inf, ctx.focusResult) &&
+					!knownDupe(focus, inf)
+				.flatMap(connect(ctx, _, initialLooksDirect, thinksStall))
+				.collect:
+					case fp if fp.connections.exists(c => !c.isInstanceOf[KnownConn] || g.isBlindPlaying(c.order)) && !fp.isBluff && fp.connections.forall(_.reacting != receiver) =>
+						WaitingConnection(fp.connections, giver, receiver, state.turnCount, focus, fp.id, ambiguousSelf = true)
+
+		g.copy(
+			common = if activeLinks.isEmpty then g.common else g.common.copy(saveLinks = activeLinks.toList ++ g.common.saveLinks),
+			waiting = g.waiting ++ condWcs
+		)
 	.when(g => g.lastMove != Some(ClueInterp.Mistake) && g.level >= Level.TempoClues && state.numPlayers > 2): g =>
 		val newCtx = ctx.copy(game = g)
 		interpretTccm(newCtx) match

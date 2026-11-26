@@ -40,40 +40,112 @@ def validBluff(game: HGroup, action: ClueAction, blind: Identity, reacting: Int,
 	!(clue.kind == ClueKind.Colour && reacting == receiver) &&	// not self-colour bluff
 	interferes.isEmpty
 
+enum SaveResult:
+	case Invalid
+	case Unconditional
+	case Conditional(link: SaveLink)
+
+	def isValid: Boolean = this != SaveResult.Invalid
+
+def checkSave(ctx: ClueContext, id: Identity, player: Player): SaveResult =
+	val state = ctx.prev.state
+	val focus = ctx.focusResult.focus
+
+	if !state.isUseful(id) || visibleFind(state, ctx.common, id, infer = true, excludeOrder = focus).nonEmpty then
+		SaveResult.Invalid
+	else if ctx.action.clue.kind == ClueKind.Colour then
+		colourSave(ctx, id, player)
+	else
+		rankSave(ctx, id, player)
+
 /** Returns whether the colour clue could be a save on the given identity. */
-def colourSave(prev: HGroup, action: ClueAction, id: Identity, focus: Int): Boolean =
+def colourSave(ctx: ClueContext, id: Identity, player: Player): SaveResult =
+	val ClueContext(prev, game, action, _) = ctx
 	val state = prev.state
 	val ClueAction(giver, receiver, orders, clue) = action
+	val focus = ctx.focusResult.focus
 	val Identity(suitIndex, rank) = id
 
 	val thought = prev.common.thoughts(focus)
 	val suit = state.variant.suits(suitIndex)
 
 	if !state.variant.cardTouched(id, clue) || !thought.possible.contains(id) || state.isBasicTrash(id) || state.isPlayable(id) then
-		return false
+		return SaveResult.Invalid
 
 	if rank == 5 && suit.name != "Black" && !suit.suitType.brownish then
-		return false
+		return SaveResult.Invalid
 
 	if state.variant.criticalRank.contains(rank) then
-		return false
+		return SaveResult.Invalid
+
+	var saveLink: Option[SaveLink] = None
 
 	if suit.name == "Black" && (rank == 2 || rank == 5) then
-		// Newly touched or fill-in cards
-		val fillIns = orders.count: o =>
-			!state.deck(o).clued ||
+		val rankClueUnavailable = state.variant.specialRank.contains(rank) &&
+			(state.variant.pinkS || state.variant.brownS || state.variant.deceptiveS)
+
+		// Exception 3: filled in an ancillary card
+		val filledIn = orders.exists: o =>
+			o != focus &&
+			state.deck(o).clued &&
+			!prev.common.orderKt(prev, o) &&
 			prev.common.thoughts(o).possible.exists(!state.variant.idTouched(_, clue))
 
-		// Trash that would be picked up by a rank clue
-		val trash = state.hands(receiver).count: o =>
-			val card = state.deck(o)
-			!card.clued && card.id().exists(i => i.rank == rank && state.isBasicTrash(i))
+		// Exception 4: gave important negative information to one or more clued cards in hand
+		val importantNegInfo = state.hands(receiver).exists: o =>
+			!orders.contains(o) &&
+			state.deck(o).clued &&
+			!prev.common.orderKt(prev, o) &&
+			prev.common.thoughts(o).inferred.exists(state.variant.idTouched(_, clue)) && {
+				val newlyIdentified = prev.common.thoughts(o).inferred.length > 1 && game.common.thoughts(o).inferred.length == 1
+				val newlyPlayable = !prev.common.orderPlayable(prev, o) && game.common.orderPlayable(game, o)
+				val newlyTrash = !prev.common.orderTrash(prev, o) && game.common.orderTrash(game, o)
+				newlyIdentified || newlyPlayable || newlyTrash
+			}
 
-		if fillIns < 2 && trash == 0 then
-			return false
+		// Exception 1: touched two or more previously unclued black cards or critical Rainbow cards
+		val extraNewlyTouched = FastBitSet.from(orders.filter(o => o != focus && !state.deck(o).clued))
+		val critRainbowIds = state.allIds.filter: i =>
+			i != id &&
+			state.variant.idTouched(i, clue) &&
+			state.isUseful(i) && {
+				val s = state.variant.suits(i.suitIndex)
+				s.name == "Black" ||
+				((s.suitType.rainbowish || (state.variant.rainbowS && state.variant.specialRank.contains(i.rank))) && state.isCritical(i))
+			}
+
+		val unconditionalMulti = extraNewlyTouched.nonEmpty && (
+			!state.variant.rainbowish ||
+			extraNewlyTouched.exists(o => prev.common.thoughts(o).possible.forall(critRainbowIds.contains))
+		)
+
+		if !rankClueUnavailable && !filledIn && !importantNegInfo && !unconditionalMulti then
+			// Exception 2: required to avoid violating Good Touch Principle (and/or conditional critical rainbow)
+			val rankClue = BaseClue(ClueKind.Rank, rank)
+			val uncluedOthers = FastBitSet.from(state.hands(receiver).filter(o => o != focus && !state.deck(o).clued))
+			val rankTouchedIds = state.allIds.filter(state.variant.idTouched(_, rankClue))
+			val trashIds = rankTouchedIds.intersect(state.trashSet)
+			val usefulIds = rankTouchedIds.difference(state.trashSet).difference(id).filter(i => state.cardCount(i.toOrd) >= 2)
+			val touchedAtClue = state.heldOrders.filter: o =>
+				o != focus &&
+				prev.isTouched(o) &&
+				!prev.meta(o).trash &&
+				prev.common.thoughts(o).possibilities.intersect(usefulIds).nonEmpty
+
+			val link = SaveLink(
+				focus = focus,
+				id = id,
+				singles = List((uncluedOthers, trashIds), (extraNewlyTouched, critRainbowIds)).filter((os, is) => os.nonEmpty && is.nonEmpty),
+				dupe = Option.when(uncluedOthers.nonEmpty && usefulIds.nonEmpty)((uncluedOthers, touchedAtClue, usefulIds))
+			)
+
+			if !link.isPossible(player, state) then
+				return SaveResult.Invalid
+
+			saveLink = Some(link)
 
 	if suit.suitType.brownish && prev.common.thinksLoaded(prev, receiver) then
-		return false
+		return SaveResult.Invalid
 
 	if "Dark Rainbow|Dark Prism".r.unanchored.matches(suit.name) then
 		val completed = prev.common.hypoStacks(suitIndex) == state.maxRanks(suitIndex)
@@ -87,7 +159,7 @@ def colourSave(prev: HGroup, action: ClueAction, id: Identity, focus: Int): Bool
 				!DARK.matches(state.variant.suits(i.suitIndex).name)
 
 		if !completed && !savedCrit then
-			return false
+			return SaveResult.Invalid
 
 	// If there is a dark colour, save with that, otherwise red.
 	val muddySaveColour = if !state.includesVariant("Black|Dark Brown|Dark Pink".r) then 0 else
@@ -95,44 +167,67 @@ def colourSave(prev: HGroup, action: ClueAction, id: Identity, focus: Int): Bool
 
 	// Note that critical 2,3,4 can be saved with anything.
 	if suit.name.contains("Muddy") && clue.value != muddySaveColour && !(state.isCritical(id) && Set(2,3,4).contains(rank)) then
-		return false
+		return SaveResult.Invalid
 
 	if suit.name.contains("Cocoa") && clue.value != muddySaveColour then
-		return false
+		return SaveResult.Invalid
 
 	if suit.suitType.inverted && suit.suitType.dark && (rank == 1 || rank == 2 || rank == 5) then
-		return false
+		return SaveResult.Invalid
 
-	state.isCritical(id) ||
-	(suit.suitType.brownish && rank == 2) ||
-	(suit.suitType.inverted && (rank == 3 || rank == 4))
+	val valid = state.isCritical(id) ||
+		(suit.suitType.brownish && rank == 2) ||
+		(suit.suitType.inverted && (rank == 3 || rank == 4))
 
-def rankSave(prev: HGroup, action: ClueAction, id: Identity, focus: Int): Boolean =
+	if !valid then
+		SaveResult.Invalid
+	else
+		saveLink.fold(SaveResult.Unconditional)(SaveResult.Conditional(_))
+
+def rankSave(ctx: ClueContext, id: Identity, player: Player): SaveResult =
+	val ClueContext(prev, _, action, _) = ctx
 	val state = prev.state
-	val ClueAction(giver, receiver, _, clue) = action
+	val ClueAction(giver, receiver, orders, clue) = action
+	val focus = ctx.focusResult.focus
 	val Identity(suitIndex, rank) = id
 	val thought = prev.common.thoughts(focus)
 
 	if !thought.possible.contains(id) || state.isBasicTrash(id) || state.deck(focus).id().exists(_.rank != rank) || state.isPlayable(id) then
-		return false
+		return SaveResult.Invalid
 
-	// Don't consider save on k3,k4 (or dark i3,i4) with rank
-	// TODO: Florrat Save
+	var saveLink: Option[SaveLink] = None
+
+	// Don't consider save on k3,k4 (or dark i3,i4) with rank unless it's a Florrat Save
 	if "Black|Dark Pink".r.unanchored.matches(state.variant.suits(suitIndex).name) && (rank == 3 || rank == 4) then
-		return false
+		val extraNewlyTouched = FastBitSet.from(orders.filter(o => o != focus && !state.deck(o).clued))
+		val critIds = state.criticalSet.filter(i => i != id && state.variant.idTouched(i, clue))
+
+		if extraNewlyTouched.isEmpty || critIds.isEmpty then
+			return SaveResult.Invalid
+
+		val link = SaveLink(focus, id, singles = List((extraNewlyTouched, critIds)))
+		if !link.isPossible(player, state) then
+			return SaveResult.Invalid
+
+		saveLink = Some(link)
 
 	val loaded34 = prev.common.thinksLoaded(prev, receiver) &&
 		(state.variant.suits.exists(s => s.suitType.whitish && !s.suitType.brownish) || state.includesVariant("Dark Rainbow|Dark Prism".r)) &&
 		(rank == 3 || rank == 4)
 
 	if loaded34 then
-		return false
+		return SaveResult.Invalid
 
 	// Breaks pink promise
 	if state.variant.pinkish && clue.kind == ClueKind.Rank && rank != clue.value then
-		return false
+		return SaveResult.Invalid
 
-	(state.isCritical(id) && rank != 1) || rank == 2
+	val valid = (state.isCritical(id) && rank != 1) || rank == 2
+
+	if !valid then
+		SaveResult.Invalid
+	else
+		saveLink.fold(SaveResult.Unconditional)(SaveResult.Conditional(_))
 
 enum SymmetricInterp:
 	case NoInterp
