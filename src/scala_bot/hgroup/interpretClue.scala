@@ -38,6 +38,7 @@ def unacceptableClue(prev: HGroup, game: HGroup, @annotation.unused action: Clue
 	val ClueAction(giver, receiver, orders, clue) = action
 
 	val fSymmetric = state.heldOrders.find: o =>
+		!state.ourHand.contains(o) &&
 		game.isBlindPlaying(o) &&
 		!prev.isBlindPlaying(o) &&
 		prev.waiting.exists: wc =>

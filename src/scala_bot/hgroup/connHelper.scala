@@ -117,8 +117,8 @@ def assignConns(game: HGroup, action: ClueAction, fps: Seq[FocusPossibility], fo
 					&& !(
 						// All ids critical, can't be ambiguous? (TODO: Are these the same condition?)
 						(conn.ids.forall(state.isCritical) && state.deck(focus).matches(fp.id)) ||
-						// Colour finesses are guaranteed if the focus cannot be a finessed identity, unless it's a bluff
-						(clue.kind == ClueKind.Colour && conn.ids.forall(!g.me.thoughts(focus).possible.contains(_)) && !conn.matchesP { case f: FinesseConn => f.isBluff })
+						// Colour finesses are guaranteed if the focus cannot be a finessed identity, unless it's a bluff or ambiguous with us
+						(ambiguousOwn.isEmpty && clue.kind == ClueKind.Colour && conn.ids.forall(!g.me.thoughts(focus).possible.contains(_)) && !conn.matchesP { case f: FinesseConn => f.isBluff })
 					)
 
 				val fStatus =
@@ -343,6 +343,32 @@ def resolveClue(ctx: ClueContext, fps: Seq[FocusPossibility], symmetricInterp: S
 		else
 			simplestFps.filter(!_.ambiguous)
 
+	val ownSymmetricFps =
+		if !game.allowFindOwn || giver == state.ourPlayerIndex || receiver == state.ourPlayerIndex || fps.exists(_.save) then
+			Nil
+		else
+			val receiverMinSimplicity = simplestFps.map(fpSimplicity(state, _, receiver, -1)).minOption.getOrElse(Double.MaxValue)
+
+			game.common.thoughts(focus).inferred.filter: inf =>
+				!game.invalidFocus(giver, clue, inf, ctx.focusResult) &&
+				game.players(receiver).thoughts(focus).possible.contains(inf) &&
+				!state.deck(focus).matches(inf) &&
+				!state.heldOrders.exists: o =>
+					o != focus &&
+					prev.state.deck(o).clued && (
+						(game.players(giver).thoughts(o).matches(inf, infer = true) && game.players(receiver).thoughts(o).matches(inf, infer = true)) ||
+						(state.ourHand.contains(o) && game.me.thoughts(o).matches(inf, infer = true))
+					)
+				&&
+				!simplestFps.exists(fp => fp.id == inf && fpSimplicity(state, fp, receiver, -1) == 0)
+			.flatMap:
+				connect(ctx, _, looksDirect, thinksStall = FastBitSet.empty, preferOwn = true, assumeTruth = true)
+			.filter: fp =>
+				fp.connections.exists(_.reacting == state.ourPlayerIndex) &&
+				!allFps.exists(fp2 => fp2.id == fp.id && fp2.connections == fp.connections) &&
+				fpSimplicity(state, fp, receiver, -1) <= receiverMinSimplicity &&
+				filterDominated(ctx, fps :+ fp).contains(fp)
+
 	val trueFp = simplestFps.find(fp => state.deck(focus).matches(fp.id))
 
 	lazy val stompedWc = !game.inEndgame && game.waiting.exists: wc =>
@@ -510,7 +536,7 @@ def resolveClue(ctx: ClueContext, fps: Seq[FocusPossibility], symmetricInterp: S
 				ambiguousSelf = !simplestFps.contains(fp) || fp.complicated,	// If it's too complicated, it could be an ambiguous connection
 			)
 
-		val ambiguousWcs = (ambiguousOwn ++ ambiguousFps).collect:
+		val ambiguousWcs = (ambiguousOwn ++ ambiguousFps ++ ownSymmetricFps).collect:
 			case fp if requiresWc(fp) && fp.connections.nonEmpty && !fp.isBluff => WaitingConnection(
 				fp.connections,
 				giver,
@@ -518,6 +544,7 @@ def resolveClue(ctx: ClueContext, fps: Seq[FocusPossibility], symmetricInterp: S
 				state.turnCount,
 				focus,
 				fp.id,
+				symmetric = fp.symmetric,
 				ambiguousSelf = true
 			)
 
