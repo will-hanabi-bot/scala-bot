@@ -11,12 +11,13 @@ enum Player:
 	case Alice, Bob, Cathy, Donald, Emily
 
 enum TestVariant:
-	case NoVariant, NoVar6, Rainbow5, Black5, White5, Pink5, Brown5, Prism5, Muddy5, Cocoa5, Omni5, Null5, Orange5, DBrown5, DOrange5, PinkLPink6
+	case NoVariant, NoVar6, Rainbow5, Rainbow6, Black5, White5, Pink5, Brown5, Prism5, Muddy5, Cocoa5, Omni5, Null5, Orange5, DBrown5, DOrange5, PinkLPink6
 
 val VARIANTS = Map(
 	TestVariant.NoVariant	-> Variant(0, "No Variant",           Vector("Red", "Yellow", "Green", "Blue", "Purple"),  shorts = Some(Vector('r', 'y', 'g', 'b', 'p'))),
 	TestVariant.NoVar6		-> Variant(1, "6 Suits",              Vector("Red", "Yellow", "Green", "Blue", "Purple", "Teal"), shorts = Some(Vector('r', 'y', 'g', 'b', 'p', 't'))),
 	TestVariant.Rainbow5	-> Variant(16, "Rainbow (5 Suits)",   Vector("Red", "Yellow", "Green", "Blue", "Rainbow"), shorts = Some(Vector('r', 'y', 'g', 'b', 'm'))),
+	TestVariant.Rainbow6	-> Variant(3, "Rainbow (6 Suits)",   Vector("Red", "Yellow", "Green", "Blue", "Purple", "Rainbow"), shorts = Some(Vector('r', 'y', 'g', 'b', 'p', 'm'))),
 	TestVariant.Black5		-> Variant(21, "Black (5 Suits)",     Vector("Red", "Yellow", "Green", "Blue", "Black"),   shorts = Some(Vector('r', 'y', 'g', 'b', 'k'))),
 	TestVariant.White5		-> Variant(22, "White (5 Suits)",     Vector("Red", "Yellow", "Green", "Blue", "White"),   shorts = Some(Vector('r', 'y', 'g', 'b', 'w'))),
 	TestVariant.Pink5		-> Variant(107, "Pink (5 Suits)",     Vector("Red", "Yellow", "Green", "Blue", "Pink"),    shorts = Some(Vector('r', 'y', 'g', 'b', 'i'))),

@@ -490,14 +490,14 @@ class CompositionFinesses extends munit.FunSuite:
 		.pipe(takeTurn("Donald discards g1", "r3"))		// Donald passes g1 to Alice
 		.pipe(takeTurn("Alice plays p1 (slot 2)"))
 		.tap: g =>
-			assert(g.waiting.exists(_.inference == g.state.expandShort("g4")))
+			assert(g.waiting.exists(_.inferences.contains(g.state.expandShort("g4"))))
 
 		.pipe(takeTurn("Bob clues blue to Donald"))
 		.pipe(takeTurn("Cathy discards y3", "p5"))
 		.pipe(takeTurn("Donald clues 5 to Alice (slot 3)"))	// Play clue on g5
 		.pipe(takeTurn("Alice plays g1 (slot 4)"))
 		.tap: g =>
-			assert(g.waiting.exists(_.inference == g.state.expandShort("g4")))
+			assert(g.waiting.exists(_.inferences.contains(g.state.expandShort("g4"))))
 
 		.pipe(takeTurn("Bob discards y4", "y2"))
 		.pipe(takeTurn("Cathy plays g2", "p3"))

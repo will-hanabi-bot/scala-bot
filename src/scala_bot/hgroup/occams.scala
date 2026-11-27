@@ -15,7 +15,7 @@ def nextUnknown(fp: FocusPossibility, skipPast: Option[Connection] = None): Opti
 		case _ => true
 
 def fpSimplicity(state: State, fp: FocusPossibility, playerIndex: Int, ourPlayerIndex: Int): Double =
-	(if state.isInverted(fp.id) && !fp.save then 0.1 else 0) +
+	(if fp.ids.forall(state.isInverted) && !fp.save then 0.1 else 0) +
 	{
 		val nextUnknownConn = nextUnknown(fp)
 		// Note that us prompting/finessing on a clue to someone else is as "complicated"
@@ -45,7 +45,7 @@ def fpSimplicity(state: State, fp: FocusPossibility, playerIndex: Int, ourPlayer
 def filterFps(ctx: ClueContext, fps: Seq[FocusPossibility]) =
 	val ClueContext(_, game, action, _) = ctx
 	val state = game.state
-	val trueFp = state.deck(ctx.focusResult.focus).id().flatMap(id => fps.find(_.id == id))
+	val trueFp = state.deck(ctx.focusResult.focus).id().flatMap(id => fps.find(_.ids.contains(id)))
 
 	def selfFinesses(fp2: FocusPossibility) = fp2.connections.count:
 		case f: FinesseConn => f.reacting == state.ourPlayerIndex
@@ -57,7 +57,7 @@ def filterFps(ctx: ClueContext, fps: Seq[FocusPossibility]) =
 			trueFp.connections.exists: conn =>
 				state.deck(conn.order).clued &&
 				conn.reacting != action.receiver &&
-				conn.ids.contains(fp.id)
+				fp.ids.forall(conn.ids.contains)
 			||
 			// There is an extra self-finesse required from us (we may not have that card)
 			!fp.ambiguous && selfFinesses(trueFp) > 0 && selfFinesses(fp) > selfFinesses(trueFp)
@@ -86,7 +86,7 @@ def filterDominated(ctx: ClueContext, fps: Seq[FocusPossibility]) =
 			case _ => None
 
 		dominated match
-			case Some(d) => Log.highlight(Console.CYAN, s"excluding ${state.logConns(fp.connections, fp.id)} due to strictly simpler possibility ${state.logConns(d.connections, d.id)}!")
+			case Some(d) => Log.highlight(Console.CYAN, s"excluding ${state.logConns(fp.connections, fp.ids)} due to strictly simpler possibility ${state.logConns(d.connections, d.ids)}!")
 			case None => ()
 
 		dominated.isDefined
@@ -96,16 +96,16 @@ def occamsRazor(ctx: ClueContext, fps: Seq[FocusPossibility], playerIndex: Int, 
 	val state = game.state
 
 	val initial = (Double.MaxValue, Seq.empty[FocusPossibility], Seq.empty[FocusPossibility])
-	val sorted = fps.sortBy(fp => if actualId.forall(_ == fp.id) then -1 else 0)
+	val sorted = fps.sortBy(fp => if actualId.forall(fp.ids.contains) then -1 else 0)
 
 	sorted.foldLeft(initial) { case ((min, acc, impossible), fp) =>
-		if !game.players(playerIndex).thoughts(ctx.focusResult.focus).possible.contains(fp.id) then
+		if game.players(playerIndex).thoughts(ctx.focusResult.focus).possible.intersect(fp.ids).isEmpty then
 			(min, acc, fp +: impossible)
 		else
 			val simplicity = fpSimplicity(state, fp, playerIndex, state.ourPlayerIndex)
-			// Log.info(s"${state.logId(fp.id)} $playerIndex simplicity: $simplicity")
+			// Log.info(s"[${fp.ids.fmt(state)}] $playerIndex simplicity: $simplicity")
 
-			if simplicity < min && actualId.forall(_ == fp.id) then
+			if simplicity < min && actualId.forall(fp.ids.contains) then
 				(simplicity, List(fp), impossible)
 			else if simplicity == min then
 				(min, fp +: acc, impossible)

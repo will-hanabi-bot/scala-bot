@@ -109,14 +109,14 @@ def targetPlay(ctx: ClueContext, targetOrder: Int): (Option[ClueInterp], RefSiev
 			inf   <- common.thoughts(targetOrder).inferred if !state.isBasicTrash(inf) && visibleFind(state, common, inf, infer = true, excludeOrder = targetOrder).isEmpty
 			conns <- connect(ctx, targetOrder, inf, unknown)
 		yield
-			FocusPossibility(inf, conns, ClueInterp.Play)
+			FocusPossibility(IdentitySet.single(inf), conns, ClueInterp.Play)
 
-	Log.info(s"focus possibilities [${focusPoss.map(fp => state.logId(fp.id)).mkString(",")}]")
+	Log.info(s"focus possibilities [${focusPoss.foldLeft(IdentitySet.empty)((a, fp) => a.union(fp.ids)).fmt(state)}]")
 
 	val targetId = common.thoughts(targetOrder).id().orElse(state.deck(targetOrder).id())
 
 	targetId match
-		case Some(id) if !focusPoss.exists(_.id == id) =>
+		case Some(id) if !focusPoss.exists(_.ids.contains(id)) =>
 			if action.giver == state.ourPlayerIndex then
 				if !state.deck(targetOrder).clued && game.state.isInverted(id) then
 					(Some(ClueInterp.Discard), resolvePlay(ctx, targetOrder, focusPoss, targetId))
@@ -130,7 +130,7 @@ def targetPlay(ctx: ClueContext, targetOrder: Int): (Option[ClueInterp], RefSiev
 					Log.warn(s"targeting an unplayable card!")
 					(None, game)
 				else
-					val newFps = focusPoss :+ FocusPossibility(id, conns.get, ClueInterp.Play)
+					val newFps = focusPoss :+ FocusPossibility(IdentitySet.single(id), conns.get, ClueInterp.Play)
 					(Some(ClueInterp.Play), resolvePlay(ctx, targetOrder, newFps, targetId))
 
 		case _ =>
@@ -140,7 +140,7 @@ def resolvePlay(ctx: ClueContext, targetOrder: Int, focusPoss: Seq[FocusPossibil
 	val ClueContext(prev, game, action) = ctx
 	val state = game.state
 	val ClueAction(giver, receiver, orders, _) = action
-	val matchedFps = focusPoss.filter(fp => targetId.exists(_.matches(fp.id)))
+	val matchedFps = focusPoss.filter(fp => targetId.exists(fp.ids.contains))
 
 	val initial = (game, Set[Int]())
 	matchedFps.flatMap(_.connections).foldLeft(initial) { case ((acc, modified), conn) =>
@@ -172,13 +172,13 @@ def resolvePlay(ctx: ClueContext, targetOrder: Int, focusPoss: Seq[FocusPossibil
 					receiver,
 					g.state.turnCount,
 					targetOrder,
-					fp.id,
-					symmetric = targetId.exists(!(_).matches(fp.id))
+					fp.ids,
+					symmetric = targetId.exists(!fp.ids.contains(_))
 				)
 		)
 
 	.withThought(targetOrder): t =>
-		val poss = IdentitySet.from(focusPoss.map(_.id))
+		val poss = focusPoss.foldLeft(IdentitySet.empty)((a, fp) => a.union(fp.ids))
 		t.copy(
 			inferred = t.inferred.intersect(poss),
 			infoLock = t.possible.intersect(poss).toOpt

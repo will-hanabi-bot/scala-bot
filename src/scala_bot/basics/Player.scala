@@ -217,7 +217,7 @@ case class Player(
 					false
 
 				case _ =>
-					possPlayable(thought.possible) || thought.infoLock.existsO(possPlayable)
+					!game.meta(order).trash && (possPlayable(thought.possible) || thought.infoLock.existsO(possPlayable))
 
 	/** Returns true if this order is obviously playable (see [[Player.orderKp]]) or inferred to be playable.
 	  * @param excludeTrash If true, trash identities are excluded from the inferences.
@@ -349,6 +349,8 @@ case class Player(
 
 		!connected.contains(order) &&				// not already connected
 		state.deck(order).clued &&
+		!prev.meta(order).trash &&
+		prev.meta(order).status != CardStatus.CalledToDiscard &&
 		thought.possible.contains(id) &&			// must be a possibility
 		thought.infoLock.forallO(_.contains(id)) &&
 		(thought.inferred.length != 1 || thought.inferred.contains(id)) &&	// not info-locked on a different id

@@ -1,7 +1,7 @@
 package scala_bot
 
 val BOT_VERSION = "v1.4.4 (scala-bot)"
-val MAX_H_LEVEL = 13
+val MAX_H_LEVEL = 14
 
 enum Convention:
 	case Reactor

@@ -9,7 +9,7 @@ import scala_bot.utils._
 import scala_bot.logger.{Log, Logger, LogLevel}
 
 enum Positional:
-	case Brown, Mud, Pink
+	case Brown, Mud, Pink, TrashPush
 	case Stale1(originalFocus: Int)
 
 case class FocusResult(
@@ -44,6 +44,8 @@ enum FStatus:
 	case PossiblyAmbiguous(to: Int)
 	/** The card may or may not be playing, according to the player. */
 	case PossiblyOn(to: Int)
+	/** The card must blind play to prove an unconfirmed *Trash Finesse* to the player. */
+	case ProvingTrashTo(to: Int)
 
 case class XConvData(
 	/** This card may be a different identity than expected (e.g. if it ended up being *Layered*). */
@@ -193,6 +195,10 @@ case class HGroup(
 			f != FStatus.PossiblyAmbiguous(state.ourPlayerIndex) &&
 			f != FStatus.PossiblyOn(state.ourPlayerIndex)
 
+	def provingTrash(order: Int, giver: Int, observer: Option[Int] = None) =
+		xmeta(order).fStatus.existsM:
+			case FStatus.ProvingTrashTo(to) => to != giver && !observer.contains(to)
+
 	def chop(playerIndex: Int) =
 		state.hands(playerIndex).findLast: o =>
 			!state.deck(o).clued &&
@@ -239,7 +245,7 @@ case class HGroup(
 			(state.variant.suits(id.suitIndex).suitType.rainbowish || (state.variant.rainbowS && state.variant.specialRank.contains(id.rank)))
 
 		state.isBasicTrash(id) ||
-		(state.variant.pinkish && !positional.contains(Positional.Pink) && clue.kind == ClueKind.Rank && clue.value != id.rank) ||
+		(state.variant.pinkish && !positional.contains(Positional.Pink) && !positional.contains(Positional.TrashPush) && clue.kind == ClueKind.Rank && clue.value != id.rank) ||
 		(!this.inEndgame && state.variant.inverted && chop && state.isInverted(id) && state.isPlayable(id)) ||
 		orangePlayClueAssumption ||
 		visibleFind(state, common, id, infer = true, excludeOrder = focus).exists: o =>
@@ -277,7 +283,7 @@ case class HGroup(
 				if level < Level.IntermediateFinesses then
 					status != CardStatus.Finessed || this.xmeta(o).fStatus.contains(FStatus.PossiblyOn(state.ourPlayerIndex))
 				else
-					(overrideLayer || !(status == CardStatus.Finessed && !this.xmeta(o).finesseIds.get.contains(id)))
+					(overrideLayer || !(status == CardStatus.Finessed && !this.xmeta(o).finesseIds.exists(_.contains(id))))
 			}
 
 		order.filter(!ignore.contains(_))
@@ -391,8 +397,18 @@ case class HGroup(
 			newlyClued.length > 1 &&
 			newlyClued.forall(state.inStartingHand)
 
-		if chop.exists(orders.contains) && !stale1 then
-			return FocusResult(chop.get, chop = true)
+		if chop.exists(orders.contains) then
+			if this.level >= Level.TrashMoves && isTrashClue(prev, this, action, chop.get) then
+				val cluedGame = orders.foldLeft(prev): (a, o) =>
+					a.withCard(o)(_.copy(clued = true))
+				val tpFocus = cluedGame.chop(receiver)
+
+				return tpFocus.fold(FocusResult(chop.get, chop = true)): focus =>
+					Log.highlight(Console.CYAN, s"trash push on ${state.logId(focus)} $focus")
+					FocusResult(focus, positional = Some(Positional.TrashPush))
+
+			if !stale1 then
+				return FocusResult(chop.get, chop = true)
 
 		val reclue = newlyClued.isEmpty
 
@@ -513,11 +529,11 @@ case class HGroup(
 			val action = Action.fromClue(state, clue, giver)
 			val FocusResult(focus, chop, _) = determineFocus(this, action)
 			val focusCard = state.deck(focus)
-			val focusId = focusCard.id().get
 
 			meta(focus).status != CardStatus.Finessed &&
 			!focusCard.clued &&
-			state.isUseful(focusId) && {
+			focusCard.id().exists(state.isUseful) && {
+				val focusId = focusCard.id().get
 				val hypo = this.copy(noRecurse = true, allowFindOwn = false).simulateAction(action)
 
 				hypo.lastMove.matchesP:
@@ -556,11 +572,11 @@ case class HGroup(
 			val action = Action.fromClue(state, clue, giver)
 			val FocusResult(focus, chop, _) = determineFocus(this, action)
 			val focusCard = state.deck(focus)
-			val focusId = focusCard.id().get
 
 			meta(focus).status != CardStatus.Finessed &&
 			!focusCard.clued &&
-			state.isUseful(focusId) && {
+			focusCard.id().exists(state.isUseful) && {
+				val focusId = focusCard.id().get
 				val hypo = this.copy(noRecurse = true, allowFindOwn = false).simulateAction(action)
 
 				hypo.lastMove.matchesP:
@@ -662,7 +678,7 @@ case class HGroup(
 					order == wc.currConn.order ||
 					(id.exists(wc.currConn.ids.length == 1 && wc.currConn.ids.head.matches(_)))
 			&&
-			!this.waiting.exists(w => w.connections.forall(wc.connections.contains) && w.inference == wc.inference && w.turn == wc.turn)
+			!this.waiting.exists(w => w.connections.forall(wc.connections.contains) && w.inferences == wc.inferences && w.turn == wc.turn)
 
 	def importantAction(playerIndex: Int) =
 		importantFinesse(playerIndex) || savedCtx(playerIndex).fold(false)(urgentSave)
@@ -768,7 +784,7 @@ object HGroup:
 
 				lostWc match
 					case Some(wc) =>
-						Log.warn(s"removed wc ${game.state.logConns(wc.connections, wc.inference)}! mistake")
+						Log.warn(s"removed wc ${game.state.logConns(wc.connections, wc.inferences)}! mistake")
 						pre.withMove(ClueInterp.Mistake)
 					case None =>
 						val interpreted = interpClue(ClueContext(prev, pre, action))
@@ -872,7 +888,7 @@ object HGroup:
 
 				lostWc match
 					case Some(wc) =>
-						Log.warn(s"removed wc ${game.state.logConns(wc.connections, wc.inference)}! mistake")
+						Log.warn(s"removed wc ${game.state.logConns(wc.connections, wc.inferences)}! mistake")
 						pre.withMove(PlayInterp.Mistake)
 					case None =>
 						pre.resetImportant(playerIndex).pipe: g =>
@@ -1089,10 +1105,10 @@ object HGroup:
 		override def cleanHypo(game: HGroup) =
 			game.waiting.foldLeft(game): (acc, wc) =>
 				if !wc.symmetric then acc else
-					revert(acc, wc.focus, List(wc.inference)).pipe: g =>
+					revert(acc, wc.focus, wc.inferences.toList).pipe: g =>
 						g.copy(
 							players = g.players.map:
-								_.withThought(wc.focus)(t => t.copy(inferred = t.inferred.difference(wc.inference)))
+								_.withThought(wc.focus)(t => t.copy(inferred = t.inferred.difference(wc.inferences)))
 						)
 
 		override def refreshAfterPlay(prev: HGroup, game: HGroup, action: PlayAction) =

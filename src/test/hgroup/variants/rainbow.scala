@@ -72,7 +72,7 @@ class Rainbow extends munit.FunSuite:
 
 		val wc = game.waiting.find: wc =>
 			wc.receiver == game.state.hands(Alice.ordinal)(3) &&
-			wc.inference == game.state.expandShort("g4")
+			wc.inferences.contains(game.state.expandShort("g4"))
 
 		// Not a prompt. Note that a waiting connection may not be generated for playable connections only.
 		assert(wc.forall(w => !w.connections.exists(_.isInstanceOf[PromptConn])))

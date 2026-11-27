@@ -227,6 +227,11 @@ case class State(
 
 		s"[${conns.map(logConn).mkString(" -> ")}$terminator]"
 
+	def logConns(conns: Seq[Connection], nextIds: IdentitySet) =
+		val terminator = if nextIds.isEmpty then "" else s" -> [${nextIds.fmt(this)}]?"
+
+		s"[${conns.map(logConn).mkString(" -> ")}$terminator]"
+
 	inline def isInverted(id: Identity): Boolean =
 		variant.suits(id.suitIndex).suitType.inverted
 
