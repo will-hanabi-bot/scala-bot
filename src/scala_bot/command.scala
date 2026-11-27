@@ -515,9 +515,9 @@ case class BotClient(
 			kind match
 				case ChatKind.Public(author) =>
 					IO.whenA(tableID.isDefined):
-						if text.startsWith("/setall") then
+						if text.startsWith("!setall") then
 							assignSettings(text)
-						else if text.startsWith("/leaveall") then
+						else if text.startsWith("!leaveall") then
 							leaveRoom()
 						else
 							IO.unit
