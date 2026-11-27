@@ -45,7 +45,7 @@ def fpSimplicity(state: State, fp: FocusPossibility, playerIndex: Int, ourPlayer
 def filterFps(ctx: ClueContext, fps: Seq[FocusPossibility]) =
 	val ClueContext(_, game, action, _) = ctx
 	val state = game.state
-	val trueFp = state.deck(ctx.focusResult.focus).id().flatMap(id => fps.find(_.id == id))
+	val trueFp = state.deck(ctx.focusResult.focus).id().flatMap(id => fps.find(fp => !fp.symmetric && fp.id == id))
 
 	def selfFinesses(fp2: FocusPossibility) = fp2.connections.count:
 		case f: FinesseConn => f.reacting == state.ourPlayerIndex
@@ -96,7 +96,8 @@ def occamsRazor(ctx: ClueContext, fps: Seq[FocusPossibility], playerIndex: Int, 
 	val state = game.state
 
 	val initial = (Double.MaxValue, Seq.empty[FocusPossibility], Seq.empty[FocusPossibility])
-	val sorted = fps.sortBy(fp => if actualId.forall(_ == fp.id) then -1 else 0)
+	val matchesActual = (fp: FocusPossibility) => actualId.fold(true)(id => !fp.symmetric && id == fp.id)
+	val sorted = fps.sortBy(fp => if matchesActual(fp) then -1 else 0)
 
 	sorted.foldLeft(initial) { case ((min, acc, impossible), fp) =>
 		if !game.players(playerIndex).thoughts(ctx.focusResult.focus).possible.contains(fp.id) then
@@ -105,7 +106,7 @@ def occamsRazor(ctx: ClueContext, fps: Seq[FocusPossibility], playerIndex: Int, 
 			val simplicity = fpSimplicity(state, fp, playerIndex, state.ourPlayerIndex)
 			// Log.info(s"${state.logId(fp.id)} $playerIndex simplicity: $simplicity")
 
-			if simplicity < min && actualId.forall(_ == fp.id) then
+			if simplicity < min && matchesActual(fp) then
 				(simplicity, List(fp), impossible)
 			else if simplicity == min then
 				(min, fp +: acc, impossible)

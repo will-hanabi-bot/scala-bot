@@ -533,3 +533,31 @@ extension (p: Player)
 						t.copy(inferred = t.inferred.intersect(game.state.playableSet))
 				else
 					acc.copy(playLinks = PlayLink(remOrders, prereqs, target) +: acc.playLinks)
+
+	def refreshSaveLinks(game: Game): Player =
+		val state = game.state
+		if p.saveLinks.isEmpty then
+			return p
+
+		p.saveLinks.foldRight(p.copy(saveLinks = Nil)): (link, acc) =>
+			val thought = acc.thoughts(link.focus)
+
+			if !state.heldOrders.contains(link.focus) || !thought.inferred.contains(link.id) || thought.reset then
+				acc
+			else if !p.isCommon && p.playerIndex != state.holderOf(link.focus) then
+				acc.copy(saveLinks = link +: acc.saveLinks)
+			else if !link.isPossible(acc, state) then
+				Log.info(s"save condition disproven for ${state.logId(link.id)} on ${link.focus} (${p.name})!")
+				val newInferred = thought.inferred.difference(link.id)
+				val newInfoLock = thought.infoLock.mapO(_.difference(link.id))
+
+				acc.withThought(link.focus): t =>
+					if newInferred.isEmpty && !t.reset then
+						t.resetInferences()
+					else
+						t.copy(
+							inferred = newInferred,
+							infoLock = if newInfoLock.existsO(_.isEmpty) then IdentitySetOpt.empty else newInfoLock
+						)
+			else
+				acc.copy(saveLinks = link +: acc.saveLinks)

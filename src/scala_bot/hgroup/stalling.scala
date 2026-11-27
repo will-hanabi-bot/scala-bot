@@ -56,14 +56,8 @@ def isStall(ctx: ClueContext, severity: Int): Option[StallInterp] =
 	lazy val trash = state.deck(focus).id().exists(state.isBasicTrash) ||
 		game.me.orderKt(game, focus)
 
-	def isSave(id: Identity) =
-		if clue.kind == ClueKind.Colour then
-			colourSave(prev, action, id, focus)
-		else
-			rankSave(prev, action, id, focus)
-
 	val notStall = severity == 0 ||
-		(chop && game.players(receiver).thoughts(focus).possible.forall(isSave)) ||
+		(chop && game.players(receiver).thoughts(focus).possible.forall(checkSave(ctx, _, prev.players(receiver)).isValid)) ||
 		(focusNew && (game.common.orderKp(game, focus) || trash))
 
 	if notStall then
@@ -92,7 +86,7 @@ def isStall(ctx: ClueContext, severity: Int): Option[StallInterp] =
 			return Some(StallInterp.FillIn)
 
 	if severity >= 3 && chop && !game.common.thinksLocked(game, receiver) && !clue.isEq(ClueKind.Rank, 1) then
-		if state.deck(focus).id().exists(isSave) then
+		if state.deck(focus).id().exists(checkSave(ctx, _, prev.players(giver)).isValid) then
 			Log.info("save that could look like lhs!")
 			return Some(StallInterp.SaveLHS)
 

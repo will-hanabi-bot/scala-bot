@@ -47,6 +47,41 @@ case class PlayLink(
 	target: Int
 )
 
+/** Tracks a conditional save inference on [[focus]] for [[id]] that is narrowed once none of its conditions remain possible. */
+case class SaveLink(
+	focus: Int,
+	id: Identity,
+	/** At least one order in `orders` must still be able to be an identity in `ids`. */
+	singles: List[(FastBitSet, IdentitySet)] = Nil,
+	/** An order in `unclued` and a distinct order in `unclued ∪ touched` must still be able to share an identity in `ids`. */
+	dupe: Option[(FastBitSet, FastBitSet, IdentitySet)] = None
+):
+	def isPossible(p: Player, state: State): Boolean =
+		def cardPoss(order: Int): IdentitySet =
+			val t = p.thoughts(order)
+			t.id(symmetric = p.isCommon)
+				.fold(if state.heldOrders.contains(order) then t.possibilities else t.possible)(IdentitySet.single)
+
+		def singleMatch(orders: FastBitSet, ids: IdentitySet) =
+			ids.nonEmpty && orders.exists: o =>
+				cardPoss(o).intersect(ids).exists(i => p.thoughts(o).matches(i, symmetric = p.isCommon) || p.unknownIds(state, i) >= 1)
+
+		singles.exists(singleMatch) || dupe.exists: (unclued, touched, ids) =>
+			val pool = unclued.union(touched)
+			ids.exists: i =>
+				val mUnclued = unclued.filter(cardPoss(_).contains(i))
+				mUnclued.nonEmpty && {
+					val mPool = pool.filter(cardPoss(_).contains(i))
+					mUnclued.exists: o1 =>
+						mPool.exists: o2 =>
+							o1 != o2 && {
+								val known =
+									(if p.thoughts(o1).matches(i, symmetric = p.isCommon) then 1 else 0) +
+									(if p.thoughts(o2).matches(i, symmetric = p.isCommon) then 1 else 0)
+								known == 2 || p.unknownIds(state, i) >= 2 - known
+							}
+				}
+
 case class Player(
 	playerIndex: Int,
 	/** The display name of the player (their username on hanab.live). */
@@ -61,6 +96,7 @@ case class Player(
 
 	links: List[Link] = Nil,
 	playLinks: List[PlayLink] = Nil,
+	saveLinks: List[SaveLink] = Nil,
 	/** The set of orders that are known playable, without knowing their identities. */
 	unknownPlays: FastBitSet = FastBitSet.empty,
 	/** The set of orders that are known delayed playable. */

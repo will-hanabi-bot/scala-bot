@@ -219,6 +219,7 @@ extension[G <: Game](game: G)
 			val newGame = ops.copyWith(g, GameUpdates(
 				common = Some:
 					newCommon.refreshPlayLinks(g)
+					.refreshSaveLinks(g)
 					.when(_ => !skipHypoStacks):
 						_.updateHypoStacks(g)
 			))
@@ -256,6 +257,7 @@ extension[G <: Game](game: G)
 					,
 					links = g.common.links,
 					playLinks = g.common.playLinks,
+					saveLinks = g.common.saveLinks,
 					dirty = g.common.dirty
 				)
 				.cardElim(state).player
@@ -263,6 +265,7 @@ extension[G <: Game](game: G)
 					_.goodTouchElim(g, except)._2
 				.refreshLinks(g)._2
 				.refreshPlayLinks(g)
+				.refreshSaveLinks(g)
 				.when(_ => !skipHypoStacks):
 					_.updateHypoStacks(g)
 				.copy(dirty = FastBitSet.empty)

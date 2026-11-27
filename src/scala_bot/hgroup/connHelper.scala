@@ -292,14 +292,21 @@ def resolveClue(ctx: ClueContext, fps: Seq[FocusPossibility], symmetricInterp: S
 			Nil
 		else
 			Log.highlight(Console.YELLOW, "finding symmetric connections!")
-			val symmetricFps =
+			val symmetricSaves = if !chop then Nil else
+				for
+					inf <- game.common.thoughts(focus).inferred if checkSave(ctx, inf, prev.common).isValid
+				yield
+					FocusPossibility(inf, Nil, ClueInterp.Save, symmetric = true, save = true)
+
+			val symmetricConns =
 				game.common.thoughts(focus).inferred.filter: inf =>
 					!game.invalidFocus(giver, clue, inf, ctx.focusResult) &&
-					!fps.exists(_.id == inf)
+					!fps.exists(_.id == inf) &&
+					!symmetricSaves.exists(_.id == inf)
 				.flatMap:
 					connect(ctx, _, looksDirect, thinksStall = FastBitSet.empty, findOwn = Some(receiver))
 
-			symmetricFps
+			symmetricSaves ++ symmetricConns
 			// occamsRazor(ctx, symmetricFps, receiver)
 
 	val ambiguousFps = if !game.allowFindOwn || giver == state.ourPlayerIndex || fps.exists(_.save) then Nil else
@@ -343,7 +350,7 @@ def resolveClue(ctx: ClueContext, fps: Seq[FocusPossibility], symmetricInterp: S
 		else
 			simplestFps.filter(!_.ambiguous)
 
-	val trueFp = simplestFps.find(fp => state.deck(focus).matches(fp.id))
+	val trueFp = simplestFps.find(fp => !fp.symmetric && state.deck(focus).matches(fp.id))
 
 	lazy val stompedWc = !game.inEndgame && game.waiting.exists: wc =>
 		!wc.symmetric && !wc.ambiguousSelf &&
