@@ -1006,11 +1006,15 @@ object HGroup:
 
 							val chop = game.chop(state.ourPlayerIndex)
 
+							val inDDA = chop.exists: c =>
+								game.dda.exists: id =>
+									game.me.thoughts(c).possible.contains(id) &&
+									visibleFind(state, game.me, id, infer = true).isEmpty
+
 							val canDiscardChop =
 								chop.isDefined &&
 								!cantDiscard &&
 								game.dcStatus == DcStatus.None &&
-								!game.dda.exists(id => game.me.thoughts(chop.get).possible.contains(id) && visibleFind(state, game.me, id, infer = true).isEmpty) &&
 								!me.thinksLocked(game, state.ourPlayerIndex) &&
 								{
 									((!state.canClue || allPlays.isEmpty) && noKtToDiscard) ||
@@ -1031,7 +1035,10 @@ object HGroup:
 									_ ++ allDiscards
 								.when(_ => canDiscardChop): as =>
 									val action = DiscardAction(state.ourPlayerIndex, chop.get, None, false)
-									val value = evalAction(game, action)
+									// Penalize discarding in DDA by 13: exceeds non-critical losses (e.g. -10 pace, -6 per 2)
+									// while staying below a critical loss (-15 - scoreLoss in evalState) so we still discard
+									// when every alternative loses a critical or is a mistake.
+									val value = evalAction(game, action) - (if inDDA then 13 else 0)
 									as :+ (PerformAction.tryDiscard(game, chop.get), action, value)
 
 							if allActions.isEmpty then
