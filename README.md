@@ -36,8 +36,8 @@ Other helpful commands:
 - `/bugreport` to get a link to the issue tracker.
 
 Some commands can be sent inside the room's chat to affect all bots that have joined.
-- `/leaveall` to kick all bots from the table.
-- `/setall` to set the same settings for all bots at the table.
+- `!leaveall` to kick all bots from the table.
+- `!setall` to set the same settings for all bots at the table.
 
 ## Contributing
 
